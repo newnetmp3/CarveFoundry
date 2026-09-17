@@ -53,8 +53,8 @@ def compensate_height_field(surface: HeightField, cutter: Cutter) -> CutterConta
     result = np.full(source_z.shape, -np.inf, dtype=float)
     touched = np.zeros(source_z.shape, dtype=bool)
     radius = cutter.radius_mm
-    max_dx = int(ceil(radius / surface.spacing_x_mm))
-    max_dy = int(ceil(radius / surface.spacing_y_mm))
+    max_dx = ceil(radius / surface.spacing_x_mm)
+    max_dy = ceil(radius / surface.spacing_y_mm)
 
     for offset_y in range(-max_dy, max_dy + 1):
         dy = offset_y * surface.spacing_y_mm
