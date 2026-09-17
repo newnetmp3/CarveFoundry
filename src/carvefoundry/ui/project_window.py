@@ -133,6 +133,62 @@ class MainWindow(_BaseMainWindow):
         self._set_project(Project(), project_path=None)
         self.statusBar().showMessage("New project created", 3000)
 
+    def _confirm_open_project(self, target_name: str) -> bool:
+        if not self._project_dirty:
+            return True
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Unsaved Changes")
+        dialog.setText(
+            f'Save changes to "{self.project.name}" before opening "{target_name}"?'
+        )
+        dialog.setInformativeText(
+            "Opening another project will replace the current workspace."
+        )
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Save)
+        result = dialog.exec()
+
+        if result == QMessageBox.StandardButton.Save:
+            return self._save_project()
+        return result == QMessageBox.StandardButton.Discard
+
+    def _open_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open CarveFoundry Project",
+            str(self.project_path.parent if self.project_path else Path.home()),
+            f"CarveFoundry Projects (*{PROJECT_SUFFIX});;All files (*)",
+        )
+        if not path:
+            self.statusBar().showMessage("Open project canceled", 3000)
+            return
+
+        target = Path(path)
+        if not self._confirm_open_project(target.name):
+            self.statusBar().showMessage("Open project canceled", 3000)
+            return
+
+        # Load completely before replacing the current project. If the file is
+        # invalid or references missing assets, the current workspace remains
+        # intact.
+        try:
+            from carvefoundry.core.project_file import load_project
+
+            project = load_project(target)
+        except ProjectFileError as exc:
+            self.selection_info.setText(f"Project open failed\n{exc}")
+            self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
+            return
+
+        self._set_project(project, project_path=target)
+        self.statusBar().showMessage(f"Opened {target.name}", 5000)
+
     # Mutating workspace actions mark the project as modified. Keeping this in
     # one lifecycle layer makes the dirty state reliable for New/Open/Close.
     def _project_item_changed(self, list_item) -> None:
