@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from carvefoundry.cam.gcode import render_grbl, write_grbl
+from carvefoundry.cam.gcode import normalize_gcode_path, render_grbl, write_grbl
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.tools import Cutter, ToolType
 
@@ -38,3 +38,18 @@ def test_write_grbl_creates_plain_nc_file(tmp_path: Path) -> None:
 
     assert path.name == "finish.nc"
     assert path.read_text(encoding="ascii").endswith("M2\n")
+
+
+def test_gcode_path_defaults_to_nc_for_missing_or_unknown_suffix(tmp_path: Path) -> None:
+    assert normalize_gcode_path(tmp_path / "finish").name == "finish.nc"
+    assert normalize_gcode_path(tmp_path / "finish.txt").name == "finish.nc"
+    assert normalize_gcode_path(tmp_path / "finish.gcode").name == "finish.gcode"
+
+
+def test_write_grbl_replaces_unknown_suffix_with_nc(tmp_path: Path) -> None:
+    path = write_grbl(_toolpath(), tmp_path / "finish.txt")
+
+    assert path.name == "finish.nc"
+    assert path.is_file()
+    assert not (tmp_path / "finish.txt").exists()
+    assert not (tmp_path / "finish.nc.tmp").exists()
