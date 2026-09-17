@@ -236,7 +236,7 @@ class MainWindow(QMainWindow):
         canvas_bar_layout.addWidget(fit_button)
         import_button = QPushButton("Import Design")
         import_button.setObjectName("PrimaryButton")
-        import_button.clicked.connect(self._import_file)
+        import_button.clicked.connect(lambda _checked=False: self._import_file())
         canvas_bar_layout.addWidget(import_button)
         canvas_layout.addWidget(canvas_bar)
 
