@@ -24,6 +24,12 @@ from PySide6.QtWidgets import (
 
 from ..core.mesh import MeshAsset, MeshImportError, load_stl
 from ..core.project import Project, ProjectItem
+from ..core.project_file import (
+    PROJECT_SUFFIX,
+    ProjectFileError,
+    load_project,
+    save_project,
+)
 from ..core.tools import DEFAULT_TOOLS
 from .ribbon import Ribbon
 from .viewport import MeshViewport
@@ -50,7 +56,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.project = Project()
+        self.project_path: Path | None = None
         self._updating_transform_controls = False
+        self._updating_stock_controls = False
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
         self.setMinimumSize(1050, 650)
@@ -85,9 +93,9 @@ class MainWindow(QMainWindow):
         accent.setObjectName("AppAccent")
         line.addWidget(name)
         line.addWidget(accent)
-        project = QLabel("  •  Untitled Project")
-        project.setObjectName("Muted")
-        line.addWidget(project)
+        self.project_title_label = QLabel("  •  Untitled Project")
+        self.project_title_label.setObjectName("Muted")
+        line.addWidget(self.project_title_label)
         line.addStretch(1)
         mode = QLabel("DESIGN + CAM")
         mode.setObjectName("AccentText")
@@ -98,8 +106,9 @@ class MainWindow(QMainWindow):
         file_page = self.ribbon.add_page("File")
         project = file_page.add_group("Project")
         project.add_button("New", self._new_project)
-        project.add_button("Open")
-        project.add_button("Save")
+        project.add_button("Open", self._open_project)
+        project.add_button("Save", self._save_project, primary=True)
+        project.add_button("Save As", self._save_project_as)
         exchange = file_page.add_group("Import / Export")
         exchange.add_button("Import", self._import_file, primary=True)
         exchange.add_button("Export G-code")
@@ -182,7 +191,6 @@ class MainWindow(QMainWindow):
 
         self.project_panel = Panel("Project / Layers")
         self.project_list = QListWidget()
-        self.project_list.addItem("Stock  300 × 200 × 19 mm")
         self.project_panel.body_layout.addWidget(self.project_list)
 
         canvas = QFrame()
@@ -215,6 +223,9 @@ class MainWindow(QMainWindow):
         self.selection_info.setObjectName("Muted")
         self.properties_panel.body_layout.addWidget(self.selection_info)
 
+        self.stock_widget = self._build_stock_controls()
+        self.properties_panel.body_layout.addWidget(self.stock_widget)
+
         self.transform_widget = self._build_transform_controls()
         self.properties_panel.body_layout.addWidget(self.transform_widget)
 
@@ -233,7 +244,7 @@ class MainWindow(QMainWindow):
         self.properties_panel.body_layout.addStretch(1)
 
         self.project_list.currentRowChanged.connect(self._update_properties)
-        self.project_list.setCurrentRow(0)
+        self._refresh_project_list(0)
 
         splitter.addWidget(self.project_panel)
         splitter.addWidget(canvas)
@@ -259,6 +270,38 @@ class MainWindow(QMainWindow):
         spin.setSuffix(suffix)
         spin.setKeyboardTracking(False)
         return spin
+
+    def _build_stock_controls(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("StockControls")
+        grid = QGridLayout(widget)
+        grid.setContentsMargins(0, 6, 0, 10)
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(5)
+
+        heading = QLabel("Stock dimensions")
+        heading.setObjectName("SectionHeading")
+        grid.addWidget(heading, 0, 0, 1, 2)
+
+        self.stock_spins = tuple(
+            self._configured_spin(
+                minimum=0.1,
+                maximum=100000.0,
+                decimals=3,
+                step=1.0,
+                suffix=" mm",
+            )
+            for _ in range(3)
+        )
+        for row, (title, spin) in enumerate(
+            zip(("Width", "Height", "Thickness"), self.stock_spins, strict=True),
+            start=1,
+        ):
+            grid.addWidget(QLabel(title), row, 0)
+            grid.addWidget(spin, row, 1)
+            spin.valueChanged.connect(self._stock_control_changed)
+
+        return widget
 
     def _build_transform_controls(self) -> QWidget:
         widget = QWidget()
@@ -379,6 +422,64 @@ class MainWindow(QMainWindow):
             f"Placed max: {placed_maximum}"
         )
 
+    def _stock_list_text(self) -> str:
+        stock = self.project.stock
+        return (
+            f"Stock  {self._number(stock.width_mm)} × "
+            f"{self._number(stock.height_mm)} × "
+            f"{self._number(stock.thickness_mm)} mm"
+        )
+
+    def _item_list_text(self, item: ProjectItem) -> str:
+        if item.mesh is None:
+            return f"{item.kind.upper()}  {item.name}"
+        return f"STL  {item.name} — {self._mesh_dimensions_text(item.mesh)}"
+
+    def _refresh_project_list(self, selected_row: int = 0) -> None:
+        self.project_list.blockSignals(True)
+        try:
+            self.project_list.clear()
+            self.project_list.addItem(self._stock_list_text())
+            for item in self.project.items:
+                self.project_list.addItem(self._item_list_text(item))
+            selected_row = max(0, min(selected_row, self.project_list.count() - 1))
+            self.project_list.setCurrentRow(selected_row)
+        finally:
+            self.project_list.blockSignals(False)
+        self._update_properties(selected_row)
+
+    def _sync_stock_controls(self) -> None:
+        self._updating_stock_controls = True
+        try:
+            for spin, value in zip(
+                self.stock_spins,
+                (
+                    self.project.stock.width_mm,
+                    self.project.stock.height_mm,
+                    self.project.stock.thickness_mm,
+                ),
+                strict=True,
+            ):
+                spin.setValue(value)
+        finally:
+            self._updating_stock_controls = False
+
+    def _stock_control_changed(self, _value: float) -> None:
+        if self._updating_stock_controls:
+            return
+        width, height, thickness = (spin.value() for spin in self.stock_spins)
+        self.project.stock.width_mm = width
+        self.project.stock.height_mm = height
+        self.project.stock.thickness_mm = thickness
+        if self.project_list.count():
+            self.project_list.item(0).setText(self._stock_list_text())
+        self.selection_info.setText(
+            "Stock\n"
+            f"{self._number(width)} × {self._number(height)} × "
+            f"{self._number(thickness)} mm"
+        )
+        self.viewport.update()
+
     def _selected_item(self) -> ProjectItem | None:
         row = self.project_list.currentRow()
         if row <= 0:
@@ -396,6 +497,8 @@ class MainWindow(QMainWindow):
                 f"{self._number(stock.width_mm)} × {self._number(stock.height_mm)} × "
                 f"{self._number(stock.thickness_mm)} mm"
             )
+            self._sync_stock_controls()
+            self.stock_widget.setVisible(True)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
             return
@@ -403,6 +506,7 @@ class MainWindow(QMainWindow):
         item_index = row - 1
         if item_index >= len(self.project.items):
             self.selection_info.setText("No design selected")
+            self.stock_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
             return
@@ -410,6 +514,7 @@ class MainWindow(QMainWindow):
         item = self.project.items[item_index]
         self.selection_info.setText(self._mesh_properties_text(item))
         self.viewport.set_selected_item(item_index)
+        self.stock_widget.setVisible(False)
         has_mesh = item.mesh is not None
         self.transform_widget.setVisible(has_mesh)
         if has_mesh:
@@ -535,13 +640,76 @@ class MainWindow(QMainWindow):
         state = "shown" if self.viewport.show_grid else "hidden"
         self.statusBar().showMessage(f"Grid {state}", 2000)
 
+    def _set_project(
+        self,
+        project: Project,
+        *,
+        project_path: Path | None,
+        selected_row: int = 0,
+    ) -> None:
+        self.project = project
+        self.project_path = project_path
+        self.project_title_label.setText(f"  •  {project.name} Project")
+        self.viewport.set_project(project)
+        self._refresh_project_list(selected_row)
+
     def _new_project(self) -> None:
-        self.project = Project()
-        self.project_list.clear()
-        self.project_list.addItem("Stock  300 × 200 × 19 mm")
-        self.viewport.set_project(self.project)
-        self.project_list.setCurrentRow(0)
+        self._set_project(Project(), project_path=None)
         self.statusBar().showMessage("New project created", 3000)
+
+    def _open_project(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open CarveFoundry Project",
+            str(self.project_path.parent if self.project_path else Path.home()),
+            f"CarveFoundry Projects (*{PROJECT_SUFFIX});;All files (*)",
+        )
+        if not path:
+            return
+        project_path = Path(path)
+        try:
+            project = load_project(project_path)
+        except ProjectFileError as exc:
+            self.selection_info.setText(f"Project open failed\n{exc}")
+            self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
+            return
+        self._set_project(project, project_path=project_path)
+        self.statusBar().showMessage(f"Opened {project_path.name}", 5000)
+
+    def _save_project(self) -> None:
+        if self.project_path is None:
+            self._save_project_as()
+            return
+        self._save_project_to(self.project_path)
+
+    def _save_project_as(self) -> None:
+        suggested = (
+            self.project_path
+            if self.project_path is not None
+            else Path.home() / f"{self.project.name}{PROJECT_SUFFIX}"
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save CarveFoundry Project",
+            str(suggested),
+            f"CarveFoundry Projects (*{PROJECT_SUFFIX})",
+        )
+        if not path:
+            return
+        self._save_project_to(Path(path))
+
+    def _save_project_to(self, path: Path) -> None:
+        if self.project.name == "Untitled":
+            self.project.name = path.stem
+        try:
+            saved_path = save_project(self.project, path)
+        except ProjectFileError as exc:
+            self.selection_info.setText(f"Project save failed\n{exc}")
+            self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
+            return
+        self.project_path = saved_path
+        self.project_title_label.setText(f"  •  {self.project.name} Project")
+        self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
 
     def _import_file(self, kind: str | None = None) -> None:
         filters = {
@@ -591,12 +759,6 @@ class MainWindow(QMainWindow):
                 transform=transform,
             )
         self.project.items.append(item)
-
-        if mesh is None:
-            list_text = f"{detected}  {source.name}"
-        else:
-            list_text = f"STL  {source.name} — {self._mesh_dimensions_text(mesh)}"
-        self.project_list.addItem(list_text)
-        self.project_list.setCurrentRow(self.project_list.count() - 1)
+        self._refresh_project_list(len(self.project.items))
         self.viewport.fit_view()
         self.statusBar().showMessage(f"Imported {source.name}", 5000)
