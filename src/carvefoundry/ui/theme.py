@@ -77,6 +77,13 @@ QToolButton#RibbonPrimary:hover { background: #d5ff68; }
     border: 1px solid #242e44;
     border-radius: 14px;
 }
+#ViewportBar {
+    background: #12192a;
+    border-bottom: 1px solid #242e44;
+}
+#MeshViewport { background: #111827; }
+#SectionHeading { color: #ffffff; font-weight: 700; padding-top: 4px; }
+#TransformControls { border-top: 1px solid #242e44; }
 #CanvasHint { color: #7f8aa0; font-size: 13px; }
 #CanvasTitle { color: #ffffff; font-size: 22px; font-weight: 700; }
 #AccentText { color: #c8ff3d; font-weight: 700; }
@@ -99,6 +106,18 @@ QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {
     padding: 6px 8px;
 }
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {
+    border-color: #c8ff3d;
+}
+QCheckBox { color: #cbd3e0; spacing: 7px; }
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    border: 1px solid #3a465f;
+    border-radius: 4px;
+    background: #0f1626;
+}
+QCheckBox::indicator:checked {
+    background: #c8ff3d;
     border-color: #c8ff3d;
 }
 QPushButton {
