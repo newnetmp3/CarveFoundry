@@ -1,25 +1,32 @@
 # CarveFoundry
 
-CarveFoundry is a native Linux CNC design and CAM application. The goal is an approachable design-to-G-code workflow in the spirit of browser-based tools such as Easel, without requiring the browser or cloud for normal use.
+CarveFoundry is a native Linux CNC design and CAM application with an approachable, ribbon-based workflow. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
 
-The UI uses the same dark navy / lime-accent visual language as Bi-Weekly Bills, adapted to a Microsoft Office-style ribbon and a large CAD/CAM workspace.
+## Project direction
 
-## Early project goals
+CarveFoundry aims to cover the practical workflow people often use Easel for while giving more control over imported geometry, cutter definitions, 3D relief work, preview, optimization, and G-code export.
 
-- Native PySide6 Linux desktop application with first-class Wayland support.
-- SVG, DXF, STL, image, and G-code import.
-- 2D / 2.5D operations: profile, pocket, engraving, V-carve, drilling, and tabs.
-- STL-based 3D roughing, finishing, rest machining, and boundary control.
-- Cutter-aware 3D toolpaths. Finishing is **not** restricted to ball-nose cutters; the CAM engine is designed to compensate for the selected cutter profile.
-- Tool library for flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and custom profiles.
-- Toolpath preview, simulation, feeds/speeds, stock setup, origins, machine profiles, and postprocessors.
-- GRBL / Onefinity-friendly G-code as an early target, with postprocessors kept modular.
+Planned and current areas include:
 
-## Run from source on Arch Linux
+- 2D/2.5D design and CAM workflows
+- SVG, DXF, image, STL, and G-code import paths
+- first-class STL mesh import with retained geometry and mesh metadata
+- stock and project setup
+- cutter-aware CAM using the actual selected cutter profile
+- roughing and finishing strategies for 3-axis CNC
+- preview and simulation
+- G-code export
+- Linux/Wayland-native desktop behavior
+
+## Cutter geometry
+
+CarveFoundry is not designed around a ball-nose-only 3D finishing assumption. Cutter definitions model the actual cutter profile so flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and future custom revolved profiles can be handled by the CAM engine.
+
+## Development
+
+Requires Python 3.12 or newer.
 
 ```bash
-git clone git@github.com:newnetmp3/CarveFoundry.git
-cd CarveFoundry
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
@@ -27,6 +34,9 @@ python -m pip install -e '.[dev]'
 carvefoundry
 ```
 
-## Status
+Run the test and lint suites with:
 
-CarveFoundry is in early development. The initial application shell establishes the ribbon-based UI, project workspace, tool library model, and cutter-profile abstraction that future CAM operations will use.
+```bash
+ruff check src tests
+pytest -q
+```
