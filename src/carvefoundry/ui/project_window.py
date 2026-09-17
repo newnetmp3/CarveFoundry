@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from carvefoundry.core.project import Project, ProjectItem
-from carvefoundry.core.project_file import PROJECT_SUFFIX, ProjectFileError, save_project
+from carvefoundry.core.project_file import (\n    PROJECT_SUFFIX,\n    ProjectFileError,\n    load_project,\n    save_project,\n)
 
 from .main_window import MainWindow as _BaseMainWindow
 
@@ -178,8 +178,6 @@ class MainWindow(_BaseMainWindow):
         # invalid or references missing assets, the current workspace remains
         # intact.
         try:
-            from carvefoundry.core.project_file import load_project
-
             project = load_project(target)
         except ProjectFileError as exc:
             self.selection_info.setText(f"Project open failed\n{exc}")
