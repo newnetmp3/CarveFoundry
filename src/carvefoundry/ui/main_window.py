@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QThread, Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..cam.gcode import write_grbl
-from ..core.importer import ImportFileError, inspect_import_file
 from ..core.project import Project, ProjectItem
 from ..core.project_file import (
     PROJECT_SUFFIX,
