@@ -91,18 +91,32 @@ class MainWindow(_BaseMainWindow):
         )
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save CarveFoundry Project",
+            "Save CarveFoundry Project As",
             str(suggested),
             f"CarveFoundry Projects (*{PROJECT_SUFFIX})",
         )
         if not path:
+            self.statusBar().showMessage("Save As canceled", 3000)
             return False
-        return self._save_project_to(Path(path))
 
-    def _save_project_to(self, path: Path) -> bool:
+        target = Path(path)
+        # Save As establishes a new project identity. Keep the display/project
+        # name synchronized with the new file name, while _save_project_to()
+        # restores the old name if the write fails.
+        return self._save_project_to(target, project_name=target.stem)
+
+    def _save_project_to(
+        self,
+        path: Path,
+        *,
+        project_name: str | None = None,
+    ) -> bool:
         original_name = self.project.name
-        if self.project.name == "Untitled":
+        if project_name is not None:
+            self.project.name = project_name
+        elif self.project.name == "Untitled":
             self.project.name = path.stem
+
         try:
             saved_path = save_project(self.project, path)
         except ProjectFileError as exc:
