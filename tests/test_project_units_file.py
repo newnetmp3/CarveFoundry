@@ -20,7 +20,7 @@ def test_project_file_preserves_source_unit_assumption(tmp_path: Path) -> None:
         mesh=load_stl(mesh_path),
         source_units=ModelUnits.INCHES,
     )
-    project_path = tmp_path / "inch-job.carvefoundry"
+    project_path = tmp_path / "inch-job.cf3d"
 
     save_project(Project(items=[item]), project_path)
     payload = json.loads(project_path.read_text(encoding="utf-8"))
