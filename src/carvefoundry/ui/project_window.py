@@ -305,8 +305,6 @@ class MainWindow(_BaseMainWindow):
         if after != before:
             self._mark_project_dirty()
 
-    def _import_file(self, kind: str | None = None) -> None:
-        before = len(self.project.items)
-        super()._import_file(kind)
-        if len(self.project.items) != before:
+    def _on_import_items_added(self, count: int) -> None:
+        if count > 0:
             self._mark_project_dirty()
