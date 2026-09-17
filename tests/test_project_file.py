@@ -38,7 +38,7 @@ def test_project_round_trip_reloads_stl_and_transform(tmp_path: Path) -> None:
             )
         ],
     )
-    project_path = tmp_path / "fixture.carvefoundry"
+    project_path = tmp_path / "fixture.cf3d"
 
     saved_path = save_project(project, project_path)
     loaded = load_project(saved_path)
@@ -62,7 +62,7 @@ def test_saved_project_uses_current_version_and_relative_source_path(tmp_path: P
     project = Project(
         items=[ProjectItem("part.stl", mesh_path, "stl", mesh=load_stl(mesh_path))]
     )
-    project_path = tmp_path / "job.carvefoundry"
+    project_path = tmp_path / "job.cf3d"
 
     save_project(project, project_path)
     payload = json.loads(project_path.read_text(encoding="utf-8"))
@@ -74,7 +74,7 @@ def test_saved_project_uses_current_version_and_relative_source_path(tmp_path: P
 def test_save_adds_project_suffix(tmp_path: Path) -> None:
     saved = save_project(Project(), tmp_path / "untitled")
 
-    assert saved.name == "untitled.carvefoundry"
+    assert saved.name == "untitled.cf3d"
     assert saved.is_file()
 
 
@@ -97,7 +97,7 @@ def test_missing_stl_is_reported_when_loading(tmp_path: Path) -> None:
             }
         ],
     }
-    path = tmp_path / "missing.carvefoundry"
+    path = tmp_path / "missing.cf3d"
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ProjectFileError, match="missing"):
@@ -105,7 +105,7 @@ def test_missing_stl_is_reported_when_loading(tmp_path: Path) -> None:
 
 
 def test_invalid_project_version_is_rejected(tmp_path: Path) -> None:
-    path = tmp_path / "future.carvefoundry"
+    path = tmp_path / "future.cf3d"
     path.write_text(
         json.dumps({"version": 999, "name": "Future", "stock": {}, "items": []}),
         encoding="utf-8",
