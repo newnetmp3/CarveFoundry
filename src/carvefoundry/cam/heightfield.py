@@ -89,8 +89,8 @@ class HeightField:
         if span_x <= 0 or span_y <= 0:
             raise ValueError("Mesh must have non-zero XY dimensions for 3-axis CAM.")
 
-        x_count = max(2, int(ceil(span_x / spacing_mm)) + 1)
-        y_count = max(2, int(ceil(span_y / spacing_mm)) + 1)
+        x_count = max(2, ceil(span_x / spacing_mm) + 1)
+        y_count = max(2, ceil(span_y / spacing_mm) + 1)
         x_axis = np.linspace(min_x, max_x, x_count, dtype=float)
         y_axis = np.linspace(min_y, max_y, y_count, dtype=float)
         z_field = np.full((y_count, x_count), -np.inf, dtype=float)
