@@ -6,7 +6,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtWidgets import QApplication
 
-from .ui.main_window import MainWindow
+from .ui.project_window import MainWindow
 from .ui.theme import APP_STYLESHEET
 
 
