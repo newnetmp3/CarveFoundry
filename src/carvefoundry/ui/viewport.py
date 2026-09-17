@@ -88,10 +88,10 @@ class MeshViewport(QWidget):
         for item in self.project.items:
             if not item.visible or item.mesh is None:
                 continue
-            item_bounds = np.asarray(
-                item.transform.transformed_bounds(item.mesh.mesh),
-                dtype=float,
-            )
+            transformed = item.transformed_mesh()
+            if transformed is None:
+                continue
+            item_bounds = np.asarray(transformed.bounds, dtype=float)
             minimum = np.minimum(minimum, item_bounds[0])
             maximum = np.maximum(maximum, item_bounds[1])
 
@@ -275,14 +275,12 @@ class MeshViewport(QWidget):
         if item.mesh is None or not item.visible:
             return
 
+        render_mesh = item.transformed_mesh()
+        if render_mesh is None:
+            return
         faces = self._sample_faces(item)
         unique_vertices, inverse = np.unique(faces.reshape(-1), return_inverse=True)
-        source_vertices = np.asarray(item.mesh.mesh.vertices, dtype=float)[unique_vertices]
-        pivot = tuple(
-            float(value)
-            for value in np.asarray(item.mesh.mesh.bounds, dtype=float).mean(axis=0)
-        )
-        transformed_vertices = item.transform.apply_points(source_vertices, pivot=pivot)
+        transformed_vertices = np.asarray(render_mesh.vertices, dtype=float)[unique_vertices]
         triangles = transformed_vertices[inverse].reshape((-1, 3, 3))
         flat_points = triangles.reshape((-1, 3))
         projected, depths = self._project(
