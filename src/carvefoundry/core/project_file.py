@@ -8,6 +8,7 @@ from typing import Any
 from .mesh import MeshImportError, load_stl
 from .project import Project, ProjectItem, Stock
 from .transform import Transform3D
+from .units import ModelUnits
 
 PROJECT_FILE_VERSION = 1
 PROJECT_SUFFIX = ".carvefoundry"
@@ -64,6 +65,7 @@ def project_to_dict(project: Project, project_path: Path) -> dict[str, Any]:
                 "source_path": _source_path_for_save(item.source_path, project_path),
                 "kind": item.kind,
                 "visible": item.visible,
+                "source_units": item.source_units.value,
                 "transform": {
                     "translation_mm": list(item.transform.translation_mm),
                     "rotation_deg": list(item.transform.rotation_deg),
@@ -129,6 +131,19 @@ def _load_transform(value: object) -> Transform3D:
     return transform
 
 
+def _load_source_units(value: object, *, item_name: str) -> ModelUnits:
+    if value is None:
+        return ModelUnits.MILLIMETERS
+    if not isinstance(value, str):
+        raise ProjectFileError(f"Project item {item_name!r} has invalid source units.")
+    try:
+        return ModelUnits(value)
+    except ValueError as exc:
+        raise ProjectFileError(
+            f"Project item {item_name!r} uses unsupported source units {value!r}."
+        ) from exc
+
+
 def _load_item(value: object, project_path: Path) -> ProjectItem:
     if not isinstance(value, dict):
         raise ProjectFileError("Project item is invalid.")
@@ -145,6 +160,7 @@ def _load_item(value: object, project_path: Path) -> ProjectItem:
 
     source_path = _source_path_for_load(value.get("source_path"), project_path)
     transform = _load_transform(value.get("transform"))
+    source_units = _load_source_units(value.get("source_units"), item_name=name)
     mesh = None
     if kind.lower() == "stl":
         if source_path is None or not source_path.is_file():
@@ -161,6 +177,7 @@ def _load_item(value: object, project_path: Path) -> ProjectItem:
         visible=visible,
         mesh=mesh,
         transform=transform,
+        source_units=source_units,
     )
 
 
