@@ -11,7 +11,7 @@ from .transform import Transform3D
 from .units import ModelUnits
 
 PROJECT_FILE_VERSION = 1
-PROJECT_SUFFIX = ".carvefoundry"
+PROJECT_SUFFIX = ".cf3d"
 
 
 class ProjectFileError(ValueError):
