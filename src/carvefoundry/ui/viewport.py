@@ -3,8 +3,8 @@ from __future__ import annotations
 from math import radians, tan
 
 import numpy as np
-from PySide6.QtCore import QPointF
-from PySide6.QtGui import QMatrix4x4, QVector3D, QWheelEvent
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QMatrix4x4, QMouseEvent, QVector3D, QWheelEvent
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
 from .viewport_gpu import MeshViewport as _GpuMeshViewport
@@ -253,6 +253,18 @@ class MeshViewport(_GpuMeshViewport):
             distance * 4.0 + diagonal * 4.0 + 10.0,
         )
         return projection, view_matrix
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        before = (self.yaw_deg, self.elevation_deg)
+        super().mouseMoveEvent(event)
+        after = (self.yaw_deg, self.elevation_deg)
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and before != after
+            and self.view_name != "Free"
+        ):
+            self.view_name = "Free"
+            self._set_view_combo("Free")
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Zoom over a wide range, including smooth Wayland touchpad deltas."""
