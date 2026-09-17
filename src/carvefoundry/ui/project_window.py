@@ -124,9 +124,7 @@ class MainWindow(_BaseMainWindow):
 
         if result == QMessageBox.StandardButton.Save:
             return self._save_project()
-        if result == QMessageBox.StandardButton.Discard:
-            return True
-        return False
+        return result == QMessageBox.StandardButton.Discard
 
     def _new_project(self) -> None:
         if not self._confirm_new_project():
