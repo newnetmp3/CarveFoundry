@@ -50,6 +50,11 @@ class Project:
     name: str = "Untitled"
     stock: Stock = field(default_factory=Stock)
     items: list[ProjectItem] = field(default_factory=list)
+    _asset_workspace_owner: object | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def default_transform_for_mesh(
         self,
