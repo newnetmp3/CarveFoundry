@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.mesh import MeshAsset, MeshImportError, load_stl
 from ..core.project import Project, ProjectItem
 from ..core.tools import DEFAULT_TOOLS
 from .ribbon import Ribbon
@@ -191,6 +192,10 @@ class MainWindow(QMainWindow):
         canvas_layout.addWidget(import_button, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.properties_panel = Panel("Properties / Carve")
+        self.selection_info = QLabel()
+        self.selection_info.setWordWrap(True)
+        self.selection_info.setObjectName("Muted")
+        self.properties_panel.body_layout.addWidget(self.selection_info)
         self.properties_panel.body_layout.addWidget(QLabel("Selected cutter"))
         self.tool_combo = QComboBox()
         for tool in DEFAULT_TOOLS:
@@ -205,6 +210,9 @@ class MainWindow(QMainWindow):
         self.properties_panel.body_layout.addWidget(info)
         self.properties_panel.body_layout.addStretch(1)
 
+        self.project_list.currentRowChanged.connect(self._update_properties)
+        self.project_list.setCurrentRow(0)
+
         splitter.addWidget(self.project_panel)
         splitter.addWidget(canvas)
         splitter.addWidget(self.properties_panel)
@@ -213,10 +221,55 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter)
         return wrapper
 
+    @staticmethod
+    def _number(value: float) -> str:
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+
+    @classmethod
+    def _mesh_dimensions_text(cls, mesh: MeshAsset) -> str:
+        dimensions = " × ".join(cls._number(value) for value in mesh.dimensions)
+        return f"{dimensions} {mesh.units or 'source units'}"
+
+    @classmethod
+    def _mesh_properties_text(cls, item: ProjectItem) -> str:
+        mesh = item.mesh
+        if mesh is None:
+            return f"{item.kind.upper()}\n{item.name}"
+        minimum, maximum = mesh.bounds
+        minimum_text = ", ".join(cls._number(value) for value in minimum)
+        maximum_text = ", ".join(cls._number(value) for value in maximum)
+        units = mesh.units or "unspecified (STL has no inherent unit)"
+        return (
+            f"STL mesh\n{item.name}\n\n"
+            f"Dimensions: {cls._mesh_dimensions_text(mesh)}\n"
+            f"Units: {units}\n"
+            f"Vertices: {mesh.vertex_count:,}\n"
+            f"Faces: {mesh.face_count:,}\n"
+            f"Bounds min: {minimum_text}\n"
+            f"Bounds max: {maximum_text}"
+        )
+
+    def _update_properties(self, row: int) -> None:
+        if row <= 0:
+            stock = self.project.stock
+            self.selection_info.setText(
+                "Stock\n"
+                f"{self._number(stock.width_mm)} × {self._number(stock.height_mm)} × "
+                f"{self._number(stock.thickness_mm)} mm"
+            )
+            return
+
+        item_index = row - 1
+        if item_index >= len(self.project.items):
+            self.selection_info.setText("No design selected")
+            return
+        self.selection_info.setText(self._mesh_properties_text(self.project.items[item_index]))
+
     def _new_project(self) -> None:
         self.project = Project()
         self.project_list.clear()
         self.project_list.addItem("Stock  300 × 200 × 19 mm")
+        self.project_list.setCurrentRow(0)
         self.statusBar().showMessage("New project created", 3000)
 
     def _import_file(self, kind: str | None = None) -> None:
@@ -239,8 +292,24 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+
         source = Path(path)
         detected = kind or source.suffix.lstrip(".").upper()
-        self.project.items.append(ProjectItem(source.name, source, detected.lower()))
-        self.project_list.addItem(f"{detected}  {source.name}")
+        mesh: MeshAsset | None = None
+        if detected.upper() == "STL":
+            try:
+                mesh = load_stl(source)
+            except MeshImportError as exc:
+                self.selection_info.setText(f"STL import failed\n{exc}")
+                self.statusBar().showMessage(f"Could not import {source.name}: {exc}", 8000)
+                return
+
+        item = ProjectItem(source.name, source, detected.lower(), mesh=mesh)
+        self.project.items.append(item)
+        if mesh is None:
+            list_text = f"{detected}  {source.name}"
+        else:
+            list_text = f"STL  {source.name} — {self._mesh_dimensions_text(mesh)}"
+        self.project_list.addItem(list_text)
+        self.project_list.setCurrentRow(self.project_list.count() - 1)
         self.statusBar().showMessage(f"Imported {source.name}", 5000)

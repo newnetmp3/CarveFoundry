@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .mesh import MeshAsset
+
 
 @dataclass(slots=True)
 class Stock:
@@ -17,6 +19,7 @@ class ProjectItem:
     source_path: Path | None = None
     kind: str = "shape"
     visible: bool = True
+    mesh: MeshAsset | None = None
 
 
 @dataclass(slots=True)
