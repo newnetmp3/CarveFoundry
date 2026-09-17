@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..cam.gcode import write_grbl
 from ..core.importer import ImportFileError, inspect_import_file
 from ..core.project import Project, ProjectItem
 from ..core.project_file import (
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow):
         project.add_button("Save As", self._save_project_as)
         exchange = file_page.add_group("Import / Export")
         exchange.add_button("Import", self._import_file, primary=True)
-        exchange.add_button("Export G-code")
+        exchange.add_button("Export G-code", self._export_gcode)
 
         home = self.ribbon.add_page("Home")
         edit = home.add_group("Edit")
@@ -833,6 +834,59 @@ class MainWindow(QMainWindow):
         self.project_path = saved_path
         self.project_title_label.setText(f"  •  {self.project.name} Project")
         self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+
+    def _export_gcode(self) -> None:
+        toolpaths = self.project.toolpaths
+        if not toolpaths:
+            self.selection_info.setText(
+                "No calculated toolpaths to export.\n\n"
+                "Calculate a toolpath first, then return to Export G-code."
+            )
+            self.statusBar().showMessage("No calculated toolpaths to export", 5000)
+            return
+
+        if len(toolpaths) > 1:
+            self.selection_info.setText(
+                "Multiple calculated toolpaths are present.\n\n"
+                "CarveFoundry will export one operation at a time until the "
+                "toolpath/operation selector is implemented."
+            )
+            self.statusBar().showMessage(
+                "Select a single calculated operation before exporting",
+                6000,
+            )
+            return
+
+        toolpath = toolpaths[0]
+        base_directory = self.project_path.parent if self.project_path else Path.home()
+        project_name = self.project.name if self.project.name != "Untitled" else toolpath.name
+        suggested = base_directory / f"{project_name}.nc"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export G-code",
+            str(suggested),
+            "G-code (*.nc *.gcode *.tap *.cnc);;All files (*)",
+        )
+        if not path:
+            self.statusBar().showMessage("G-code export canceled", 3000)
+            return
+
+        try:
+            output_path = write_grbl(toolpath, Path(path))
+        except (OSError, ValueError) as exc:
+            self.selection_info.setText(f"G-code export failed\n{exc}")
+            self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
+            return
+
+        self.selection_info.setText(
+            f"G-code exported\n{output_path}\n\n"
+            f"Operation: {toolpath.name}\n"
+            f"Cutter: {toolpath.cutter.name}\n"
+            f"Moves: {len(toolpath.moves):,}\n"
+            f"Estimated cutting time: {toolpath.estimated_cutting_minutes:.1f} min "
+            "(rapids excluded)"
+        )
+        self.statusBar().showMessage(f"Exported {output_path.name}", 5000)
 
     def _import_file(self, kind: str | None = None) -> None:
         filters = {
