@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from carvefoundry.core.history import WorkspaceSnapshot, capture_workspace, restore_workspace
 from carvefoundry.core.project import Project, ProjectItem
 from carvefoundry.core.project_file import (
     PROJECT_SUFFIX,
@@ -13,6 +15,14 @@ from carvefoundry.core.project_file import (
 )
 
 from .main_window import MainWindow as _BaseMainWindow
+
+
+@dataclass(slots=True)
+class _UndoEntry:
+    snapshot: WorkspaceSnapshot
+    selected_row: int
+    state_id: int
+    label: str
 
 
 class MainWindow(_BaseMainWindow):
@@ -25,6 +35,11 @@ class MainWindow(_BaseMainWindow):
 
     def __init__(self) -> None:
         self._project_dirty = False
+        self._undo_stack: list[_UndoEntry] = []
+        self._history_state_id = 0
+        self._history_next_id = 1
+        self._saved_state_id = 0
+        self._pending_import_undo: tuple[WorkspaceSnapshot, int] | None = None
         super().__init__()
         self._update_project_title()
 
@@ -44,14 +59,61 @@ class MainWindow(_BaseMainWindow):
         self.setWindowTitle(f"CarveFoundry — {self.project.name}{marker}")
 
     def _mark_project_dirty(self) -> None:
-        if self._project_dirty:
-            return
+        if not self._project_dirty:
+            self._history_state_id = self._history_next_id
+            self._history_next_id += 1
         self._project_dirty = True
         self._update_project_title()
 
     def _mark_project_clean(self) -> None:
+        self._saved_state_id = self._history_state_id
         self._project_dirty = False
         self._update_project_title()
+
+    def _reset_undo_history(self) -> None:
+        self._undo_stack.clear()
+        self._history_state_id = 0
+        self._history_next_id = 1
+        self._saved_state_id = 0
+        self._pending_import_undo = None
+
+    def _record_undo(
+        self,
+        snapshot: WorkspaceSnapshot,
+        selected_row: int,
+        label: str,
+    ) -> None:
+        self._undo_stack.append(
+            _UndoEntry(
+                snapshot=snapshot,
+                selected_row=selected_row,
+                state_id=self._history_state_id,
+                label=label,
+            )
+        )
+        if len(self._undo_stack) > 100:
+            self._undo_stack.pop(0)
+
+        self._history_state_id = self._history_next_id
+        self._history_next_id += 1
+        self._project_dirty = self._history_state_id != self._saved_state_id
+        self._update_project_title()
+
+    def _undo(self) -> None:
+        if not self._undo_stack:
+            self.statusBar().showMessage("Nothing to undo", 3000)
+            return
+
+        entry = self._undo_stack.pop()
+        restore_workspace(self.project, entry.snapshot)
+        self._history_state_id = entry.state_id
+        self._project_dirty = self._history_state_id != self._saved_state_id
+        self._update_project_title()
+
+        self.viewport.set_project(self.project)
+        self._refresh_project_list(entry.selected_row)
+        self.viewport.fit_view()
+        self.statusBar().showMessage(f"Undo: {entry.label}", 3000)
 
     def _set_project(
         self,
@@ -65,6 +127,7 @@ class MainWindow(_BaseMainWindow):
             project_path=project_path,
             selected_row=selected_row,
         )
+        self._reset_undo_history()
         self._mark_project_clean()
 
     def _save_project(self) -> bool:
@@ -220,13 +283,17 @@ class MainWindow(_BaseMainWindow):
     # Mutating workspace actions mark the project as modified. Keeping this in
     # one lifecycle layer makes the dirty state reliable for New/Open/Close.
     def _project_item_changed(self, list_item) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         before = tuple(item.visible for item in self.project.items)
         super()._project_item_changed(list_item)
         after = tuple(item.visible for item in self.project.items)
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "visibility")
 
     def _stock_control_changed(self, value: float) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         before = (
             self.project.stock.width_mm,
             self.project.stock.height_mm,
@@ -239,72 +306,106 @@ class MainWindow(_BaseMainWindow):
             self.project.stock.thickness_mm,
         )
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "stock dimensions")
 
     def _source_units_changed(self, index: int) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         item = self._selected_item()
         before = self._transform_signature(item) if item is not None else None
         super()._source_units_changed(index)
         item = self._selected_item()
         after = self._transform_signature(item) if item is not None else None
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "model units")
 
     def _transform_control_changed(self, value: float) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         item = self._selected_item()
         before = self._transform_signature(item) if item is not None else None
         super()._transform_control_changed(value)
         item = self._selected_item()
         after = self._transform_signature(item) if item is not None else None
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "model transform")
 
     def _center_selected_xy(self) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         item = self._selected_item()
         before = self._transform_signature(item) if item is not None else None
         super()._center_selected_xy()
         item = self._selected_item()
         after = self._transform_signature(item) if item is not None else None
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "center XY")
 
     def _top_selected_to_surface(self) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         item = self._selected_item()
         before = self._transform_signature(item) if item is not None else None
         super()._top_selected_to_surface()
         item = self._selected_item()
         after = self._transform_signature(item) if item is not None else None
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "top to Z0")
 
     def _reset_selected_transform(self) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         item = self._selected_item()
         before = self._transform_signature(item) if item is not None else None
         super()._reset_selected_transform()
         item = self._selected_item()
         after = self._transform_signature(item) if item is not None else None
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "reset transform")
 
     def _duplicate_selected_item(self) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         before = len(self.project.items)
         super()._duplicate_selected_item()
         if len(self.project.items) != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "duplicate")
 
     def _delete_selected_item(self) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         before = len(self.project.items)
+        removed_name = self._selected_item().name if self._selected_item() is not None else "item"
         super()._delete_selected_item()
         if len(self.project.items) != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, f"delete {removed_name}")
 
     def _move_selected_item(self, offset: int) -> None:
+        snapshot = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
         before = tuple(id(item) for item in self.project.items)
         super()._move_selected_item(offset)
         after = tuple(id(item) for item in self.project.items)
         if after != before:
-            self._mark_project_dirty()
+            self._record_undo(snapshot, selected_row, "reorder layer")
+
+    def _before_import_items_added(self, count: int) -> None:
+        if count <= 0:
+            self._pending_import_undo = None
+            return
+        self._pending_import_undo = (
+            capture_workspace(self.project),
+            self.project_list.currentRow(),
+        )
 
     def _on_import_items_added(self, count: int) -> None:
-        if count > 0:
-            self._mark_project_dirty()
+        pending = self._pending_import_undo
+        self._pending_import_undo = None
+        if count > 0 and pending is not None:
+            snapshot, selected_row = pending
+            label = "import file" if count == 1 else f"import {count} files"
+            self._record_undo(snapshot, selected_row, label)
+
+    def _import_thread_finished(self) -> None:
+        super()._import_thread_finished()
+        self._pending_import_undo = None
