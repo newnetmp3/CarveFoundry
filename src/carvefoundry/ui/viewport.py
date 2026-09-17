@@ -476,7 +476,7 @@ class MeshViewport(QOpenGLWidget):
             vao=vao,
             vertex_buffer=vertex_buffer,
             index_buffer=index_buffer,
-            index_count=int(len(faces)),
+            index_count=len(faces),
         )
 
     def _gpu_mesh_for_item(self, item: ProjectItem) -> _GpuMesh | None:
@@ -544,7 +544,7 @@ class MeshViewport(QOpenGLWidget):
         self._line_program.setUniformValue("u_mvp", view_projection)
         self._line_program.setUniformValue("u_color", color)
         self._line_vao.bind()
-        self._functions.glDrawArrays(GL_LINES, 0, int(len(line_vertices)))
+        self._functions.glDrawArrays(GL_LINES, 0, len(line_vertices))
         self._line_vao.release()
         self._line_program.release()
 
