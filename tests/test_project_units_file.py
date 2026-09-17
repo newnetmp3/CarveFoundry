@@ -6,7 +6,7 @@ import trimesh
 
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.project import Project, ProjectItem
-from carvefoundry.core.project_file import load_project, save_project
+from carvefoundry.core.project_file import load_project, project_to_dict, save_project
 from carvefoundry.core.units import ModelUnits
 
 
@@ -20,13 +20,15 @@ def test_project_file_preserves_source_unit_assumption(tmp_path: Path) -> None:
         mesh=load_stl(mesh_path),
         source_units=ModelUnits.INCHES,
     )
+    project = Project(items=[item])
     project_path = tmp_path / "inch-job.cf3d"
 
-    save_project(Project(items=[item]), project_path)
-    payload = json.loads(project_path.read_text(encoding="utf-8"))
+    save_project(project, project_path)
+    manifest = project_to_dict(project, project_path)
+    mesh_path.unlink()
     loaded = load_project(project_path)
 
-    assert payload["items"][0]["source_units"] == "in"
+    assert manifest["items"][0]["source_units"] == "in"
     assert loaded.items[0].source_units is ModelUnits.INCHES
     transformed = loaded.items[0].transformed_mesh()
     assert transformed is not None
