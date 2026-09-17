@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from math import ceil, isfinite
+
+import numpy as np
+import trimesh
+
+from carvefoundry.core.tools import Cutter
+
+from .contact import CutterContactMap, compensate_height_field
+from .heightfield import HeightField
+from .raster import RasterFinishingSettings, generate_raster_finishing
+from .toolpath import Toolpath
+
+
+@dataclass(frozen=True, slots=True)
+class Finish3DSettings:
+    """Parameters shared by surface sampling and the raster finishing strategy."""
+
+    surface_spacing_mm: float
+    raster: RasterFinishingSettings
+    max_surface_samples: int = 2_000_000
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.surface_spacing_mm) or self.surface_spacing_mm <= 0:
+            raise ValueError("surface_spacing_mm must be finite and greater than zero.")
+        if self.max_surface_samples < 4:
+            raise ValueError("max_surface_samples must be at least four.")
+
+
+@dataclass(frozen=True, slots=True)
+class Finish3DResult:
+    surface: HeightField
+    contact: CutterContactMap
+    toolpath: Toolpath
+
+
+def _estimated_sample_count(mesh: trimesh.Trimesh, spacing_mm: float) -> int:
+    bounds = np.asarray(mesh.bounds, dtype=float)
+    span = bounds[1, :2] - bounds[0, :2]
+    if np.any(span <= 0):
+        raise ValueError("Mesh must have non-zero XY dimensions for 3-axis finishing.")
+    x_count = max(2, ceil(float(span[0]) / spacing_mm) + 1)
+    y_count = max(2, ceil(float(span[1]) / spacing_mm) + 1)
+    return x_count * y_count
+
+
+def calculate_3d_finish(
+    mesh_mm: trimesh.Trimesh,
+    cutter: Cutter,
+    settings: Finish3DSettings,
+    *,
+    name: str = "3D Finish",
+) -> Finish3DResult:
+    """Run the geometry-safe baseline 3D finishing pipeline.
+
+    ``mesh_mm`` must already be transformed into project/machine millimeter
+    coordinates. Cutter compensation is performed from the selected cutter's
+    radial profile; no cutter family is substituted or approximated as a ball.
+    """
+
+    sample_count = _estimated_sample_count(mesh_mm, settings.surface_spacing_mm)
+    if sample_count > settings.max_surface_samples:
+        raise ValueError(
+            f"Requested surface grid would contain {sample_count:,} samples; "
+            f"limit is {settings.max_surface_samples:,}. Increase surface spacing."
+        )
+
+    surface = HeightField.from_mesh_top_surface(
+        mesh_mm,
+        spacing_mm=settings.surface_spacing_mm,
+    )
+    contact = compensate_height_field(surface, cutter)
+    toolpath = generate_raster_finishing(contact, settings.raster, name=name)
+    return Finish3DResult(surface=surface, contact=contact, toolpath=toolpath)
