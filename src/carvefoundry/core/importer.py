@@ -5,6 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import ezdxf
+from ezdxf.lldxf.const import DXFError
 
 from .mesh import MeshAsset, MeshImportError, load_stl
 
@@ -90,7 +91,7 @@ def _validate_svg(path: Path) -> None:
 def _validate_dxf(path: Path) -> None:
     try:
         ezdxf.readfile(path)
-    except (OSError, ezdxf.DXFError) as exc:
+    except (OSError, DXFError) as exc:
         raise ImportFileError(f"Invalid DXF {path.name}: {exc}") from exc
 
 
