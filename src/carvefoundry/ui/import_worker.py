@@ -38,7 +38,7 @@ class ImportWorker(QObject):
                     failures.append(f"{source.name}: {exc}")
                     continue
                 infos.append(info)
-        except Exception as exc:  # keep the GUI alive on unexpected parser failures
+        except Exception as exc:  # noqa: BLE001 - thread boundary must always report/quit
             self.failed.emit(f"{type(exc).__name__}: {exc}")
             return
 
