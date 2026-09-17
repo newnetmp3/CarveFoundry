@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import radians, tan
+from math import atan, degrees, radians, sin, tan
 
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
@@ -17,6 +17,7 @@ class MeshViewport(_GpuMeshViewport):
     MAX_ZOOM = 100_000.0
     PERSPECTIVE_FOV_DEG = 45.0
     ISOMETRIC_ELEVATION_DEG = 35.26438968
+    FIT_MARGIN = 1.10
 
     def __init__(self, project=None) -> None:
         super().__init__(project)
@@ -171,30 +172,43 @@ class MeshViewport(_GpuMeshViewport):
         self.fit_view()
 
     def _camera_matrices(self) -> tuple[QMatrix4x4, QMatrix4x4]:
+        """Build camera matrices without changing framing as the camera orbits.
+
+        The previous implementation fitted the projected X/Y extents on every
+        frame. Those extents change with camera angle, which made an orbit look
+        like an automatic zoom. A bounding sphere is rotation-invariant, so the
+        apparent scale now changes only through explicit zoom/fit operations.
+        """
+
         bounds = self._scene_bounds()
         target = bounds.mean(axis=0)
         right, up, view = self._camera_basis()
 
-        corners = self._bounds_corners(bounds) - target
-        span_x = max(float(np.ptp(corners @ right)), 1e-6)
-        span_y = max(float(np.ptp(corners @ up)), 1e-6)
-        span_depth = max(float(np.ptp(corners @ view)), 1e-6)
         diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-6)
+        radius = max(diagonal / 2.0, 1e-6)
+        framed_radius = radius * self.FIT_MARGIN
 
         width = max(self.width(), 1)
         height = max(self.height(), 1)
-        aspect = width / height
+        aspect = max(width / height, 1e-9)
+        zoom = max(self.zoom, 1e-9)
 
         if self.projection_mode == "perspective":
-            half_fov = radians(self.PERSPECTIVE_FOV_DEG) / 2.0
-            tan_half_fov = tan(half_fov)
-            required_y = span_y / (2.0 * tan_half_fov)
-            required_x = span_x / (2.0 * tan_half_fov * aspect)
-            fit_distance = max(required_x, required_y) + span_depth / 2.0
-            fit_distance = max(fit_distance * 1.10, 1e-5)
-            distance = max(fit_distance / max(self.zoom, 1e-9), 1e-6)
+            base_half_vertical = radians(self.PERSPECTIVE_FOV_DEG) / 2.0
+            base_half_horizontal = atan(tan(base_half_vertical) * aspect)
+            limiting_half_angle = max(
+                min(base_half_vertical, base_half_horizontal),
+                1e-6,
+            )
 
-            world_height = 2.0 * distance * tan_half_fov
+            distance = max(
+                framed_radius / sin(limiting_half_angle),
+                framed_radius + 1e-5,
+            )
+
+            effective_half_vertical = atan(tan(base_half_vertical) / zoom)
+            effective_fov_deg = max(degrees(effective_half_vertical * 2.0), 1e-5)
+            world_height = 2.0 * distance * tan(effective_half_vertical)
             world_width = world_height * aspect
             target = (
                 target
@@ -210,23 +224,24 @@ class MeshViewport(_GpuMeshViewport):
                 QVector3D(*[float(value) for value in up]),
             )
 
-            near_plane = max(min(distance * 0.01, diagonal * 0.01), 1e-5)
-            far_plane = max(distance + diagonal * 8.0, near_plane + 1.0)
+            near_plane = max(distance - radius * 2.0, 1e-5)
+            far_plane = max(distance + radius * 4.0, near_plane + 1.0)
             projection = QMatrix4x4()
             projection.perspective(
-                self.PERSPECTIVE_FOV_DEG,
+                effective_fov_deg,
                 aspect,
                 near_plane,
                 far_plane,
             )
             return projection, view_matrix
 
-        half_x = max(span_x * 0.55 / max(self.zoom, 1e-9), 1e-9)
-        half_y = max(span_y * 0.55 / max(self.zoom, 1e-9), 1e-9)
-        if half_x / half_y < aspect:
-            half_x = half_y * aspect
+        half_extent = framed_radius / zoom
+        if aspect >= 1.0:
+            half_y = half_extent
+            half_x = half_extent * aspect
         else:
-            half_y = half_x / aspect
+            half_x = half_extent
+            half_y = half_extent / aspect
 
         target = (
             target
