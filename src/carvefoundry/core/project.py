@@ -54,7 +54,7 @@ class Project:
     name: str = "Untitled"
     stock: Stock = field(default_factory=Stock)
     items: list[ProjectItem] = field(default_factory=list)
-    toolpaths: list["Toolpath"] = field(
+    toolpaths: list[Toolpath] = field(
         default_factory=list,
         repr=False,
         compare=False,
