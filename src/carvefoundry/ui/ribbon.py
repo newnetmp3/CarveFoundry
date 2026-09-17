@@ -38,6 +38,7 @@ class RibbonGroup(QFrame):
         outer.addLayout(self.buttons, 1)
         label = QLabel(title)
         label.setObjectName("RibbonGroupTitle")
+        label.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         outer.addWidget(label)
 
