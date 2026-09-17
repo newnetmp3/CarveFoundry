@@ -129,7 +129,8 @@ class MainWindow(QMainWindow):
 
         home = self.ribbon.add_page("Home")
         edit = home.add_group("Edit")
-        for title in ("Undo", "Redo", "Cut", "Copy", "Paste"):
+        edit.add_button("Undo", self._undo)
+        for title in ("Redo", "Cut", "Copy", "Paste"):
             edit.add_button(title)
         edit.add_button("Delete", self._delete_selected_item)
         arrange = home.add_group("Arrange")
@@ -787,6 +788,9 @@ class MainWindow(QMainWindow):
         self.viewport.set_project(project)
         self._refresh_project_list(selected_row)
 
+    def _undo(self) -> None:
+        self.statusBar().showMessage("Nothing to undo", 3000)
+
     def _new_project(self) -> None:
         self._set_project(Project(), project_path=None)
         self.statusBar().showMessage("New project created", 3000)
@@ -980,10 +984,15 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Import result discarded — project changed", 6000)
             return
 
+        info_list = list(infos)
+        failure_list = list(failures)
+        if info_list:
+            self._before_import_items_added(len(info_list))
+
         imported: list[ProjectItem] = []
         source_only_count = 0
 
-        for info in list(infos):
+        for info in info_list:
             mesh = info.mesh
             if mesh is None:
                 item = ProjectItem(info.path.name, info.path, info.kind)
@@ -1002,7 +1011,6 @@ class MainWindow(QMainWindow):
             self.project.items.append(item)
             imported.append(item)
 
-        failure_list = list(failures)
         if imported:
             self._refresh_project_list(len(self.project.items))
             if any(item.mesh is not None for item in imported):
@@ -1035,6 +1043,9 @@ class MainWindow(QMainWindow):
                 f"Import failed for {len(failure_list)} file(s)",
                 8000,
             )
+
+    def _before_import_items_added(self, count: int) -> None:
+        del count
 
     def _on_import_items_added(self, count: int) -> None:
         del count
