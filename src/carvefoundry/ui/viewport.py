@@ -69,10 +69,11 @@ class MeshViewport(_GpuMeshViewport):
         self._position_view_controls()
 
     def _scene_bounds(self) -> np.ndarray:
-        """Frame the selected mesh instead of letting stock dominate the view.
+        """Return bounds used to frame the current view.
 
-        Selecting the Stock row clears ``selected_item_index`` and therefore
-        intentionally falls back to the complete stock/project bounds.
+        The selected mesh controls framing so a small model can fill the
+        viewport. Selecting the Stock row clears ``selected_item_index`` and
+        therefore intentionally falls back to the complete stock/project bounds.
         """
 
         if self.project is not None and self.selected_item_index is not None:
@@ -81,6 +82,16 @@ class MeshViewport(_GpuMeshViewport):
                 item = self.project.items[index]
                 if item.visible and item.mesh is not None:
                     return self._item_bounds_mm(item)
+        return super()._scene_bounds()
+
+    def _clip_bounds(self) -> np.ndarray:
+        """Return full-scene bounds used only for near/far clipping.
+
+        Framing and clipping must be separate. A selected STL can be tiny
+        compared with the stock, but the stock/grid still needs to remain inside
+        the depth range while the camera orbits.
+        """
+
         return super()._scene_bounds()
 
     def fit_view(self) -> None:
@@ -172,21 +183,33 @@ class MeshViewport(_GpuMeshViewport):
         self.fit_view()
 
     def _camera_matrices(self) -> tuple[QMatrix4x4, QMatrix4x4]:
-        """Build camera matrices without changing framing as the camera orbits.
+        """Build stable camera matrices while keeping the full scene unclipped.
 
-        The previous implementation fitted the projected X/Y extents on every
-        frame. Those extents change with camera angle, which made an orbit look
-        like an automatic zoom. A bounding sphere is rotation-invariant, so the
-        apparent scale now changes only through explicit zoom/fit operations.
+        ``_scene_bounds`` controls framing and may intentionally contain only a
+        selected model. ``_clip_bounds`` always contains the stock and visible
+        scene so grid/stock geometry cannot disappear merely because a small STL
+        is selected. Framing uses a rotation-invariant sphere so orbiting never
+        changes zoom.
         """
 
         bounds = self._scene_bounds()
+        clip_bounds = self._clip_bounds()
         target = bounds.mean(axis=0)
         right, up, view = self._camera_basis()
 
         diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-6)
         radius = max(diagonal / 2.0, 1e-6)
         framed_radius = radius * self.FIT_MARGIN
+
+        clip_corners = self._bounds_corners(clip_bounds)
+        relative_clip_depths = (clip_corners - target) @ view
+        nearest_scene_offset = float(np.max(relative_clip_depths))
+        farthest_scene_offset = float(np.min(relative_clip_depths))
+        clip_diagonal = max(
+            float(np.linalg.norm(clip_bounds[1] - clip_bounds[0])),
+            1e-6,
+        )
+        clip_margin = max(clip_diagonal * 0.02, 0.1)
 
         width = max(self.width(), 1)
         height = max(self.height(), 1)
@@ -201,14 +224,23 @@ class MeshViewport(_GpuMeshViewport):
                 1e-6,
             )
 
-            distance = max(
+            fit_distance = max(
                 framed_radius / sin(limiting_half_angle),
                 framed_radius + 1e-5,
             )
+            distance = max(
+                fit_distance,
+                nearest_scene_offset + clip_margin,
+                1e-5,
+            )
 
-            effective_half_vertical = atan(tan(base_half_vertical) / zoom)
+            desired_half_height = max(
+                fit_distance * tan(base_half_vertical) / zoom,
+                1e-9,
+            )
+            effective_half_vertical = atan(desired_half_height / distance)
             effective_fov_deg = max(degrees(effective_half_vertical * 2.0), 1e-5)
-            world_height = 2.0 * distance * tan(effective_half_vertical)
+            world_height = 2.0 * desired_half_height
             world_width = world_height * aspect
             target = (
                 target
@@ -224,8 +256,10 @@ class MeshViewport(_GpuMeshViewport):
                 QVector3D(*[float(value) for value in up]),
             )
 
-            near_plane = max(distance - radius * 2.0, 1e-5)
-            far_plane = max(distance + radius * 4.0, near_plane + 1.0)
+            nearest_depth = distance - nearest_scene_offset
+            farthest_depth = distance - farthest_scene_offset
+            near_plane = max(nearest_depth * 0.5, 1e-4)
+            far_plane = max(farthest_depth + clip_margin, near_plane + 1.0)
             projection = QMatrix4x4()
             projection.perspective(
                 effective_fov_deg,
@@ -249,7 +283,11 @@ class MeshViewport(_GpuMeshViewport):
             + up * self.pan_px.y() * ((2.0 * half_y) / height)
         )
 
-        distance = max(diagonal * 2.0, 1.0)
+        distance = max(
+            diagonal * 2.0,
+            nearest_scene_offset + clip_margin,
+            1.0,
+        )
         eye = target + view * distance
         view_matrix = QMatrix4x4()
         view_matrix.lookAt(
@@ -258,14 +296,19 @@ class MeshViewport(_GpuMeshViewport):
             QVector3D(*[float(value) for value in up]),
         )
 
+        nearest_depth = distance - nearest_scene_offset
+        farthest_depth = distance - farthest_scene_offset
+        near_plane = max(nearest_depth * 0.5, 1e-4)
+        far_plane = max(farthest_depth + clip_margin, near_plane + 1.0)
+
         projection = QMatrix4x4()
         projection.ortho(
             -half_x,
             half_x,
             -half_y,
             half_y,
-            1e-4,
-            distance * 4.0 + diagonal * 4.0 + 10.0,
+            near_plane,
+            far_plane,
         )
         return projection, view_matrix
 
