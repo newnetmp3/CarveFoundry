@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QPushButton,
+    QProgressBar,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -34,6 +35,7 @@ from ..core.project_file import (
 )
 from ..core.tools import DEFAULT_TOOLS
 from ..core.units import ModelUnits
+from .import_worker import ImportWorker
 from .ribbon import Ribbon
 from .viewport import MeshViewport
 
@@ -63,6 +65,9 @@ class MainWindow(QMainWindow):
         self._updating_transform_controls = False
         self._updating_stock_controls = False
         self._updating_project_list = False
+        self._import_thread: QThread | None = None
+        self._import_worker: ImportWorker | None = None
+        self._import_target_project: Project | None = None
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
         self.setMinimumSize(1050, 650)
@@ -81,6 +86,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_workspace(), 1)
 
         status = QStatusBar()
+        self.import_progress = QProgressBar()
+        self.import_progress.setObjectName("ImportProgress")
+        self.import_progress.setFixedWidth(220)
+        self.import_progress.setTextVisible(False)
+        self.import_progress.hide()
+        status.addPermanentWidget(self.import_progress)
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
 
@@ -889,6 +900,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Exported {output_path.name}", 5000)
 
     def _import_file(self, kind: str | None = None) -> None:
+        if self._import_thread is not None and self._import_thread.isRunning():
+            self.statusBar().showMessage("An import is already in progress", 3000)
+            return
+
         filters = {
             "SVG": "SVG files (*.svg)",
             "DXF": "DXF files (*.dxf)",
@@ -922,17 +937,54 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Import canceled", 3000)
             return
 
+        self._start_import(paths, kind)
+
+    def _start_import(self, paths: list[str], kind: str | None) -> None:
+        thread = QThread(self)
+        worker = ImportWorker(paths, kind)
+        worker.moveToThread(thread)
+
+        self._import_thread = thread
+        self._import_worker = worker
+        self._import_target_project = self.project
+
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._import_progress_changed)
+        worker.finished.connect(self._import_completed)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(self._import_failed)
+        worker.failed.connect(thread.quit)
+        worker.failed.connect(worker.deleteLater)
+        thread.finished.connect(self._import_thread_finished)
+        thread.finished.connect(thread.deleteLater)
+
+        self.import_progress.setRange(0, 0)
+        self.import_progress.show()
+        self.statusBar().showMessage("Loading design…")
+        thread.start()
+
+    def _import_progress_changed(self, index: int, total: int, name: str) -> None:
+        if total <= 1:
+            self.import_progress.setRange(0, 0)
+        else:
+            self.import_progress.setRange(0, total)
+            self.import_progress.setValue(max(0, index - 1))
+        self.statusBar().showMessage(f"Loading {name} ({index}/{total})…")
+
+    def _import_completed(self, infos: object, failures: object) -> None:
+        if self.project is not self._import_target_project:
+            self.selection_info.setText(
+                "Import finished, but the active project changed while it was loading.\n\n"
+                "The loaded data was not added to the new project."
+            )
+            self.statusBar().showMessage("Import result discarded — project changed", 6000)
+            return
+
         imported: list[ProjectItem] = []
-        failures: list[str] = []
         source_only_count = 0
 
-        for path in paths:
-            try:
-                info = inspect_import_file(path, expected_kind=kind)
-            except ImportFileError as exc:
-                failures.append(f"{Path(path).name}: {exc}")
-                continue
-
+        for info in list(infos):
             mesh = info.mesh
             if mesh is None:
                 item = ProjectItem(info.path.name, info.path, info.kind)
@@ -948,26 +1000,27 @@ class MainWindow(QMainWindow):
                     transform=transform,
                     source_units=source_units,
                 )
-
             self.project.items.append(item)
             imported.append(item)
 
+        failure_list = list(failures)
         if imported:
             self._refresh_project_list(len(self.project.items))
             if any(item.mesh is not None for item in imported):
                 self.viewport.fit_view()
+            self._on_import_items_added(len(imported))
 
-        if failures:
-            failure_text = "\n".join(failures[:8])
-            if len(failures) > 8:
-                failure_text += f"\n… and {len(failures) - 8} more"
+        if failure_list:
+            failure_text = "\n".join(failure_list[:8])
+            if len(failure_list) > 8:
+                failure_text += f"\n… and {len(failure_list) - 8} more"
             self.selection_info.setText(
-                f"Import completed with {len(failures)} failure(s)\n\n{failure_text}"
+                f"Import completed with {len(failure_list)} failure(s)\n\n{failure_text}"
             )
 
-        if imported and failures:
+        if imported and failure_list:
             self.statusBar().showMessage(
-                f"Imported {len(imported)} file(s); {len(failures)} failed",
+                f"Imported {len(imported)} file(s); {len(failure_list)} failed",
                 8000,
             )
         elif imported:
@@ -980,6 +1033,30 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(message, 6000)
         else:
             self.statusBar().showMessage(
-                f"Import failed for {len(failures)} file(s)",
+                f"Import failed for {len(failure_list)} file(s)",
                 8000,
             )
+
+    def _on_import_items_added(self, count: int) -> None:
+        del count
+
+    def _import_failed(self, message: str) -> None:
+        self.selection_info.setText(f"Import failed\n{message}")
+        self.statusBar().showMessage(f"Import failed: {message}", 8000)
+
+    def _import_thread_finished(self) -> None:
+        self.import_progress.hide()
+        self._import_worker = None
+        self._import_thread = None
+        self._import_target_project = None
+
+    def closeEvent(self, event) -> None:
+        if self._import_thread is not None and self._import_thread.isRunning():
+            self.statusBar().showMessage(
+                "Please wait for the current import to finish before closing",
+                5000,
+            )
+            event.ignore()
+            return
+        super().closeEvent(event)
+
