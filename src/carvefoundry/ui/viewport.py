@@ -666,7 +666,7 @@ class MeshViewport(QOpenGLWidget):
                 GL_TRIANGLES,
                 gpu_mesh.index_count,
                 GL_UNSIGNED_INT,
-                None,
+                0,
             )
             gpu_mesh.vao.release()
 
