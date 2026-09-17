@@ -36,14 +36,20 @@ class Cutter:
             raise ValueError("diameter_mm must be greater than zero")
         if self.tip_diameter_mm < 0 or self.tip_diameter_mm > self.diameter_mm:
             raise ValueError("tip_diameter_mm must be between zero and tool diameter")
-        if self.tool_type in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}:
-            if self.angle_deg is None or not 0 < self.angle_deg < 180:
-                raise ValueError("conical cutters require an included angle between 0 and 180 degrees")
+        if (
+            self.tool_type in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}
+            and (self.angle_deg is None or not 0 < self.angle_deg < 180)
+        ):
+            raise ValueError(
+                "conical cutters require an included angle between 0 and 180 degrees"
+            )
         if self.tool_type is ToolType.TAPERED_BALL_NOSE:
             if self.ball_radius_mm is None or self.ball_radius_mm <= 0:
                 raise ValueError("tapered ball nose requires ball_radius_mm")
             if self.taper_angle_deg is None or not 0 < self.taper_angle_deg < 90:
-                raise ValueError("tapered ball nose requires a taper angle between 0 and 90 degrees")
+                raise ValueError(
+                    "tapered ball nose requires a taper angle between 0 and 90 degrees"
+                )
 
     @property
     def radius_mm(self) -> float:
