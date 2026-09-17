@@ -159,5 +159,16 @@ QPushButton:disabled {
     border-color: #20283a;
 }
 QSplitter::handle { background: #1c2436; width: 2px; height: 2px; }
+QProgressBar#ImportProgress {
+    background: #0f1626;
+    border: 1px solid #2a3550;
+    border-radius: 5px;
+    min-height: 10px;
+    max-height: 10px;
+}
+QProgressBar#ImportProgress::chunk {
+    background: #c8ff3d;
+    border-radius: 4px;
+}
 QStatusBar { background: #0e1425; color: #8792a8; border-top: 1px solid #1c2436; }
 """
