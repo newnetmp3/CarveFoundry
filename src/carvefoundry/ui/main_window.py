@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.importer import ImportFileError, inspect_import_file
-from ..core.mesh import MeshAsset
 from ..core.project import Project, ProjectItem
 from ..core.project_file import (
     PROJECT_SUFFIX,
