@@ -5,7 +5,12 @@ from pathlib import Path
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from carvefoundry.core.project import Project, ProjectItem
-from carvefoundry.core.project_file import (\n    PROJECT_SUFFIX,\n    ProjectFileError,\n    load_project,\n    save_project,\n)
+from carvefoundry.core.project_file import (
+    PROJECT_SUFFIX,
+    ProjectFileError,
+    load_project,
+    save_project,
+)
 
 from .main_window import MainWindow as _BaseMainWindow
 
