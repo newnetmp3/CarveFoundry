@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.mesh import MeshAsset, MeshImportError, load_stl
+from ..core.importer import ImportFileError, inspect_import_file
+from ..core.mesh import MeshAsset
 from ..core.project import Project, ProjectItem
 from ..core.project_file import (
     PROJECT_SUFFIX,
@@ -844,46 +845,88 @@ class MainWindow(QMainWindow):
         }
         selected_filter = filters.get(
             kind,
-            "Design files (*.svg *.dxf *.stl *.png *.jpg *.jpeg *.nc *.gcode *.tap);;"
-            "All files (*)",
+            "Supported designs (*.stl *.svg *.dxf *.png *.jpg *.jpeg *.bmp *.webp "
+            "*.nc *.gcode *.tap *.cnc);;All files (*)",
         )
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            f"Import {kind or 'Design'}",
-            str(Path.home()),
-            selected_filter,
-        )
-        if not path:
+
+        if kind is None:
+            paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Import Design Files",
+                str(Path.home()),
+                selected_filter,
+            )
+        else:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                f"Import {kind}",
+                str(Path.home()),
+                selected_filter,
+            )
+            paths = [path] if path else []
+
+        if not paths:
+            self.statusBar().showMessage("Import canceled", 3000)
             return
 
-        source = Path(path)
-        detected = kind or source.suffix.lstrip(".").upper()
-        mesh: MeshAsset | None = None
-        if detected.upper() == "STL":
-            try:
-                mesh = load_stl(source)
-            except MeshImportError as exc:
-                self.selection_info.setText(f"STL import failed\n{exc}")
-                self.statusBar().showMessage(
-                    f"Could not import {source.name}: {exc}",
-                    8000,
-                )
-                return
+        imported: list[ProjectItem] = []
+        failures: list[str] = []
+        source_only_count = 0
 
-        if mesh is None:
-            item = ProjectItem(source.name, source, detected.lower())
-        else:
-            source_units = ModelUnits.from_metadata(mesh.units)
-            transform = self.project.default_transform_for_mesh(mesh, source_units)
-            item = ProjectItem(
-                source.name,
-                source,
-                detected.lower(),
-                mesh=mesh,
-                transform=transform,
-                source_units=source_units,
+        for path in paths:
+            try:
+                info = inspect_import_file(path, expected_kind=kind)
+            except ImportFileError as exc:
+                failures.append(f"{Path(path).name}: {exc}")
+                continue
+
+            mesh = info.mesh
+            if mesh is None:
+                item = ProjectItem(info.path.name, info.path, info.kind)
+                source_only_count += 1
+            else:
+                source_units = ModelUnits.from_metadata(mesh.units)
+                transform = self.project.default_transform_for_mesh(mesh, source_units)
+                item = ProjectItem(
+                    info.path.name,
+                    info.path,
+                    info.kind,
+                    mesh=mesh,
+                    transform=transform,
+                    source_units=source_units,
+                )
+
+            self.project.items.append(item)
+            imported.append(item)
+
+        if imported:
+            self._refresh_project_list(len(self.project.items))
+            if any(item.mesh is not None for item in imported):
+                self.viewport.fit_view()
+
+        if failures:
+            failure_text = "\n".join(failures[:8])
+            if len(failures) > 8:
+                failure_text += f"\n… and {len(failures) - 8} more"
+            self.selection_info.setText(
+                f"Import completed with {len(failures)} failure(s)\n\n{failure_text}"
             )
-        self.project.items.append(item)
-        self._refresh_project_list(len(self.project.items))
-        self.viewport.fit_view()
-        self.statusBar().showMessage(f"Imported {source.name}", 5000)
+
+        if imported and failures:
+            self.statusBar().showMessage(
+                f"Imported {len(imported)} file(s); {len(failures)} failed",
+                8000,
+            )
+        elif imported:
+            message = f"Imported {len(imported)} file(s)"
+            if source_only_count:
+                message += (
+                    f" — {source_only_count} stored as project source asset(s) "
+                    "pending dedicated editor support"
+                )
+            self.statusBar().showMessage(message, 6000)
+        else:
+            self.statusBar().showMessage(
+                f"Import failed for {len(failures)} file(s)",
+                8000,
+            )
