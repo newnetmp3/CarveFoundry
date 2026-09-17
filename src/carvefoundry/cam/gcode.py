@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .toolpath import MoveKind, Toolpath
 
+GCODE_SUFFIXES = frozenset({".nc", ".gcode", ".tap", ".cnc"})
+
 
 @dataclass(frozen=True, slots=True)
 class GrblPostSettings:
@@ -69,12 +71,29 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
     return "\n".join(lines) + "\n"
 
 
+def normalize_gcode_path(path: str | Path) -> Path:
+    """Return a machine-file path, defaulting unsupported suffixes to .nc."""
+
+    output_path = Path(path).expanduser()
+    if output_path.suffix.lower() not in GCODE_SUFFIXES:
+        output_path = output_path.with_suffix(".nc")
+    return output_path
+
+
 def write_grbl(
     toolpath: Toolpath,
     path: str | Path,
     settings: GrblPostSettings | None = None,
 ) -> Path:
-    output_path = Path(path).expanduser()
+    """Write GRBL G-code atomically enough for normal desktop export."""
+
+    output_path = normalize_gcode_path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(render_grbl(toolpath, settings), encoding="ascii")
+    temporary = output_path.with_suffix(output_path.suffix + ".tmp")
+    try:
+        temporary.write_text(render_grbl(toolpath, settings), encoding="ascii")
+        temporary.replace(output_path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
     return output_path
