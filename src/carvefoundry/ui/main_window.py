@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QPushButton,
     QSplitter,
@@ -31,6 +32,7 @@ from ..core.project_file import (
     save_project,
 )
 from ..core.tools import DEFAULT_TOOLS
+from ..core.units import ModelUnits
 from .ribbon import Ribbon
 from .viewport import MeshViewport
 
@@ -59,6 +61,7 @@ class MainWindow(QMainWindow):
         self.project_path: Path | None = None
         self._updating_transform_controls = False
         self._updating_stock_controls = False
+        self._updating_project_list = False
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
         self.setMinimumSize(1050, 650)
@@ -115,11 +118,16 @@ class MainWindow(QMainWindow):
 
         home = self.ribbon.add_page("Home")
         edit = home.add_group("Edit")
-        for title in ("Undo", "Redo", "Cut", "Copy", "Paste", "Delete"):
+        for title in ("Undo", "Redo", "Cut", "Copy", "Paste"):
             edit.add_button(title)
+        edit.add_button("Delete", self._delete_selected_item)
         arrange = home.add_group("Arrange")
-        for title in ("Align", "Center", "Group", "Ungroup", "Duplicate"):
+        for title in ("Align", "Center", "Group", "Ungroup"):
             arrange.add_button(title)
+        arrange.add_button("Duplicate", self._duplicate_selected_item)
+        layers = home.add_group("Layers")
+        layers.add_button("Move Up", lambda: self._move_selected_item(-1))
+        layers.add_button("Move Down", lambda: self._move_selected_item(1))
 
         create = self.ribbon.add_page("Create")
         shapes = create.add_group("Shapes")
@@ -192,6 +200,23 @@ class MainWindow(QMainWindow):
         self.project_panel = Panel("Project / Layers")
         self.project_list = QListWidget()
         self.project_panel.body_layout.addWidget(self.project_list)
+        layer_buttons = QWidget()
+        layer_layout = QGridLayout(layer_buttons)
+        layer_layout.setContentsMargins(0, 0, 0, 0)
+        layer_layout.setSpacing(5)
+        up_button = QPushButton("Move Up")
+        up_button.clicked.connect(lambda: self._move_selected_item(-1))
+        layer_layout.addWidget(up_button, 0, 0)
+        down_button = QPushButton("Move Down")
+        down_button.clicked.connect(lambda: self._move_selected_item(1))
+        layer_layout.addWidget(down_button, 0, 1)
+        duplicate_button = QPushButton("Duplicate")
+        duplicate_button.clicked.connect(self._duplicate_selected_item)
+        layer_layout.addWidget(duplicate_button, 1, 0)
+        delete_button = QPushButton("Delete")
+        delete_button.clicked.connect(self._delete_selected_item)
+        layer_layout.addWidget(delete_button, 1, 1)
+        self.project_panel.body_layout.addWidget(layer_buttons)
 
         canvas = QFrame()
         canvas.setObjectName("CanvasFrame")
@@ -244,12 +269,13 @@ class MainWindow(QMainWindow):
         self.properties_panel.body_layout.addStretch(1)
 
         self.project_list.currentRowChanged.connect(self._update_properties)
+        self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
 
         splitter.addWidget(self.project_panel)
         splitter.addWidget(canvas)
         splitter.addWidget(self.properties_panel)
-        splitter.setSizes([240, 980, 320])
+        splitter.setSizes([250, 970, 330])
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter)
         return wrapper
@@ -315,12 +341,19 @@ class MainWindow(QMainWindow):
         heading.setObjectName("SectionHeading")
         grid.addWidget(heading, 0, 0, 1, 4)
 
-        grid.addWidget(QLabel(""), 1, 0)
+        grid.addWidget(QLabel("Model units"), 1, 0)
+        self.source_units_combo = QComboBox()
+        for units in ModelUnits:
+            self.source_units_combo.addItem(units.display_name, units)
+        self.source_units_combo.currentIndexChanged.connect(self._source_units_changed)
+        grid.addWidget(self.source_units_combo, 1, 1, 1, 3)
+
+        grid.addWidget(QLabel(""), 2, 0)
         for column, axis in enumerate(("X", "Y", "Z"), start=1):
             label = QLabel(axis)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setObjectName("Muted")
-            grid.addWidget(label, 1, column)
+            grid.addWidget(label, 2, column)
 
         self.position_spins = tuple(
             self._configured_spin(
@@ -358,7 +391,7 @@ class MainWindow(QMainWindow):
                 ("Rotation", self.rotation_spins),
                 ("Scale", self.scale_spins),
             ),
-            start=2,
+            start=3,
         ):
             grid.addWidget(QLabel(title), row, 0)
             for column, spin in enumerate(spins, start=1):
@@ -367,19 +400,19 @@ class MainWindow(QMainWindow):
 
         self.lock_scale = QCheckBox("Lock XYZ scale")
         self.lock_scale.setChecked(True)
-        grid.addWidget(self.lock_scale, 5, 0, 1, 4)
+        grid.addWidget(self.lock_scale, 6, 0, 1, 4)
 
         center_button = QPushButton("Center XY")
         center_button.clicked.connect(self._center_selected_xy)
-        grid.addWidget(center_button, 6, 0, 1, 2)
+        grid.addWidget(center_button, 7, 0, 1, 2)
 
         top_button = QPushButton("Top to Z0")
         top_button.clicked.connect(self._top_selected_to_surface)
-        grid.addWidget(top_button, 6, 2, 1, 2)
+        grid.addWidget(top_button, 7, 2, 1, 2)
 
         reset_button = QPushButton("Reset Transform")
         reset_button.clicked.connect(self._reset_selected_transform)
-        grid.addWidget(reset_button, 7, 0, 1, 4)
+        grid.addWidget(reset_button, 8, 0, 1, 4)
 
         widget.setVisible(False)
         return widget
@@ -389,9 +422,11 @@ class MainWindow(QMainWindow):
         return f"{value:.3f}".rstrip("0").rstrip(".")
 
     @classmethod
-    def _mesh_dimensions_text(cls, mesh: MeshAsset) -> str:
-        dimensions = " × ".join(cls._number(value) for value in mesh.dimensions)
-        return f"{dimensions} {mesh.units or 'source units'}"
+    def _source_dimensions_text(cls, item: ProjectItem) -> str:
+        if item.mesh is None:
+            return ""
+        dimensions = " × ".join(cls._number(value) for value in item.mesh.dimensions)
+        return f"{dimensions} {item.source_units.value}"
 
     @classmethod
     def _mesh_properties_text(cls, item: ProjectItem) -> str:
@@ -410,12 +445,13 @@ class MainWindow(QMainWindow):
         placed_maximum = ", ".join(
             cls._number(float(value)) for value in transformed.bounds[1]
         )
-        units = mesh.units or "unspecified; placement assumes 1 STL unit = 1 mm"
+        metadata_units = mesh.units or "none (STL normally stores no unit)"
         return (
             f"STL mesh\n{item.name}\n\n"
-            f"Source size: {cls._mesh_dimensions_text(mesh)}\n"
+            f"Source size: {cls._source_dimensions_text(item)}\n"
+            f"Model units: {item.source_units.display_name}\n"
+            f"File metadata units: {metadata_units}\n"
             f"Placed size: {placed_dimensions} mm\n"
-            f"Units: {units}\n"
             f"Vertices: {mesh.vertex_count:,}\n"
             f"Faces: {mesh.face_count:,}\n"
             f"Placed min: {placed_minimum}\n"
@@ -433,20 +469,46 @@ class MainWindow(QMainWindow):
     def _item_list_text(self, item: ProjectItem) -> str:
         if item.mesh is None:
             return f"{item.kind.upper()}  {item.name}"
-        return f"STL  {item.name} — {self._mesh_dimensions_text(item.mesh)}"
+        return f"STL  {item.name} — {self._source_dimensions_text(item)}"
 
     def _refresh_project_list(self, selected_row: int = 0) -> None:
+        self._updating_project_list = True
         self.project_list.blockSignals(True)
         try:
             self.project_list.clear()
             self.project_list.addItem(self._stock_list_text())
-            for item in self.project.items:
-                self.project_list.addItem(self._item_list_text(item))
+            for project_item in self.project.items:
+                list_item = QListWidgetItem(self._item_list_text(project_item))
+                list_item.setFlags(
+                    list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+                )
+                list_item.setCheckState(
+                    Qt.CheckState.Checked
+                    if project_item.visible
+                    else Qt.CheckState.Unchecked
+                )
+                self.project_list.addItem(list_item)
             selected_row = max(0, min(selected_row, self.project_list.count() - 1))
             self.project_list.setCurrentRow(selected_row)
         finally:
             self.project_list.blockSignals(False)
+            self._updating_project_list = False
         self._update_properties(selected_row)
+
+    def _project_item_changed(self, list_item: QListWidgetItem) -> None:
+        if self._updating_project_list:
+            return
+        row = self.project_list.row(list_item)
+        if row <= 0:
+            return
+        index = row - 1
+        if index >= len(self.project.items):
+            return
+        visible = list_item.checkState() == Qt.CheckState.Checked
+        self.project.items[index].visible = visible
+        self.viewport.update()
+        state = "visible" if visible else "hidden"
+        self.statusBar().showMessage(f"{self.project.items[index].name} {state}", 2000)
 
     def _sync_stock_controls(self) -> None:
         self._updating_stock_controls = True
@@ -489,6 +551,15 @@ class MainWindow(QMainWindow):
             return None
         return self.project.items[index]
 
+    def _selected_item_index(self) -> int | None:
+        row = self.project_list.currentRow()
+        if row <= 0:
+            return None
+        index = row - 1
+        if index >= len(self.project.items):
+            return None
+        return index
+
     def _update_properties(self, row: int) -> None:
         if row <= 0:
             stock = self.project.stock
@@ -523,6 +594,9 @@ class MainWindow(QMainWindow):
     def _sync_transform_controls(self, item: ProjectItem) -> None:
         self._updating_transform_controls = True
         try:
+            unit_index = self.source_units_combo.findData(item.source_units)
+            if unit_index >= 0:
+                self.source_units_combo.setCurrentIndex(unit_index)
             for spin, value in zip(
                 self.position_spins,
                 item.transform.translation_mm,
@@ -543,6 +617,24 @@ class MainWindow(QMainWindow):
                 spin.setValue(value)
         finally:
             self._updating_transform_controls = False
+
+    def _source_units_changed(self, _index: int) -> None:
+        if self._updating_transform_controls:
+            return
+        item = self._selected_item()
+        if item is None or item.mesh is None:
+            return
+        units = self.source_units_combo.currentData()
+        if not isinstance(units, ModelUnits) or units is item.source_units:
+            return
+        item.source_units = units
+        item.transform = self.project.default_transform_for_mesh(item.mesh, units)
+        self._refresh_project_list(self.project_list.currentRow())
+        self.viewport.fit_view()
+        self.statusBar().showMessage(
+            f"Interpreting {item.name} as {units.display_name}; placement reset",
+            5000,
+        )
 
     def _transform_control_changed(self, value: float) -> None:
         if self._updating_transform_controls:
@@ -575,10 +667,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Select an STL mesh first", 3000)
             return
 
-        bounds = np.asarray(
-            item.transform.transformed_bounds(item.mesh.mesh),
-            dtype=float,
-        )
+        transformed = item.transformed_mesh()
+        assert transformed is not None
+        bounds = np.asarray(transformed.bounds, dtype=float)
         center = bounds.mean(axis=0)
         tx, ty, tz = item.transform.translation_mm
         item.transform.translation_mm = (
@@ -597,10 +688,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Select an STL mesh first", 3000)
             return
 
-        bounds = np.asarray(
-            item.transform.transformed_bounds(item.mesh.mesh),
-            dtype=float,
-        )
+        transformed = item.transformed_mesh()
+        assert transformed is not None
+        bounds = np.asarray(transformed.bounds, dtype=float)
         tx, ty, tz = item.transform.translation_mm
         item.transform.translation_mm = (tx, ty, tz - bounds[1, 2])
         self._sync_transform_controls(item)
@@ -614,11 +704,44 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Select an STL mesh first", 3000)
             return
 
-        item.transform = self.project.default_transform_for_mesh(item.mesh)
+        item.transform = self.project.default_transform_for_mesh(
+            item.mesh,
+            item.source_units,
+        )
         self._sync_transform_controls(item)
         self._update_properties(self.project_list.currentRow())
         self.viewport.fit_view()
         self.statusBar().showMessage("Reset selected mesh transform", 3000)
+
+    def _duplicate_selected_item(self) -> None:
+        index = self._selected_item_index()
+        if index is None:
+            self.statusBar().showMessage("Select a design item to duplicate", 3000)
+            return
+        new_index, duplicate = self.project.duplicate_item(index)
+        self._refresh_project_list(new_index + 1)
+        self.viewport.update()
+        self.statusBar().showMessage(f"Duplicated {duplicate.name}", 3000)
+
+    def _delete_selected_item(self) -> None:
+        index = self._selected_item_index()
+        if index is None:
+            self.statusBar().showMessage("Stock cannot be deleted", 3000)
+            return
+        removed = self.project.remove_item(index)
+        next_row = min(index + 1, len(self.project.items))
+        self._refresh_project_list(next_row)
+        self.viewport.fit_view()
+        self.statusBar().showMessage(f"Deleted {removed.name}", 3000)
+
+    def _move_selected_item(self, offset: int) -> None:
+        index = self._selected_item_index()
+        if index is None:
+            self.statusBar().showMessage("Select a design item to reorder", 3000)
+            return
+        new_index = self.project.move_item(index, offset)
+        self._refresh_project_list(new_index + 1)
+        self.viewport.update()
 
     def _focus_transform_controls(self) -> None:
         item = self._selected_item()
@@ -747,16 +870,18 @@ class MainWindow(QMainWindow):
                 )
                 return
 
-        transform = self.project.default_transform_for_mesh(mesh) if mesh is not None else None
-        if transform is None:
+        if mesh is None:
             item = ProjectItem(source.name, source, detected.lower())
         else:
+            source_units = ModelUnits.from_metadata(mesh.units)
+            transform = self.project.default_transform_for_mesh(mesh, source_units)
             item = ProjectItem(
                 source.name,
                 source,
                 detected.lower(),
                 mesh=mesh,
                 transform=transform,
+                source_units=source_units,
             )
         self.project.items.append(item)
         self._refresh_project_list(len(self.project.items))
