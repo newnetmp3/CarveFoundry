@@ -23,7 +23,7 @@ class RibbonButton(QToolButton):
         self.setIconSize(QSize(22, 22))
         self.setMinimumHeight(52)
         if callback is not None:
-            self.clicked.connect(callback)
+            self.clicked.connect(lambda _checked=False: callback())
 
 
 class RibbonGroup(QFrame):
