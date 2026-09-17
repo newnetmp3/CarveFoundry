@@ -345,7 +345,7 @@ class MeshViewport(QWidget):
                 "Import an STL to preview it in the stock.",
             )
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#111827"))
@@ -360,11 +360,11 @@ class MeshViewport(QWidget):
         self._draw_overlay(painter)
         painter.end()
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last_mouse_pos = event.position()
         self.setFocus()
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._last_mouse_pos is None:
             self._last_mouse_pos = event.position()
             return
@@ -383,16 +383,16 @@ class MeshViewport(QWidget):
             self.pan_px += delta
             self.update()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         del event
         self._last_mouse_pos = None
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+    def wheelEvent(self, event: QWheelEvent) -> None:
         steps = event.angleDelta().y() / 120.0
         self.zoom *= 1.15**steps
         self.zoom = max(0.08, min(25.0, self.zoom))
         self.update()
 
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         del event
         self.fit_view()
