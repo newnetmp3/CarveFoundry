@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeAlias
 
 import numpy as np
 import trimesh
 
-MeshGeometry: TypeAlias = trimesh.Trimesh | trimesh.Scene
+type MeshGeometry = trimesh.Trimesh | trimesh.Scene
 
 
 class MeshImportError(ValueError):
