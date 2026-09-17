@@ -41,14 +41,13 @@ QTabWidget#Ribbon QTabBar::tab:selected {
     border-radius: 10px;
 }
 #RibbonGroupTitle {
-    color: #7f8aa0;
+    color: #c8ff3d;
     font-size: 10px;
     font-weight: 700;
     border-radius: 5px;
     padding: 1px 5px;
 }
 #RibbonGroupTitle:hover {
-    color: #c8ff3d;
     background: #171e31;
 }
 QToolButton#RibbonButton, QToolButton#RibbonPrimary {
