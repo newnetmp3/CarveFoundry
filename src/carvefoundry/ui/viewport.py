@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QWheelEvent
 
 from .viewport_gpu import MeshViewport as _GpuMeshViewport
@@ -41,12 +40,6 @@ class MeshViewport(_GpuMeshViewport):
             self.zoom *= 1.20**steps
             self.zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, self.zoom))
             self.update()
-        event.accept()
-
-    def mouseDoubleClickEvent(self, event) -> None:
-        """Double-click fits the selected model; Stock selection fits the scene."""
-
-        self.fit_view()
         event.accept()
 
 
