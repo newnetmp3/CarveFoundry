@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import trimesh
+
+if TYPE_CHECKING:
+    from carvefoundry.cam.toolpath import Toolpath
 
 from .mesh import MeshAsset
 from .transform import Transform3D, placement_on_stock
@@ -50,6 +54,11 @@ class Project:
     name: str = "Untitled"
     stock: Stock = field(default_factory=Stock)
     items: list[ProjectItem] = field(default_factory=list)
+    toolpaths: list["Toolpath"] = field(
+        default_factory=list,
+        repr=False,
+        compare=False,
+    )
     _asset_workspace_owner: object | None = field(
         default=None,
         repr=False,
