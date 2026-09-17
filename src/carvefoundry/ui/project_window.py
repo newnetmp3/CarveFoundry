@@ -70,6 +70,17 @@ class MainWindow(_BaseMainWindow):
     def _save_project(self) -> bool:
         if self.project_path is None:
             return self._save_project_as()
+
+        # A clean project that still exists on disk needs no rewrite. If the
+        # backing file was removed externally, Save recreates it from the
+        # in-memory project even though the project itself is unchanged.
+        if not self._project_dirty and self.project_path.is_file():
+            self.statusBar().showMessage(
+                f"No changes to save — {self.project_path.name} is up to date",
+                3000,
+            )
+            return True
+
         return self._save_project_to(self.project_path)
 
     def _save_project_as(self) -> bool:
