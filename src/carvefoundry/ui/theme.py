@@ -40,8 +40,18 @@ QTabWidget#Ribbon QTabBar::tab:selected {
     border: 1px solid #242e44;
     border-radius: 10px;
 }
-#RibbonGroupTitle { color: #7f8aa0; font-size: 10px; font-weight: 700; }
-QToolButton#RibbonButton {
+#RibbonGroupTitle {
+    color: #7f8aa0;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 5px;
+    padding: 1px 5px;
+}
+#RibbonGroupTitle:hover {
+    color: #c8ff3d;
+    background: #171e31;
+}
+QToolButton#RibbonButton, QToolButton#RibbonPrimary {
     background: transparent;
     color: #edf1f7;
     border: 1px solid transparent;
@@ -49,17 +59,22 @@ QToolButton#RibbonButton {
     padding: 6px 9px;
     min-width: 54px;
 }
-QToolButton#RibbonButton:hover { background: #171e31; border-color: #29324a; }
-QToolButton#RibbonButton:pressed { background: #202a40; }
-QToolButton#RibbonPrimary {
+QToolButton#RibbonPrimary { font-weight: 800; }
+QToolButton#RibbonButton:hover, QToolButton#RibbonPrimary:hover {
     background: #c8ff3d;
     color: #0b1020;
-    border: 0;
-    border-radius: 9px;
-    padding: 7px 11px;
-    font-weight: 800;
+    border-color: #c8ff3d;
 }
-QToolButton#RibbonPrimary:hover { background: #d5ff68; }
+QToolButton#RibbonButton:pressed, QToolButton#RibbonPrimary:pressed {
+    background: #9fcf2f;
+    color: #07100b;
+    border-color: #9fcf2f;
+}
+QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
+    background: transparent;
+    color: #586276;
+    border-color: transparent;
+}
 #WorkspacePanel {
     background: #0e1425;
     border: 1px solid #232b3e;
@@ -128,8 +143,22 @@ QPushButton {
     padding: 7px 10px;
     font-weight: 600;
 }
-QPushButton:hover { background: #202a40; border-color: #3a465f; }
-QPushButton#PrimaryButton { background: #c8ff3d; color: #0b1020; border: 0; }
+QPushButton#PrimaryButton { font-weight: 800; }
+QPushButton:hover {
+    background: #c8ff3d;
+    color: #0b1020;
+    border-color: #c8ff3d;
+}
+QPushButton:pressed {
+    background: #9fcf2f;
+    color: #07100b;
+    border-color: #9fcf2f;
+}
+QPushButton:disabled {
+    background: #12192a;
+    color: #586276;
+    border-color: #20283a;
+}
 QSplitter::handle { background: #1c2436; width: 2px; height: 2px; }
 QStatusBar { background: #0e1425; color: #8792a8; border-top: 1px solid #1c2436; }
 """
