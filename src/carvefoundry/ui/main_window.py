@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFontComboBox,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -61,6 +63,11 @@ class Panel(QFrame):
 
         self.body = QWidget()
         self.body.setObjectName("InspectorBody")
+        self.body.setMinimumWidth(0)
+        self.body.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(8, 8, 8, 8)
 
@@ -758,6 +765,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.properties_panel = Panel("Inspector")
         self.properties_panel.setObjectName("InspectorPanel")
+        # Keep the inspector useful at a compact canvas-friendly width while
+        # preventing users from collapsing it until controls become unusable.
+        self.properties_panel.setMinimumWidth(260)
 
         selection_heading = QLabel("Selection")
         selection_heading.setObjectName("SectionHeading")
@@ -860,19 +870,49 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         spin.setSingleStep(step)
         spin.setSuffix(suffix)
         spin.setKeyboardTracking(False)
+        spin.setMinimumWidth(0)
+        spin.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         return spin
+
+    @staticmethod
+    def _configure_inspector_form(form: QFormLayout) -> None:
+        """Make a form reflow instead of clipping in a narrow inspector."""
+
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
+        form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setLabelAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+
+    @staticmethod
+    def _configure_inspector_field(widget: QWidget) -> None:
+        widget.setMinimumWidth(0)
+        policy = widget.sizePolicy()
+        policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        widget.setSizePolicy(policy)
 
     def _build_stock_controls(self) -> QWidget:
         widget = QWidget()
         widget.setObjectName("StockControls")
-        grid = QGridLayout(widget)
-        grid.setContentsMargins(0, 6, 0, 10)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(5)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 10)
+        layout.setSpacing(6)
 
         heading = QLabel("Stock dimensions")
         heading.setObjectName("SectionHeading")
-        grid.addWidget(heading, 0, 0, 1, 2)
+        layout.addWidget(heading)
+
+        form = QFormLayout()
+        self._configure_inspector_form(form)
+        layout.addLayout(form)
 
         self.stock_spins = tuple(
             self._configured_spin(
@@ -884,12 +924,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
             for _ in range(3)
         )
-        for row, (title, spin) in enumerate(
-            zip(("Width", "Height", "Thickness"), self.stock_spins, strict=True),
-            start=1,
+        for title, spin in zip(
+            ("Width", "Height", "Thickness"),
+            self.stock_spins,
+            strict=True,
         ):
-            grid.addWidget(QLabel(title), row, 0)
-            grid.addWidget(spin, row, 1)
+            form.addRow(title, spin)
             spin.valueChanged.connect(self._stock_control_changed)
 
         return widget
@@ -897,32 +937,40 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _build_text_controls(self) -> QWidget:
         widget = QWidget()
         widget.setObjectName("TextControls")
-        grid = QGridLayout(widget)
-        grid.setContentsMargins(0, 6, 0, 10)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(6)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 10)
+        layout.setSpacing(6)
 
         heading = QLabel("Text")
         heading.setObjectName("SectionHeading")
-        grid.addWidget(heading, 0, 0, 1, 4)
+        layout.addWidget(heading)
 
         self.text_editor = QPlainTextEdit()
         self.text_editor.setPlaceholderText("Enter text…")
         self.text_editor.setMinimumHeight(72)
         self.text_editor.setMaximumHeight(120)
+        self.text_editor.setMinimumWidth(0)
         self.text_editor.setTabChangesFocus(True)
         self.text_editor.textChanged.connect(self._text_control_changed)
-        grid.addWidget(self.text_editor, 1, 0, 1, 4)
+        layout.addWidget(self.text_editor)
 
         typography_heading = QLabel("Typography")
         typography_heading.setObjectName("TextSubheading")
-        grid.addWidget(typography_heading, 2, 0, 1, 4)
+        layout.addWidget(typography_heading)
 
-        grid.addWidget(QLabel("Font"), 3, 0)
+        typography_form = QFormLayout()
+        self._configure_inspector_form(typography_form)
+        layout.addLayout(typography_form)
+
         self.text_font_combo = QFontComboBox()
         self.text_font_combo.setFontFilters(
             QFontComboBox.FontFilter.ScalableFonts
         )
+        self.text_font_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.text_font_combo.setMinimumContentsLength(10)
+        self._configure_inspector_field(self.text_font_combo)
         self.text_font_combo.setToolTip(
             "Installed scalable system fonts. The selected font's real glyph "
             "outlines are used to build CNC geometry."
@@ -930,14 +978,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_font_combo.currentFontChanged.connect(
             self._text_font_changed
         )
-        grid.addWidget(self.text_font_combo, 3, 1, 1, 3)
+        typography_form.addRow("Font", self.text_font_combo)
 
-        grid.addWidget(QLabel("Style"), 4, 0)
         self.text_font_style_combo = QComboBox()
+        self.text_font_style_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.text_font_style_combo.setMinimumContentsLength(8)
+        self._configure_inspector_field(self.text_font_style_combo)
         self.text_font_style_combo.currentTextChanged.connect(
             self._text_style_changed
         )
-        grid.addWidget(self.text_font_style_combo, 4, 1, 1, 2)
+        typography_form.addRow("Style", self.text_font_style_combo)
 
         self.text_size_spin = self._configured_spin(
             minimum=1.0,
@@ -950,9 +1002,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Font point size, matching conventional word-processor sizing."
         )
         self.text_size_spin.valueChanged.connect(self._text_control_changed)
-        grid.addWidget(self.text_size_spin, 4, 3)
+        typography_form.addRow("Size", self.text_size_spin)
 
         format_bar = QWidget()
+        format_bar.setMinimumWidth(0)
         format_layout = QHBoxLayout(format_bar)
         format_layout.setContentsMargins(0, 0, 0, 0)
         format_layout.setSpacing(4)
@@ -967,7 +1020,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             (self.text_strike_button, "Strikethrough"),
         ):
             button.setCheckable(True)
-            button.setMaximumWidth(38)
+            button.setFixedWidth(34)
             button.setToolTip(tooltip)
             if button in (
                 self.text_bold_button,
@@ -978,10 +1031,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 button.toggled.connect(self._text_control_changed)
             format_layout.addWidget(button)
         format_layout.addStretch(1)
-        grid.addWidget(QLabel("Effects"), 5, 0)
-        grid.addWidget(format_bar, 5, 1, 1, 3)
+        typography_form.addRow("Effects", format_bar)
 
-        grid.addWidget(QLabel("Align"), 6, 0)
         self.text_alignment_combo = QComboBox()
         for title, value in (
             ("Left", "left"),
@@ -990,12 +1041,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Justified", "justify"),
         ):
             self.text_alignment_combo.addItem(title, value)
+        self._configure_inspector_field(self.text_alignment_combo)
         self.text_alignment_combo.currentIndexChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(self.text_alignment_combo, 6, 1)
+        typography_form.addRow("Align", self.text_alignment_combo)
 
-        grid.addWidget(QLabel("Case"), 6, 2)
         self.text_case_combo = QComboBox()
         for title, value in (
             ("Normal", "normal"),
@@ -1004,14 +1055,19 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Title Case", "title"),
         ):
             self.text_case_combo.addItem(title, value)
+        self._configure_inspector_field(self.text_case_combo)
         self.text_case_combo.currentIndexChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(self.text_case_combo, 6, 3)
+        typography_form.addRow("Case", self.text_case_combo)
 
         spacing_heading = QLabel("Spacing & layout")
         spacing_heading.setObjectName("TextSubheading")
-        grid.addWidget(spacing_heading, 7, 0, 1, 4)
+        layout.addWidget(spacing_heading)
+
+        spacing_form = QFormLayout()
+        self._configure_inspector_form(spacing_form)
+        layout.addLayout(spacing_form)
 
         self.text_kerning_check = QCheckBox("Pair kerning")
         self.text_kerning_check.setChecked(True)
@@ -1019,11 +1075,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Use the selected font's kerning pairs when positioning glyphs."
         )
         self.text_kerning_check.toggled.connect(self._text_control_changed)
-        grid.addWidget(self.text_kerning_check, 8, 0, 1, 2)
+        spacing_form.addRow(self.text_kerning_check)
 
-        self.text_wrap_check = QCheckBox("Wrap to width")
+        self.text_wrap_check = QCheckBox("Wrap to text box width")
         self.text_wrap_check.toggled.connect(self._text_layout_control_changed)
-        grid.addWidget(self.text_wrap_check, 8, 2, 1, 2)
+        spacing_form.addRow(self.text_wrap_check)
 
         self.text_character_spacing_spin = self._configured_spin(
             minimum=-25.0,
@@ -1035,8 +1091,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_character_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Character spacing"), 9, 0, 1, 2)
-        grid.addWidget(self.text_character_spacing_spin, 9, 2, 1, 2)
+        spacing_form.addRow(
+            "Character spacing",
+            self.text_character_spacing_spin,
+        )
 
         self.text_word_spacing_spin = self._configured_spin(
             minimum=-25.0,
@@ -1048,8 +1106,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_word_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Word spacing"), 10, 0, 1, 2)
-        grid.addWidget(self.text_word_spacing_spin, 10, 2, 1, 2)
+        spacing_form.addRow("Word spacing", self.text_word_spacing_spin)
 
         self.text_line_spacing_spin = self._configured_spin(
             minimum=25.0,
@@ -1061,8 +1118,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_line_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Line spacing"), 11, 0, 1, 2)
-        grid.addWidget(self.text_line_spacing_spin, 11, 2, 1, 2)
+        spacing_form.addRow("Line spacing", self.text_line_spacing_spin)
 
         self.text_horizontal_scale_spin = self._configured_spin(
             minimum=10.0,
@@ -1077,8 +1133,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_horizontal_scale_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Character width"), 12, 0, 1, 2)
-        grid.addWidget(self.text_horizontal_scale_spin, 12, 2, 1, 2)
+        spacing_form.addRow(
+            "Character width",
+            self.text_horizontal_scale_spin,
+        )
 
         self.text_box_width_spin = self._configured_spin(
             minimum=0.1,
@@ -1090,21 +1148,24 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_box_width_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Text box width"), 13, 0, 1, 2)
-        grid.addWidget(self.text_box_width_spin, 13, 2, 1, 2)
+        spacing_form.addRow("Text box width", self.text_box_width_spin)
 
         geometry_heading = QLabel("CNC geometry")
         geometry_heading.setObjectName("TextSubheading")
-        grid.addWidget(geometry_heading, 14, 0, 1, 4)
+        layout.addWidget(geometry_heading)
 
-        grid.addWidget(QLabel("Geometry"), 15, 0)
+        geometry_form = QFormLayout()
+        self._configure_inspector_form(geometry_form)
+        layout.addLayout(geometry_form)
+
         self.text_geometry_combo = QComboBox()
         self.text_geometry_combo.addItem("Filled", "filled")
         self.text_geometry_combo.addItem("Outline", "outline")
+        self._configure_inspector_field(self.text_geometry_combo)
         self.text_geometry_combo.currentIndexChanged.connect(
             self._text_geometry_control_changed
         )
-        grid.addWidget(self.text_geometry_combo, 15, 1)
+        geometry_form.addRow("Geometry", self.text_geometry_combo)
 
         self.text_outline_width_spin = self._configured_spin(
             minimum=0.05,
@@ -1116,9 +1177,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_outline_width_spin.valueChanged.connect(
             self._text_control_changed
         )
-        self.text_outline_label = QLabel("Outline")
-        grid.addWidget(self.text_outline_label, 15, 2)
-        grid.addWidget(self.text_outline_width_spin, 15, 3)
+        self.text_outline_label = QLabel("Outline width")
+        geometry_form.addRow(
+            self.text_outline_label,
+            self.text_outline_width_spin,
+        )
 
         self.text_depth_spin = self._configured_spin(
             minimum=0.05,
@@ -1131,8 +1194,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Extruded text thickness. Text top remains at the object's Z level."
         )
         self.text_depth_spin.valueChanged.connect(self._text_control_changed)
-        grid.addWidget(QLabel("Depth"), 16, 0, 1, 2)
-        grid.addWidget(self.text_depth_spin, 16, 2, 1, 2)
+        geometry_form.addRow("Depth", self.text_depth_spin)
 
         self._text_shortcuts: list[QShortcut] = []
         for sequence, callback in (
@@ -1178,18 +1240,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
-        grid.addWidget(note, 17, 0, 1, 4)
+        layout.addWidget(note)
 
         self.text_font_warning = QLabel()
         self.text_font_warning.setObjectName("TextFontWarning")
         self.text_font_warning.setWordWrap(True)
         self.text_font_warning.hide()
-        grid.addWidget(self.text_font_warning, 18, 0, 1, 4)
+        layout.addWidget(self.text_font_warning)
 
         self.text_cnc_hint = QLabel()
         self.text_cnc_hint.setObjectName("TextCncHint")
         self.text_cnc_hint.setWordWrap(True)
-        grid.addWidget(self.text_cnc_hint, 19, 0, 1, 4)
+        layout.addWidget(self.text_cnc_hint)
 
         initial_family = self.text_font_combo.currentFont().family()
         self._refresh_text_font_styles(initial_family, "Regular")
@@ -1201,28 +1263,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _build_transform_controls(self) -> QWidget:
         widget = QWidget()
         widget.setObjectName("TransformControls")
-        grid = QGridLayout(widget)
-        grid.setContentsMargins(0, 6, 0, 10)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(5)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 10)
+        layout.setSpacing(6)
 
         heading = QLabel("Model transform")
         heading.setObjectName("SectionHeading")
-        grid.addWidget(heading, 0, 0, 1, 4)
+        layout.addWidget(heading)
 
-        grid.addWidget(QLabel("Model units"), 1, 0)
+        units_form = QFormLayout()
+        self._configure_inspector_form(units_form)
+        layout.addLayout(units_form)
+
         self.source_units_combo = QComboBox()
         for units in ModelUnits:
             self.source_units_combo.addItem(units.display_name, units)
-        self.source_units_combo.currentIndexChanged.connect(self._source_units_changed)
-        grid.addWidget(self.source_units_combo, 1, 1, 1, 3)
-
-        grid.addWidget(QLabel(""), 2, 0)
-        for column, axis in enumerate(("X", "Y", "Z"), start=1):
-            label = QLabel(axis)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setObjectName("Muted")
-            grid.addWidget(label, 2, column)
+        self._configure_inspector_field(self.source_units_combo)
+        self.source_units_combo.currentIndexChanged.connect(
+            self._source_units_changed
+        )
+        units_form.addRow("Model units", self.source_units_combo)
 
         self.position_spins = tuple(
             self._configured_spin(
@@ -1258,6 +1318,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 f"Rotate around the {axis} axis; motion occurs in the {plane} plane."
             )
             spin.setAccessibleName(f"Rotation around {axis} axis")
+
         self.size_spins = tuple(
             self._configured_spin(
                 minimum=0.001,
@@ -1288,19 +1349,31 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             for _ in range(3)
         )
 
-        for row, (title, spins) in enumerate(
-            (
-                ("Position", self.position_spins),
-                ("Rotate about", self.rotation_spins),
-                ("Size", self.size_spins),
-                ("Scale", self.scale_spins),
-            ),
-            start=3,
-        ):
-            grid.addWidget(QLabel(title), row, 0)
-            for column, spin in enumerate(spins, start=1):
-                grid.addWidget(spin, row, column)
+        def add_axis_row(title: str, spins: tuple[QDoubleSpinBox, ...]) -> None:
+            title_label = QLabel(title)
+            title_label.setObjectName("InspectorFieldHeading")
+            layout.addWidget(title_label)
+
+            axis_widget = QWidget()
+            axis_widget.setMinimumWidth(0)
+            axis_layout = QGridLayout(axis_widget)
+            axis_layout.setContentsMargins(0, 0, 0, 0)
+            axis_layout.setHorizontalSpacing(5)
+            axis_layout.setVerticalSpacing(2)
+            for column, (axis, spin) in enumerate(
+                zip(("X", "Y", "Z"), spins, strict=True)
+            ):
+                axis_label = QLabel(axis)
+                axis_label.setObjectName("Muted")
+                axis_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                axis_layout.addWidget(axis_label, 0, column)
+                axis_layout.addWidget(spin, 1, column)
+                axis_layout.setColumnStretch(column, 1)
                 spin.valueChanged.connect(self._transform_control_changed)
+            layout.addWidget(axis_widget)
+
+        add_axis_row("Position", self.position_spins)
+        add_axis_row("Rotate about", self.rotation_spins)
 
         rotation_note = QLabel(
             "Rotation axes: X → YZ plane   Y → XZ plane   Z → XY plane"
@@ -1310,31 +1383,59 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         rotation_note.setToolTip(
             "X/Y/Z name the axis being rotated around, not the plane being rotated."
         )
-        grid.addWidget(rotation_note, 7, 0, 1, 4)
+        layout.addWidget(rotation_note)
 
-        grid.addWidget(QLabel("Lock axes"), 8, 0)
+        add_axis_row("Size", self.size_spins)
+        add_axis_row("Scale", self.scale_spins)
+
+        lock_bar = QWidget()
+        lock_bar.setMinimumWidth(0)
+        lock_layout = QHBoxLayout(lock_bar)
+        lock_layout.setContentsMargins(0, 0, 0, 0)
+        lock_layout.setSpacing(8)
+        lock_layout.addWidget(QLabel("Lock axes"))
         self.lock_axis_checks = tuple(
             QCheckBox(axis)
             for axis in ("X", "Y", "Z")
         )
-        for column, checkbox in enumerate(self.lock_axis_checks, start=1):
+        for checkbox in self.lock_axis_checks:
             checkbox.setChecked(True)
             checkbox.setToolTip(
                 "Locked axes resize proportionally together when Size or Scale changes."
             )
-            grid.addWidget(checkbox, 8, column)
+            lock_layout.addWidget(checkbox)
+        lock_layout.addStretch(1)
+        layout.addWidget(lock_bar)
+
+        action_bar = QWidget()
+        action_bar.setMinimumWidth(0)
+        action_layout = QHBoxLayout(action_bar)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(6)
 
         center_button = QPushButton("Center XY")
+        center_button.setMinimumWidth(0)
+        center_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         center_button.clicked.connect(self._center_selected_xy)
-        grid.addWidget(center_button, 9, 0, 1, 2)
+        action_layout.addWidget(center_button)
 
         top_button = QPushButton("Top to Z0")
+        top_button.setMinimumWidth(0)
+        top_button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         top_button.clicked.connect(self._top_selected_to_surface)
-        grid.addWidget(top_button, 9, 2, 1, 2)
+        action_layout.addWidget(top_button)
+        layout.addWidget(action_bar)
 
         reset_button = QPushButton("Reset Transform")
+        reset_button.setMinimumWidth(0)
         reset_button.clicked.connect(self._reset_selected_transform)
-        grid.addWidget(reset_button, 10, 0, 1, 4)
+        layout.addWidget(reset_button)
 
         widget.setVisible(False)
         return widget
