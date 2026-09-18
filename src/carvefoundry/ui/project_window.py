@@ -163,7 +163,7 @@ class MainWindow(_BaseMainWindow):
         self._project_dirty = self._history_state_id != self._saved_state_id
         self._update_project_title()
 
-        self.viewport.set_project(self.project)
+        self.viewport.set_project(self.project, fit_view=False)
         self._refresh_project_list(entry.selected_row)
         self._sync_toolpath_state_from_project()
         self._sync_history_action_state()
@@ -191,7 +191,7 @@ class MainWindow(_BaseMainWindow):
         self._project_dirty = self._history_state_id != self._saved_state_id
         self._update_project_title()
 
-        self.viewport.set_project(self.project)
+        self.viewport.set_project(self.project, fit_view=False)
         self._refresh_project_list(entry.selected_row)
         self._sync_toolpath_state_from_project()
         self._sync_history_action_state()
