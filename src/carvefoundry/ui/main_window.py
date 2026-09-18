@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -37,6 +38,7 @@ from ..core.tools import DEFAULT_TOOLS
 from ..core.units import ModelUnits
 from .import_worker import ImportWorker
 from .ribbon import Ribbon
+from .ribbon_actions import RibbonActionsMixin
 from .viewport import MeshViewport
 
 
@@ -57,7 +59,7 @@ class Panel(QFrame):
         layout.addWidget(self.body, 1)
 
 
-class MainWindow(QMainWindow):
+class MainWindow(RibbonActionsMixin, QMainWindow):
     def __init__(self):
         super().__init__()
         self.project = Project()
@@ -70,6 +72,7 @@ class MainWindow(QMainWindow):
         self._import_target_project: Project | None = None
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
+        self._init_ribbon_action_state()
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
         self.setMinimumSize(1050, 650)
@@ -149,12 +152,16 @@ class MainWindow(QMainWindow):
         home = self.ribbon.add_page("Home")
         edit = home.add_group("Edit")
         edit.add_button("Undo", self._undo)
-        for title in ("Redo", "Cut", "Copy", "Paste"):
-            edit.add_button(title)
+        edit.add_button("Redo", self._redo)
+        edit.add_button("Cut", self._cut_selected_items)
+        edit.add_button("Copy", self._copy_selected_items)
+        edit.add_button("Paste", self._paste_items)
         edit.add_button("Delete", self._delete_selected_item)
         arrange = home.add_group("Arrange")
-        for title in ("Align", "Center", "Group", "Ungroup"):
-            arrange.add_button(title)
+        arrange.add_button("Align", self._align_selected_items)
+        arrange.add_button("Center", self._center_selected_items)
+        arrange.add_button("Group", self._group_selected_items)
+        arrange.add_button("Ungroup", self._ungroup_selected_items)
         arrange.add_button("Duplicate", self._duplicate_selected_item)
         layers = home.add_group("Layers")
         layers.add_button("Move Up", lambda: self._move_selected_item(-1))
@@ -162,11 +169,14 @@ class MainWindow(QMainWindow):
 
         create = self.ribbon.add_page("Create")
         shapes = create.add_group("Shapes")
-        for title in ("Rectangle", "Ellipse", "Polygon", "Line", "Text"):
-            shapes.add_button(title)
+        shapes.add_button("Rectangle", self._create_rectangle)
+        shapes.add_button("Ellipse", self._create_ellipse)
+        shapes.add_button("Polygon", self._create_polygon)
+        shapes.add_button("Line", self._create_line)
+        shapes.add_button("Text", self._create_text)
         vectors = create.add_group("Vectors")
-        vectors.add_button("Pen")
-        vectors.add_button("Trace Image")
+        vectors.add_button("Pen", self._create_pen_path)
+        vectors.add_button("Trace Image", self._trace_image)
 
         import_page = self.ribbon.add_page("Import")
         files = import_page.add_group("Design Files")
@@ -178,48 +188,113 @@ class MainWindow(QMainWindow):
 
         carve = self.ribbon.add_page("Carve")
         operations = carve.add_group("2D / 2.5D Operations")
-        for title in ("Profile", "Pocket", "V-Carve", "Engrave", "Drill", "Tabs"):
-            operations.add_button(title)
+        operations.add_button(
+            "Profile",
+            lambda: self._select_cam_operation("profile"),
+        )
+        operations.add_button(
+            "Pocket",
+            lambda: self._select_cam_operation("pocket"),
+        )
+        operations.add_button(
+            "V-Carve",
+            lambda: self._select_cam_operation("vcarve"),
+        )
+        operations.add_button(
+            "Engrave",
+            lambda: self._select_cam_operation("engrave"),
+        )
+        operations.add_button(
+            "Drill",
+            lambda: self._select_cam_operation("drill"),
+        )
+        self._tabs_button = operations.add_button(
+            "Tabs",
+            self._toggle_tabs_operation,
+        )
+        self._tabs_button.setCheckable(True)
         calculate = carve.add_group("Toolpaths")
-        calculate.add_button("Calculate", primary=True)
-        calculate.add_button("Preview")
+        calculate.add_button("Calculate", self._calculate_toolpath, primary=True)
+        calculate.add_button("Preview", self._preview_toolpaths)
 
         three_d = self.ribbon.add_page("3D")
         mesh = three_d.add_group("Mesh")
-        for title in ("Orient", "Scale", "Position"):
-            mesh.add_button(title, self._focus_transform_controls)
+        mesh.add_button(
+            "Orient",
+            lambda: self._focus_transform_section("rotation"),
+        )
+        mesh.add_button(
+            "Scale",
+            lambda: self._focus_transform_section("scale"),
+        )
+        mesh.add_button(
+            "Position",
+            lambda: self._focus_transform_section("position"),
+        )
         mesh.add_button("Center XY", self._center_selected_xy)
         mesh.add_button("Top to Z0", self._top_selected_to_surface)
         strategies = three_d.add_group("Strategies")
-        for title in ("Rough", "Finish", "Rest", "Waterline"):
-            strategies.add_button(title, primary=title == "Finish")
+        strategies.add_button(
+            "Rough",
+            lambda: self._select_cam_operation("rough"),
+        )
+        strategies.add_button(
+            "Finish",
+            lambda: self._select_cam_operation("finish"),
+            primary=True,
+        )
+        strategies.add_button(
+            "Rest",
+            lambda: self._select_cam_operation("rest"),
+        )
+        strategies.add_button(
+            "Waterline",
+            lambda: self._select_cam_operation("waterline"),
+        )
 
         tools = self.ribbon.add_page("Tools")
         library = tools.add_group("Tool Library")
-        library.add_button("Library", primary=True)
-        library.add_button("New Tool")
-        library.add_button("Custom Profile")
+        library.add_button("Library", self._show_tool_library, primary=True)
+        library.add_button("New Tool", self._new_tool)
+        library.add_button("Custom Profile", self._new_custom_profile_tool)
         feeds = tools.add_group("Feeds & Speeds")
-        feeds.add_button("Calculator")
+        feeds.add_button("Calculator", self._feeds_speeds_calculator)
 
         machine = self.ribbon.add_page("Machine")
         setup = machine.add_group("Setup")
-        for title in ("Machine Profile", "Work Area", "Origin", "Postprocessor"):
-            setup.add_button(title)
+        setup.add_button("Machine Profile", self._machine_profile)
+        setup.add_button("Work Area", self._machine_work_area)
+        setup.add_button("Origin", self._machine_origin)
+        setup.add_button("Postprocessor", self._postprocessor_settings_dialog)
         control = machine.add_group("Control")
-        control.add_button("Connect", primary=True)
-        control.add_button("Probe")
-        control.add_button("Jog")
+        control.add_button("Connect", self._connect_machine, primary=True)
+        control.add_button("Probe", self._probe_machine)
+        control.add_button("Jog", self._show_jog_controls)
 
         view = self.ribbon.add_page("View")
         display = view.add_group("Display")
         display.add_button("Fit 3D", self._fit_view, primary=True)
         display.add_button("Stock", self._toggle_stock)
         display.add_button("Grid", self._toggle_grid)
-        for title in ("2D", "Toolpaths", "Rapids"):
-            display.add_button(title)
+        display.add_button("2D", self._set_2d_view)
+        self._toolpaths_view_button = display.add_button(
+            "Toolpaths",
+            self._toggle_toolpaths_view,
+        )
+        self._toolpaths_view_button.setCheckable(True)
+        self._toolpaths_view_button.setChecked(True)
+        self._rapids_view_button = display.add_button(
+            "Rapids",
+            self._toggle_rapids_view,
+        )
+        self._rapids_view_button.setCheckable(True)
         simulation = view.add_group("Simulation")
-        simulation.add_button("Simulate", primary=True)
+        self._simulation_button = simulation.add_button(
+            "Simulate",
+            self._simulate_toolpaths,
+            primary=True,
+        )
+        self._simulation_button.setCheckable(True)
 
         options = self.ribbon.add_page("Options")
         program = options.add_group("Program")
@@ -294,6 +369,9 @@ class MainWindow(QMainWindow):
 
         self.project_panel = Panel("Project / Layers")
         self.project_list = QListWidget()
+        self.project_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
         self.project_panel.body_layout.addWidget(self.project_list)
         layer_buttons = QWidget()
         layer_layout = QGridLayout(layer_buttons)
@@ -351,7 +429,7 @@ class MainWindow(QMainWindow):
 
         self.properties_panel.body_layout.addWidget(QLabel("Selected cutter"))
         self.tool_combo = QComboBox()
-        for tool in DEFAULT_TOOLS:
+        for tool in self._all_tools():
             self.tool_combo.addItem(tool.name, tool)
         self.properties_panel.body_layout.addWidget(self.tool_combo)
         info = QLabel(
@@ -608,9 +686,14 @@ class MainWindow(QMainWindow):
         )
 
     def _item_list_text(self, item: ProjectItem) -> str:
+        group = "  [GROUP]" if item.group_id else ""
         if item.mesh is None:
-            return f"{item.kind.upper()}  {item.name}"
-        return f"STL  {item.name} — {self._source_dimensions_text(item)}"
+            return f"{item.kind.upper()}  {item.name}{group}"
+        kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
+        return (
+            f"{kind}  {item.name} — {self._source_dimensions_text(item)}"
+            f"{group}"
+        )
 
     def _refresh_project_list(self, selected_row: int = 0) -> None:
         self._updating_project_list = True
@@ -1606,7 +1689,11 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            output_path = write_grbl(toolpath, Path(path))
+            output_path = write_grbl(
+                toolpath,
+                Path(path),
+                self._grbl_post_settings(),
+            )
         except (OSError, ValueError) as exc:
             self.selection_info.setText(f"G-code export failed\n{exc}")
             self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
@@ -1795,6 +1882,9 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        self._simulation_timer.stop()
+        if self.machine_controller.connected:
+            self.machine_controller.disconnect()
         self._save_interface_options()
         super().closeEvent(event)
 
