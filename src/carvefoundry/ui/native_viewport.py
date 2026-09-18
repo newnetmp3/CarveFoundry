@@ -503,12 +503,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         return np.vstack((minimum, maximum))
 
     def _framing_bounds(self) -> np.ndarray:
-        if self.project is not None and self.selected_item_index is not None:
-            index = self.selected_item_index
-            if 0 <= index < len(self.project.items):
-                item = self.project.items[index]
-                if item.visible and item.mesh is not None:
-                    return self._item_bounds_mm(item)
+        """Return camera framing bounds independent of object selection.
+
+        Selection must never implicitly reframe, zoom, or retarget the camera.
+        The selected item only affects overlays such as its bounds and XYZ gizmo.
+        Explicit Fit View remains the operation that resets the camera framing.
+        """
+
         return self._full_scene_bounds()
 
     def _camera_geometry(
