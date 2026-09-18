@@ -156,7 +156,7 @@ class _CameraState:
     # Default to a CNC-friendly XY plan view: +X right, +Y up, with the
     # stock origin at the lower-left.  Perspective remains the default
     # projection so orbiting immediately behaves like a 3D workspace.
-    yaw_deg: float = 0.0
+    yaw_deg: float = -90.0
     elevation_deg: float = 90.0
     zoom: float = 1.0
     pan_world: tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -1186,8 +1186,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             vertical = -delta.y() if self.invert_vertical_drag else delta.y()
             self.camera.yaw_deg += horizontal * 0.45
             self.camera.elevation_deg = max(
-                -85.0,
-                min(85.0, self.camera.elevation_deg + vertical * 0.35),
+                -89.9,
+                min(89.9, self.camera.elevation_deg + vertical * 0.35),
             )
             self.orbitStarted.emit()
             self.requestUpdate()
@@ -1605,7 +1605,7 @@ class MeshViewport(QWidget):
         projection_mode: str = "orthographic",
     ) -> None:
         orientations = {
-            "Top": (0.0, 90.0),
+            "Top": (-90.0, 90.0),
             "Bottom": (0.0, -90.0),
             "Front": (-90.0, 0.0),
             "Back": (90.0, 0.0),
