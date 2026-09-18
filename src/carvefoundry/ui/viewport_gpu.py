@@ -119,6 +119,7 @@ class MeshViewport(QOpenGLWidget):
         self.pan_px = QPointF(0.0, 0.0)
         self.show_stock = True
         self.show_grid = True
+        self.reverse_horizontal_drag = True
 
         self._last_mouse_pos: QPointF | None = None
         self._functions = None
@@ -174,6 +175,9 @@ class MeshViewport(QOpenGLWidget):
     def toggle_grid(self) -> None:
         self.show_grid = not self.show_grid
         self.update()
+
+    def set_reverse_horizontal_drag(self, enabled: bool) -> None:
+        self.reverse_horizontal_drag = bool(enabled)
 
     @staticmethod
     def _qmatrix_from_numpy(matrix: np.ndarray) -> QMatrix4x4:
@@ -691,7 +695,8 @@ class MeshViewport(QOpenGLWidget):
         self._last_mouse_pos = event.position()
 
         if event.buttons() & Qt.MouseButton.LeftButton:
-            self.yaw_deg += delta.x() * 0.45
+            horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
+            self.yaw_deg += horizontal * 0.45
             self.elevation_deg = max(
                 -85.0,
                 min(85.0, self.elevation_deg + delta.y() * 0.35),
@@ -700,7 +705,8 @@ class MeshViewport(QOpenGLWidget):
         elif event.buttons() & (
             Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
         ):
-            self.pan_px += delta
+            horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
+            self.pan_px += QPointF(horizontal, delta.y())
             self.update()
         event.accept()
 
