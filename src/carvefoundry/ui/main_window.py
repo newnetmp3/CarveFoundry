@@ -304,6 +304,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ),
             minimum_width=108,
         )
+        detail_slider = path_design.add_slider(
+            "Detail",
+            0,
+            100,
+            self._cam_detail,
+            self._set_cam_detail,
+            tooltip=(
+                "Raster-line density for the selected cutter. Moving right "
+                "reduces stepover and creates more raster lines; moving left "
+                "increases stepover for faster machining."
+            ),
+            minimum_width=210,
+            low_label="Faster",
+            high_label="Detail",
+        )
+        self._register_cam_detail_slider(detail_slider)
 
         motion = carve.add_group("Motion")
         add_cam_selector(
@@ -433,6 +449,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "3D finishing stepover presets; smaller percentages improve finish.",
             minimum_width=108,
         )
+        finish_detail_slider = finish_design.add_slider(
+            "Detail",
+            0,
+            100,
+            self._cam_detail,
+            self._set_cam_detail,
+            tooltip=(
+                "Increase to add raster lines for the selected cutter; "
+                "decrease for fewer passes and shorter runtime."
+            ),
+            minimum_width=210,
+            low_label="Faster",
+            high_label="Detail",
+        )
+        self._register_cam_detail_slider(finish_detail_slider)
         add_cam_selector(
             finish_design,
             "linking",
@@ -622,6 +653,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_combo = QComboBox()
         for tool in self._all_tools():
             self.tool_combo.addItem(tool.name, tool)
+        self.tool_combo.currentIndexChanged.connect(
+            lambda _index: self._refresh_cam_detail_readouts()
+        )
         self.properties_panel.body_layout.addWidget(self.tool_combo)
         info = QLabel(
             "Toolpaths will compensate for the selected cutter profile; "
@@ -1393,6 +1427,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.stock_widget.setVisible(True)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
+            self._refresh_cam_detail_readouts()
             return
 
         item_index = row - 1
@@ -1401,6 +1436,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.stock_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
+            self._refresh_cam_detail_readouts()
             return
 
         item = self.project.items[item_index]
@@ -1411,6 +1447,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.transform_widget.setVisible(has_mesh)
         if has_mesh:
             self._sync_transform_controls(item)
+        self._refresh_cam_detail_readouts()
 
     def _sync_transform_controls(self, item: ProjectItem) -> None:
         self._updating_transform_controls = True
