@@ -408,6 +408,7 @@ class RibbonActionsMixin:
             self._clone_item(self.project.items[index])
             for index in indices
         ]
+        self._sync_selection_action_state()
         self.statusBar().showMessage(
             f"Copied {len(self._clipboard_items)} item(s)",
             2500,
