@@ -2,19 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (
-    QApplication,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QStyle,
-    QTabWidget,
-    QToolButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6 import QtCore, QtGui, QtWidgets
 
 
 _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
@@ -103,42 +91,42 @@ _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
     "right": ("go-next",),
 }
 
-_STANDARD_FALLBACKS: dict[str, QStyle.StandardPixmap] = {
-    "new": QStyle.StandardPixmap.SP_FileIcon,
-    "open": QStyle.StandardPixmap.SP_DialogOpenButton,
-    "save": QStyle.StandardPixmap.SP_DialogSaveButton,
-    "save as": QStyle.StandardPixmap.SP_DialogSaveButton,
-    "undo": QStyle.StandardPixmap.SP_ArrowBack,
-    "redo": QStyle.StandardPixmap.SP_ArrowForward,
-    "delete": QStyle.StandardPixmap.SP_TrashIcon,
-    "move up": QStyle.StandardPixmap.SP_ArrowUp,
-    "move down": QStyle.StandardPixmap.SP_ArrowDown,
-    "top": QStyle.StandardPixmap.SP_ArrowUp,
-    "bottom": QStyle.StandardPixmap.SP_ArrowDown,
-    "left": QStyle.StandardPixmap.SP_ArrowLeft,
-    "right": QStyle.StandardPixmap.SP_ArrowRight,
+_STANDARD_FALLBACKS: dict[str, QtWidgets.QStyle.StandardPixmap] = {
+    "new": QtWidgets.QStyle.StandardPixmap.SP_FileIcon,
+    "open": QtWidgets.QStyle.StandardPixmap.SP_DialogOpenButton,
+    "save": QtWidgets.QStyle.StandardPixmap.SP_DialogSaveButton,
+    "save as": QtWidgets.QStyle.StandardPixmap.SP_DialogSaveButton,
+    "undo": QtWidgets.QStyle.StandardPixmap.SP_ArrowBack,
+    "redo": QtWidgets.QStyle.StandardPixmap.SP_ArrowForward,
+    "delete": QtWidgets.QStyle.StandardPixmap.SP_TrashIcon,
+    "move up": QtWidgets.QStyle.StandardPixmap.SP_ArrowUp,
+    "move down": QtWidgets.QStyle.StandardPixmap.SP_ArrowDown,
+    "top": QtWidgets.QStyle.StandardPixmap.SP_ArrowUp,
+    "bottom": QtWidgets.QStyle.StandardPixmap.SP_ArrowDown,
+    "left": QtWidgets.QStyle.StandardPixmap.SP_ArrowLeft,
+    "right": QtWidgets.QStyle.StandardPixmap.SP_ArrowRight,
 }
 
 
-def _ribbon_icon(text: str) -> QIcon:
+def _ribbon_icon(text: str) -> QtGui.QIcon:
     label = text.replace("\n", " ").strip().lower()
     candidates = _ICON_CANDIDATES.get(label, ())
     for candidate in candidates:
-        icon = QIcon.fromTheme(candidate)
+        icon = QtGui.QIcon.fromTheme(candidate)
         if not icon.isNull():
             return icon
 
     fallback = _STANDARD_FALLBACKS.get(
         label,
-        QStyle.StandardPixmap.SP_FileDialogDetailedView,
+        QtWidgets.QStyle.StandardPixmap.SP_FileDialogDetailedView,
     )
-    app = QApplication.instance()
+    app = QtWidgets.QApplication.instance()
     if app is not None:
         return app.style().standardIcon(fallback)
-    return QIcon()
+    return QtGui.QIcon()
 
 
-class RibbonButton(QToolButton):
+class RibbonButton(QtWidgets.QToolButton):
     def __init__(
         self,
         text: str,
@@ -150,8 +138,8 @@ class RibbonButton(QToolButton):
         self.setText(text)
         self.setIcon(_ribbon_icon(text))
         self.setObjectName("RibbonPrimary" if primary else "RibbonButton")
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        self.setIconSize(QSize(28, 28))
+        self.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.setIconSize(QtCore.QSize(28, 28))
         self.setMinimumHeight(68)
         self.setToolTip(text.replace("\n", " "))
 
@@ -165,20 +153,20 @@ class RibbonButton(QToolButton):
             self.clicked.connect(lambda _checked=False: callback())
 
 
-class RibbonGroup(QFrame):
+class RibbonGroup(QtWidgets.QFrame):
     def __init__(self, title: str):
         super().__init__()
         self.setObjectName("RibbonGroup")
-        outer = QVBoxLayout(self)
+        outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(8, 6, 8, 4)
         outer.setSpacing(3)
-        self.buttons = QHBoxLayout()
+        self.buttons = QtWidgets.QHBoxLayout()
         self.buttons.setSpacing(3)
         outer.addLayout(self.buttons, 1)
-        label = QLabel(title)
+        label = QtWidgets.QLabel(title)
         label.setObjectName("RibbonGroupTitle")
-        label.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        label.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         outer.addWidget(label)
 
     def add_button(
@@ -193,14 +181,14 @@ class RibbonGroup(QFrame):
         return button
 
 
-class RibbonPage(QWidget):
+class RibbonPage(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("RibbonPage")
-        self.layout_ = QHBoxLayout(self)
+        self.layout_ = QtWidgets.QHBoxLayout(self)
         self.layout_.setContentsMargins(8, 6, 8, 6)
         self.layout_.setSpacing(6)
-        self.layout_.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.layout_.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
 
     def add_group(self, title: str) -> RibbonGroup:
         group = RibbonGroup(title)
@@ -208,7 +196,7 @@ class RibbonPage(QWidget):
         return group
 
 
-class Ribbon(QTabWidget):
+class Ribbon(QtWidgets.QTabWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("Ribbon")
