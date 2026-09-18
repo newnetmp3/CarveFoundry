@@ -4,7 +4,7 @@ import trimesh
 
 from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.mesh import load_stl
-from carvefoundry.core.project import Project, ProjectItem, Stock
+from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 
@@ -62,3 +62,32 @@ def test_snapshot_does_not_capture_project_identity(tmp_path: Path) -> None:
     restore_workspace(project, snapshot)
 
     assert project.name == "Saved As"
+
+
+
+def test_workspace_snapshot_restores_text_properties() -> None:
+    original = TextProperties(
+        content="Original",
+        font_family="DejaVu Sans",
+        size_pt=30.0,
+        alignment="center",
+    )
+    project = Project(
+        items=[
+            ProjectItem(
+                "Title",
+                kind="text",
+                text_properties=original,
+            )
+        ]
+    )
+    snapshot = capture_workspace(project)
+
+    project.items[0].text_properties = TextProperties(
+        content="Changed",
+        font_family="DejaVu Serif",
+        size_pt=54.0,
+    )
+    restore_workspace(project, snapshot)
+
+    assert project.items[0].text_properties == original
