@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 import numpy as np
 import trimesh
@@ -35,6 +36,7 @@ class ProjectItem:
     transform: Transform3D = field(default_factory=Transform3D)
     source_units: ModelUnits = ModelUnits.MILLIMETERS
     group_id: str | None = None
+    item_id: str = field(default_factory=lambda: uuid4().hex)
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
