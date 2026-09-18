@@ -38,6 +38,7 @@ def test_inspector_stays_compact_without_clipping_field_minimums() -> None:
 
         responsive_fields = (
             window.text_font_combo,
+            window.text_font_variant_combo,
             window.text_font_style_combo,
             window.text_size_spin,
             window.text_alignment_combo,
@@ -61,19 +62,60 @@ def test_inspector_stays_compact_without_clipping_field_minimums() -> None:
         window.close()
 
 
-def test_text_font_selector_previews_filtered_text_families() -> None:
+def test_font_family_grouping_separates_common_variants() -> None:
+    groups = MainWindow._group_text_font_families(
+        [
+            "Noto Sans",
+            "Noto Sans Condensed",
+            "Noto Sans SemiCondensed",
+            "Noto Sans SemiBold",
+            "Liberation Serif",
+            "Franklin Gothic Medium",
+        ]
+    )
+
+    assert groups["Noto Sans"] == [
+        ("Regular", "Noto Sans"),
+        ("Condensed", "Noto Sans Condensed"),
+        ("Semi Condensed", "Noto Sans SemiCondensed"),
+        ("SemiBold", "Noto Sans SemiBold"),
+    ]
+    assert groups["Liberation Serif"] == [
+        ("Regular", "Liberation Serif")
+    ]
+    # A lone suffix-like family stays intact instead of inventing a base
+    # family that is not actually present.
+    assert groups["Franklin Gothic Medium"] == [
+        ("Regular", "Franklin Gothic Medium")
+    ]
+
+
+def test_text_font_selector_previews_grouped_families_and_variants() -> None:
     window = MainWindow()
     try:
         assert isinstance(window.text_font_combo, QComboBox)
+        assert isinstance(window.text_font_variant_combo, QComboBox)
         assert window.text_font_combo.count() > 0
         assert window.text_font_combo.currentText()
+        assert window.text_font_variant_combo.count() > 0
         for index in range(min(5, window.text_font_combo.count())):
             item_font = window.text_font_combo.itemData(
                 index,
                 Qt.ItemDataRole.FontRole,
             )
+            concrete_family = window.text_font_combo.itemData(index)
             assert isinstance(item_font, QFont)
-            assert item_font.family() == window.text_font_combo.itemText(index)
+            assert isinstance(concrete_family, str)
+            assert item_font.family() == concrete_family
+
+        for index in range(window.text_font_variant_combo.count()):
+            item_font = window.text_font_variant_combo.itemData(
+                index,
+                Qt.ItemDataRole.FontRole,
+            )
+            concrete_family = window.text_font_variant_combo.itemData(index)
+            assert isinstance(item_font, QFont)
+            assert item_font.family() == concrete_family
     finally:
         window.close()
 
@@ -81,7 +123,7 @@ def test_text_font_selector_previews_filtered_text_families() -> None:
 def test_text_edit_updates_geometry_preserves_placement_and_invalidates_cam() -> None:
     window = ProjectMainWindow()
     try:
-        family = window.text_font_combo.currentText()
+        family = window._selected_text_font_family()
         original = TextProperties(
             content="CARVE",
             font_family=family,
