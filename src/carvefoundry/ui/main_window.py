@@ -113,6 +113,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.viewport.itemTransformFinished.connect(
             self._viewport_transform_finished
         )
+        self.viewport.shapeDrawRequested.connect(self._shape_drawn)
+        self.viewport.shapeDrawModeChanged.connect(
+            self._shape_draw_mode_changed
+        )
         self._restore_options()
 
     def _build_brand_row(self) -> QWidget:
@@ -168,11 +172,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         create = self.ribbon.add_page("Create")
         shapes = create.add_group("Shapes")
-        shapes.add_button("Rectangle", self._create_rectangle)
-        shapes.add_button("Ellipse", self._create_ellipse)
-        shapes.add_button("Polygon", self._create_polygon)
-        shapes.add_button("Line", self._create_line)
-        shapes.add_button("Text", self._create_text)
+        shape_actions = (
+            ("rectangle", "Rectangle", self._create_rectangle),
+            ("ellipse", "Ellipse", self._create_ellipse),
+            ("polygon", "Polygon", self._create_polygon),
+            ("line", "Line", self._create_line),
+            ("text", "Text", self._create_text),
+        )
+        for tool, title, callback in shape_actions:
+            button = shapes.add_button(title, callback)
+            button.setCheckable(True)
+            button.setToolTip(
+                f"{title}: drag directly on the stock to draw. "
+                "Hold Shift to constrain. Press Esc to exit the tool."
+            )
+            self._shape_tool_buttons[tool] = button
         vectors = create.add_group("Vectors")
         vectors.add_button("Pen", self._create_pen_path)
         vectors.add_button("Trace Image", self._trace_image)
