@@ -4,7 +4,6 @@ from carvefoundry.ui.main_window import MainWindow
 
 _APP = QApplication.instance() or QApplication([])
 
-
 def test_main_window_builds_text_inspector_offscreen() -> None:
     window = MainWindow()
     try:
