@@ -945,16 +945,23 @@ class MainWindow(QMainWindow):
             )
 
         projection = str(
-            self._settings.value("viewport/projection_mode", "orthographic")
+            self._settings.value("viewport/projection_mode", "perspective")
         ).lower()
-        view_name = str(self._settings.value("viewport/view_name", "Free"))
+        view_name = str(self._settings.value("viewport/view_name", "Top"))
         standard_views = {"Top", "Bottom", "Front", "Back", "Left", "Right"}
-        if projection == "perspective":
-            self.viewport.set_perspective_view()
-        elif view_name == "Isometric":
+        if view_name == "Isometric":
             self.viewport.set_isometric_view()
         elif view_name in standard_views:
-            self.viewport.set_standard_view(view_name)
+            self.viewport.set_standard_view(
+                view_name,
+                projection_mode=(
+                    "perspective"
+                    if projection == "perspective"
+                    else "orthographic"
+                ),
+            )
+        elif projection == "perspective":
+            self.viewport.set_perspective_view()
         else:
             self.viewport.set_orthographic_view()
 
@@ -1117,9 +1124,7 @@ class MainWindow(QMainWindow):
         self.viewport.set_rulers_visible(True)
         self.viewport.set_reverse_horizontal_drag(False)
         self.viewport.set_invert_vertical_drag(False)
-        self.viewport.yaw_deg = 45.0
-        self.viewport.elevation_deg = 35.0
-        self.viewport.set_orthographic_view()
+        self.viewport.set_default_view()
 
         for key in (
             "project_panel",
