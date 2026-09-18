@@ -155,6 +155,7 @@ def _build_container(
                 "kind": item.kind,
                 "visible": item.visible,
                 "source_units": item.source_units.value,
+                "group_id": item.group_id,
                 "asset_id": asset_id,
                 "source_name": source_name,
                 "transform": _transform_to_dict(item.transform),
@@ -311,6 +312,8 @@ def _load_legacy_item(value: object, project_path: Path) -> ProjectItem:
     source_path = _legacy_source_path(value.get("source_path"), project_path)
     transform = _load_transform(value.get("transform"))
     source_units = _load_source_units(value.get("source_units"), item_name=name)
+    group_value = value.get("group_id")
+    group_id = group_value if isinstance(group_value, str) and group_value else None
     mesh = None
     if kind.lower() == "stl":
         if source_path is None or not source_path.is_file():
@@ -328,6 +331,7 @@ def _load_legacy_item(value: object, project_path: Path) -> ProjectItem:
         mesh=mesh,
         transform=transform,
         source_units=source_units,
+        group_id=group_id,
     )
 
 
@@ -518,6 +522,8 @@ def _load_native_item(
 
     transform = _load_transform(value.get("transform"))
     source_units = _load_source_units(value.get("source_units"), item_name=name)
+    group_value = value.get("group_id")
+    group_id = group_value if isinstance(group_value, str) and group_value else None
     asset_id = value.get("asset_id")
     source_name_value = value.get("source_name")
     source_name = source_name_value if isinstance(source_name_value, str) else None
@@ -544,13 +550,13 @@ def _load_native_item(
             )
             materialized[cache_key] = source_path
 
-    if kind.lower() == "stl":
-        if source_path is None:
-            raise ProjectFileError(f"Embedded STL asset for {name!r} is missing.")
+    if source_path is not None and source_path.suffix.lower() == ".stl":
         try:
             mesh = load_stl(source_path)
         except MeshImportError as exc:
             raise ProjectFileError(f"Could not reload embedded {name!r}: {exc}") from exc
+    elif kind.lower() == "stl":
+        raise ProjectFileError(f"Embedded STL asset for {name!r} is missing.")
 
     return ProjectItem(
         name=name,
@@ -560,6 +566,7 @@ def _load_native_item(
         mesh=mesh,
         transform=transform,
         source_units=source_units,
+        group_id=group_id,
     )
 
 
