@@ -1108,18 +1108,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
 
         self.properties_panel.show()
+        self.inspector_button.setChecked(True)
         self._set_option_checked("properties_panel", True)
 
-        # A splitter can remember a zero-width panel even after the widget is
-        # made visible.  Restore a useful content-sized width so context-menu
-        # transform commands always produce an obvious editor on screen.
+        # Restore a useful inspector width if it was previously hidden.
         sizes = self.workspace_splitter.sizes()
-        if len(sizes) == 3 and sizes[2] < 40:
+        if len(sizes) == 2 and sizes[1] < 40:
             preferred = self._properties_panel_default_width()
             total = max(sum(sizes), 1)
-            left = sizes[0]
-            center = max(360, total - left - preferred)
-            self.workspace_splitter.setSizes([left, center, preferred])
+            canvas = max(520, total - preferred)
+            self.workspace_splitter.setSizes([canvas, preferred])
 
         controls = {
             "position": self.position_spins,
@@ -1409,6 +1407,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return index
 
     def _update_properties(self, row: int) -> None:
+        if hasattr(self, "object_selector"):
+            desired = max(
+                0,
+                min(int(row), self.object_selector.count() - 1),
+            )
+            if self.object_selector.currentIndex() != desired:
+                self._updating_object_selector = True
+                self.object_selector.blockSignals(True)
+                try:
+                    self.object_selector.setCurrentIndex(desired)
+                finally:
+                    self.object_selector.blockSignals(False)
+                    self._updating_object_selector = False
+
         if row <= 0:
             stock = self.project.stock
             self.selection_info.setText(
@@ -1627,7 +1639,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         self._sync_transform_controls(item)
         self._update_properties(self.project_list.currentRow())
-        self.viewport.fit_view()
+        self.viewport.update()
         self.statusBar().showMessage("Reset selected mesh transform", 3000)
 
     def _duplicate_selected_item(self) -> None:
@@ -1648,7 +1660,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         removed = self.project.remove_item(index)
         next_row = min(index + 1, len(self.project.items))
         self._refresh_project_list(next_row)
-        self.viewport.fit_view()
+        self.viewport.update()
         self.statusBar().showMessage(f"Deleted {removed.name}", 3000)
 
     def _move_selected_item(self, offset: int) -> None:
