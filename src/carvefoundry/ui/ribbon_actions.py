@@ -1565,6 +1565,9 @@ class RibbonActionsMixin:
                 )
             )
 
+        for generated in generated_toolpaths:
+            generated.source_item_name = item.name
+
         self._before_ribbon_mutation(f"calculate {operation}")
         self.project.toolpaths = generated_toolpaths
         self._toolpaths_stale_reason = None
@@ -1582,6 +1585,7 @@ class RibbonActionsMixin:
         operation_names = " + ".join(path.name for path in generated_toolpaths)
         self._set_activity_info(
             f"Toolpath ready\n{operation_names}\n\n"
+            f"Source: {item.name}\n"
             f"Cutter: {toolpath.cutter.name}\n"
             f"Moves: {total_moves:,}\n"
             f"Cut distance: {total_cut:.1f} mm\n"
