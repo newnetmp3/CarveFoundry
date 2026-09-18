@@ -54,6 +54,7 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 
 from .machine_control import MachineController
+from .toolpath_preview import ToolpathPreviewWindow
 
 
 class _ActionForm(QDialog):
@@ -187,6 +188,7 @@ class RibbonActionsMixin:
         self._rapids_view_button = None
         self._tabs_button = None
         self._jog_dialog: QDialog | None = None
+        self._toolpath_preview_window: ToolpathPreviewWindow | None = None
 
         self.machine_controller = MachineController(self)
         self.machine_controller.connectionChanged.connect(
@@ -951,19 +953,33 @@ class RibbonActionsMixin:
         if not self.project.toolpaths:
             self.statusBar().showMessage("No calculated toolpaths to preview", 4000)
             return
-        self.viewport.set_toolpaths_visible(True)
-        self.viewport.set_simulation_fraction(1.0)
-        if self._toolpaths_view_button is not None:
-            self._toolpaths_view_button.setChecked(True)
-        toolpath = self.project.toolpaths[0]
-        self.selection_info.setText(
-            f"Toolpath preview\n{toolpath.name}\n\n"
-            f"{len(toolpath.moves):,} moves\n"
-            f"{toolpath.cutting_distance_mm:.1f} mm cutting\n"
-            f"{toolpath.rapid_distance_mm:.1f} mm rapid"
+
+        existing = self._toolpath_preview_window
+        if existing is not None and existing.isVisible():
+            existing.showNormal()
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        window = ToolpathPreviewWindow(
+            toolpaths=list(self.project.toolpaths),
+            stock=self.project.stock,
+            post_settings=self._grbl_post_settings(),
+            parent=self,
         )
-        self.viewport.update()
-        self.statusBar().showMessage("Toolpath preview shown", 3000)
+        window.destroyed.connect(
+            lambda _obj=None: setattr(
+                self,
+                "_toolpath_preview_window",
+                None,
+            )
+        )
+        self._toolpath_preview_window = window
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        self.statusBar().showMessage("Opened toolpath backplot preview", 3000)
+
 
     # ------------------------------------------------------------------
     # Tools
