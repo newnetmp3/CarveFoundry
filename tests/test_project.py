@@ -80,3 +80,23 @@ def test_remove_and_move_items() -> None:
 
     assert removed.name == "c"
     assert [item.name for item in project.items] == ["a", "b"]
+
+
+def test_fast_transformed_bounds_match_unrotated_mesh_bounds() -> None:
+    asset = mesh_asset_from_geometry(trimesh.creation.box(extents=(2.0, 4.0, 6.0)))
+    item = ProjectItem(
+        "part.stl",
+        kind="stl",
+        mesh=asset,
+        transform=Transform3D(
+            translation_mm=(10.0, 20.0, -3.0),
+            scale_xyz=(2.0, 0.5, 1.5),
+        ),
+    )
+
+    fast_bounds = item.transformed_bounds_mm()
+    transformed = item.transformed_mesh()
+
+    assert fast_bounds is not None
+    assert transformed is not None
+    assert np.allclose(fast_bounds, transformed.bounds)
