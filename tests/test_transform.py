@@ -17,6 +17,24 @@ def test_translation_moves_mesh_without_changing_dimensions() -> None:
     assert np.allclose(moved.bounds.mean(axis=0), (15.0, -3.0, 2.0))
 
 
+def test_x_rotation_acts_in_yz_plane() -> None:
+    mesh = trimesh.creation.box(extents=(10.0, 20.0, 5.0))
+    transform = Transform3D(rotation_deg=(90.0, 0.0, 0.0))
+
+    rotated = transform.apply_to_mesh(mesh)
+
+    assert np.allclose(rotated.extents, (10.0, 5.0, 20.0), atol=1e-9)
+
+
+def test_y_rotation_acts_in_xz_plane() -> None:
+    mesh = trimesh.creation.box(extents=(10.0, 20.0, 5.0))
+    transform = Transform3D(rotation_deg=(0.0, 90.0, 0.0))
+
+    rotated = transform.apply_to_mesh(mesh)
+
+    assert np.allclose(rotated.extents, (5.0, 20.0, 10.0), atol=1e-9)
+
+
 def test_z_rotation_swaps_rectangular_xy_extents() -> None:
     mesh = trimesh.creation.box(extents=(10.0, 20.0, 5.0))
     transform = Transform3D(rotation_deg=(0.0, 0.0, 90.0))
@@ -24,6 +42,22 @@ def test_z_rotation_swaps_rectangular_xy_extents() -> None:
     rotated = transform.apply_to_mesh(mesh)
 
     assert np.allclose(rotated.extents, (20.0, 10.0, 5.0), atol=1e-9)
+
+
+def test_positive_axis_rotations_follow_right_hand_rule() -> None:
+    x_rotated = Transform3D(rotation_deg=(90.0, 0.0, 0.0)).apply_points(
+        np.array(((0.0, 1.0, 0.0),))
+    )
+    y_rotated = Transform3D(rotation_deg=(0.0, 90.0, 0.0)).apply_points(
+        np.array(((0.0, 0.0, 1.0),))
+    )
+    z_rotated = Transform3D(rotation_deg=(0.0, 0.0, 90.0)).apply_points(
+        np.array(((1.0, 0.0, 0.0),))
+    )
+
+    assert np.allclose(x_rotated[0], (0.0, 0.0, 1.0), atol=1e-9)
+    assert np.allclose(y_rotated[0], (1.0, 0.0, 0.0), atol=1e-9)
+    assert np.allclose(z_rotated[0], (0.0, 1.0, 0.0), atol=1e-9)
 
 
 def test_non_uniform_scale_changes_extents() -> None:
