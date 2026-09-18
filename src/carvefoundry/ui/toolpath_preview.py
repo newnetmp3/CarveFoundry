@@ -44,6 +44,7 @@ class ToolpathPreviewWindow(QMainWindow):
         toolpaths: list[Toolpath],
         stock: Stock,
         post_settings: GrblPostSettings,
+        source_names: list[str] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -56,6 +57,7 @@ class ToolpathPreviewWindow(QMainWindow):
         self.setMinimumSize(960, 620)
 
         self._toolpaths = list(toolpaths)
+        self._source_names = list(source_names or [])
         self._moves = list(chain.from_iterable(path.moves for path in toolpaths))
         self._post_settings = post_settings
         self._code_lines, self._move_code_lines = self._render_program()
@@ -264,10 +266,13 @@ class ToolpathPreviewWindow(QMainWindow):
             dict.fromkeys(path.cutter.name for path in self._toolpaths)
         )
         source_names = ", ".join(
-            dict.fromkeys(
-                path.source_item_name
-                for path in self._toolpaths
-                if path.source_item_name
+            self._source_names
+            or list(
+                dict.fromkeys(
+                    path.source_item_name
+                    for path in self._toolpaths
+                    if path.source_item_name
+                )
             )
         )
         total_minutes = sum(
