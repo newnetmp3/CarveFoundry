@@ -1191,6 +1191,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_cnc_hint.setWordWrap(True)
         grid.addWidget(self.text_cnc_hint, 19, 0, 1, 4)
 
+        initial_family = self.text_font_combo.currentFont().family()
+        self._refresh_text_font_styles(initial_family, "Regular")
+        self._update_text_editor_preview(initial_family)
+
         widget.setVisible(False)
         return widget
 
