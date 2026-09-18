@@ -34,6 +34,7 @@ def test_workspace_snapshot_restores_mutable_state_without_copying_mesh(tmp_path
 
     snapshot = capture_workspace(project)
     original_mesh_asset = project.items[0].mesh
+    original_item_id = project.items[0].item_id
 
     project.stock.width_mm = 999.0
     project.items[0].visible = False
@@ -50,6 +51,7 @@ def test_workspace_snapshot_restores_mutable_state_without_copying_mesh(tmp_path
     assert restored.transform.rotation_deg == (4.0, 5.0, 6.0)
     assert restored.transform.scale_xyz == (1.2, 1.2, 1.2)
     assert restored.mesh is original_mesh_asset
+    assert restored.item_id == original_item_id
 
 
 def test_snapshot_does_not_capture_project_identity(tmp_path: Path) -> None:
