@@ -54,9 +54,9 @@ class Cutter:
                     "tapered ball nose requires a taper angle between 0 and 90 degrees"
                 )
 
-        if self.tool_type is ToolType.CUSTOM:
+        if self.tool_type is ToolType.CUSTOM and self.profile_points is not None:
             points = self.profile_points
-            if points is None or len(points) < 2:
+            if len(points) < 2:
                 raise ValueError("custom cutters require at least two profile points")
             radii = [float(point[0]) for point in points]
             heights = [float(point[1]) for point in points]
@@ -108,7 +108,10 @@ class Cutter:
             return ball_equator_height + (r - ball_radius) / tan(taper)
 
         if self.tool_type is ToolType.CUSTOM:
-            assert self.profile_points is not None
+            if self.profile_points is None:
+                raise NotImplementedError(
+                    "custom cutter requires a defined radial profile curve"
+                )
             radii = [float(point[0]) for point in self.profile_points]
             heights = [float(point[1]) for point in self.profile_points]
             if r >= radii[-1]:
