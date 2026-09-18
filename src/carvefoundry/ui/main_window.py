@@ -825,15 +825,212 @@ class MainWindow(QMainWindow):
     def _fit_view(self) -> None:
         self.viewport.fit_view()
 
+    def _set_option_checked(self, key: str, checked: bool) -> None:
+        button = self._option_buttons.get(key)
+        if button is not None:
+            button.setChecked(bool(checked))
+
+    def _settings_bool(self, key: str, default: bool) -> bool:
+        return bool(self._settings.value(key, default, type=bool))
+
+    def _restore_options(self) -> None:
+        project_panel_visible = self._settings_bool(
+            "interface/project_panel_visible",
+            True,
+        )
+        properties_panel_visible = self._settings_bool(
+            "interface/properties_panel_visible",
+            True,
+        )
+        status_bar_visible = self._settings_bool(
+            "interface/status_bar_visible",
+            True,
+        )
+        view_controls_visible = self._settings_bool(
+            "interface/view_controls_visible",
+            True,
+        )
+        stock_visible = self._settings_bool("viewport/show_stock", True)
+        grid_visible = self._settings_bool("viewport/show_grid", True)
+        reverse_horizontal = self._settings_bool(
+            "viewport/reverse_horizontal_drag",
+            True,
+        )
+
+        self.project_panel.setVisible(project_panel_visible)
+        self.properties_panel.setVisible(properties_panel_visible)
+        self.statusBar().setVisible(status_bar_visible)
+        self.viewport.set_view_controls_visible(view_controls_visible)
+        self.viewport.show_stock = stock_visible
+        self.viewport.show_grid = grid_visible
+        self.viewport.set_reverse_horizontal_drag(reverse_horizontal)
+
+        stored_sizes = self._settings.value("interface/splitter_sizes")
+        if isinstance(stored_sizes, list) and len(stored_sizes) == 3:
+            try:
+                sizes = [max(0, int(value)) for value in stored_sizes]
+            except (TypeError, ValueError):
+                sizes = []
+            if len(sizes) == 3 and sum(sizes) > 0:
+                self.workspace_splitter.setSizes(sizes)
+
+        projection = str(
+            self._settings.value("viewport/projection_mode", "orthographic")
+        ).lower()
+        view_name = str(self._settings.value("viewport/view_name", "Free"))
+        standard_views = {"Top", "Bottom", "Front", "Back", "Left", "Right"}
+        if projection == "perspective":
+            self.viewport.set_perspective_view()
+        elif view_name == "Isometric":
+            self.viewport.set_isometric_view()
+        elif view_name in standard_views:
+            self.viewport.set_standard_view(view_name)
+        else:
+            self.viewport.set_orthographic_view()
+
+        self._set_option_checked("project_panel", project_panel_visible)
+        self._set_option_checked("properties_panel", properties_panel_visible)
+        self._set_option_checked("status_bar", status_bar_visible)
+        self._set_option_checked("view_controls", view_controls_visible)
+        self._set_option_checked("stock", stock_visible)
+        self._set_option_checked("grid", grid_visible)
+        self._set_option_checked("reverse_horizontal", reverse_horizontal)
+        self.viewport.update()
+
+    def _save_viewport_mode(self) -> None:
+        self._settings.setValue(
+            "viewport/projection_mode",
+            self.viewport.projection_mode,
+        )
+        self._settings.setValue("viewport/view_name", self.viewport.view_name)
+
+    def _save_interface_options(self) -> None:
+        self._settings.setValue(
+            "interface/project_panel_visible",
+            self.project_panel.isVisible(),
+        )
+        self._settings.setValue(
+            "interface/properties_panel_visible",
+            self.properties_panel.isVisible(),
+        )
+        self._settings.setValue(
+            "interface/status_bar_visible",
+            self.statusBar().isVisible(),
+        )
+        self._settings.setValue(
+            "interface/view_controls_visible",
+            self.viewport.view_controls_visible,
+        )
+        self._settings.setValue(
+            "interface/splitter_sizes",
+            self.workspace_splitter.sizes(),
+        )
+        self._settings.setValue("viewport/show_stock", self.viewport.show_stock)
+        self._settings.setValue("viewport/show_grid", self.viewport.show_grid)
+        self._settings.setValue(
+            "viewport/reverse_horizontal_drag",
+            self.viewport.reverse_horizontal_drag,
+        )
+        self._save_viewport_mode()
+        self._settings.sync()
+
+    def _toggle_project_panel_option(self) -> None:
+        visible = not self.project_panel.isVisible()
+        self.project_panel.setVisible(visible)
+        self._set_option_checked("project_panel", visible)
+        self._save_interface_options()
+
+    def _toggle_properties_panel_option(self) -> None:
+        visible = not self.properties_panel.isVisible()
+        self.properties_panel.setVisible(visible)
+        self._set_option_checked("properties_panel", visible)
+        self._save_interface_options()
+
+    def _toggle_status_bar_option(self) -> None:
+        visible = not self.statusBar().isVisible()
+        self.statusBar().setVisible(visible)
+        self._set_option_checked("status_bar", visible)
+        self._save_interface_options()
+
+    def _toggle_view_controls_option(self) -> None:
+        visible = not self.viewport.view_controls_visible
+        self.viewport.set_view_controls_visible(visible)
+        self._set_option_checked("view_controls", visible)
+        self._save_interface_options()
+        self.statusBar().showMessage(
+            f"Viewport controls {'shown' if visible else 'hidden'}",
+            2000,
+        )
+
+    def _toggle_reverse_horizontal_option(self) -> None:
+        enabled = not self.viewport.reverse_horizontal_drag
+        self.viewport.set_reverse_horizontal_drag(enabled)
+        self._set_option_checked("reverse_horizontal", enabled)
+        self._save_interface_options()
+        state = "reversed" if enabled else "standard"
+        self.statusBar().showMessage(f"Horizontal viewport drag: {state}", 2500)
+
     def _toggle_stock(self) -> None:
         self.viewport.toggle_stock()
+        self._set_option_checked("stock", self.viewport.show_stock)
+        self._save_interface_options()
         state = "shown" if self.viewport.show_stock else "hidden"
         self.statusBar().showMessage(f"Stock {state}", 2000)
 
     def _toggle_grid(self) -> None:
         self.viewport.toggle_grid()
+        self._set_option_checked("grid", self.viewport.show_grid)
+        self._save_interface_options()
         state = "shown" if self.viewport.show_grid else "hidden"
         self.statusBar().showMessage(f"Grid {state}", 2000)
+
+    def _set_perspective_option(self) -> None:
+        self.viewport.set_perspective_view()
+        self.statusBar().showMessage("Perspective projection", 2000)
+
+    def _set_orthographic_option(self) -> None:
+        self.viewport.set_orthographic_view()
+        self.statusBar().showMessage("Orthographic projection", 2000)
+
+    def _set_isometric_option(self) -> None:
+        self.viewport.set_isometric_view()
+        self.statusBar().showMessage("Isometric view", 2000)
+
+    def _set_standard_view_option(self, name: str) -> None:
+        self.viewport.set_standard_view(name)
+        self.statusBar().showMessage(f"{name} view", 2000)
+
+    def _reset_interface_options(self) -> None:
+        self._settings.remove("interface")
+        self._settings.remove("viewport")
+
+        self.project_panel.show()
+        self.properties_panel.show()
+        self.statusBar().show()
+        self.workspace_splitter.setSizes([250, 970, 330])
+
+        self.viewport.set_view_controls_visible(True)
+        self.viewport.show_stock = True
+        self.viewport.show_grid = True
+        self.viewport.set_reverse_horizontal_drag(True)
+        self.viewport.yaw_deg = 45.0
+        self.viewport.elevation_deg = 35.0
+        self.viewport.set_orthographic_view()
+
+        for key in (
+            "project_panel",
+            "properties_panel",
+            "status_bar",
+            "view_controls",
+            "stock",
+            "grid",
+            "reverse_horizontal",
+        ):
+            self._set_option_checked(key, True)
+
+        self.viewport.update()
+        self._save_interface_options()
+        self.statusBar().showMessage("Interface options reset", 3000)
 
     def _set_project(
         self,
@@ -1128,5 +1325,6 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        self._save_interface_options()
         super().closeEvent(event)
 
