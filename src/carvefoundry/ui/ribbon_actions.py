@@ -278,6 +278,7 @@ class RibbonActionsMixin:
         self._tabs_button = None
         self._jog_dialog: QDialog | None = None
         self._toolpath_preview_window: ToolpathPreviewWindow | None = None
+        self._machine_connect_button = None
 
         self.machine_controller = MachineController(self)
         self.machine_controller.connectionChanged.connect(
@@ -1986,6 +1987,27 @@ class RibbonActionsMixin:
             self.machine_controller.send_line("?")
 
     def _machine_connection_changed(self, connected: bool, port: str) -> None:
+        if self._machine_connect_button is not None:
+            self._machine_connect_button.setText(
+                "Disconnect" if connected else "Connect"
+            )
+            self._machine_connect_button.setChecked(connected)
+
+        if hasattr(self, "machine_status_label"):
+            self.machine_status_label.setText(
+                f"CONNECTED • {port}" if connected else "OFFLINE"
+            )
+            self.machine_status_label.setProperty(
+                "connected",
+                connected,
+            )
+            self.machine_status_label.style().unpolish(
+                self.machine_status_label
+            )
+            self.machine_status_label.style().polish(
+                self.machine_status_label
+            )
+
         self.statusBar().showMessage(
             f"{'Connected to' if connected else 'Disconnected from'} {port}",
             4000,
