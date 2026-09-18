@@ -41,3 +41,25 @@ def test_invalid_radius_rejected() -> None:
     tool = Cutter("flat", ToolType.FLAT_END_MILL, 6.0)
     with pytest.raises(ValueError):
         tool.profile_height_mm(3.1)
+
+
+def test_custom_profile_interpolates_height() -> None:
+    tool = Cutter(
+        "custom",
+        ToolType.CUSTOM,
+        6.0,
+        profile_points=((0.0, 0.0), (1.0, 0.2), (3.0, 2.0)),
+    )
+
+    assert tool.profile_height_mm(0.5) == pytest.approx(0.1)
+    assert tool.profile_height_mm(2.0) == pytest.approx(1.1)
+
+
+def test_custom_profile_rejects_unsorted_radii() -> None:
+    with pytest.raises(ValueError, match="increase strictly"):
+        Cutter(
+            "bad",
+            ToolType.CUSTOM,
+            6.0,
+            profile_points=((0.0, 0.0), (2.0, 1.0), (1.0, 2.0)),
+        )
