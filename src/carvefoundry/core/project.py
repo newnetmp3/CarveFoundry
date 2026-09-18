@@ -26,6 +26,67 @@ class Stock:
     thickness_mm: float = 19.0
 
 
+@dataclass(frozen=True, slots=True)
+class TextProperties:
+    """Editable CNC text settings stored independently from generated mesh data."""
+
+    content: str = "Text"
+    font_family: str = ""
+    font_style: str = "Regular"
+    size_pt: float = 36.0
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    strikeout: bool = False
+    alignment: str = "left"
+    character_spacing_mm: float = 0.0
+    word_spacing_mm: float = 0.0
+    kerning: bool = True
+    line_spacing_percent: float = 100.0
+    horizontal_scale_percent: float = 100.0
+    wrap_to_width: bool = False
+    box_width_mm: float = 0.0
+    depth_mm: float = 1.0
+    geometry_mode: str = "filled"
+    outline_width_mm: float = 0.8
+    case_mode: str = "normal"
+
+    def validate(self) -> None:
+        if not self.content:
+            raise ValueError("Text content cannot be empty.")
+        if not np.isfinite(
+            (
+                self.size_pt,
+                self.character_spacing_mm,
+                self.word_spacing_mm,
+                self.line_spacing_percent,
+                self.horizontal_scale_percent,
+                self.box_width_mm,
+                self.depth_mm,
+                self.outline_width_mm,
+            )
+        ).all():
+            raise ValueError("Text properties must be finite.")
+        if self.size_pt <= 0:
+            raise ValueError("Font size must be greater than zero.")
+        if self.line_spacing_percent <= 0:
+            raise ValueError("Line spacing must be greater than zero.")
+        if self.horizontal_scale_percent <= 0:
+            raise ValueError("Horizontal font scale must be greater than zero.")
+        if self.box_width_mm < 0:
+            raise ValueError("Text box width cannot be negative.")
+        if self.depth_mm <= 0:
+            raise ValueError("Text depth must be greater than zero.")
+        if self.outline_width_mm <= 0:
+            raise ValueError("Outline width must be greater than zero.")
+        if self.alignment not in {"left", "center", "right", "justify"}:
+            raise ValueError(f"Unsupported text alignment: {self.alignment}")
+        if self.geometry_mode not in {"filled", "outline"}:
+            raise ValueError(f"Unsupported text geometry mode: {self.geometry_mode}")
+        if self.case_mode not in {"normal", "uppercase", "lowercase", "title"}:
+            raise ValueError(f"Unsupported text case mode: {self.case_mode}")
+
+
 @dataclass(slots=True)
 class ProjectItem:
     name: str
@@ -37,6 +98,7 @@ class ProjectItem:
     source_units: ModelUnits = ModelUnits.MILLIMETERS
     group_id: str | None = None
     item_id: str = field(default_factory=lambda: uuid4().hex)
+    text_properties: TextProperties | None = None
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
@@ -171,6 +233,7 @@ class Project:
             ),
             source_units=source.source_units,
             group_id=None,
+            text_properties=source.text_properties,
         )
         new_index = index + 1
         self.items.insert(new_index, duplicate)
