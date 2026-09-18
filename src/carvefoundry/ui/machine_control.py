@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QIODevice, QObject, Signal
 
 try:
     from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
@@ -70,7 +70,7 @@ class MachineController(QObject):
         self._serial.setStopBits(QSerialPort.StopBits.OneStop)
         self._serial.setFlowControl(QSerialPort.FlowControl.NoFlowControl)
 
-        if not self._serial.open(QSerialPort.OpenModeFlag.ReadWrite):
+        if not self._serial.open(QIODevice.OpenModeFlag.ReadWrite):
             self.errorOccurred.emit(
                 self._serial.errorString() or f"Could not open {port_name}."
             )
