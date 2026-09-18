@@ -496,6 +496,16 @@ def _extrude_text_geometry(
     *,
     preserve_x_origin: bool = False,
 ) -> MeshAsset:
+    # Font backends can return several touching or nearly coincident outline
+    # polygons.  Normalize them in 2D before extrusion so Earcut does not
+    # produce separate seam vertices for what is logically one CNC region.
+    polygons = _flatten_polygon_geometry(geometry)
+    if not polygons:
+        raise ValueError("Text produced no machinable geometry.")
+    geometry = unary_union(polygons)
+    if not geometry.is_valid:
+        geometry = geometry.buffer(0)
+
     parts: list[trimesh.Trimesh] = []
     for polygon in _flatten_polygon_geometry(geometry):
         if polygon.area <= 1e-8:
@@ -512,6 +522,10 @@ def _extrude_text_geometry(
         raise ValueError("Text produced no machinable geometry.")
 
     mesh = trimesh.util.concatenate(parts)
+    # Qt/fontconfig can emit coincident contour vertices differently across
+    # Linux distributions.  Let Trimesh weld those seams and discard
+    # degenerate/duplicate faces before the mesh reaches CAM.
+    mesh.process(validate=True)
     bounds = np.asarray(mesh.bounds, dtype=float)
     x_shift = 0.0 if preserve_x_origin else -bounds[0, 0]
     mesh.apply_translation((x_shift, -bounds[0, 1], 0.0))
