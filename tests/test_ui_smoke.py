@@ -161,6 +161,68 @@ def test_select_tool_and_escape_cancel_active_drawing_mode() -> None:
         window.close()
 
 
+def test_contextual_tool_options_bar_tracks_active_draw_tool() -> None:
+    window = MainWindow()
+    try:
+        assert window.tool_options_bar.isHidden()
+
+        window._set_shape_tool("rectangle")
+        assert not window.tool_options_bar.isHidden()
+        assert window.tool_options_title.text() == "Rectangle Tool"
+        assert window.tool_options_polygon_sides.isHidden()
+        assert window.tool_options_line_width_spin.isHidden()
+        assert window.tool_options_text_edit.isHidden()
+
+        window.tool_options_depth_spin.setValue(2.75)
+        window._shape_drawn("rectangle", 10.0, 20.0, 30.0, 35.0)
+        rectangle = window.project.items[-1]
+        assert rectangle.kind == "rectangle"
+        assert rectangle.local_size_mm() == pytest.approx(
+            (20.0, 15.0, 2.75),
+            abs=0.01,
+        )
+
+        window._set_shape_tool("polygon")
+        assert not window.tool_options_polygon_sides.isHidden()
+        window.tool_options_polygon_sides.setValue(9)
+        assert window._tool_option_polygon_sides == 9
+
+        window._set_shape_tool("line")
+        assert not window.tool_options_line_width_spin.isHidden()
+        window.tool_options_line_width_spin.setValue(4.5)
+        window._shape_drawn("line", 0.0, 0.0, 20.0, 0.0)
+        line = window.project.items[-1]
+        assert line.kind == "line"
+        assert line.local_size_mm() == pytest.approx(
+            (20.0, 4.5, 2.75),
+            abs=0.01,
+        )
+
+        window._set_shape_tool("text")
+        assert not window.tool_options_text_edit.isHidden()
+        assert not window.tool_options_font_value.isHidden()
+        window.tool_options_text_edit.setText("NAVY")
+        window._shape_drawn("text", 5.0, 5.0, 45.0, 20.0)
+        text_item = window.project.items[-1]
+        assert text_item.text_properties is not None
+        assert text_item.text_properties.content == "NAVY"
+        assert text_item.text_properties.depth_mm == pytest.approx(2.75)
+
+        window._apply_active_tool()
+        assert window._active_shape_tool is None
+        assert window.viewport.shape_draw_mode is None
+        assert window.tool_options_bar.isHidden()
+
+        window._set_shape_tool("ellipse")
+        assert not window.tool_options_bar.isHidden()
+        window._cancel_active_tool()
+        assert window._active_shape_tool is None
+        assert window.viewport.shape_draw_mode is None
+        assert window.tool_options_bar.isHidden()
+    finally:
+        window.close()
+
+
 def test_text_edit_updates_geometry_preserves_placement_and_invalidates_cam() -> None:
     window = ProjectMainWindow()
     try:
