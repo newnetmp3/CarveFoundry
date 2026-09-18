@@ -5,7 +5,14 @@ from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer
-from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence, QShortcut
+from PySide6.QtGui import (
+    QAction,
+    QFont,
+    QFontDatabase,
+    QFontInfo,
+    QKeySequence,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
