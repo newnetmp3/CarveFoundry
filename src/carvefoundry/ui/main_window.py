@@ -524,33 +524,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(8, 8, 8, 8)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(True)
+        splitter.setChildrenCollapsible(False)
         self.workspace_splitter = splitter
 
-        self.project_panel = Panel("Project / Layers")
-        self.project_list = QListWidget()
-        self.project_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
+        # Keep the existing QListWidget-based project selection model, but move
+        # it out of the permanent layout.  It now lives in an on-demand popup.
+        self.layers_popup = LayersPopup(
+            self,
+            move_up=lambda: self._move_selected_item(-1),
+            move_down=lambda: self._move_selected_item(1),
+            duplicate=self._duplicate_selected_item,
+            delete=self._delete_selected_item,
         )
-        self.project_panel.body_layout.addWidget(self.project_list)
-        layer_buttons = QWidget()
-        layer_layout = QGridLayout(layer_buttons)
-        layer_layout.setContentsMargins(0, 0, 0, 0)
-        layer_layout.setSpacing(5)
-        up_button = QPushButton("Move Up")
-        up_button.clicked.connect(lambda: self._move_selected_item(-1))
-        layer_layout.addWidget(up_button, 0, 0)
-        down_button = QPushButton("Move Down")
-        down_button.clicked.connect(lambda: self._move_selected_item(1))
-        layer_layout.addWidget(down_button, 0, 1)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_selected_item)
-        layer_layout.addWidget(duplicate_button, 1, 0)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_selected_item)
-        layer_layout.addWidget(delete_button, 1, 1)
-        self.project_panel.body_layout.addWidget(layer_buttons)
+        self.project_list = self.layers_popup.list_widget
 
         canvas = QFrame()
         canvas.setObjectName("CanvasFrame")
@@ -561,25 +549,67 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         canvas_bar = QWidget()
         canvas_bar.setObjectName("ViewportBar")
         canvas_bar_layout = QHBoxLayout(canvas_bar)
-        canvas_bar_layout.setContentsMargins(10, 7, 10, 7)
-        canvas_bar_layout.addWidget(QLabel("3D Workspace"))
+        canvas_bar_layout.setContentsMargins(10, 6, 10, 6)
+        canvas_bar_layout.setSpacing(7)
+
+        canvas_bar_layout.addWidget(QLabel("Object"))
+        self.object_selector = QComboBox()
+        self.object_selector.setObjectName("ObjectSelector")
+        self.object_selector.setMinimumWidth(230)
+        self.object_selector.setMaximumWidth(420)
+        self.object_selector.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.object_selector.setMinimumContentsLength(22)
+        self.object_selector.setToolTip(
+            "Select Stock or a design object without opening the Layers manager."
+        )
+        self.object_selector.currentIndexChanged.connect(
+            self._object_selector_changed
+        )
+        canvas_bar_layout.addWidget(self.object_selector)
+
+        self.layers_button = QPushButton("Layers")
+        self.layers_button.setToolTip(
+            "Open the object/layer manager for visibility, multi-select, and ordering."
+        )
+        self.layers_button.clicked.connect(self._show_layers_popup)
+        canvas_bar_layout.addWidget(self.layers_button)
         canvas_bar_layout.addStretch(1)
-        fit_button = QPushButton("Fit View")
+
+        fit_button = QPushButton("Fit")
+        fit_button.setToolTip("Fit the entire job to the viewport")
         fit_button.clicked.connect(self._fit_view)
         canvas_bar_layout.addWidget(fit_button)
-        import_button = QPushButton("Import Design")
+
+        self.inspector_button = QPushButton("Inspector")
+        self.inspector_button.setCheckable(True)
+        self.inspector_button.setChecked(True)
+        self.inspector_button.setToolTip(
+            "Show or hide the contextual stock/object inspector"
+        )
+        self.inspector_button.clicked.connect(
+            self._toggle_properties_panel_option
+        )
+        canvas_bar_layout.addWidget(self.inspector_button)
+
+        import_button = QPushButton("Import")
         import_button.setObjectName("PrimaryButton")
-        import_button.clicked.connect(lambda _checked=False: self._import_file())
+        import_button.setToolTip("Import a design file into this project")
+        import_button.clicked.connect(
+            lambda _checked=False: self._import_file()
+        )
         canvas_bar_layout.addWidget(import_button)
         canvas_layout.addWidget(canvas_bar)
 
         self.viewport = MeshViewport(self.project)
         canvas_layout.addWidget(self.viewport, 1)
 
-        self.properties_panel = Panel("Properties / Carve")
+        self.properties_panel = Panel("Inspector")
+        self.properties_panel.setObjectName("InspectorPanel")
         self.selection_info = QLabel()
         self.selection_info.setWordWrap(True)
-        self.selection_info.setObjectName("Muted")
+        self.selection_info.setObjectName("InspectorSummary")
         self.properties_panel.body_layout.addWidget(self.selection_info)
 
         self.stock_widget = self._build_stock_controls()
@@ -588,42 +618,31 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.transform_widget = self._build_transform_controls()
         self.properties_panel.body_layout.addWidget(self.transform_widget)
 
-        self.properties_panel.body_layout.addWidget(QLabel("Selected cutter"))
-        self.tool_combo = QComboBox()
-        for tool in self._all_tools():
-            self.tool_combo.addItem(tool.name, tool)
-        self.tool_combo.currentIndexChanged.connect(
-            lambda _index: self._refresh_cam_detail_readouts()
+        inspector_hint = QLabel(
+            "Cutter selection and CAM settings are grouped on the Toolpaths ribbon."
         )
-        self.properties_panel.body_layout.addWidget(self.tool_combo)
-        info = QLabel(
-            "Toolpaths will compensate for the selected cutter profile; "
-            "3D finishing is not limited to ball-nose tools."
-        )
-        info.setWordWrap(True)
-        info.setObjectName("Muted")
-        self.properties_panel.body_layout.addWidget(info)
+        inspector_hint.setWordWrap(True)
+        inspector_hint.setObjectName("Muted")
+        self.properties_panel.body_layout.addWidget(inspector_hint)
         self.properties_panel.body_layout.addStretch(1)
 
         self.project_list.currentRowChanged.connect(self._update_properties)
         self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
 
-        splitter.addWidget(self.project_panel)
         splitter.addWidget(canvas)
         splitter.addWidget(self.properties_panel)
-        splitter.setSizes(self._default_workspace_splitter_sizes(1550))
-        splitter.setStretchFactor(1, 1)
+        splitter.setSizes(self._default_workspace_splitter_sizes(1500))
+        splitter.setStretchFactor(0, 1)
         layout.addWidget(splitter)
         return wrapper
 
     def _properties_panel_default_width(self) -> int:
-        """Return the narrowest useful width for the initially loaded panel."""
+        """Return a useful contextual-inspector width without stealing canvas."""
 
         self.properties_panel.ensurePolished()
         self.stock_widget.ensurePolished()
         self.transform_widget.ensurePolished()
-        self.tool_combo.ensurePolished()
 
         body_margins = self.properties_panel.body_layout.contentsMargins()
         frame_padding = self.properties_panel.frameWidth() * 2
@@ -632,23 +651,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             + body_margins.right()
             + frame_padding
         )
-
-        selection_width = max(
-            (
-                self.selection_info.fontMetrics().horizontalAdvance(line)
-                for line in self.selection_info.text().splitlines()
-                if line
-            ),
-            default=0,
-        )
         content_width = max(
             self.properties_panel.header.sizeHint().width(),
             self.stock_widget.sizeHint().width(),
             self.transform_widget.sizeHint().width(),
-            self.tool_combo.sizeHint().width(),
-            selection_width,
         )
-        return content_width + outer_padding
+        return max(330, min(430, content_width + outer_padding))
 
     def _default_workspace_splitter_sizes(
         self,
@@ -657,12 +665,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if total_width is None:
             total_width = sum(self.workspace_splitter.sizes())
         if total_width <= 0:
-            total_width = 1550
+            total_width = 1500
 
-        project_width = 250
-        properties_width = self._properties_panel_default_width()
-        canvas_width = max(360, total_width - project_width - properties_width)
-        return [project_width, canvas_width, properties_width]
+        inspector_width = self._properties_panel_default_width()
+        canvas_width = max(520, total_width - inspector_width)
+        return [canvas_width, inspector_width]
 
     @staticmethod
     def _configured_spin(
