@@ -26,6 +26,7 @@ GL_COLOR_BUFFER_BIT = 0x00004000
 GL_DEPTH_BUFFER_BIT = 0x00000100
 GL_DEPTH_TEST = 0x0B71
 GL_BLEND = 0x0BE2
+GL_SCISSOR_TEST = 0x0C11
 GL_SRC_ALPHA = 0x0302
 GL_ONE_MINUS_SRC_ALPHA = 0x0303
 GL_LEQUAL = 0x0203
@@ -830,6 +831,11 @@ class MeshViewport(QOpenGLWidget):
         if self._functions is None:
             return
 
+        # Reset frame-critical GL state before every paint. QOpenGLWidget shares
+        # compositor-managed buffers under Wayland, so stale depth/scissor state
+        # must never restrict the clear to a previous damage region.
+        self._functions.glDepthMask(True)
+        self._functions.glDisable(GL_SCISSOR_TEST)
         self._functions.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         self._prune_mesh_cache()
 
