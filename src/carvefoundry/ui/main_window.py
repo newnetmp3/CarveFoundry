@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer
-from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence
+from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -1127,6 +1127,44 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_depth_spin.valueChanged.connect(self._text_control_changed)
         grid.addWidget(QLabel("Depth"), 16, 0, 1, 2)
         grid.addWidget(self.text_depth_spin, 16, 2, 1, 2)
+
+        self._text_shortcuts: list[QShortcut] = []
+        for sequence, callback in (
+            ("Ctrl+B", self.text_bold_button.toggle),
+            ("Ctrl+I", self.text_italic_button.toggle),
+            ("Ctrl+U", self.text_underline_button.toggle),
+            ("Ctrl+Shift+X", self.text_strike_button.toggle),
+            (
+                "Ctrl+L",
+                lambda: self.text_alignment_combo.setCurrentIndex(
+                    self.text_alignment_combo.findData("left")
+                ),
+            ),
+            (
+                "Ctrl+E",
+                lambda: self.text_alignment_combo.setCurrentIndex(
+                    self.text_alignment_combo.findData("center")
+                ),
+            ),
+            (
+                "Ctrl+R",
+                lambda: self.text_alignment_combo.setCurrentIndex(
+                    self.text_alignment_combo.findData("right")
+                ),
+            ),
+            (
+                "Ctrl+J",
+                lambda: self.text_alignment_combo.setCurrentIndex(
+                    self.text_alignment_combo.findData("justify")
+                ),
+            ),
+        ):
+            shortcut = QShortcut(QKeySequence(sequence), widget)
+            shortcut.setContext(
+                Qt.ShortcutContext.WidgetWithChildrenShortcut
+            )
+            shortcut.activated.connect(callback)
+            self._text_shortcuts.append(shortcut)
 
         note = QLabel(
             "Font geometry comes from the installed system font. "
