@@ -1,10 +1,10 @@
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import QApplication, QComboBox, QSizePolicy
 
 from carvefoundry.cam.toolpath import Toolpath
-from carvefoundry.core.primitives import text_mesh
+from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
 from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
@@ -12,6 +12,141 @@ from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def test_photoshop_style_tool_rail_and_compact_ribbon() -> None:
+    window = MainWindow()
+    try:
+        assert window.tool_rail.width() == 46
+        assert window.ribbon.height() == 104
+        assert {
+            "select",
+            "shapes",
+            "line",
+            "text",
+            "pen",
+            "arrange",
+            "cam",
+            "import",
+            "layers",
+            "inspector",
+            "fit",
+        }.issubset(window.tool_rail.buttons)
+        assert window.tool_rail.buttons["select"].isChecked()
+        assert len(window.tool_rail.buttons["shapes"].menu().actions()) == 3
+
+        window._set_shape_tool("ellipse")
+        assert window.viewport.shape_draw_mode == "ellipse"
+        assert window.tool_rail.buttons["shapes"].isChecked()
+        assert (
+            window.tool_rail.buttons["shapes"].property("currentAction")
+            == "ellipse"
+        )
+
+        window._activate_navigation_tool()
+        assert window.viewport.shape_draw_mode is None
+        assert window.tool_rail.buttons["select"].isChecked()
+    finally:
+        window.close()
+
+
+def test_viewport_multi_selection_syncs_layers_and_actions() -> None:
+    window = MainWindow()
+    try:
+        project = Project(
+            items=[
+                ProjectItem(
+                    "Left",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(10.0, 10.0, 1.0),
+                    transform=Transform3D(
+                        translation_mm=(25.0, 25.0, 0.0),
+                    ),
+                ),
+                ProjectItem(
+                    "Right",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(10.0, 10.0, 1.0),
+                    transform=Transform3D(
+                        translation_mm=(75.0, 25.0, 0.0),
+                    ),
+                ),
+            ]
+        )
+        window._set_project(
+            project,
+            project_path=None,
+            selected_row=1,
+        )
+
+        window._viewport_selection_requested([0], "replace")
+        window._viewport_selection_requested([1], "add")
+
+        assert window._selected_design_indices() == [0, 1]
+        assert window.viewport._renderer.selected_item_indices == {0, 1}
+        assert "2 objects selected" in window.selection_info.text()
+        assert window._selection_action_buttons["group"].isEnabled()
+        assert window._selection_action_buttons["align"].isEnabled()
+
+        window._viewport_selection_requested([0], "toggle")
+        assert window._selected_design_indices() == [1]
+        assert window.viewport._renderer.selected_item_indices == {1}
+
+        window._viewport_selection_requested([], "replace")
+        assert window._selected_design_indices() == []
+        assert window.viewport._renderer.selected_item_indices == set()
+    finally:
+        window.close()
+
+
+def test_viewport_marquee_detects_multiple_visible_objects() -> None:
+    window = MainWindow()
+    try:
+        project = Project(
+            items=[
+                ProjectItem(
+                    "One",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(12.0, 12.0, 1.0),
+                    transform=Transform3D(
+                        translation_mm=(30.0, 30.0, 0.0),
+                    ),
+                ),
+                ProjectItem(
+                    "Two",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(12.0, 12.0, 1.0),
+                    transform=Transform3D(
+                        translation_mm=(90.0, 60.0, 0.0),
+                    ),
+                ),
+            ]
+        )
+        window._set_project(
+            project,
+            project_path=None,
+            selected_row=1,
+        )
+        renderer = window.viewport._renderer
+        renderer.resize(800, 600)
+
+        selected = renderer._selection_indices_in_screen_rect(
+            QPointF(0.0, 0.0),
+            QPointF(800.0, 600.0),
+        )
+        assert selected == [0, 1]
+
+        assert renderer._selection_mode_for_modifiers(
+            Qt.KeyboardModifier.NoModifier
+        ) == "replace"
+        assert renderer._selection_mode_for_modifiers(
+            Qt.KeyboardModifier.ShiftModifier
+        ) == "add"
+        assert renderer._selection_mode_for_modifiers(
+            Qt.KeyboardModifier.ControlModifier
+        ) == "toggle"
+    finally:
+        window.close()
 
 
 def test_main_window_builds_text_inspector_offscreen() -> None:
