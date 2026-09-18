@@ -1053,8 +1053,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if self._updating_object_selector:
             return
         row = max(0, min(int(row), self.project_list.count() - 1))
+        row_changed = self.project_list.currentRow() != row
         self.project_list.clearSelection()
         self.project_list.setCurrentRow(row)
+        item = self.project_list.item(row)
+        if item is not None:
+            item.setSelected(True)
+        if not row_changed:
+            self._update_properties(row)
 
     def _show_layers_popup(self) -> None:
         if not hasattr(self, "layers_popup"):
@@ -1141,12 +1147,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         """Synchronize a viewport click with the Project/Layers selection."""
 
         row = index + 1 if 0 <= index < len(self.project.items) else 0
+        row_changed = self.project_list.currentRow() != row
         self.project_list.clearSelection()
-        if self.project_list.currentRow() != row:
-            self.project_list.setCurrentRow(row)
-        elif row > 0:
-            self.project_list.item(row).setSelected(True)
-            self.viewport.set_selected_item(index)
+        self.project_list.setCurrentRow(row)
+        item = self.project_list.item(row)
+        if item is not None:
+            item.setSelected(True)
+        if not row_changed:
+            self._update_properties(row)
 
     def _viewport_transform_started(self, _index: int) -> None:
         """Lifecycle hook overridden by the project-history window."""
