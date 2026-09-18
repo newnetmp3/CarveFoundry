@@ -664,8 +664,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             cls._number(float(value)) for value in placed_bounds[1]
         )
         metadata_units = mesh.units or "none (STL normally stores no unit)"
+        kind_label = "STL" if item.kind.lower() == "stl" else item.kind.upper()
         return (
-            f"STL mesh\n{item.name}\n\n"
+            f"{kind_label} mesh\n{item.name}\n\n"
             f"Source size: {cls._source_dimensions_text(item)}\n"
             f"Model units: {item.source_units.display_name}\n"
             f"File metadata units: {metadata_units}\n"
