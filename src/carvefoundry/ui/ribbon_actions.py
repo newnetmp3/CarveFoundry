@@ -560,6 +560,7 @@ class RibbonActionsMixin:
             item.transform.translation_mm = (tx + dx, ty + dy, tz + dz)
 
         self._refresh_project_list(indices[-1] + 1)
+        self._select_project_indices(indices, primary=indices[-1])
         self.viewport.update()
         self._after_ribbon_mutation(f"align {choice}", True)
         self.statusBar().showMessage(f"Aligned {len(valid)} item(s): {choice}", 3000)
@@ -588,6 +589,7 @@ class RibbonActionsMixin:
             tx, ty, tz = item.transform.translation_mm
             item.transform.translation_mm = (tx + dx, ty + dy, tz)
         self._refresh_project_list(indices[-1] + 1)
+        self._select_project_indices(indices, primary=indices[-1])
         self.viewport.update()
         self._after_ribbon_mutation("center selection", True)
         self.statusBar().showMessage("Centered selection on stock", 3000)
@@ -602,6 +604,7 @@ class RibbonActionsMixin:
         for index in indices:
             self.project.items[index].group_id = group_id
         self._refresh_project_list(indices[-1] + 1)
+        self._select_project_indices(indices, primary=indices[-1])
         self._after_ribbon_mutation("group", True)
         self.statusBar().showMessage(f"Grouped {len(indices)} items", 3000)
 
@@ -619,6 +622,7 @@ class RibbonActionsMixin:
         for index in grouped:
             self.project.items[index].group_id = None
         self._refresh_project_list(grouped[-1] + 1)
+        self._select_project_indices(grouped, primary=grouped[-1])
         self._after_ribbon_mutation("ungroup", True)
         self.statusBar().showMessage(f"Ungrouped {len(grouped)} items", 3000)
 
@@ -792,6 +796,8 @@ class RibbonActionsMixin:
                 self._navigation_tool_button.setChecked(not bool(mode))
             finally:
                 self._navigation_tool_button.blockSignals(False)
+        if hasattr(self, "tool_rail"):
+            self.tool_rail.set_active_draw_tool(mode or None)
         self._sync_tool_options_bar(mode or None)
 
     def _add_drawn_item(
