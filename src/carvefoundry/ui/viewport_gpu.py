@@ -128,6 +128,7 @@ class MeshViewport(QOpenGLWidget):
         self._line_vao: QOpenGLVertexArrayObject | None = None
         self._line_buffer: QOpenGLBuffer | None = None
         self._mesh_cache: dict[int, _GpuMesh] = {}
+        self._prepared_mesh_uploads: dict[int, tuple[object, bytes, int]] = {}
         self._renderer_description = "GPU OpenGL initializing…"
         self._gl_error: str | None = None
 
@@ -154,8 +155,25 @@ class MeshViewport(QOpenGLWidget):
     def set_project(self, project: Project) -> None:
         self.project = project
         self.selected_item_index = None
+        self._prepared_mesh_uploads.clear()
         self.fit_view()
         self._update_overlay()
+
+    def prepare_mesh_upload(
+        self,
+        source_mesh: object,
+        vertex_bytes: bytes,
+        vertex_count: int,
+    ) -> None:
+        """Prime one mesh with CPU-prepared non-indexed GPU vertex data."""
+
+        if vertex_count <= 0 or not vertex_bytes:
+            return
+        self._prepared_mesh_uploads[id(source_mesh)] = (
+            source_mesh,
+            vertex_bytes,
+            int(vertex_count),
+        )
 
     def set_selected_item(self, index: int | None) -> None:
         self.selected_item_index = index
@@ -413,13 +431,24 @@ class MeshViewport(QOpenGLWidget):
         )
         return projection, view_matrix
 
-    def _upload_mesh(self, source_mesh: object) -> _GpuMesh:
+    def _upload_mesh(
+        self,
+        source_mesh: object,
+        prepared: tuple[bytes, int] | None = None,
+    ) -> _GpuMesh:
         if self._mesh_program is None:
             raise RuntimeError("OpenGL mesh shader is not initialized.")
 
-        triangle_vertices = expand_triangle_positions(source_mesh)
-        if len(triangle_vertices) == 0:
-            raise RuntimeError("Cannot render an empty mesh.")
+        if prepared is None:
+            triangle_vertices = expand_triangle_positions(source_mesh)
+            if len(triangle_vertices) == 0:
+                raise RuntimeError("Cannot render an empty mesh.")
+            vertex_bytes = triangle_vertices.tobytes()
+            vertex_count = len(triangle_vertices)
+        else:
+            vertex_bytes, vertex_count = prepared
+            if vertex_count <= 0 or not vertex_bytes:
+                raise RuntimeError("Prepared mesh upload is empty.")
 
         vao = QOpenGLVertexArrayObject()
         vertex_buffer = QOpenGLBuffer(QOpenGLBuffer.Type.VertexBuffer)
@@ -434,7 +463,6 @@ class MeshViewport(QOpenGLWidget):
 
         vao.bind()
         vertex_buffer.bind()
-        vertex_bytes = triangle_vertices.tobytes()
         vertex_buffer.allocate(vertex_bytes, len(vertex_bytes))
 
         self._mesh_program.bind()
@@ -449,7 +477,7 @@ class MeshViewport(QOpenGLWidget):
             source_mesh=source_mesh,
             vao=vao,
             vertex_buffer=vertex_buffer,
-            vertex_count=len(triangle_vertices),
+            vertex_count=vertex_count,
         )
 
     def _gpu_mesh_for_item(self, item: ProjectItem) -> _GpuMesh | None:
@@ -465,8 +493,13 @@ class MeshViewport(QOpenGLWidget):
         if cached is not None:
             cached.destroy()
 
+        prepared_entry = self._prepared_mesh_uploads.pop(key, None)
+        prepared: tuple[bytes, int] | None = None
+        if prepared_entry is not None and prepared_entry[0] is source_mesh:
+            prepared = (prepared_entry[1], prepared_entry[2])
+
         try:
-            cached = self._upload_mesh(source_mesh)
+            cached = self._upload_mesh(source_mesh, prepared)
         except (RuntimeError, ValueError) as exc:
             self._gl_error = str(exc)
             self._update_overlay()
@@ -490,6 +523,14 @@ class MeshViewport(QOpenGLWidget):
         ]
         for key in stale_keys:
             self._mesh_cache.pop(key).destroy()
+
+        stale_prepared = [
+            key
+            for key, entry in self._prepared_mesh_uploads.items()
+            if active_meshes.get(key) is not entry[0]
+        ]
+        for key in stale_prepared:
+            self._prepared_mesh_uploads.pop(key, None)
 
     def _draw_lines(
         self,
