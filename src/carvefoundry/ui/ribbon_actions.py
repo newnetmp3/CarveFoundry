@@ -202,6 +202,10 @@ class RibbonActionsMixin:
         self._active_shape_tool: str | None = None
         self._shape_tool_buttons: dict[str, object] = {}
         self._navigation_tool_button = None
+        self._tool_option_depth_mm = 1.0
+        self._tool_option_line_width_mm = 2.0
+        self._tool_option_polygon_sides = 6
+        self._tool_option_text = "Text"
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
         self._cam_detail_widgets: list[object] = []
 
@@ -652,12 +656,93 @@ class RibbonActionsMixin:
             3500,
         )
 
-    def _cancel_active_tool(self) -> None:
-        """Exit the current transient drawing tool, if any."""
+    def _apply_active_tool(self) -> None:
+        """Finish the current draw tool and keep completed geometry."""
 
         if self._active_shape_tool is None:
             return
-        self._activate_navigation_tool()
+        label = self._active_shape_tool.title()
+        self.viewport.set_shape_draw_mode(None)
+        self.statusBar().showMessage(
+            f"{label} tool applied — returned to Select",
+            2500,
+        )
+
+    def _cancel_active_tool(self) -> None:
+        """Cancel the current draw tool/preview without deleting finished items."""
+
+        if self._active_shape_tool is None:
+            return
+        label = self._active_shape_tool.title()
+        self.viewport.set_shape_draw_mode(None)
+        self.statusBar().showMessage(
+            f"{label} tool canceled — returned to Select",
+            2500,
+        )
+
+    def _sync_tool_options_bar(self, mode: str | None) -> None:
+        """Show only options relevant to the active paint-style tool."""
+
+        bar = getattr(self, "tool_options_bar", None)
+        if bar is None:
+            return
+        active = bool(mode)
+        bar.setVisible(active)
+        if not active:
+            return
+
+        self.tool_options_title.setText(f"{mode.title()} Tool")
+        self.tool_options_depth_spin.blockSignals(True)
+        self.tool_options_depth_spin.setValue(self._tool_option_depth_mm)
+        self.tool_options_depth_spin.blockSignals(False)
+
+        is_polygon = mode == "polygon"
+        self.tool_options_polygon_label.setVisible(is_polygon)
+        self.tool_options_polygon_sides.setVisible(is_polygon)
+        if is_polygon:
+            self.tool_options_polygon_sides.blockSignals(True)
+            self.tool_options_polygon_sides.setValue(
+                self._tool_option_polygon_sides
+            )
+            self.tool_options_polygon_sides.blockSignals(False)
+
+        is_line = mode == "line"
+        self.tool_options_line_width_label.setVisible(is_line)
+        self.tool_options_line_width_spin.setVisible(is_line)
+        if is_line:
+            self.tool_options_line_width_spin.blockSignals(True)
+            self.tool_options_line_width_spin.setValue(
+                self._tool_option_line_width_mm
+            )
+            self.tool_options_line_width_spin.blockSignals(False)
+
+        is_text = mode == "text"
+        self.tool_options_text_label.setVisible(is_text)
+        self.tool_options_text_edit.setVisible(is_text)
+        self.tool_options_font_label.setVisible(is_text)
+        self.tool_options_font_value.setVisible(is_text)
+        if is_text:
+            self.tool_options_text_edit.blockSignals(True)
+            self.tool_options_text_edit.setText(self._tool_option_text)
+            self.tool_options_text_edit.blockSignals(False)
+            family = (
+                self._selected_text_font_family()
+                if hasattr(self, "_selected_text_font_family")
+                else QFontInfo(QFont()).family()
+            )
+            self.tool_options_font_value.setText(family)
+
+    def _tool_option_depth_changed(self, value: float) -> None:
+        self._tool_option_depth_mm = float(value)
+
+    def _tool_option_line_width_changed(self, value: float) -> None:
+        self._tool_option_line_width_mm = float(value)
+
+    def _tool_option_polygon_sides_changed(self, value: int) -> None:
+        self._tool_option_polygon_sides = int(value)
+
+    def _tool_option_text_changed(self, text: str) -> None:
+        self._tool_option_text = text or "Text"
 
     def _set_shape_tool(self, tool: str) -> None:
         """Activate one paint-style shape tool in the viewport."""
@@ -704,6 +789,7 @@ class RibbonActionsMixin:
                 self._navigation_tool_button.setChecked(not bool(mode))
             finally:
                 self._navigation_tool_button.blockSignals(False)
+        self._sync_tool_options_bar(mode or None)
 
     def _add_drawn_item(
         self,
@@ -746,7 +832,7 @@ class RibbonActionsMixin:
         height = max_y - min_y
         center_x = (min_x + max_x) / 2.0
         center_y = (min_y + max_y) / 2.0
-        depth = 1.0
+        depth = self._tool_option_depth_mm
 
         if tool in {"rectangle", "ellipse", "polygon", "text"} and (
             width < 0.10 or height < 0.10
@@ -772,7 +858,11 @@ class RibbonActionsMixin:
 
         if tool == "polygon":
             # Start from a unit regular hexagon and stretch it to the drag box.
-            mesh = polygon_mesh(6, 1.0, depth)
+            mesh = polygon_mesh(
+                self._tool_option_polygon_sides,
+                1.0,
+                depth,
+            )
             transform = Transform3D(
                 translation_mm=(center_x, center_y, 0.0),
                 scale_xyz=(width, height, 1.0),
@@ -787,7 +877,11 @@ class RibbonActionsMixin:
             if length < 0.10:
                 self.statusBar().showMessage("Drag farther to create the line", 2500)
                 return
-            mesh = line_mesh(length, 2.0, depth)
+            mesh = line_mesh(
+                length,
+                self._tool_option_line_width_mm,
+                depth,
+            )
             transform = Transform3D(
                 translation_mm=(
                     (float(x0) + float(x1)) / 2.0,
@@ -802,8 +896,12 @@ class RibbonActionsMixin:
         if tool == "text":
             size_pt = max(6.0, height * 72.0 / 25.4)
             properties = TextProperties(
-                content="Text",
-                font_family=QFontInfo(QFont()).family(),
+                content=self._tool_option_text or "Text",
+                font_family=(
+                    self._selected_text_font_family()
+                    if hasattr(self, "_selected_text_font_family")
+                    else QFontInfo(QFont()).family()
+                ),
                 font_style="Regular",
                 size_pt=size_pt,
                 box_width_mm=max(width, 0.1),
