@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QImage
+from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -773,7 +773,7 @@ class RibbonActionsMixin:
             size_pt = max(6.0, height * 72.0 / 25.4)
             properties = TextProperties(
                 content="Text",
-                font_family=QFont().family(),
+                font_family=QFontInfo(QFont()).family(),
                 font_style="Regular",
                 size_pt=size_pt,
                 box_width_mm=max(width, 0.1),
