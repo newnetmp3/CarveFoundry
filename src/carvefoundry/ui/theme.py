@@ -16,6 +16,20 @@ QMainWindow, #AppRoot { background: #0b1020; }
 }
 #AppName { color: #ffffff; font-size: 18px; font-weight: 700; }
 #AppAccent { color: #c8ff3d; font-size: 18px; font-weight: 800; }
+QPushButton#TitleQuickButton {
+    background: transparent;
+    color: #aeb8ca;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 11px;
+    font-weight: 700;
+}
+QPushButton#TitleQuickButton:hover {
+    background: #202a40;
+    color: #c8ff3d;
+    border-color: #35415a;
+}
 QTabWidget#Ribbon::pane {
     background: #0e1425;
     border: 0;
