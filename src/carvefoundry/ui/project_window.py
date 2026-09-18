@@ -40,6 +40,17 @@ class MainWindow(_BaseMainWindow):
         self._history_next_id = 1
         self._saved_state_id = 0
         self._pending_import_undo: tuple[WorkspaceSnapshot, int] | None = None
+        self._pending_viewport_transform_undo: tuple[
+            WorkspaceSnapshot,
+            int,
+            tuple[object, ...],
+        ] | None = None
+        self._pending_context_transform_undo: tuple[
+            WorkspaceSnapshot,
+            int,
+            tuple[object, ...],
+            str,
+        ] | None = None
         super().__init__()
         self._update_project_title()
 
@@ -76,6 +87,8 @@ class MainWindow(_BaseMainWindow):
         self._history_next_id = 1
         self._saved_state_id = 0
         self._pending_import_undo = None
+        self._pending_viewport_transform_undo = None
+        self._pending_context_transform_undo = None
 
     def _record_undo(
         self,
@@ -388,6 +401,57 @@ class MainWindow(_BaseMainWindow):
         after = tuple(id(item) for item in self.project.items)
         if after != before:
             self._record_undo(snapshot, selected_row, "reorder layer")
+
+    def _viewport_transform_started(self, index: int) -> None:
+        super()._viewport_transform_started(index)
+        if not 0 <= index < len(self.project.items):
+            self._pending_viewport_transform_undo = None
+            return
+        item = self.project.items[index]
+        self._pending_viewport_transform_undo = (
+            capture_workspace(self.project),
+            index + 1,
+            self._transform_signature(item),
+        )
+
+    def _viewport_transform_finished(self, index: int) -> None:
+        super()._viewport_transform_finished(index)
+        pending = self._pending_viewport_transform_undo
+        self._pending_viewport_transform_undo = None
+        if pending is None or not 0 <= index < len(self.project.items):
+            return
+        snapshot, selected_row, before = pending
+        after = self._transform_signature(self.project.items[index])
+        if after != before:
+            self._record_undo(snapshot, selected_row, "move object")
+
+    def _before_context_transform(self, index: int, label: str) -> None:
+        super()._before_context_transform(index, label)
+        if not 0 <= index < len(self.project.items):
+            self._pending_context_transform_undo = None
+            return
+        item = self.project.items[index]
+        self._pending_context_transform_undo = (
+            capture_workspace(self.project),
+            index + 1,
+            self._transform_signature(item),
+            label,
+        )
+
+    def _after_context_transform(self, index: int, label: str) -> None:
+        super()._after_context_transform(index, label)
+        pending = self._pending_context_transform_undo
+        self._pending_context_transform_undo = None
+        if pending is None or not 0 <= index < len(self.project.items):
+            return
+        snapshot, selected_row, before, pending_label = pending
+        after = self._transform_signature(self.project.items[index])
+        if after != before:
+            self._record_undo(
+                snapshot,
+                selected_row,
+                pending_label or label,
+            )
 
     def _before_import_items_added(self, count: int) -> None:
         if count <= 0:
