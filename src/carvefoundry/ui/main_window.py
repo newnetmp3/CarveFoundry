@@ -4,13 +4,14 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-from PySide6.QtCore import QSettings, Qt, QThread
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer
+from PySide6.QtGui import QAction, QFont, QFontDatabase, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFontComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -28,7 +30,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..cam.gcode import write_grbl, write_grbl_program
-from ..core.project import Project, ProjectItem
+from ..core.primitives import text_mesh
+from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
     PROJECT_SUFFIX,
     ProjectFileError,
@@ -78,6 +81,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.project = Project()
         self.project_path: Path | None = None
         self._updating_transform_controls = False
+        self._updating_text_controls = False
         self._updating_stock_controls = False
         self._updating_project_list = False
         self._updating_object_selector = False
@@ -95,6 +99,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._selection_action_buttons: dict[str, object] = {}
         self._calculate_button = None
         self._toolpaths_stale_reason: str | None = None
+        self._text_update_timer = QTimer(self)
+        self._text_update_timer.setSingleShot(True)
+        self._text_update_timer.setInterval(275)
+        self._text_update_timer.timeout.connect(
+            self._apply_text_properties_from_controls
+        )
         self._init_ribbon_action_state()
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
@@ -761,6 +771,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.stock_widget = self._build_stock_controls()
         self.properties_panel.body_layout.addWidget(self.stock_widget)
 
+        self.text_widget = self._build_text_controls()
+        self.properties_panel.body_layout.addWidget(self.text_widget)
+
         self.transform_widget = self._build_transform_controls()
         self.properties_panel.body_layout.addWidget(self.transform_widget)
 
@@ -814,6 +827,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         content_width = max(
             self.properties_panel.header.sizeHint().width(),
             self.stock_widget.sizeHint().width(),
+            self.text_widget.sizeHint().width(),
             self.transform_widget.sizeHint().width(),
         )
         return max(330, min(430, content_width + outer_padding))
