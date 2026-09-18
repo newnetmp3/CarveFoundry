@@ -1,4 +1,6 @@
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QComboBox, QSizePolicy
 
 from carvefoundry.cam.toolpath import Toolpath
@@ -59,12 +61,19 @@ def test_inspector_stays_compact_without_clipping_field_minimums() -> None:
         window.close()
 
 
-def test_text_font_selector_uses_plain_text_families() -> None:
+def test_text_font_selector_previews_filtered_text_families() -> None:
     window = MainWindow()
     try:
         assert isinstance(window.text_font_combo, QComboBox)
         assert window.text_font_combo.count() > 0
         assert window.text_font_combo.currentText()
+        for index in range(min(5, window.text_font_combo.count())):
+            item_font = window.text_font_combo.itemData(
+                index,
+                Qt.ItemDataRole.FontRole,
+            )
+            assert isinstance(item_font, QFont)
+            assert item_font.family() == window.text_font_combo.itemText(index)
     finally:
         window.close()
 
