@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from carvefoundry.cam.toolpath import Toolpath
 
 from .mesh import MeshAsset
-from .project import Project, ProjectItem, Stock
+from .project import Project, ProjectItem, Stock, TextProperties
 from .transform import Transform3D
 from .units import ModelUnits
 
@@ -26,6 +26,7 @@ class ProjectItemSnapshot:
     source_units: ModelUnits
     group_id: str | None
     item_id: str
+    text_properties: TextProperties | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,7 @@ def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
         source_units=item.source_units,
         group_id=item.group_id,
         item_id=item.item_id,
+        text_properties=item.text_properties,
     )
 
 
@@ -82,6 +84,7 @@ def _restore_item(snapshot: ProjectItemSnapshot) -> ProjectItem:
         source_units=snapshot.source_units,
         group_id=snapshot.group_id,
         item_id=snapshot.item_id,
+        text_properties=snapshot.text_properties,
     )
 
 
