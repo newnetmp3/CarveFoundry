@@ -206,8 +206,7 @@ def _block_text_mesh(
         raise ValueError("Text produced no geometry.")
     mesh = trimesh.util.concatenate(parts)
     bounds = np.asarray(mesh.bounds, dtype=float)
-    x_shift = 0.0 if preserve_x_origin else -bounds[0, 0]
-    mesh.apply_translation((x_shift, -bounds[0, 1], 0.0))
+    mesh.apply_translation((-bounds[0, 0], -bounds[0, 1], 0.0))
     return mesh_asset_from_geometry(mesh)
 
 
@@ -514,7 +513,8 @@ def _extrude_text_geometry(
 
     mesh = trimesh.util.concatenate(parts)
     bounds = np.asarray(mesh.bounds, dtype=float)
-    mesh.apply_translation((-bounds[0, 0], -bounds[0, 1], 0.0))
+    x_shift = 0.0 if preserve_x_origin else -bounds[0, 0]
+    mesh.apply_translation((x_shift, -bounds[0, 1], 0.0))
     return mesh_asset_from_geometry(mesh)
 
 
