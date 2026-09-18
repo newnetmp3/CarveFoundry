@@ -6,6 +6,7 @@ import pytest
 import trimesh
 
 from carvefoundry.core.mesh import load_stl
+from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem, Stock
 from carvefoundry.core.project_file import (
     LEGACY_PROJECT_FILE_VERSION,
@@ -163,3 +164,27 @@ def test_invalid_legacy_project_version_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ProjectFileError, match="Unsupported project version"):
         load_project(path)
+
+
+def test_generated_mesh_and_group_round_trip(tmp_path: Path) -> None:
+    generated = rectangle_mesh(25.0, 15.0, 2.0)
+    project = Project(
+        items=[
+            ProjectItem(
+                "Rectangle",
+                kind="rectangle",
+                mesh=generated,
+                group_id="group-1",
+            )
+        ]
+    )
+
+    path = save_project(project, tmp_path / "generated.cf3d")
+    loaded = load_project(path)
+
+    assert len(loaded.items) == 1
+    item = loaded.items[0]
+    assert item.kind == "rectangle"
+    assert item.group_id == "group-1"
+    assert item.mesh is not None
+    assert np.allclose(item.mesh.dimensions, (25.0, 15.0, 2.0))
