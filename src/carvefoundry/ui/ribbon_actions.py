@@ -1272,7 +1272,7 @@ class RibbonActionsMixin:
                 overall_depth_mm=self.project.stock.thickness_mm,
                 padding_mm=settings.padding_mm,
                 tab_height_mm=settings.tab_height_mm,
-                tabs_enabled=True if self._tabs_enabled else False,
+                tabs_enabled=self._tabs_enabled,
                 milling_direction=settings.milling_direction,
                 pocket_strategy=settings.pocket_strategy,
                 relief_style=ReliefStyle.FULL_DEPTH,
