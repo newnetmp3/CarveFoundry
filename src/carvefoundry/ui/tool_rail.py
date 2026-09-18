@@ -34,6 +34,7 @@ class ToolRail(QFrame):
         self.buttons: dict[str, QToolButton] = {}
         self.actions: dict[str, QAction] = {}
         self._flyout_callbacks: dict[str, Callable[[], None]] = {}
+        self._action_callbacks: dict[str, Callable[[], None]] = {}
         self._draw_button_keys = {
             "rectangle": "shapes",
             "ellipse": "shapes",
@@ -113,6 +114,7 @@ class ToolRail(QFrame):
             action.setToolTip(action_tooltip)
             action.setStatusTip(action_tooltip)
             self.actions[action_key] = action
+            self._action_callbacks[action_key] = callback
             menu.addAction(action)
             if first_key is None:
                 first_key = action_key
@@ -207,14 +209,14 @@ class ToolRail(QFrame):
 
         if tool and tool in self.actions and active_key == "shapes":
             action = self.actions[tool]
-            callback = self._flyout_callbacks.get("shapes")
-            # The main window will invoke the actual callback; this only updates
-            # which shape icon the shared flyout displays.
+            callback = self._action_callbacks.get(tool)
             if callback is not None:
-                button = self.buttons.get("shapes")
-                if button is not None:
-                    button.setIcon(action.icon())
-                    button.setProperty("currentAction", tool)
+                self._set_flyout_choice(
+                    "shapes",
+                    tool,
+                    action,
+                    callback,
+                )
 
     def set_tool_enabled(self, key: str, enabled: bool) -> None:
         button = self.buttons.get(key)
