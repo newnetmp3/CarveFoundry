@@ -105,7 +105,7 @@ class Panel(QFrame):
 
         self.header = QLabel(title)
         self.header.setObjectName("PanelHeader")
-        self.header.setContentsMargins(10, 8, 10, 8)
+        self.header.setContentsMargins(8, 6, 8, 6)
         layout.addWidget(self.header)
 
         self.body = QWidget()
@@ -217,7 +217,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _build_brand_row(self) -> QWidget:
         row = QWidget()
         row.setObjectName("TitleBar")
-        row.setFixedHeight(42)
+        row.setFixedHeight(36)
         line = QHBoxLayout(row)
         line.setContentsMargins(14, 0, 14, 0)
         line.setSpacing(5)
@@ -941,14 +941,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         canvas_bar = QWidget()
         canvas_bar.setObjectName("ViewportBar")
         canvas_bar_layout = QHBoxLayout(canvas_bar)
-        canvas_bar_layout.setContentsMargins(10, 6, 10, 6)
-        canvas_bar_layout.setSpacing(7)
+        canvas_bar_layout.setContentsMargins(7, 4, 7, 4)
+        canvas_bar_layout.setSpacing(5)
 
         canvas_bar_layout.addWidget(QLabel("Object"))
         self.object_selector = QComboBox()
         self.object_selector.setObjectName("ObjectSelector")
-        self.object_selector.setMinimumWidth(230)
-        self.object_selector.setMaximumWidth(420)
+        self.object_selector.setMinimumWidth(190)
+        self.object_selector.setMaximumWidth(360)
         self.object_selector.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
@@ -1005,8 +1005,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_options_bar = QWidget()
         self.tool_options_bar.setObjectName("ToolOptionsBar")
         tool_options_layout = QHBoxLayout(self.tool_options_bar)
-        tool_options_layout.setContentsMargins(10, 5, 10, 5)
-        tool_options_layout.setSpacing(7)
+        tool_options_layout.setContentsMargins(7, 4, 7, 4)
+        tool_options_layout.setSpacing(5)
 
         self.tool_options_title = QLabel("Tool")
         self.tool_options_title.setObjectName("ToolOptionsTitle")
@@ -1078,7 +1078,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.tool_options_apply_button = QPushButton("✓")
         self.tool_options_apply_button.setObjectName("ToolApplyButton")
-        self.tool_options_apply_button.setFixedWidth(38)
+        self.tool_options_apply_button.setFixedWidth(32)
         self.tool_options_apply_button.setToolTip(
             "Apply / finish this tool and return to Select"
         )
@@ -1089,7 +1089,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.tool_options_cancel_button = QPushButton("✕")
         self.tool_options_cancel_button.setObjectName("ToolCancelButton")
-        self.tool_options_cancel_button.setFixedWidth(38)
+        self.tool_options_cancel_button.setFixedWidth(32)
         self.tool_options_cancel_button.setToolTip(
             "Cancel this tool/current preview and return to Select"
         )
@@ -1189,7 +1189,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.text_widget.sizeHint().width(),
             self.transform_widget.sizeHint().width(),
         )
-        return max(330, min(430, content_width + outer_padding))
+        return max(300, min(370, content_width + outer_padding))
 
     def _default_workspace_splitter_sizes(
         self,
@@ -2023,6 +2023,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 if popup_button is not None:
                     popup_button.setEnabled(enabled)
 
+        if hasattr(self, "tool_rail"):
+            self.tool_rail.set_tool_enabled("arrange", has_selection)
+            self.tool_rail.set_tool_enabled("cam", has_mesh)
+
     def _set_history_action_state(
         self,
         *,
@@ -2378,6 +2382,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _ensure_inspector_visible(self) -> None:
         self.properties_panel.show()
         self.inspector_button.setChecked(True)
+        if hasattr(self, "tool_rail"):
+            rail_button = self.tool_rail.buttons.get("inspector")
+            if rail_button is not None:
+                rail_button.setChecked(True)
         self._set_option_checked("properties_panel", True)
 
         sizes = self.workspace_splitter.sizes()
@@ -3712,9 +3720,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 )
             )
 
+        first_new_index = len(self.project.items)
         self.project.items.extend(duplicates)
         self._invalidate_toolpaths("Project geometry")
+        duplicate_indices = list(
+            range(first_new_index, first_new_index + len(duplicates))
+        )
         self._refresh_project_list(len(self.project.items))
+        self._select_project_indices(
+            duplicate_indices,
+            primary=duplicate_indices[-1],
+        )
         self.viewport.update()
 
         if len(duplicates) == 1:
@@ -3840,6 +3856,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.properties_panel.setVisible(inspector_visible)
         self.inspector_button.setChecked(inspector_visible)
+        if hasattr(self, "tool_rail"):
+            rail_button = self.tool_rail.buttons.get("inspector")
+            if rail_button is not None:
+                rail_button.setChecked(inspector_visible)
         self.statusBar().setVisible(status_bar_visible)
         self.viewport.set_view_controls_visible(view_controls_visible)
         self.viewport.show_stock = stock_visible
@@ -3952,6 +3972,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         visible = not self.properties_panel.isVisible()
         self.properties_panel.setVisible(visible)
         self.inspector_button.setChecked(visible)
+        if hasattr(self, "tool_rail"):
+            rail_button = self.tool_rail.buttons.get("inspector")
+            if rail_button is not None:
+                rail_button.setChecked(visible)
         self._set_option_checked("properties_panel", visible)
 
         if visible:
