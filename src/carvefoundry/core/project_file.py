@@ -419,6 +419,7 @@ def _load_legacy_item(value: object, project_path: Path) -> ProjectItem:
         transform=transform,
         source_units=source_units,
         group_id=group_id,
+        text_properties=text_properties,
     )
 
 
@@ -609,6 +610,10 @@ def _load_native_item(
 
     transform = _load_transform(value.get("transform"))
     source_units = _load_source_units(value.get("source_units"), item_name=name)
+    text_properties = _load_text_properties(
+        value.get("text_properties"),
+        item_name=name,
+    )
     group_value = value.get("group_id")
     group_id = group_value if isinstance(group_value, str) and group_value else None
     item_id_value = value.get("item_id")
