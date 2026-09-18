@@ -152,6 +152,7 @@ def _build_container(
         items.append(
             {
                 "name": item.name,
+                "item_id": item.item_id,
                 "kind": item.kind,
                 "visible": item.visible,
                 "source_units": item.source_units.value,
@@ -524,6 +525,12 @@ def _load_native_item(
     source_units = _load_source_units(value.get("source_units"), item_name=name)
     group_value = value.get("group_id")
     group_id = group_value if isinstance(group_value, str) and group_value else None
+    item_id_value = value.get("item_id")
+    item_id = (
+        item_id_value
+        if isinstance(item_id_value, str) and item_id_value.strip()
+        else None
+    )
     asset_id = value.get("asset_id")
     source_name_value = value.get("source_name")
     source_name = source_name_value if isinstance(source_name_value, str) else None
@@ -558,16 +565,19 @@ def _load_native_item(
     elif kind.lower() == "stl":
         raise ProjectFileError(f"Embedded STL asset for {name!r} is missing.")
 
-    return ProjectItem(
-        name=name,
-        source_path=source_path,
-        kind=kind,
-        visible=visible,
-        mesh=mesh,
-        transform=transform,
-        source_units=source_units,
-        group_id=group_id,
-    )
+    item_kwargs: dict[str, object] = {
+        "name": name,
+        "source_path": source_path,
+        "kind": kind,
+        "visible": visible,
+        "mesh": mesh,
+        "transform": transform,
+        "source_units": source_units,
+        "group_id": group_id,
+    }
+    if item_id is not None:
+        item_kwargs["item_id"] = item_id
+    return ProjectItem(**item_kwargs)
 
 
 def _load_native_project(project_path: Path) -> Project:
