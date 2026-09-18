@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..cam.gcode import write_grbl
+from ..cam.gcode import write_grbl, write_grbl_program
 from ..core.project import Project, ProjectItem
 from ..core.project_file import (
     PROJECT_SUFFIX,
@@ -1883,18 +1883,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.statusBar().showMessage("No calculated toolpaths to export", 5000)
             return
 
-        if len(toolpaths) > 1:
-            self.selection_info.setText(
-                "Multiple calculated toolpaths are present.\n\n"
-                "CarveFoundry will export one operation at a time until the "
-                "toolpath/operation selector is implemented."
-            )
-            self.statusBar().showMessage(
-                "Select a single calculated operation before exporting",
-                6000,
-            )
-            return
-
         toolpath = toolpaths[0]
         base_directory = self.project_path.parent if self.project_path else Path.home()
         project_name = self.project.name if self.project.name != "Untitled" else toolpath.name
@@ -1910,22 +1898,34 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
 
         try:
-            output_path = write_grbl(
-                toolpath,
-                Path(path),
-                self._grbl_post_settings(),
-            )
+            if len(toolpaths) == 1:
+                output_path = write_grbl(
+                    toolpath,
+                    Path(path),
+                    self._grbl_post_settings(),
+                )
+            else:
+                output_path = write_grbl_program(
+                    toolpaths,
+                    Path(path),
+                    self._grbl_post_settings(),
+                )
         except (OSError, ValueError) as exc:
             self.selection_info.setText(f"G-code export failed\n{exc}")
             self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
             return
 
+        total_moves = sum(len(path.moves) for path in toolpaths)
+        total_minutes = sum(
+            path.estimated_cutting_minutes for path in toolpaths
+        )
+        operation_names = " + ".join(path.name for path in toolpaths)
         self.selection_info.setText(
             f"G-code exported\n{output_path}\n\n"
-            f"Operation: {toolpath.name}\n"
+            f"Operations: {operation_names}\n"
             f"Cutter: {toolpath.cutter.name}\n"
-            f"Moves: {len(toolpath.moves):,}\n"
-            f"Estimated cutting time: {toolpath.estimated_cutting_minutes:.1f} min "
+            f"Moves: {total_moves:,}\n"
+            f"Estimated cutting time: {total_minutes:.1f} min "
             "(rapids excluded)"
         )
         self.statusBar().showMessage(f"Exported {output_path.name}", 5000)
