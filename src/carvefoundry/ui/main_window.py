@@ -1639,7 +1639,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _object_selector_text(item: ProjectItem) -> str:
         group = " • Grouped" if item.group_id else ""
         kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
-        return f"{item.name}  [{kind}]{group}"
+        preview = ""
+        if item.kind.lower() == "text" and item.text_properties is not None:
+            first_line = " ".join(
+                item.text_properties.content.splitlines()
+            ).strip()
+            if first_line:
+                if len(first_line) > 34:
+                    first_line = first_line[:31].rstrip() + "…"
+                preview = f' • “{first_line}”'
+        return f"{item.name}  [{kind}]{group}{preview}"
 
     def _refresh_project_list(self, selected_row: int = 0) -> None:
         self._updating_project_list = True
@@ -1662,8 +1671,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 )
                 group_text = "\nGrouped object" if project_item.group_id else ""
                 source_size = self._source_dimensions_text(project_item)
+                text_preview = ""
+                if (
+                    project_item.kind.lower() == "text"
+                    and project_item.text_properties is not None
+                ):
+                    content_preview = " ".join(
+                        project_item.text_properties.content.splitlines()
+                    ).strip()
+                    if len(content_preview) > 90:
+                        content_preview = content_preview[:87].rstrip() + "…"
+                    if content_preview:
+                        text_preview = f"\nContent: {content_preview}"
                 list_item.setToolTip(
                     f"{kind} • {project_item.name}{group_text}"
+                    + text_preview
                     + (
                         f"\nSource size: {source_size}"
                         if source_size
@@ -2596,6 +2618,32 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._invalidate_toolpaths("Text geometry")
         self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
+        row = index + 1
+        self.object_selector.blockSignals(True)
+        try:
+            self.object_selector.setItemText(
+                row,
+                self._object_selector_text(item),
+            )
+        finally:
+            self.object_selector.blockSignals(False)
+        list_item = self.project_list.item(row)
+        if list_item is not None:
+            kind = item.kind.upper()
+            content_preview = " ".join(
+                properties.content.splitlines()
+            ).strip()
+            if len(content_preview) > 90:
+                content_preview = content_preview[:87].rstrip() + "…"
+            list_item.setToolTip(
+                f"{kind} • {item.name}"
+                + (
+                    f"\nContent: {content_preview}"
+                    if content_preview
+                    else ""
+                )
+                + "\nDouble-click or press F2 to rename."
+            )
         self.viewport.set_selected_item(index)
         self.viewport.update()
         self._after_text_properties_change(index)
