@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidgetItem,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QScrollArea,
     QSizePolicy,
     QSplitter,
@@ -815,6 +817,113 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         canvas_bar_layout.addWidget(import_button)
         canvas_layout.addWidget(canvas_bar)
+
+        self.tool_options_bar = QWidget()
+        self.tool_options_bar.setObjectName("ToolOptionsBar")
+        tool_options_layout = QHBoxLayout(self.tool_options_bar)
+        tool_options_layout.setContentsMargins(10, 5, 10, 5)
+        tool_options_layout.setSpacing(7)
+
+        self.tool_options_title = QLabel("Tool")
+        self.tool_options_title.setObjectName("ToolOptionsTitle")
+        tool_options_layout.addWidget(self.tool_options_title)
+
+        tool_options_layout.addWidget(QLabel("Depth"))
+        self.tool_options_depth_spin = QDoubleSpinBox()
+        self.tool_options_depth_spin.setRange(0.05, 1000.0)
+        self.tool_options_depth_spin.setDecimals(3)
+        self.tool_options_depth_spin.setSingleStep(0.25)
+        self.tool_options_depth_spin.setSuffix(" mm")
+        self.tool_options_depth_spin.setValue(self._tool_option_depth_mm)
+        self.tool_options_depth_spin.setMaximumWidth(110)
+        self.tool_options_depth_spin.valueChanged.connect(
+            self._tool_option_depth_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_depth_spin)
+
+        self.tool_options_polygon_label = QLabel("Sides")
+        tool_options_layout.addWidget(self.tool_options_polygon_label)
+        self.tool_options_polygon_sides = QSpinBox()
+        self.tool_options_polygon_sides.setRange(3, 64)
+        self.tool_options_polygon_sides.setValue(
+            self._tool_option_polygon_sides
+        )
+        self.tool_options_polygon_sides.setMaximumWidth(78)
+        self.tool_options_polygon_sides.valueChanged.connect(
+            self._tool_option_polygon_sides_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_polygon_sides)
+
+        self.tool_options_line_width_label = QLabel("Width")
+        tool_options_layout.addWidget(self.tool_options_line_width_label)
+        self.tool_options_line_width_spin = QDoubleSpinBox()
+        self.tool_options_line_width_spin.setRange(0.05, 1000.0)
+        self.tool_options_line_width_spin.setDecimals(3)
+        self.tool_options_line_width_spin.setSingleStep(0.25)
+        self.tool_options_line_width_spin.setSuffix(" mm")
+        self.tool_options_line_width_spin.setValue(
+            self._tool_option_line_width_mm
+        )
+        self.tool_options_line_width_spin.setMaximumWidth(110)
+        self.tool_options_line_width_spin.valueChanged.connect(
+            self._tool_option_line_width_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_line_width_spin)
+
+        self.tool_options_text_label = QLabel("Text")
+        tool_options_layout.addWidget(self.tool_options_text_label)
+        self.tool_options_text_edit = QLineEdit(self._tool_option_text)
+        self.tool_options_text_edit.setMinimumWidth(120)
+        self.tool_options_text_edit.setMaximumWidth(260)
+        self.tool_options_text_edit.textChanged.connect(
+            self._tool_option_text_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_text_edit)
+
+        self.tool_options_font_label = QLabel("Font")
+        tool_options_layout.addWidget(self.tool_options_font_label)
+        self.tool_options_font_value = QLabel("")
+        self.tool_options_font_value.setObjectName("ToolOptionsValue")
+        self.tool_options_font_value.setMaximumWidth(220)
+        self.tool_options_font_value.setToolTip(
+            "Uses the current font selected in the Text Inspector."
+        )
+        tool_options_layout.addWidget(self.tool_options_font_value)
+
+        tool_options_layout.addStretch(1)
+
+        self.tool_options_apply_button = QPushButton("✓")
+        self.tool_options_apply_button.setObjectName("ToolApplyButton")
+        self.tool_options_apply_button.setFixedWidth(38)
+        self.tool_options_apply_button.setToolTip(
+            "Apply / finish this tool and return to Select"
+        )
+        self.tool_options_apply_button.clicked.connect(
+            self._apply_active_tool
+        )
+        tool_options_layout.addWidget(self.tool_options_apply_button)
+
+        self.tool_options_cancel_button = QPushButton("✕")
+        self.tool_options_cancel_button.setObjectName("ToolCancelButton")
+        self.tool_options_cancel_button.setFixedWidth(38)
+        self.tool_options_cancel_button.setToolTip(
+            "Cancel this tool/current preview and return to Select"
+        )
+        self.tool_options_cancel_button.clicked.connect(
+            self._cancel_active_tool
+        )
+        tool_options_layout.addWidget(self.tool_options_cancel_button)
+
+        self.tool_options_bar.hide()
+        self.tool_options_polygon_label.hide()
+        self.tool_options_polygon_sides.hide()
+        self.tool_options_line_width_label.hide()
+        self.tool_options_line_width_spin.hide()
+        self.tool_options_text_label.hide()
+        self.tool_options_text_edit.hide()
+        self.tool_options_font_label.hide()
+        self.tool_options_font_value.hide()
+        canvas_layout.addWidget(self.tool_options_bar)
 
         self.viewport = MeshViewport(self.project)
         canvas_layout.addWidget(self.viewport, 1)
