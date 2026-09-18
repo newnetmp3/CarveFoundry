@@ -96,6 +96,7 @@ def test_duplicate_item_copies_transform_but_not_transform_object() -> None:
     assert duplicate.name == "part copy.stl"
     assert duplicate.mesh is original.mesh
     assert duplicate.source_units is ModelUnits.INCHES
+    assert duplicate.item_id != original.item_id
     assert original.transform.translation_mm == (5.0, 6.0, 7.0)
 
 
