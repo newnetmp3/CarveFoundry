@@ -1,10 +1,12 @@
 import numpy as np
-from PySide6.QtGui import QFontDatabase, QGuiApplication
+from PySide6.QtGui import QFontDatabase
+from PySide6.QtWidgets import QApplication
 
 from carvefoundry.core.primitives import text_mesh
 from carvefoundry.core.project import TextProperties
 
-_APP = QGuiApplication.instance() or QGuiApplication([])
+_APP = QApplication.instance() or QApplication([])
+
 
 def _test_font_family() -> str:
     families = list(QFontDatabase.families())
@@ -12,6 +14,7 @@ def _test_font_family() -> str:
     if "DejaVu Sans" in families:
         return "DejaVu Sans"
     return families[0]
+
 
 def test_system_font_text_uses_real_glyph_outlines() -> None:
     properties = TextProperties(
@@ -36,6 +39,7 @@ def test_system_font_text_uses_real_glyph_outlines() -> None:
     # The counter in "O" means the solid volume is materially below its
     # bounding-box volume.
     assert mesh.volume < float(np.prod(extents)) * 0.9
+
 
 def test_outline_text_geometry_is_distinct_from_filled_text() -> None:
     family = _test_font_family()
