@@ -75,6 +75,7 @@ _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
     "status bar": ("view-status-bar", "dialog-information"),
     "view controls": ("configure-toolbars", "preferences-system"),
     "reverse horizontal": ("object-flip-horizontal", "transform-flip-horizontal"),
+    "invert vertical": ("object-flip-vertical", "transform-flip-vertical"),
     "perspective": ("camera-photo", "view-preview"),
     "orthographic": ("draw-cuboid", "view-grid"),
     "isometric": ("draw-cuboid", "applications-engineering"),
