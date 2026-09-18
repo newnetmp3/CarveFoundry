@@ -3,7 +3,13 @@ from __future__ import annotations
 from itertools import chain
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QTextCursor
+from PySide6.QtGui import (
+    QColor,
+    QFontDatabase,
+    QKeySequence,
+    QShortcut,
+    QTextCursor,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -75,6 +81,7 @@ class ToolpathPreviewWindow(QMainWindow):
         self._timer.timeout.connect(self._playback_tick)
 
         self._build_ui()
+        self._install_shortcuts()
         self._load_code()
         self._set_position(0 if self._moves else -1)
         self.viewport.set_isometric_view()
@@ -131,6 +138,13 @@ class ToolpathPreviewWindow(QMainWindow):
         top_layout.addWidget(self._summary_label)
         top_layout.addStretch(1)
 
+        self._code_toggle = QPushButton("Code")
+        self._code_toggle.setCheckable(True)
+        self._code_toggle.setChecked(True)
+        self._code_toggle.setToolTip("Show or hide the G-code / DRO sidebar")
+        self._code_toggle.clicked.connect(self._toggle_code_panel)
+        top_layout.addWidget(self._code_toggle)
+
         for label, callback in (
             ("Fit", self.viewport.fit_view),
             ("Top", lambda: self.viewport.set_standard_view("Top")),
@@ -144,13 +158,14 @@ class ToolpathPreviewWindow(QMainWindow):
 
         root_layout.addWidget(top_bar)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._build_left_panel())
-        splitter.addWidget(self._build_plot_panel())
-        splitter.setSizes([390, 1030])
-        splitter.setStretchFactor(1, 1)
-        root_layout.addWidget(splitter, 1)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.setChildrenCollapsible(True)
+        self._left_panel = self._build_left_panel()
+        self._splitter.addWidget(self._left_panel)
+        self._splitter.addWidget(self._build_plot_panel())
+        self._splitter.setSizes([390, 1030])
+        self._splitter.setStretchFactor(1, 1)
+        root_layout.addWidget(self._splitter, 1)
 
     def _panel_header(self, text: str) -> QLabel:
         label = QLabel(text)
@@ -176,7 +191,7 @@ class ToolpathPreviewWindow(QMainWindow):
         self.code_editor.setObjectName("BackplotCode")
         layout.addWidget(self.code_editor, 1)
 
-        layout.addWidget(self._panel_header("Digital Read Out"))
+        layout.addWidget(self._panel_header("Position"))
         dro = QWidget()
         dro_grid = QGridLayout(dro)
         dro_grid.setContentsMargins(0, 2, 0, 2)
@@ -199,7 +214,7 @@ class ToolpathPreviewWindow(QMainWindow):
         self._move_info.setObjectName("Muted")
         layout.addWidget(self._move_info)
 
-        layout.addWidget(self._panel_header("Machine Options"))
+        layout.addWidget(self._panel_header("View Orientation"))
         orientation_row = QHBoxLayout()
         orientation_row.addWidget(QLabel("Plot orientation"))
         orientation = QComboBox()
@@ -214,7 +229,7 @@ class ToolpathPreviewWindow(QMainWindow):
         orientation_row.addWidget(orientation, 1)
         layout.addLayout(orientation_row)
 
-        layout.addWidget(self._panel_header("Backplotter Settings"))
+        layout.addWidget(self._panel_header("Display"))
         self._grid_check = QCheckBox("Show grid")
         self._grid_check.setChecked(True)
         self._grid_check.toggled.connect(self._set_grid_visible)
@@ -237,7 +252,7 @@ class ToolpathPreviewWindow(QMainWindow):
         )
         layout.addWidget(self._points_check)
 
-        self._hide_after_check = QCheckBox("Hide toolpath after position")
+        self._hide_after_check = QCheckBox("Show completed path only")
         self._hide_after_check.setChecked(False)
         self._hide_after_check.toggled.connect(
             lambda _checked: self._apply_plot_position()
@@ -248,9 +263,12 @@ class ToolpathPreviewWindow(QMainWindow):
         cutter_names = ", ".join(
             dict.fromkeys(path.cutter.name for path in self._toolpaths)
         )
+        total_minutes = sum(
+            path.estimated_cutting_minutes for path in self._toolpaths
+        )
         self._summary_label.setText(
             f"{operation_names}  •  {cutter_names}  •  "
-            f"{len(self._moves):,} moves"
+            f"{len(self._moves):,} moves  •  ~{total_minutes:.1f} min cutting"
         )
         return panel
 
@@ -308,6 +326,30 @@ class ToolpathPreviewWindow(QMainWindow):
 
         layout.addWidget(transport)
         return panel
+
+    def _install_shortcuts(self) -> None:
+        shortcuts = (
+            ("Space", self._toggle_play),
+            ("Left", self._previous),
+            ("Right", self._next),
+            ("Home", self._first),
+            ("End", self._last),
+            ("Ctrl+0", self.viewport.fit_view),
+            ("C", lambda: self._code_toggle.click()),
+        )
+        self._shortcuts: list[QShortcut] = []
+        for sequence, callback in shortcuts:
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.activated.connect(callback)
+            self._shortcuts.append(shortcut)
+
+    def _toggle_code_panel(self) -> None:
+        visible = self._code_toggle.isChecked()
+        self._left_panel.setVisible(visible)
+        if visible:
+            sizes = self._splitter.sizes()
+            total = max(sum(sizes), self.width())
+            self._splitter.setSizes([390, max(570, total - 390)])
 
     def _load_code(self) -> None:
         numbered = "\n".join(
