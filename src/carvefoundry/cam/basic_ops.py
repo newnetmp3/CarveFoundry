@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from itertools import pairwise
 from math import ceil, isfinite
 
@@ -10,19 +11,45 @@ import trimesh
 from carvefoundry.core.tools import Cutter
 
 from .finish import Finish3DSettings, calculate_3d_finish
-from .raster import RasterAxis, RasterFinishingSettings
+from .raster import (
+    RasterAxis,
+    RasterFinishingSettings,
+    RasterLinkMode,
+)
 from .toolpath import MoveKind, Toolpath, ToolpathMove
+
+
+class MillingDirection(StrEnum):
+    DEFAULT = "default"
+    CLIMB = "climb"
+    CONVENTIONAL = "conventional"
+
+
+class PocketStrategy(StrEnum):
+    OFFSET = "offset"
+    RASTER_X = "raster_x"
+    RASTER_Y = "raster_y"
 
 
 @dataclass(frozen=True, slots=True)
 class BasicCamSettings:
-    safe_z_mm: float = 5.0
+    safe_z_mm: float = 1.5
     feed_mm_min: float = 1000.0
     plunge_feed_mm_min: float = 300.0
     max_stepdown_mm: float = 2.0
     stepover_fraction: float = 0.45
+    finish_stepover_fraction: float = 0.10
+    overall_depth_mm: float | None = None
+    padding_mm: float = 0.0
     tab_height_mm: float = 2.0
     tabs_enabled: bool = False
+    milling_direction: MillingDirection = MillingDirection.DEFAULT
+    pocket_strategy: PocketStrategy = PocketStrategy.RASTER_X
+    raster_axis: RasterAxis = RasterAxis.X
+    raster_link_mode: RasterLinkMode = RasterLinkMode.SMART
+    local_link_clearance_mm: float = 0.5
+    direct_link_tolerance_mm: float = 0.02
+    ramp_angle_deg: float | None = None
 
     def __post_init__(self) -> None:
         positive = (
@@ -30,15 +57,44 @@ class BasicCamSettings:
             self.plunge_feed_mm_min,
             self.max_stepdown_mm,
             self.stepover_fraction,
+            self.finish_stepover_fraction,
             self.tab_height_mm,
+            self.local_link_clearance_mm,
         )
         if not all(isfinite(value) and value > 0 for value in positive):
             raise ValueError("CAM feed/step values must be finite and greater than zero.")
         if not isfinite(self.safe_z_mm):
             raise ValueError("safe_z_mm must be finite.")
+        if self.overall_depth_mm is not None and (
+            not isfinite(self.overall_depth_mm) or self.overall_depth_mm <= 0
+        ):
+            raise ValueError("overall_depth_mm must be greater than zero when set.")
+        if not isfinite(self.padding_mm) or self.padding_mm < 0:
+            raise ValueError("padding_mm must be finite and non-negative.")
+        if self.stepover_fraction > 1.0 or self.finish_stepover_fraction > 1.0:
+            raise ValueError("Stepover fractions cannot exceed 1.0.")
+        if (
+            not isfinite(self.direct_link_tolerance_mm)
+            or self.direct_link_tolerance_mm < 0
+        ):
+            raise ValueError(
+                "direct_link_tolerance_mm must be finite and non-negative."
+            )
+        if self.ramp_angle_deg is not None and (
+            not isfinite(self.ramp_angle_deg)
+            or not 0 < self.ramp_angle_deg < 90
+        ):
+            raise ValueError("ramp_angle_deg must be between 0 and 90 degrees.")
 
 
-def _target_depth(bounds: np.ndarray, *, fallback_mm: float = -1.0) -> float:
+def _target_depth(
+    bounds: np.ndarray,
+    settings: BasicCamSettings,
+    *,
+    fallback_mm: float = -1.0,
+) -> float:
+    if settings.overall_depth_mm is not None:
+        return -abs(float(settings.overall_depth_mm))
     minimum_z = float(bounds[0, 2])
     if minimum_z < -1e-6:
         return minimum_z
@@ -93,22 +149,48 @@ def _cut(
     )
 
 
+def _padded_xy_bounds(
+    bounds: np.ndarray,
+    padding_mm: float,
+) -> tuple[float, float, float, float]:
+    data = np.asarray(bounds, dtype=float)
+    return (
+        float(data[0, 0] - padding_mm),
+        float(data[0, 1] - padding_mm),
+        float(data[1, 0] + padding_mm),
+        float(data[1, 1] + padding_mm),
+    )
+
+
 def rectangular_profile(
     bounds: np.ndarray,
     cutter: Cutter,
     settings: BasicCamSettings,
     *,
     name: str = "Profile",
+    offset_mode: str = "outside",
 ) -> Toolpath:
     data = np.asarray(bounds, dtype=float)
-    min_x, min_y = data[0, :2]
-    max_x, max_y = data[1, :2]
+    min_x, min_y, max_x, max_y = _padded_xy_bounds(
+        data,
+        settings.padding_mm,
+    )
     radius = cutter.radius_mm
-    min_x -= radius
-    min_y -= radius
-    max_x += radius
-    max_y += radius
-    target_z = _target_depth(data)
+    if offset_mode == "outside":
+        min_x -= radius
+        min_y -= radius
+        max_x += radius
+        max_y += radius
+    elif offset_mode == "inside":
+        min_x += radius
+        min_y += radius
+        max_x -= radius
+        max_y -= radius
+    elif offset_mode != "on":
+        raise ValueError(f"Unsupported profile offset mode: {offset_mode}")
+    if max_x <= min_x or max_y <= min_y:
+        raise ValueError("Selected geometry is too small for this profile offset.")
+    target_z = _target_depth(data, settings)
     moves: list[ToolpathMove] = []
 
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
@@ -119,6 +201,14 @@ def rectangular_profile(
             (min_x, max_y),
             (min_x, min_y),
         ]
+        if settings.milling_direction is MillingDirection.CONVENTIONAL:
+            corners = [
+                (min_x, min_y),
+                (min_x, max_y),
+                (max_x, max_y),
+                (max_x, min_y),
+                (min_x, min_y),
+            ]
         _rapid(moves, corners[0][0], corners[0][1], settings.safe_z_mm)
         _plunge(moves, corners[0][0], corners[0][1], depth, settings)
 
@@ -158,30 +248,96 @@ def rectangular_pocket(
     name: str = "Pocket",
 ) -> Toolpath:
     data = np.asarray(bounds, dtype=float)
-    min_x, min_y = data[0, :2] + cutter.radius_mm
-    max_x, max_y = data[1, :2] - cutter.radius_mm
+    raw_min_x, raw_min_y, raw_max_x, raw_max_y = _padded_xy_bounds(
+        data,
+        settings.padding_mm,
+    )
+    min_x = raw_min_x + cutter.radius_mm
+    min_y = raw_min_y + cutter.radius_mm
+    max_x = raw_max_x - cutter.radius_mm
+    max_y = raw_max_y - cutter.radius_mm
     if max_x <= min_x or max_y <= min_y:
         raise ValueError("Selected geometry is too small for the selected cutter.")
-    target_z = _target_depth(data)
+    target_z = _target_depth(data, settings)
     stepover = max(cutter.diameter_mm * settings.stepover_fraction, 0.05)
-    y_values = list(np.arange(min_y, max_y + stepover * 0.5, stepover))
-    if not y_values or y_values[-1] < max_y:
-        y_values.append(max_y)
 
     moves: list[ToolpathMove] = []
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
-        reverse = False
-        first_xy: tuple[float, float] | None = None
-        for y in y_values:
-            start_x, end_x = (max_x, min_x) if reverse else (min_x, max_x)
-            if first_xy is None:
-                first_xy = (start_x, float(y))
-                _rapid(moves, start_x, float(y), settings.safe_z_mm)
-                _plunge(moves, start_x, float(y), depth, settings)
-            else:
-                _cut(moves, start_x, float(y), depth, settings)
-            _cut(moves, end_x, float(y), depth, settings)
-            reverse = not reverse
+        if settings.pocket_strategy is PocketStrategy.OFFSET:
+            inset = 0.0
+            first_loop = True
+            while (
+                min_x + inset <= max_x - inset
+                and min_y + inset <= max_y - inset
+            ):
+                left = min_x + inset
+                right = max_x - inset
+                bottom = min_y + inset
+                top = max_y - inset
+                loop = [
+                    (left, bottom),
+                    (right, bottom),
+                    (right, top),
+                    (left, top),
+                    (left, bottom),
+                ]
+                if settings.milling_direction is MillingDirection.CONVENTIONAL:
+                    loop = [
+                        (left, bottom),
+                        (left, top),
+                        (right, top),
+                        (right, bottom),
+                        (left, bottom),
+                    ]
+                if first_loop:
+                    _rapid(moves, loop[0][0], loop[0][1], settings.safe_z_mm)
+                    _plunge(moves, loop[0][0], loop[0][1], depth, settings)
+                    first_loop = False
+                else:
+                    _cut(moves, loop[0][0], loop[0][1], depth, settings)
+                for x, y in loop[1:]:
+                    _cut(moves, x, y, depth, settings)
+                inset += stepover
+        else:
+            raster_y = settings.pocket_strategy is PocketStrategy.RASTER_Y
+            line_min = min_x if raster_y else min_y
+            line_max = max_x if raster_y else max_y
+            line_values = list(
+                np.arange(line_min, line_max + stepover * 0.5, stepover)
+            )
+            if not line_values or line_values[-1] < line_max:
+                line_values.append(line_max)
+
+            reverse = False
+            first_line = True
+            for line_value in line_values:
+                if raster_y:
+                    start = (
+                        float(line_value),
+                        max_y if reverse else min_y,
+                    )
+                    end = (
+                        float(line_value),
+                        min_y if reverse else max_y,
+                    )
+                else:
+                    start = (
+                        max_x if reverse else min_x,
+                        float(line_value),
+                    )
+                    end = (
+                        min_x if reverse else max_x,
+                        float(line_value),
+                    )
+                if first_line:
+                    _rapid(moves, start[0], start[1], settings.safe_z_mm)
+                    _plunge(moves, start[0], start[1], depth, settings)
+                    first_line = False
+                else:
+                    _cut(moves, start[0], start[1], depth, settings)
+                _cut(moves, end[0], end[1], depth, settings)
+                reverse = not reverse
+
         if moves:
             last = moves[-1]
             _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
@@ -207,7 +363,11 @@ def rectangular_engrave(
     data = np.asarray(bounds, dtype=float)
     min_x, min_y = data[0, :2]
     max_x, max_y = data[1, :2]
-    z = min(-1e-4, float(depth_mm))
+    z = (
+        _target_depth(data, settings, fallback_mm=depth_mm)
+        if settings.overall_depth_mm is not None
+        else min(-1e-4, float(depth_mm))
+    )
     points = [
         (min_x, min_y),
         (max_x, min_y),
@@ -239,7 +399,7 @@ def center_drill(
 ) -> Toolpath:
     data = np.asarray(bounds, dtype=float)
     center = data.mean(axis=0)
-    target_z = _target_depth(data)
+    target_z = _target_depth(data, settings)
     moves: list[ToolpathMove] = []
     _rapid(moves, float(center[0]), float(center[1]), settings.safe_z_mm)
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
@@ -275,14 +435,20 @@ def _finish_settings(
     bounds = np.asarray(mesh.bounds, dtype=float)
     xy_span = np.maximum(bounds[1, :2] - bounds[0, :2], 1e-6)
     if quality == "rough":
-        spacing = max(cutter.diameter_mm * 0.28, float(np.max(xy_span)) / 260.0)
-        stepover = max(cutter.diameter_mm * 0.48, spacing)
-    elif quality == "rest":
-        spacing = max(cutter.diameter_mm * 0.08, float(np.max(xy_span)) / 650.0)
-        stepover = max(cutter.diameter_mm * 0.10, spacing)
+        stepover = max(cutter.diameter_mm * 0.48, 0.05)
+        spacing = min(
+            stepover,
+            max(cutter.diameter_mm * 0.24, float(np.max(xy_span)) / 300.0),
+        )
     else:
-        spacing = max(cutter.diameter_mm * 0.12, float(np.max(xy_span)) / 500.0)
-        stepover = max(cutter.diameter_mm * 0.14, spacing)
+        fraction = settings.finish_stepover_fraction
+        if quality == "rest":
+            fraction = min(fraction, 0.08)
+        stepover = max(cutter.diameter_mm * fraction, 0.03)
+        spacing = min(
+            stepover,
+            max(stepover * 0.65, float(np.max(xy_span)) / 700.0),
+        )
 
     return Finish3DSettings(
         surface_spacing_mm=spacing,
@@ -291,7 +457,10 @@ def _finish_settings(
             feed_mm_min=settings.feed_mm_min,
             plunge_feed_mm_min=settings.plunge_feed_mm_min,
             safe_z_mm=settings.safe_z_mm,
-            axis=RasterAxis.X,
+            axis=settings.raster_axis,
+            link_mode=settings.raster_link_mode,
+            local_link_clearance_mm=settings.local_link_clearance_mm,
+            direct_link_tolerance_mm=settings.direct_link_tolerance_mm,
         ),
         max_surface_samples=2_000_000,
     )
