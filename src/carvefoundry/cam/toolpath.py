@@ -47,6 +47,7 @@ class Toolpath:
     cutter: Cutter
     safe_z_mm: float
     moves: list[ToolpathMove] = field(default_factory=list)
+    source_item_id: str | None = None
     source_item_name: str | None = None
 
     def __post_init__(self) -> None:
