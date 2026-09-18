@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, radians, sin
+from math import cos, floor, log10, radians, sin
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 GL_COLOR_BUFFER_BIT = 0x00004000
 GL_DEPTH_BUFFER_BIT = 0x00000100
 GL_DEPTH_TEST = 0x0B71
+GL_BLEND = 0x0BE2
+GL_SRC_ALPHA = 0x0302
+GL_ONE_MINUS_SRC_ALPHA = 0x0303
 GL_LEQUAL = 0x0203
 GL_FLOAT = 0x1406
 GL_TRIANGLES = 0x0004
@@ -91,6 +94,47 @@ void main()
 }
 """
 
+_STOCK_VERTEX_SHADER = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+
+uniform mat4 u_mvp;
+
+out vec3 v_world_position;
+
+void main()
+{
+    v_world_position = a_position;
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+}
+"""
+
+_STOCK_FRAGMENT_SHADER = """
+#version 330 core
+in vec3 v_world_position;
+
+uniform vec4 u_base_color;
+
+out vec4 frag_color;
+
+void main()
+{
+    float warp =
+        sin(v_world_position.y * 0.055) * 3.5
+        + sin(v_world_position.y * 0.017) * 7.0
+        + sin(v_world_position.z * 0.11) * 1.8;
+
+    float broad = 0.5 + 0.5 * sin((v_world_position.x + warp) * 0.16);
+    float fine = 0.5 + 0.5 * sin((v_world_position.x * 0.72) + (warp * 0.55));
+    float grain = mix(broad, fine, 0.35);
+
+    float brightness = 0.78 + grain * 0.22;
+    float alpha = u_base_color.a * (0.82 + grain * 0.18);
+
+    frag_color = vec4(u_base_color.rgb * brightness, alpha);
+}
+"""
+
 
 @dataclass(slots=True)
 class _GpuMesh:
@@ -125,6 +169,7 @@ class MeshViewport(QOpenGLWidget):
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
         self._line_program: QOpenGLShaderProgram | None = None
+        self._stock_program: QOpenGLShaderProgram | None = None
         self._line_vao: QOpenGLVertexArrayObject | None = None
         self._line_buffer: QOpenGLBuffer | None = None
         self._mesh_cache: dict[int, _GpuMesh] = {}
@@ -229,6 +274,8 @@ class MeshViewport(QOpenGLWidget):
         try:
             self._functions = context.functions()
             self._functions.glEnable(GL_DEPTH_TEST)
+            self._functions.glEnable(GL_BLEND)
+            self._functions.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             self._functions.glDepthFunc(GL_LEQUAL)
             self._functions.glClearColor(0.067, 0.094, 0.153, 1.0)
 
@@ -239,6 +286,10 @@ class MeshViewport(QOpenGLWidget):
             self._line_program = self._compile_program(
                 _LINE_VERTEX_SHADER,
                 _LINE_FRAGMENT_SHADER,
+            )
+            self._stock_program = self._compile_program(
+                _STOCK_VERTEX_SHADER,
+                _STOCK_FRAGMENT_SHADER,
             )
 
             self._line_vao = QOpenGLVertexArrayObject()
@@ -291,6 +342,7 @@ class MeshViewport(QOpenGLWidget):
 
         self._mesh_program = None
         self._line_program = None
+        self._stock_program = None
         self._line_buffer = None
         self._line_vao = None
         self._functions = None
@@ -561,10 +613,41 @@ class MeshViewport(QOpenGLWidget):
         self._line_vao.release()
         self._line_program.release()
 
-    def _stock_lines(self) -> tuple[np.ndarray, np.ndarray]:
-        if self.project is None or not self.show_stock:
-            empty = np.empty((0, 3), dtype=np.float32)
-            return empty, empty
+    @staticmethod
+    def _nice_grid_step(target: float) -> float:
+        target = max(float(target), 1e-6)
+        exponent = floor(log10(target))
+        scale = 10.0**exponent
+        fraction = target / scale
+        if fraction <= 1.0:
+            nice = 1.0
+        elif fraction <= 2.0:
+            nice = 2.0
+        elif fraction <= 5.0:
+            nice = 5.0
+        else:
+            nice = 10.0
+        return nice * scale
+
+    def _adaptive_grid_step(self, w: float, h: float) -> float:
+        bounds = self._scene_bounds()
+        xy_span = np.asarray(bounds[1, :2] - bounds[0, :2], dtype=float)
+        visible_span = max(float(np.max(xy_span)), 1e-6) / max(self.zoom, 1e-9)
+
+        # Aim for roughly a dozen minor cells across the current view.
+        desired = visible_span / 12.0
+        adaptive = self._nice_grid_step(desired)
+
+        # Never generate an excessive number of lines across the whole stock.
+        stock_floor = self._nice_grid_step(max(w, h) / 180.0)
+        return max(adaptive, stock_floor)
+
+    def _stock_geometry(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        empty = np.empty((0, 3), dtype=np.float32)
+        if self.project is None:
+            return empty, empty, empty, empty
 
         stock = self.project.stock
         w = float(stock.width_mm)
@@ -584,58 +667,129 @@ class MeshViewport(QOpenGLWidget):
             ),
             dtype=np.float32,
         )
-        edge_indices = (
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 0),
-            (4, 5),
-            (5, 6),
-            (6, 7),
-            (7, 4),
-            (0, 4),
-            (1, 5),
-            (2, 6),
-            (3, 7),
-        )
-        edges = np.asarray(
-            [corners[index] for pair in edge_indices for index in pair],
-            dtype=np.float32,
-        )
+
+        surfaces = empty
+        edges = empty
+        if self.show_stock:
+            triangle_indices = (
+                (0, 1, 2), (0, 2, 3),
+                (4, 6, 5), (4, 7, 6),
+                (0, 4, 5), (0, 5, 1),
+                (1, 5, 6), (1, 6, 2),
+                (2, 6, 7), (2, 7, 3),
+                (3, 7, 4), (3, 4, 0),
+            )
+            surfaces = np.asarray(
+                [corners[index] for tri in triangle_indices for index in tri],
+                dtype=np.float32,
+            )
+
+            edge_indices = (
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (4, 5),
+                (5, 6),
+                (6, 7),
+                (7, 4),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            )
+            edges = np.asarray(
+                [corners[index] for pair in edge_indices for index in pair],
+                dtype=np.float32,
+            )
 
         if not self.show_grid:
-            return edges, np.empty((0, 3), dtype=np.float32)
+            return surfaces, edges, empty, empty
 
-        largest = max(w, h)
-        if largest <= 150.0:
-            step = 10.0
-        elif largest <= 400.0:
-            step = 25.0
-        elif largest <= 1000.0:
-            step = 50.0
-        else:
-            step = 100.0
+        step = self._adaptive_grid_step(w, h)
+        minor_points: list[tuple[float, float, float]] = []
+        major_points: list[tuple[float, float, float]] = []
 
-        grid_points: list[tuple[float, float, float]] = []
-        for x in np.arange(step, w, step):
-            grid_points.extend(((float(x), 0.0, 0.0), (float(x), h, 0.0)))
-        for y in np.arange(step, h, step):
-            grid_points.extend(((0.0, float(y), 0.0), (w, float(y), 0.0)))
+        max_x_index = max(1, int(w / step) + 1)
+        max_y_index = max(1, int(h / step) + 1)
 
-        grid = np.asarray(grid_points, dtype=np.float32).reshape((-1, 3))
-        return edges, grid
+        for index in range(1, max_x_index):
+            x = index * step
+            if x >= w:
+                break
+            target = major_points if index % 5 == 0 else minor_points
+            target.extend(((float(x), 0.0, 0.002), (float(x), h, 0.002)))
+
+        for index in range(1, max_y_index):
+            y = index * step
+            if y >= h:
+                break
+            target = major_points if index % 5 == 0 else minor_points
+            target.extend(((0.0, float(y), 0.002), (w, float(y), 0.002)))
+
+        minor_grid = np.asarray(minor_points, dtype=np.float32).reshape((-1, 3))
+        major_grid = np.asarray(major_points, dtype=np.float32).reshape((-1, 3))
+        return surfaces, edges, minor_grid, major_grid
+
+    def _draw_stock_surface(
+        self,
+        vertices: np.ndarray,
+        *,
+        view_projection: QMatrix4x4,
+    ) -> None:
+        if (
+            self._functions is None
+            or self._stock_program is None
+            or self._line_buffer is None
+            or self._line_vao is None
+            or len(vertices) == 0
+        ):
+            return
+
+        stock_vertices = np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+        stock_bytes = stock_vertices.tobytes()
+
+        self._line_buffer.bind()
+        self._line_buffer.allocate(stock_bytes, len(stock_bytes))
+        self._line_buffer.release()
+
+        self._stock_program.bind()
+        self._stock_program.setUniformValue("u_mvp", view_projection)
+        self._stock_program.setUniformValue(
+            "u_base_color",
+            QVector4D(0.72, 0.74, 0.78, 0.23),
+        )
+
+        # Keep the translucent stock from hiding relief geometry below Z0.
+        self._functions.glDepthMask(False)
+        self._line_vao.bind()
+        self._functions.glDrawArrays(GL_TRIANGLES, 0, len(stock_vertices))
+        self._line_vao.release()
+        self._functions.glDepthMask(True)
+
+        self._stock_program.release()
 
     def _draw_stock(self, view_projection: QMatrix4x4) -> None:
-        edges, grid = self._stock_lines()
-        self._draw_lines(
-            grid,
+        surfaces, edges, minor_grid, major_grid = self._stock_geometry()
+
+        self._draw_stock_surface(
+            surfaces,
             view_projection=view_projection,
-            color=QVector4D(0.30, 0.36, 0.47, 1.0),
+        )
+        self._draw_lines(
+            minor_grid,
+            view_projection=view_projection,
+            color=QVector4D(0.40, 0.44, 0.52, 0.48),
+        )
+        self._draw_lines(
+            major_grid,
+            view_projection=view_projection,
+            color=QVector4D(0.58, 0.62, 0.70, 0.78),
         )
         self._draw_lines(
             edges,
             view_projection=view_projection,
-            color=QVector4D(0.43, 0.50, 0.62, 1.0),
+            color=QVector4D(0.62, 0.66, 0.74, 0.88),
         )
 
     def _draw_meshes(self, view_projection: QMatrix4x4) -> None:
