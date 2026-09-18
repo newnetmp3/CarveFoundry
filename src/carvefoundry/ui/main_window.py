@@ -1476,6 +1476,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.selection_info.setText(
                 self._mesh_properties_text(project_item)
             )
+            if any(
+                path.source_item_id == project_item.item_id
+                for path in self.project.toolpaths
+            ):
+                self._sync_toolpath_state_from_project()
             self.statusBar().showMessage(
                 f"Renamed {old_name} → {unique_name}",
                 2500,
