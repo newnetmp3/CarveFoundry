@@ -35,14 +35,17 @@ from carvefoundry.cam.basic_ops import (
     MillingDirection,
     PocketStrategy,
     ReliefStyle,
-    center_drill,
     detail_for_stepover_fraction,
     detail_stepover_fraction,
     finish_3d,
-    rectangular_engrave,
-    rectangular_pocket,
-    rectangular_profile,
     waterline_3d,
+)
+from carvefoundry.cam.vector_ops import (
+    geometry_drill,
+    geometry_engrave,
+    geometry_pocket,
+    geometry_profile,
+    geometry_vcarve,
 )
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
@@ -1513,9 +1516,10 @@ class RibbonActionsMixin:
     def _sync_cam_control_relevance(self) -> None:
         operation = self._active_cam_operation
         is_3d = operation in {"rough", "finish", "rest", "waterline"}
+        uses_cut_type = operation in {"profile", "pocket", "engrave"}
 
         for combo in self._cam_selector_widgets.get("cut_type", []):
-            combo.setEnabled(not is_3d)
+            combo.setEnabled(uses_cut_type)
         for combo in self._cam_selector_widgets.get("3d_cut_style", []):
             combo.setEnabled(is_3d)
         for combo in self._cam_selector_widgets.get("entry", []):
@@ -1613,44 +1617,42 @@ class RibbonActionsMixin:
         self.statusBar().showMessage(f"Calculating {operation} toolpath…")
         try:
             cut_type = self._cam_cut_type
-            if (
+            if operation == "vcarve":
+                toolpath = geometry_vcarve(mesh, cutter, settings)
+            elif operation == "drill":
+                toolpath = geometry_drill(mesh, cutter, settings)
+            elif (
                 cut_type == "Pocket"
                 and operation in {"profile", "pocket", "engrave"}
             ):
-                toolpath = rectangular_pocket(bounds, cutter, settings)
+                toolpath = geometry_pocket(mesh, cutter, settings)
             elif (
                 cut_type in {"On Path", "Outside", "Inside"}
                 and operation in {"profile", "pocket", "engrave"}
             ):
-                offset_mode = {
-                    "On Path": "on",
-                    "Outside": "outside",
-                    "Inside": "inside",
-                }[cut_type]
-                toolpath = rectangular_profile(
-                    bounds,
-                    cutter,
-                    settings,
-                    offset_mode=offset_mode,
-                )
+                if operation == "engrave" and cut_type == "On Path":
+                    toolpath = geometry_engrave(mesh, cutter, settings)
+                else:
+                    offset_mode = {
+                        "On Path": "on",
+                        "Outside": "outside",
+                        "Inside": "inside",
+                    }[cut_type]
+                    toolpath = geometry_profile(
+                        mesh,
+                        cutter,
+                        settings,
+                        offset_mode=offset_mode,
+                    )
+                    if operation == "engrave":
+                        toolpath.name = "Engrave"
+                        toolpath.operation = "engrave"
             elif operation == "profile":
-                toolpath = rectangular_profile(bounds, cutter, settings)
+                toolpath = geometry_profile(mesh, cutter, settings)
             elif operation == "pocket":
-                toolpath = rectangular_pocket(bounds, cutter, settings)
-            elif operation == "vcarve":
-                depth = -min(max(cutter.diameter_mm * 0.25, 0.5), 3.0)
-                toolpath = rectangular_engrave(
-                    bounds,
-                    cutter,
-                    settings,
-                    depth_mm=depth,
-                    name="V-Carve",
-                    operation="v_carve",
-                )
+                toolpath = geometry_pocket(mesh, cutter, settings)
             elif operation == "engrave":
-                toolpath = rectangular_engrave(bounds, cutter, settings)
-            elif operation == "drill":
-                toolpath = center_drill(bounds, cutter, settings)
+                toolpath = geometry_engrave(mesh, cutter, settings)
             elif operation in {"rough", "finish", "rest"}:
                 toolpath = finish_3d(
                     mesh,
@@ -1696,8 +1698,8 @@ class RibbonActionsMixin:
                 ramp_angle_deg=settings.ramp_angle_deg,
             )
             generated_toolpaths.append(
-                rectangular_profile(
-                    bounds,
+                geometry_profile(
+                    mesh,
                     cutter,
                     cutout_settings,
                     name="Full Depth Cutout",
