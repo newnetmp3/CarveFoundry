@@ -247,6 +247,9 @@ class RibbonActionsMixin:
         self._tabs_enabled = bool(
             self._settings.value("cam/tabs_enabled", False, type=bool)
         )
+        if self._cam_3d_cut_style == "Full Depth Cutout" and not self._tabs_enabled:
+            self._tabs_enabled = True
+            self._settings.setValue("cam/tabs_enabled", True)
         self._custom_tools = self._load_custom_tools()
 
         self._simulation_timer = QTimer(self)
