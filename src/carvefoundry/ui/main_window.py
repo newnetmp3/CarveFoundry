@@ -619,7 +619,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         for row, (title, spins) in enumerate(
             (
                 ("Position", self.position_spins),
-                ("Rotation", self.rotation_spins),
+                ("Rotate about", self.rotation_spins),
                 ("Scale", self.scale_spins),
             ),
             start=3,
