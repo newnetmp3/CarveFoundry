@@ -387,6 +387,23 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         finish_design = three_d.add_group("Finish Design")
         add_cam_selector(
             finish_design,
+            "3d_cut_style",
+            "Cut Style",
+            (
+                "Model Boundary Relief",
+                "Rectangle Relief",
+                "Full Depth Cutout",
+            ),
+            self._cam_3d_cut_style,
+            (
+                "Easel-style 3D cut style. Model Boundary follows the model; "
+                "Rectangle Relief clears a padded rectangle around it; Full "
+                "Depth Cutout adds an outside profile to stock depth."
+            ),
+            minimum_width=144,
+        )
+        add_cam_selector(
+            finish_design,
             "direction",
             "Direction",
             (
