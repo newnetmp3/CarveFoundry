@@ -70,10 +70,26 @@ class _ActionForm(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
+        self.setMinimumWidth(430)
+        self.setSizeGripEnabled(True)
+
         self._form = QFormLayout()
+        self._form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
+        self._form.setRowWrapPolicy(
+            QFormLayout.RowWrapPolicy.DontWrapRows
+        )
+        self._form.setLabelAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._form.setHorizontalSpacing(14)
+        self._form.setVerticalSpacing(8)
         self._fields: dict[str, QWidget] = {}
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 12)
+        layout.setSpacing(12)
         layout.addLayout(self._form)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
