@@ -1581,21 +1581,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
         rail.add_stretch()
-        rail.add_action_tool(
-            "layers",
-            self._ui_actions["layers"],
-            tooltip="Objects & Layers (Ctrl+Shift+L).",
-        )
-        rail.add_action_tool(
-            "inspector",
-            self._ui_actions["inspector"],
-            tooltip="Show or hide Inspector (Ctrl+Shift+I).",
-        )
-        rail.add_action_tool(
-            "fit",
-            self._ui_actions["fit_view"],
-            tooltip="Fit the complete job to the viewport (Ctrl+0).",
-        )
         rail.set_active_draw_tool(None)
         return rail
 
