@@ -170,36 +170,36 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._register_cam_selector(key, combo)
             return combo
 
+        # FILE: project lifecycle and bringing source material into the job.
         file_page = self.ribbon.add_page("File")
         project = file_page.add_group("Project")
         project.add_button("New", self._new_project)
         project.add_button("Open", self._open_project)
         project.add_button("Save", self._save_project, primary=True)
         project.add_button("Save As", self._save_project_as)
-        exchange = file_page.add_group("Import / Export")
-        exchange.add_button("Import", self._import_file, primary=True)
-        exchange.add_button("Export G-code", self._export_gcode)
 
-        home = self.ribbon.add_page("Home")
-        edit = home.add_group("Edit")
+        import_group = file_page.add_group("Import")
+        import_group.add_button("Import", self._import_file, primary=True)
+        import_group.add_button("STL", lambda: self._import_file("STL"))
+        import_group.add_button("SVG", lambda: self._import_file("SVG"))
+        import_group.add_button("DXF", lambda: self._import_file("DXF"))
+        import_group.add_button("Image", lambda: self._import_file("Image"))
+        import_group.add_button("G-code", lambda: self._import_file("G-code"))
+
+        output = file_page.add_group("Output")
+        output.add_button("Export G-code", self._export_gcode)
+
+        # DESIGN: geometry creation, editing, arrangement, and object management.
+        design = self.ribbon.add_page("Design")
+        edit = design.add_group("Edit")
         edit.add_button("Undo", self._undo)
         edit.add_button("Redo", self._redo)
         edit.add_button("Cut", self._cut_selected_items)
         edit.add_button("Copy", self._copy_selected_items)
         edit.add_button("Paste", self._paste_items)
         edit.add_button("Delete", self._delete_selected_item)
-        arrange = home.add_group("Arrange")
-        arrange.add_button("Align", self._align_selected_items)
-        arrange.add_button("Center", self._center_selected_items)
-        arrange.add_button("Group", self._group_selected_items)
-        arrange.add_button("Ungroup", self._ungroup_selected_items)
-        arrange.add_button("Duplicate", self._duplicate_selected_item)
-        layers = home.add_group("Layers")
-        layers.add_button("Move Up", lambda: self._move_selected_item(-1))
-        layers.add_button("Move Down", lambda: self._move_selected_item(1))
 
-        create = self.ribbon.add_page("Create")
-        shapes = create.add_group("Shapes")
+        shapes = design.add_group("Draw")
         shape_actions = (
             ("rectangle", "Rectangle", self._create_rectangle),
             ("ellipse", "Ellipse", self._create_ellipse),
@@ -215,48 +215,116 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "Hold Shift to constrain. Press Esc to exit the tool."
             )
             self._shape_tool_buttons[tool] = button
-        vectors = create.add_group("Vectors")
+
+        vectors = design.add_group("Vector")
         vectors.add_button("Pen", self._create_pen_path)
         vectors.add_button("Trace Image", self._trace_image)
 
-        import_page = self.ribbon.add_page("Import")
-        files = import_page.add_group("Design Files")
-        files.add_button("SVG", lambda: self._import_file("SVG"))
-        files.add_button("DXF", lambda: self._import_file("DXF"))
-        files.add_button("STL", lambda: self._import_file("STL"), primary=True)
-        files.add_button("Image", lambda: self._import_file("Image"))
-        files.add_button("G-code", lambda: self._import_file("G-code"))
+        arrange = design.add_group("Arrange")
+        arrange.add_button("Align", self._align_selected_items)
+        arrange.add_button("Center", self._center_selected_items)
+        arrange.add_button("Group", self._group_selected_items)
+        arrange.add_button("Ungroup", self._ungroup_selected_items)
+        arrange.add_button("Duplicate", self._duplicate_selected_item)
 
-        carve = self.ribbon.add_page("Carve")
-        operations = carve.add_group("2D / 2.5D Operations")
-        operations.add_button(
-            "Profile",
-            lambda: self._select_cam_operation("profile"),
+        objects = design.add_group("Objects")
+        objects.add_button("Layers", self._show_layers_popup, primary=True)
+        objects.add_button("Move Up", lambda: self._move_selected_item(-1))
+        objects.add_button("Move Down", lambda: self._move_selected_item(1))
+
+        # MODEL: stock-relative placement and object transforms.
+        model = self.ribbon.add_page("Model")
+        stock = model.add_group("Stock")
+        stock.add_button("Stock Setup", self._focus_stock_section, primary=True)
+        stock.add_button("Fit View", self._fit_view)
+
+        transform = model.add_group("Transform")
+        transform.add_button(
+            "Position",
+            lambda: self._focus_transform_section("position"),
         )
-        operations.add_button(
-            "Pocket",
-            lambda: self._select_cam_operation("pocket"),
+        transform.add_button(
+            "Rotate",
+            lambda: self._focus_transform_section("rotation"),
         )
-        operations.add_button(
-            "V-Carve",
-            lambda: self._select_cam_operation("vcarve"),
+        transform.add_button(
+            "Size",
+            lambda: self._focus_transform_section("size"),
+            primary=True,
         )
-        operations.add_button(
-            "Engrave",
-            lambda: self._select_cam_operation("engrave"),
+        transform.add_button(
+            "Scale",
+            lambda: self._focus_transform_section("scale"),
         )
-        operations.add_button(
-            "Drill",
-            lambda: self._select_cam_operation("drill"),
-        )
-        self._tabs_button = operations.add_button(
+
+        placement = model.add_group("Placement")
+        placement.add_button("Center XY", self._center_selected_xy)
+        placement.add_button("Top to Z0", self._top_selected_to_surface)
+        placement.add_button("Fit Stock", self._fit_selected_inside_stock)
+        placement.add_button("Reset", self._reset_selected_transform)
+
+        # TOOLPATHS: all CAM work lives in one workflow tab.
+        toolpaths = self.ribbon.add_page("Toolpaths")
+        operations_2d = toolpaths.add_group("2D / 2.5D")
+        self._cam_operation_buttons: dict[str, object] = {}
+        for operation, title in (
+            ("profile", "Profile"),
+            ("pocket", "Pocket"),
+            ("vcarve", "V-Carve"),
+            ("engrave", "Engrave"),
+            ("drill", "Drill"),
+        ):
+            button = operations_2d.add_button(
+                title,
+                lambda op=operation: self._select_cam_operation(op),
+            )
+            button.setCheckable(True)
+            self._cam_operation_buttons[operation] = button
+        self._tabs_button = operations_2d.add_button(
             "Tabs",
             self._toggle_tabs_operation,
         )
         self._tabs_button.setCheckable(True)
         self._tabs_button.setChecked(self._tabs_enabled)
 
-        path_design = carve.add_group("Toolpath Design")
+        operations_3d = toolpaths.add_group("3D")
+        for operation, title in (
+            ("rough", "Rough"),
+            ("finish", "Finish"),
+            ("rest", "Rest"),
+            ("waterline", "Waterline"),
+        ):
+            button = operations_3d.add_button(
+                title,
+                lambda op=operation: self._select_cam_operation(op),
+                primary=operation == "finish",
+            )
+            button.setCheckable(True)
+            self._cam_operation_buttons[operation] = button
+
+        cutters = toolpaths.add_group("Cutter")
+        all_cutters = self._all_tools()
+        cutter_names = [cutter.name for cutter in all_cutters]
+        self.tool_combo = cutters.add_selector(
+            "Selected Cutter",
+            cutter_names,
+            cutter_names[0] if cutter_names else "",
+            tooltip=(
+                "The active cutter is used for toolpath generation and "
+                "cutter-profile compensation."
+            ),
+            minimum_width=150,
+        )
+        for index, cutter in enumerate(all_cutters):
+            self.tool_combo.setItemData(index, cutter)
+        self.tool_combo.currentIndexChanged.connect(
+            lambda _index: self._refresh_cam_detail_readouts()
+        )
+        cutters.add_button("Library", self._show_tool_library)
+        cutters.add_button("New Tool", self._new_tool)
+        cutters.add_button("Calculator", self._feeds_speeds_calculator)
+
+        path_design = toolpaths.add_group("Path Design")
         add_cam_selector(
             path_design,
             "cut_type",
@@ -264,11 +332,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Auto", "Pocket", "On Path", "Outside", "Inside"),
             self._cam_cut_type,
             (
-                "Easel-style cut type. Auto uses the selected operation; "
-                "Pocket clears inside; On Path centers the cutter; Outside "
-                "and Inside offset by the cutter radius."
+                "Choose where the cutter runs relative to 2D geometry. "
+                "Auto follows the selected operation."
             ),
             minimum_width=98,
+        )
+        add_cam_selector(
+            path_design,
+            "3d_cut_style",
+            "3D Style",
+            (
+                "Model Boundary Relief",
+                "Rectangle Relief",
+                "Full Depth Cutout",
+            ),
+            self._cam_3d_cut_style,
+            (
+                "Controls the area surrounding a 3D model and whether a "
+                "final outside cutout operation is added."
+            ),
+            minimum_width=140,
         )
         add_cam_selector(
             path_design,
@@ -284,29 +367,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ),
             self._cam_direction,
             (
-                "Toolpath pattern/direction. Smart Serpentine chooses the "
-                "long axis for fewer rows. Offset applies to 2D pockets; "
-                "45°/135° are available for 3D finishing."
+                "Smart Serpentine minimizes row count. Explicit raster "
+                "directions can be aligned to grain or surface features."
             ),
             minimum_width=126,
-        )
-        add_cam_selector(
-            path_design,
-            "quality",
-            "Finish",
-            (
-                "Fast 15%",
-                "Balanced 10%",
-                "Detail 8%",
-                "Fine 6%",
-                "Custom",
-            ),
-            self._cam_quality,
-            (
-                "3D finishing stepover. 15% favors speed; 8% and 6% favor "
-                "surface detail. Custom uses Advanced settings."
-            ),
-            minimum_width=108,
         )
         detail_slider = path_design.add_slider(
             "Detail",
@@ -315,27 +379,23 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._cam_detail,
             self._set_cam_detail,
             tooltip=(
-                "Raster-line density for the selected cutter. Moving right "
-                "reduces stepover and creates more raster lines; moving left "
-                "increases stepover for faster machining."
+                "Raster-line density for the selected cutter. More Detail "
+                "reduces stepover and increases raster lines."
             ),
-            minimum_width=210,
+            minimum_width=215,
             low_label="Faster",
             high_label="Detail",
         )
         self._register_cam_detail_slider(detail_slider)
 
-        motion = carve.add_group("Motion")
+        motion = toolpaths.add_group("Motion")
         add_cam_selector(
             motion,
             "entry",
             "Entry",
             ("Plunge", "Ramp 5°", "Ramp 20°", "Custom Ramp"),
             self._cam_entry,
-            (
-                "Material entry. Easel-style ramping lowers tool load; "
-                "5° is gentle, while 20° is useful for many wood jobs."
-            ),
+            "Choose vertical plunge or a ramped entry into material.",
             minimum_width=98,
         )
         add_cam_selector(
@@ -344,10 +404,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Milling",
             ("Default", "Climb (CCW)", "Conventional (CW)"),
             self._cam_milling,
-            (
-                "Milling direction for outlines and offset fills. "
-                "Climb uses CCW; Conventional uses CW."
-            ),
+            "Controls milling direction for outlines and offset fills.",
             minimum_width=116,
         )
         add_cam_selector(
@@ -357,135 +414,25 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Smart Min-Lift", "Local Lift", "Full Retract"),
             self._cam_linking,
             (
-                "Smart Min-Lift keeps serpentine rows connected when safe, "
-                "uses a small local Z lift when needed, and full Safe Z only "
+                "Smart Min-Lift keeps safe serpentine links cutting, uses "
+                "small local lifts where needed, and retracts fully only "
                 "across disconnected areas."
             ),
             minimum_width=112,
         )
         motion.add_button("Advanced", self._toolpath_design_advanced)
 
-        calculate = carve.add_group("Toolpaths")
-        calculate.add_button("Calculate", self._calculate_toolpath, primary=True)
-        calculate.add_button("Preview", self._preview_toolpaths)
+        generate = toolpaths.add_group("Generate")
+        generate.add_button("Calculate", self._calculate_toolpath, primary=True)
+        generate.add_button("Preview", self._preview_toolpaths)
+        self._simulation_button = generate.add_button(
+            "Simulate",
+            self._simulate_toolpaths,
+        )
+        self._simulation_button.setCheckable(True)
+        generate.add_button("Export G-code", self._export_gcode)
 
-        three_d = self.ribbon.add_page("3D")
-        mesh = three_d.add_group("Mesh")
-        mesh.add_button(
-            "Orient",
-            lambda: self._focus_transform_section("rotation"),
-        )
-        mesh.add_button(
-            "Scale",
-            lambda: self._focus_transform_section("scale"),
-        )
-        mesh.add_button(
-            "Position",
-            lambda: self._focus_transform_section("position"),
-        )
-        mesh.add_button("Center XY", self._center_selected_xy)
-        mesh.add_button("Top to Z0", self._top_selected_to_surface)
-        strategies = three_d.add_group("Strategies")
-        strategies.add_button(
-            "Rough",
-            lambda: self._select_cam_operation("rough"),
-        )
-        strategies.add_button(
-            "Finish",
-            lambda: self._select_cam_operation("finish"),
-            primary=True,
-        )
-        strategies.add_button(
-            "Rest",
-            lambda: self._select_cam_operation("rest"),
-        )
-        strategies.add_button(
-            "Waterline",
-            lambda: self._select_cam_operation("waterline"),
-        )
-
-        finish_design = three_d.add_group("Finish Design")
-        add_cam_selector(
-            finish_design,
-            "3d_cut_style",
-            "Cut Style",
-            (
-                "Model Boundary Relief",
-                "Rectangle Relief",
-                "Full Depth Cutout",
-            ),
-            self._cam_3d_cut_style,
-            (
-                "Easel-style 3D cut style. Model Boundary follows the model; "
-                "Rectangle Relief clears a padded rectangle around it; Full "
-                "Depth Cutout adds an outside profile to stock depth."
-            ),
-            minimum_width=144,
-        )
-        add_cam_selector(
-            finish_design,
-            "direction",
-            "Direction",
-            (
-                "Smart Serpentine",
-                "Offset",
-                "Raster X",
-                "Raster Y",
-                "Raster 45°",
-                "Raster 135°",
-            ),
-            self._cam_direction,
-            "3D raster direction; X/Y/45°/135° can be aligned to wood grain.",
-            minimum_width=126,
-        )
-        add_cam_selector(
-            finish_design,
-            "quality",
-            "Stepover",
-            (
-                "Fast 15%",
-                "Balanced 10%",
-                "Detail 8%",
-                "Fine 6%",
-                "Custom",
-            ),
-            self._cam_quality,
-            "3D finishing stepover presets; smaller percentages improve finish.",
-            minimum_width=108,
-        )
-        finish_detail_slider = finish_design.add_slider(
-            "Detail",
-            0,
-            100,
-            self._cam_detail,
-            self._set_cam_detail,
-            tooltip=(
-                "Increase to add raster lines for the selected cutter; "
-                "decrease for fewer passes and shorter runtime."
-            ),
-            minimum_width=210,
-            low_label="Faster",
-            high_label="Detail",
-        )
-        self._register_cam_detail_slider(finish_detail_slider)
-        add_cam_selector(
-            finish_design,
-            "linking",
-            "Linking",
-            ("Smart Min-Lift", "Local Lift", "Full Retract"),
-            self._cam_linking,
-            "Controls row-to-row retract behavior for raster toolpaths.",
-            minimum_width=112,
-        )
-
-        tools = self.ribbon.add_page("Tools")
-        library = tools.add_group("Tool Library")
-        library.add_button("Library", self._show_tool_library, primary=True)
-        library.add_button("New Tool", self._new_tool)
-        library.add_button("Custom Profile", self._new_custom_profile_tool)
-        feeds = tools.add_group("Feeds & Speeds")
-        feeds.add_button("Calculator", self._feeds_speeds_calculator)
-
+        # MACHINE: physical machine configuration and control only.
         machine = self.ribbon.add_page("Machine")
         setup = machine.add_group("Setup")
         setup.add_button("Machine Profile", self._machine_profile)
@@ -497,12 +444,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         control.add_button("Probe", self._probe_machine)
         control.add_button("Jog", self._show_jog_controls)
 
+        # VIEW: canvas appearance, camera, and workspace chrome.
         view = self.ribbon.add_page("View")
         display = view.add_group("Display")
-        display.add_button("Fit 3D", self._fit_view, primary=True)
-        display.add_button("Stock", self._toggle_stock)
-        display.add_button("Grid", self._toggle_grid)
-        display.add_button("2D", self._set_2d_view)
+        stock_view = display.add_button("Stock", self._toggle_stock)
+        stock_view.setCheckable(True)
+        self._option_buttons["stock"] = stock_view
+        grid_view = display.add_button("Grid", self._toggle_grid)
+        grid_view.setCheckable(True)
+        self._option_buttons["grid"] = grid_view
+        rulers_view = display.add_button("Rulers", self._toggle_rulers)
+        rulers_view.setCheckable(True)
+        self._option_buttons["rulers"] = rulers_view
         self._toolpaths_view_button = display.add_button(
             "Toolpaths",
             self._toggle_toolpaths_view,
@@ -514,76 +467,58 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._toggle_rapids_view,
         )
         self._rapids_view_button.setCheckable(True)
-        simulation = view.add_group("Simulation")
-        self._simulation_button = simulation.add_button(
-            "Simulate",
-            self._simulate_toolpaths,
-            primary=True,
-        )
-        self._simulation_button.setCheckable(True)
 
-        options = self.ribbon.add_page("Options")
-        program = options.add_group("Program")
-        program.add_button("Reset UI", self._reset_interface_options)
+        camera = view.add_group("Camera")
+        camera.add_button("Fit View", self._fit_view, primary=True)
+        camera.add_button("Perspective", self._set_perspective_option)
+        camera.add_button("Orthographic", self._set_orthographic_option)
+        camera.add_button("Isometric", self._set_isometric_option)
 
-        interface = options.add_group("Interface")
-        project_panel = interface.add_button(
-            "Project\nPanel",
-            self._toggle_project_panel_option,
-        )
-        project_panel.setCheckable(True)
-        self._option_buttons["project_panel"] = project_panel
-        properties_panel = interface.add_button(
-            "Properties",
-            self._toggle_properties_panel_option,
-        )
-        properties_panel.setCheckable(True)
-        self._option_buttons["properties_panel"] = properties_panel
-        status_bar = interface.add_button("Status\nBar", self._toggle_status_bar_option)
-        status_bar.setCheckable(True)
-        self._option_buttons["status_bar"] = status_bar
-        view_controls = interface.add_button(
-            "View\nControls",
-            self._toggle_view_controls_option,
-        )
-        view_controls.setCheckable(True)
-        self._option_buttons["view_controls"] = view_controls
-
-        viewport_options = options.add_group("Viewport")
-        reverse_horizontal = viewport_options.add_button(
-            "Reverse\nHorizontal",
-            self._toggle_reverse_horizontal_option,
-        )
-        reverse_horizontal.setCheckable(True)
-        self._option_buttons["reverse_horizontal"] = reverse_horizontal
-        invert_vertical = viewport_options.add_button(
-            "Invert\nVertical",
-            self._toggle_invert_vertical_option,
-        )
-        invert_vertical.setCheckable(True)
-        self._option_buttons["invert_vertical"] = invert_vertical
-        stock_option = viewport_options.add_button("Stock", self._toggle_stock)
-        stock_option.setCheckable(True)
-        self._option_buttons["stock"] = stock_option
-        grid_option = viewport_options.add_button("Grid", self._toggle_grid)
-        grid_option.setCheckable(True)
-        self._option_buttons["grid"] = grid_option
-        rulers_option = viewport_options.add_button("Rulers", self._toggle_rulers)
-        rulers_option.setCheckable(True)
-        self._option_buttons["rulers"] = rulers_option
-        viewport_options.add_button("Fit View", self._fit_view)
-
-        projection = options.add_group("Projection")
-        projection.add_button("Perspective", self._set_perspective_option)
-        projection.add_button("Orthographic", self._set_orthographic_option)
-        projection.add_button("Isometric", self._set_isometric_option)
-
-        fixed_views = options.add_group("Fixed View")
+        fixed_views = view.add_group("Fixed View")
         for title in ("Top", "Bottom", "Front", "Back", "Left", "Right"):
             fixed_views.add_button(
                 title,
                 lambda name=title: self._set_standard_view_option(name),
             )
+
+        workspace = view.add_group("Workspace")
+        workspace.add_button("Layers", self._show_layers_popup)
+        inspector = workspace.add_button(
+            "Inspector",
+            self._toggle_properties_panel_option,
+        )
+        inspector.setCheckable(True)
+        self._option_buttons["properties_panel"] = inspector
+        status = workspace.add_button(
+            "Status Bar",
+            self._toggle_status_bar_option,
+        )
+        status.setCheckable(True)
+        self._option_buttons["status_bar"] = status
+        controls = workspace.add_button(
+            "View Controls",
+            self._toggle_view_controls_option,
+        )
+        controls.setCheckable(True)
+        self._option_buttons["view_controls"] = controls
+        workspace.add_button("Reset UI", self._reset_interface_options)
+
+        navigation = view.add_group("Navigation")
+        reverse_horizontal = navigation.add_button(
+            "Reverse\nHorizontal",
+            self._toggle_reverse_horizontal_option,
+        )
+        reverse_horizontal.setCheckable(True)
+        self._option_buttons["reverse_horizontal"] = reverse_horizontal
+        invert_vertical = navigation.add_button(
+            "Invert\nVertical",
+            self._toggle_invert_vertical_option,
+        )
+        invert_vertical.setCheckable(True)
+        self._option_buttons["invert_vertical"] = invert_vertical
+
+        # Design is the useful day-to-day starting page; File is still one click away.
+        self.ribbon.setCurrentWidget(design)
 
     def _build_workspace(self) -> QWidget:
         wrapper = QWidget()
