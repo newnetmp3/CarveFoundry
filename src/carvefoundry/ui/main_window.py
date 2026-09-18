@@ -886,32 +886,45 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _mesh_properties_text(cls, item: ProjectItem) -> str:
         mesh = item.mesh
         if mesh is None:
-            return f"{item.kind.upper()}\n{item.name}"
+            return f"{item.name}\n{item.kind.upper()} source"
 
-        placed_bounds = item.transformed_bounds_mm()
-        assert placed_bounds is not None
-        placed_dimensions_array = placed_bounds[1] - placed_bounds[0]
-        placed_dimensions = " × ".join(
-            cls._number(float(value)) for value in placed_dimensions_array
+        local_size = item.local_size_mm()
+        bounds = item.transformed_bounds_mm()
+        assert local_size is not None and bounds is not None
+
+        size_text = " × ".join(
+            cls._number(float(value))
+            for value in local_size
         )
-        placed_minimum = ", ".join(
-            cls._number(float(value)) for value in placed_bounds[0]
+        world_size = bounds[1] - bounds[0]
+        world_size_text = " × ".join(
+            cls._number(float(value))
+            for value in world_size
         )
-        placed_maximum = ", ".join(
-            cls._number(float(value)) for value in placed_bounds[1]
+        position = " / ".join(
+            cls._number(float(value))
+            for value in item.transform.translation_mm
         )
-        metadata_units = mesh.units or "none (STL normally stores no unit)"
-        kind_label = "STL" if item.kind.lower() == "stl" else item.kind.upper()
+        rotation = " / ".join(
+            f"{cls._number(float(value))}°"
+            for value in item.transform.rotation_deg
+        )
+        scale = " / ".join(
+            cls._number(float(value))
+            for value in item.transform.scale_xyz
+        )
+        kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
+        group = "\nGrouped object" if item.group_id else ""
+
         return (
-            f"{kind_label} mesh\n{item.name}\n\n"
-            f"Source size: {cls._source_dimensions_text(item)}\n"
-            f"Model units: {item.source_units.display_name}\n"
-            f"File metadata units: {metadata_units}\n"
-            f"Placed size: {placed_dimensions} mm\n"
-            f"Vertices: {mesh.vertex_count:,}\n"
-            f"Faces: {mesh.face_count:,}\n"
-            f"Placed min: {placed_minimum}\n"
-            f"Placed max: {placed_maximum}"
+            f"{item.name}\n"
+            f"{kind} • {mesh.face_count:,} faces{group}\n\n"
+            f"Size XYZ: {size_text} mm\n"
+            f"World bounds: {world_size_text} mm\n"
+            f"Position XYZ: {position} mm\n"
+            f"Rotation XYZ: {rotation}\n"
+            f"Scale XYZ: {scale}\n\n"
+            f"Source: {cls._source_dimensions_text(item)}"
         )
 
     def _stock_list_text(self) -> str:
@@ -923,14 +936,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
     def _item_list_text(self, item: ProjectItem) -> str:
-        group = "  [GROUP]" if item.group_id else ""
-        if item.mesh is None:
-            return f"{item.kind.upper()}  {item.name}{group}"
+        group = "  • grouped" if item.group_id else ""
         kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
-        return (
-            f"{kind}  {item.name} — {self._source_dimensions_text(item)}"
-            f"{group}"
-        )
+        return f"{kind}  {item.name}{group}"
 
     @staticmethod
     def _object_selector_text(item: ProjectItem) -> str:
@@ -952,6 +960,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
             for project_item in self.project.items:
                 list_item = QListWidgetItem(self._item_list_text(project_item))
+                list_item.setToolTip(
+                    f"{project_item.name}\n"
+                    f"Source size: {self._source_dimensions_text(project_item)}"
+                )
                 list_item.setFlags(
                     list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable
                 )
@@ -992,6 +1004,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if not hasattr(self, "layers_popup"):
             return
         self.layers_popup.show_below(self.layers_button)
+
+    def _active_cutter_changed(self, _index: int) -> None:
+        cutter = self.tool_combo.currentData()
+        if cutter is not None and hasattr(cutter, "name"):
+            self._settings.setValue("tools/selected_name", cutter.name)
+            self._settings.sync()
+        self._refresh_cam_detail_readouts()
 
     def _focus_stock_section(self) -> None:
         self.properties_panel.show()
