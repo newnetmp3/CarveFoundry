@@ -34,7 +34,6 @@ from ..core.project_file import (
     load_project,
     save_project,
 )
-from ..core.tools import DEFAULT_TOOLS
 from ..core.units import ModelUnits
 from .import_worker import ImportWorker
 from .ribbon import Ribbon
