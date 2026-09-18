@@ -3062,6 +3062,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
     def _active_cutter_changed(self, _index: int) -> None:
         cutter = self.tool_combo.currentData()
+        if hasattr(self, "_cutter_menu_actions"):
+            current = self.tool_combo.currentIndex()
+            for index, action in enumerate(self._cutter_menu_actions):
+                action.setChecked(index == current)
         if cutter is not None and hasattr(cutter, "name"):
             self._settings.setValue("tools/selected_name", cutter.name)
             self._settings.sync()
