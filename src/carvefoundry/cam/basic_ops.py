@@ -31,6 +31,12 @@ class PocketStrategy(StrEnum):
     RASTER_Y = "raster_y"
 
 
+class ReliefStyle(StrEnum):
+    MODEL_BOUNDARY = "model_boundary"
+    RECTANGLE = "rectangle"
+    FULL_DEPTH = "full_depth"
+
+
 @dataclass(frozen=True, slots=True)
 class BasicCamSettings:
     safe_z_mm: float = 1.5
@@ -45,6 +51,7 @@ class BasicCamSettings:
     tabs_enabled: bool = False
     milling_direction: MillingDirection = MillingDirection.DEFAULT
     pocket_strategy: PocketStrategy = PocketStrategy.RASTER_X
+    relief_style: ReliefStyle = ReliefStyle.MODEL_BOUNDARY
     raster_axis: RasterAxis = RasterAxis.X
     raster_link_mode: RasterLinkMode = RasterLinkMode.SMART
     local_link_clearance_mm: float = 0.5
@@ -539,6 +546,15 @@ def _finish_settings(
             max(stepover * 0.65, float(np.max(xy_span)) / 700.0),
         )
 
+    surface_padding = 0.0
+    background_z: float | None = None
+    if settings.relief_style is ReliefStyle.RECTANGLE:
+        surface_padding = settings.padding_mm
+        if settings.overall_depth_mm is not None:
+            background_z = -abs(settings.overall_depth_mm)
+        else:
+            background_z = float(bounds[0, 2])
+
     return Finish3DSettings(
         surface_spacing_mm=spacing,
         raster=RasterFinishingSettings(
@@ -552,6 +568,8 @@ def _finish_settings(
             direct_link_tolerance_mm=settings.direct_link_tolerance_mm,
         ),
         max_surface_samples=2_000_000,
+        surface_padding_mm=surface_padding,
+        background_z_mm=background_z,
     )
 
 
