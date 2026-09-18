@@ -119,6 +119,27 @@ QComboBox#RibbonCombo {
 QComboBox#RibbonCombo:hover {
     border-color: #c8ff3d;
 }
+QComboBox#RibbonCombo:disabled {
+    background: #111725;
+    color: #596477;
+    border-color: #222b3d;
+}
+#RibbonSelector:disabled #RibbonSelectorTitle,
+#RibbonSlider:disabled #RibbonSelectorTitle,
+#RibbonSlider:disabled #RibbonSliderEnd,
+#RibbonSlider:disabled #RibbonSliderReadout {
+    color: #566176;
+}
+QSlider#RibbonDetailSlider:disabled::groove:horizontal {
+    background: #1c2434;
+}
+QSlider#RibbonDetailSlider:disabled::sub-page:horizontal {
+    background: #566176;
+}
+QSlider#RibbonDetailSlider:disabled::handle:horizontal {
+    background: #697386;
+    border-color: #525d71;
+}
 QComboBox#RibbonCombo::drop-down {
     border: 0;
     width: 18px;
@@ -195,6 +216,13 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     border: 1px solid #242e44;
     border-radius: 8px;
     padding: 8px;
+}
+#ActivitySummary {
+    background: #111827;
+    color: #aeb8ca;
+    border-left: 3px solid #35415a;
+    border-radius: 4px;
+    padding: 7px 8px;
 }
 QScrollArea#InspectorScrollArea,
 #InspectorBody {
