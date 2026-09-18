@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from math import atan2, degrees, hypot, pi
+from math import atan2, ceil, degrees, hypot, pi, sqrt
 from pathlib import Path
 from uuid import uuid4
 
@@ -35,6 +35,8 @@ from carvefoundry.cam.basic_ops import (
     PocketStrategy,
     ReliefStyle,
     center_drill,
+    detail_for_stepover_fraction,
+    detail_stepover_fraction,
     finish_3d,
     rectangular_engrave,
     rectangular_pocket,
@@ -183,6 +185,7 @@ class RibbonActionsMixin:
         self._active_shape_tool: str | None = None
         self._shape_tool_buttons: dict[str, object] = {}
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
+        self._cam_detail_widgets: list[object] = []
 
         def saved_choice(
             key: str,
@@ -220,6 +223,20 @@ class RibbonActionsMixin:
                 "Custom",
             ),
         )
+        preset_fraction = {
+            "Fast 15%": 0.15,
+            "Balanced 10%": 0.10,
+            "Detail 8%": 0.08,
+            "Fine 6%": 0.06,
+        }.get(self._cam_quality, 0.10)
+        default_detail = detail_for_stepover_fraction(preset_fraction)
+        try:
+            saved_detail = int(
+                self._settings.value("cam/design/detail", default_detail)
+            )
+        except (TypeError, ValueError):
+            saved_detail = default_detail
+        self._cam_detail = max(0, min(100, saved_detail))
         self._cam_entry = saved_choice(
             "cam/design/entry",
             "Plunge",
@@ -862,6 +879,122 @@ class RibbonActionsMixin:
     def _register_cam_selector(self, key: str, combo: QComboBox) -> None:
         self._cam_selector_widgets.setdefault(key, []).append(combo)
 
+    def _register_cam_detail_slider(self, widget) -> None:
+        self._cam_detail_widgets.append(widget)
+        self._refresh_cam_detail_readouts()
+
+    def _set_cam_detail(
+        self,
+        value: int,
+        *,
+        mark_custom: bool = True,
+    ) -> None:
+        detail = max(0, min(100, int(value)))
+        self._cam_detail = detail
+        self._settings.setValue("cam/design/detail", detail)
+
+        if mark_custom and self._cam_quality != "Custom":
+            self._cam_quality = "Custom"
+            self._settings.setValue("cam/design/quality", "Custom")
+            for combo in self._cam_selector_widgets.get("quality", []):
+                combo.blockSignals(True)
+                try:
+                    index = combo.findText("Custom")
+                    if index >= 0:
+                        combo.setCurrentIndex(index)
+                finally:
+                    combo.blockSignals(False)
+
+        for widget in self._cam_detail_widgets:
+            slider = widget.slider
+            if slider.value() == detail:
+                continue
+            slider.blockSignals(True)
+            try:
+                slider.setValue(detail)
+            finally:
+                slider.blockSignals(False)
+
+        self._settings.sync()
+        self._refresh_cam_detail_readouts()
+
+        fraction = detail_stepover_fraction(detail)
+        cutter = (
+            self.tool_combo.currentData()
+            if hasattr(self, "tool_combo")
+            else None
+        )
+        if isinstance(cutter, Cutter):
+            stepover = cutter.diameter_mm * fraction
+            message = (
+                f"Detail {detail}% — {fraction * 100:.1f}% stepover "
+                f"({stepover:.3f} mm with {cutter.name})"
+            )
+        else:
+            message = (
+                f"Detail {detail}% — {fraction * 100:.1f}% cutter stepover"
+            )
+        if hasattr(self, "statusBar"):
+            self.statusBar().showMessage(message, 2500)
+
+    def _estimated_detail_raster_lines(self, stepover_mm: float) -> int | None:
+        if stepover_mm <= 0.0:
+            return None
+        item = self._selected_item() if hasattr(self, "_selected_item") else None
+        if item is None:
+            return None
+        bounds = item.transformed_bounds_mm()
+        if bounds is None:
+            return None
+
+        span = np.maximum(
+            np.asarray(bounds[1, :2], dtype=float)
+            - np.asarray(bounds[0, :2], dtype=float),
+            0.0,
+        )
+        span_x = float(span[0])
+        span_y = float(span[1])
+
+        direction = self._cam_direction
+        if direction == "Offset":
+            return None
+        if direction == "Raster X":
+            cross_span = span_y
+        elif direction == "Raster Y":
+            cross_span = span_x
+        elif direction in {"Raster 45°", "Raster 135°"}:
+            cross_span = (span_x + span_y) / sqrt(2.0)
+        else:
+            # Smart Serpentine runs along the longer dimension, leaving fewer
+            # raster rows across the shorter dimension.
+            cross_span = min(span_x, span_y)
+
+        if cross_span <= 1e-9:
+            return None
+        return max(2, ceil(cross_span / stepover_mm) + 1)
+
+    def _refresh_cam_detail_readouts(self) -> None:
+        if not self._cam_detail_widgets:
+            return
+
+        fraction = detail_stepover_fraction(self._cam_detail)
+        cutter = (
+            self.tool_combo.currentData()
+            if hasattr(self, "tool_combo")
+            else None
+        )
+        if isinstance(cutter, Cutter):
+            stepover = cutter.diameter_mm * fraction
+            line_count = self._estimated_detail_raster_lines(stepover)
+            text = f"{fraction * 100:.1f}% • {stepover:.3f} mm"
+            if line_count is not None:
+                text += f" • ~{line_count:,} lines"
+        else:
+            text = f"{fraction * 100:.1f}% of cutter"
+
+        for widget in self._cam_detail_widgets:
+            widget.set_readout(text)
+
     def _set_cam_design_option(self, key: str, value: str) -> None:
         attributes = {
             "cut_type": "_cam_cut_type",
@@ -875,6 +1008,18 @@ class RibbonActionsMixin:
         attribute = attributes[key]
         setattr(self, attribute, value)
         self._settings.setValue(f"cam/design/{key}", value)
+
+        if key == "quality" and value != "Custom":
+            fraction = {
+                "Fast 15%": 0.15,
+                "Balanced 10%": 0.10,
+                "Detail 8%": 0.08,
+                "Fine 6%": 0.06,
+            }[value]
+            self._set_cam_detail(
+                detail_for_stepover_fraction(fraction),
+                mark_custom=False,
+            )
         if (
             key == "3d_cut_style"
             and value == "Full Depth Cutout"
@@ -896,6 +1041,9 @@ class RibbonActionsMixin:
                     combo.setCurrentIndex(index)
             finally:
                 combo.blockSignals(False)
+
+        if key == "direction":
+            self._refresh_cam_detail_readouts()
 
         self.statusBar().showMessage(
             f"Toolpath {key.replace('_', ' ')}: {value}",
@@ -960,13 +1108,13 @@ class RibbonActionsMixin:
         )
         form.add_double(
             "finish_stepover",
-            "Custom 3D finishing stepover",
-            float(self._settings.value("cam/finish_stepover_percent", 10.0)),
-            minimum=1.0,
-            maximum=100.0,
+            "3D detail stepover",
+            detail_stepover_fraction(self._cam_detail) * 100.0,
+            minimum=4.0,
+            maximum=20.0,
             decimals=1,
-            step=1.0,
-            suffix=" %",
+            step=0.5,
+            suffix=" % of cutter",
         )
         form.add_double(
             "padding",
@@ -1055,7 +1203,6 @@ class RibbonActionsMixin:
             "cam/plunge_mm_min": form.value("plunge"),
             "cam/stepdown_mm": form.value("stepdown"),
             "cam/stepover_percent": form.value("pocket_stepover"),
-            "cam/finish_stepover_percent": form.value("finish_stepover"),
             "cam/padding_mm": form.value("padding"),
             "cam/usable_bit_length_mm": form.value("bit_length"),
             "cam/tab_height_mm": form.value("tab_height"),
@@ -1067,26 +1214,17 @@ class RibbonActionsMixin:
         }
         for setting_key, setting_value in values.items():
             self._settings.setValue(setting_key, setting_value)
+
+        requested_fraction = float(form.value("finish_stepover")) / 100.0
+        self._set_cam_detail(
+            detail_for_stepover_fraction(requested_fraction),
+            mark_custom=True,
+        )
         self._settings.sync()
         self.statusBar().showMessage("Advanced toolpath settings saved", 3000)
 
     def _quality_stepover_fraction(self) -> float:
-        values = {
-            "Fast 15%": 0.15,
-            "Balanced 10%": 0.10,
-            "Detail 8%": 0.08,
-            "Fine 6%": 0.06,
-        }
-        if self._cam_quality in values:
-            return values[self._cam_quality]
-        return max(
-            0.01,
-            min(
-                1.0,
-                float(self._settings.value("cam/finish_stepover_percent", 10.0))
-                / 100.0,
-            ),
-        )
+        return detail_stepover_fraction(self._cam_detail)
 
     def _ramp_angle(self) -> float | None:
         if self._cam_entry == "Ramp 5°":
