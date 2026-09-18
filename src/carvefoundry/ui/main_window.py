@@ -749,18 +749,36 @@ class MainWindow(QMainWindow):
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select an STL mesh first", 3000)
             return
+
         self.properties_panel.show()
         self._set_option_checked("properties_panel", True)
+
+        # A splitter can remember a zero-width panel even after the widget is
+        # made visible.  Restore a useful content-sized width so context-menu
+        # transform commands always produce an obvious editor on screen.
+        sizes = self.workspace_splitter.sizes()
+        if len(sizes) == 3 and sizes[2] < 40:
+            preferred = self._properties_panel_default_width()
+            total = max(sum(sizes), 1)
+            left = sizes[0]
+            center = max(360, total - left - preferred)
+            self.workspace_splitter.setSizes([left, center, preferred])
+
         controls = {
             "position": self.position_spins,
             "rotation": self.rotation_spins,
             "scale": self.scale_spins,
         }
+        labels = {
+            "position": "Position",
+            "rotation": "Rotation",
+            "scale": "Scale",
+        }
         target = controls.get(section, self.position_spins)
-        target[0].setFocus()
+        target[0].setFocus(Qt.FocusReason.OtherFocusReason)
         target[0].selectAll()
         self.statusBar().showMessage(
-            "Drag the selected object in the viewport or enter exact transform values",
+            f"{labels.get(section, 'Position')} editor ready for {item.name}",
             4000,
         )
 
@@ -877,6 +895,16 @@ class MainWindow(QMainWindow):
 
         self._apply_context_transform("Fit inside stock", apply)
 
+    @staticmethod
+    def _add_context_action(menu: QMenu, text: str, callback):
+        """Add an action with a PySide-safe triggered(bool) adapter."""
+
+        action = menu.addAction(text)
+        action.triggered.connect(
+            lambda _checked=False, function=callback: function()
+        )
+        return action
+
     def _show_viewport_item_context_menu(self, index: int, global_pos) -> None:
         if not 0 <= index < len(self.project.items):
             return
@@ -887,32 +915,46 @@ class MainWindow(QMainWindow):
         menu.addSection(item.name)
 
         edit_menu = menu.addMenu("Edit Transform")
-        edit_menu.addAction(
+        self._add_context_action(
+            edit_menu,
             "Move / Position…",
             lambda: self._focus_transform_section("position"),
         )
-        edit_menu.addAction(
+        self._add_context_action(
+            edit_menu,
             "Rotate…",
             lambda: self._focus_transform_section("rotation"),
         )
-        edit_menu.addAction(
+        self._add_context_action(
+            edit_menu,
             "Scale…",
             lambda: self._focus_transform_section("scale"),
         )
 
         move_menu = menu.addMenu("Move / Place")
-        move_menu.addAction("Center in Stock (XY)", self._center_selected_xy)
-        move_menu.addAction(
+        self._add_context_action(
+            move_menu,
+            "Center in Stock (XY)",
+            self._center_selected_xy,
+        )
+        self._add_context_action(
+            move_menu,
             "Move to Stock Origin (XY)",
             self._move_selected_to_stock_origin,
         )
-        move_menu.addAction(
+        self._add_context_action(
+            move_menu,
             "Place at Stock Origin + Top Z0",
             self._place_selected_at_stock_origin,
         )
         move_menu.addSeparator()
-        move_menu.addAction("Top to Stock Surface (Z0)", self._top_selected_to_surface)
-        move_menu.addAction(
+        self._add_context_action(
+            move_menu,
+            "Top to Stock Surface (Z0)",
+            self._top_selected_to_surface,
+        )
+        self._add_context_action(
+            move_menu,
             "Bottom to Stock Surface (Z0)",
             self._bottom_selected_to_surface,
         )
@@ -920,35 +962,63 @@ class MainWindow(QMainWindow):
         rotate_menu = menu.addMenu("Rotate 90°")
         for axis in range(3):
             axis_name = "XYZ"[axis]
-            rotate_menu.addAction(
+            self._add_context_action(
+                rotate_menu,
                 f"{axis_name} +90°",
-                lambda _checked=False, a=axis: self._rotate_selected_axis(a, 90.0),
+                lambda a=axis: self._rotate_selected_axis(a, 90.0),
             )
-            rotate_menu.addAction(
+            self._add_context_action(
+                rotate_menu,
                 f"{axis_name} -90°",
-                lambda _checked=False, a=axis: self._rotate_selected_axis(a, -90.0),
+                lambda a=axis: self._rotate_selected_axis(a, -90.0),
             )
         rotate_menu.addSeparator()
-        rotate_menu.addAction("Reset Rotation", self._reset_selected_rotation)
+        self._add_context_action(
+            rotate_menu,
+            "Reset Rotation",
+            self._reset_selected_rotation,
+        )
 
         scale_menu = menu.addMenu("Scale")
-        scale_menu.addAction(
+        self._add_context_action(
+            scale_menu,
             "50%",
             lambda: self._scale_selected_uniform(0.5),
         )
-        scale_menu.addAction(
+        self._add_context_action(
+            scale_menu,
             "200%",
             lambda: self._scale_selected_uniform(2.0),
         )
-        scale_menu.addAction("Fit Inside Stock", self._fit_selected_inside_stock)
+        self._add_context_action(
+            scale_menu,
+            "Fit Inside Stock",
+            self._fit_selected_inside_stock,
+        )
         scale_menu.addSeparator()
-        scale_menu.addAction("Reset Scale", self._reset_selected_scale)
+        self._add_context_action(
+            scale_menu,
+            "Reset Scale",
+            self._reset_selected_scale,
+        )
 
         menu.addSeparator()
-        menu.addAction("Reset Full Transform", self._reset_selected_transform)
+        self._add_context_action(
+            menu,
+            "Reset Full Transform",
+            self._reset_selected_transform,
+        )
         menu.addSeparator()
-        menu.addAction("Duplicate", self._duplicate_selected_item)
-        menu.addAction("Delete", self._delete_selected_item)
+        self._add_context_action(
+            menu,
+            "Duplicate",
+            self._duplicate_selected_item,
+        )
+        self._add_context_action(
+            menu,
+            "Delete",
+            self._delete_selected_item,
+        )
         menu.exec(global_pos)
 
     def _selected_item(self) -> ProjectItem | None:
