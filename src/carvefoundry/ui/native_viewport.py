@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import cos, floor, log10, radians, sin, tan
+from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -492,17 +492,37 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         zoom = max(self.camera.zoom, 1e-9)
 
         if self.camera.projection_mode == "perspective":
-            half_vertical = radians(self.PERSPECTIVE_FOV_DEG) / 2.0
-            half_horizontal = np.arctan(tan(half_vertical) * aspect)
-            limiting_angle = max(min(half_vertical, half_horizontal), 1e-6)
-            fit_distance = max(radius / sin(limiting_angle), radius + 1e-4)
+            # Keep the framing scale independent of camera angle.  The camera may
+            # need to move farther away so the complete stock/scene remains inside
+            # the near clipping plane, but that safety distance must not change
+            # the apparent zoom.  Zoom is therefore expressed through the field
+            # of view rather than by moving the camera toward the model.
+            base_half_vertical = radians(self.PERSPECTIVE_FOV_DEG) / 2.0
+            base_half_horizontal = atan(tan(base_half_vertical) * aspect)
+            limiting_angle = max(
+                min(base_half_vertical, base_half_horizontal),
+                1e-6,
+            )
+            fit_distance = max(
+                radius / sin(limiting_angle),
+                radius + 1e-4,
+            )
             distance = max(
-                fit_distance / zoom,
+                fit_distance,
                 nearest_offset + clip_margin,
                 1e-4,
             )
-            half_world_height = distance * tan(half_vertical)
-            world_per_pixel = (2.0 * half_world_height) / height
+
+            desired_half_height = max(
+                fit_distance * tan(base_half_vertical) / zoom,
+                1e-9,
+            )
+            effective_half_vertical = atan(desired_half_height / distance)
+            effective_fov_deg = max(
+                degrees(effective_half_vertical * 2.0),
+                1e-5,
+            )
+            world_per_pixel = (2.0 * desired_half_height) / height
 
             eye = target + view * distance
             view_matrix = QMatrix4x4()
@@ -519,7 +539,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
             projection = QMatrix4x4()
             projection.perspective(
-                self.PERSPECTIVE_FOV_DEG,
+                effective_fov_deg,
                 aspect,
                 near_plane,
                 far_plane,
