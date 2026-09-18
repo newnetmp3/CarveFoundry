@@ -1974,6 +1974,12 @@ class RibbonActionsMixin:
             self.machine_controller.disconnect()
             return
 
+        # A checkable ribbon button toggles before this callback runs.  Treat
+        # controller state as authoritative so canceled/failed attempts never
+        # leave the UI looking connected.
+        if self._machine_connect_button is not None:
+            self._machine_connect_button.setChecked(False)
+
         port = str(self._settings.value("machine/port", "")).strip()
         baud = int(self._settings.value("machine/baud", 115200))
         if not port:
