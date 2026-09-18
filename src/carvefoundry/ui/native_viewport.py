@@ -181,6 +181,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     PERSPECTIVE_FOV_DEG = 45.0
     FIT_MARGIN = 1.10
     ISOMETRIC_ELEVATION_DEG = 35.26438968
+    GIZMO_LENGTH_PX = 72.0
+    GIZMO_PICK_RADIUS_PX = 10.0
+    GIZMO_MIN_PROJECTED_PX = 18.0
 
     def __init__(self, project: Project | None = None) -> None:
         super().__init__()
@@ -200,6 +203,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_mode: str | None = None
         self._interaction_distance = 0.0
         self._object_drag_started = False
+        self._active_gizmo_axis: int | None = None
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
         self._line_program: QOpenGLShaderProgram | None = None
@@ -1232,106 +1236,298 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 best_distance = distance
         return best_index
 
-    def _object_drag_xy_delta(
+    def _selected_gizmo_pivot(self) -> np.ndarray | None:
+        if (
+            self.project is None
+            or self.selected_item_index is None
+            or not 0 <= self.selected_item_index < len(self.project.items)
+        ):
+            return None
+        item = self.project.items[self.selected_item_index]
+        if not item.visible or item.mesh is None:
+            return None
+        return self._item_bounds_mm(item).mean(axis=0)
+
+    def _gizmo_visual_direction(
+        self,
+        axis: int,
+        pivot: np.ndarray,
+        length_mm: float,
+        view_projection: QMatrix4x4,
+    ) -> np.ndarray:
+        """Return a visible direction for one translation handle.
+
+        Normally the handle follows the true world axis.  If that axis points
+        almost straight into the camera, its screen projection collapses.  In
+        that case use a small billboard-style direction while the drag still
+        changes only the requested world coordinate.
+        """
+
+        world_axis = np.eye(3, dtype=float)[axis]
+        start = self._project_world_point(
+            tuple(float(value) for value in pivot),
+            view_projection,
+        )
+        actual_end = self._project_world_point(
+            tuple(float(value) for value in pivot + world_axis * length_mm),
+            view_projection,
+        )
+        if start is not None and actual_end is not None:
+            projected = np.hypot(
+                actual_end.x() - start.x(),
+                actual_end.y() - start.y(),
+            )
+            if projected >= self.GIZMO_MIN_PROJECTED_PX:
+                return world_axis
+
+        right, up, _view = self._camera_basis()
+        if axis == 0:
+            fallback = right + up * 0.55
+        elif axis == 1:
+            fallback = -right + up * 0.55
+        else:
+            fallback = right + up
+        length = float(np.linalg.norm(fallback))
+        if length <= 1e-12:
+            return world_axis
+        return fallback / length
+
+    def _gizmo_axis_data(
+        self,
+        axis: int,
+        *,
+        view_projection: QMatrix4x4,
+        world_per_pixel: float,
+    ) -> tuple[np.ndarray, np.ndarray, QPointF, QPointF] | None:
+        pivot = self._selected_gizmo_pivot()
+        if pivot is None:
+            return None
+
+        length_mm = max(
+            float(world_per_pixel) * self.GIZMO_LENGTH_PX,
+            0.5,
+        )
+        visual_direction = self._gizmo_visual_direction(
+            axis,
+            pivot,
+            length_mm,
+            view_projection,
+        )
+        endpoint = pivot + visual_direction * length_mm
+
+        start_screen = self._project_world_point(
+            tuple(float(value) for value in pivot),
+            view_projection,
+        )
+        end_screen = self._project_world_point(
+            tuple(float(value) for value in endpoint),
+            view_projection,
+        )
+        if start_screen is None or end_screen is None:
+            return None
+        return pivot, endpoint, start_screen, end_screen
+
+    @staticmethod
+    def _point_segment_distance(
+        point: QPointF,
+        start: QPointF,
+        end: QPointF,
+    ) -> float:
+        px = float(point.x())
+        py = float(point.y())
+        sx = float(start.x())
+        sy = float(start.y())
+        ex = float(end.x())
+        ey = float(end.y())
+        dx = ex - sx
+        dy = ey - sy
+        length_sq = dx * dx + dy * dy
+        if length_sq <= 1e-12:
+            return float(np.hypot(px - sx, py - sy))
+        t = ((px - sx) * dx + (py - sy) * dy) / length_sq
+        t = max(0.0, min(1.0, t))
+        closest_x = sx + t * dx
+        closest_y = sy + t * dy
+        return float(np.hypot(px - closest_x, py - closest_y))
+
+    def pick_gizmo_axis(self, position: QPointF) -> int | None:
+        """Return the selected translation axis when a gizmo handle is hit."""
+
+        if self.selected_item_index is None:
+            return None
+        projection, view_matrix, world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+
+        best_axis: int | None = None
+        best_distance = float("inf")
+        for axis in range(3):
+            data = self._gizmo_axis_data(
+                axis,
+                view_projection=view_projection,
+                world_per_pixel=world_per_pixel,
+            )
+            if data is None:
+                continue
+            _pivot, _endpoint, start, end = data
+
+            # Do not let the shared center point make all three axes ambiguous.
+            # Only the outer 80% of each shaft is an active handle.
+            handle_start = QPointF(
+                start.x() + (end.x() - start.x()) * 0.20,
+                start.y() + (end.y() - start.y()) * 0.20,
+            )
+            distance = self._point_segment_distance(
+                position,
+                handle_start,
+                end,
+            )
+            if (
+                distance <= self.GIZMO_PICK_RADIUS_PX
+                and distance < best_distance
+            ):
+                best_axis = axis
+                best_distance = distance
+        return best_axis
+
+    def _gizmo_axis_drag_delta(
         self,
         item_index: int,
+        axis: int,
         delta: QPointF,
-    ) -> np.ndarray | None:
-        """Convert a screen drag into a stable XY move for one selected item.
-
-        The previous implementation intersected successive mouse rays with the
-        global stock Z0 plane.  At oblique camera angles that plane can be far
-        from the selected geometry, magnifying tiny mouse motion and even making
-        the apparent drag direction feel reversed.
-
-        Instead, measure the local screen-space effect of +X and +Y at the
-        selected object's current center and solve that 2D mapping directly.
-        A gain cap prevents near-edge-on views from producing huge XY jumps.
-        """
+    ) -> float | None:
+        """Convert mouse movement along a visible handle to one-axis motion."""
 
         if (
             self.project is None
             or not 0 <= item_index < len(self.project.items)
+            or not 0 <= axis <= 2
         ):
             return None
-        item = self.project.items[item_index]
-        if not item.visible or item.mesh is None:
+
+        projection, view_matrix, world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        data = self._gizmo_axis_data(
+            axis,
+            view_projection=view_projection,
+            world_per_pixel=world_per_pixel,
+        )
+        if data is None:
+            return None
+        pivot, endpoint, start, end = data
+
+        screen_axis = np.array(
+            (float(end.x() - start.x()), float(end.y() - start.y())),
+            dtype=float,
+        )
+        screen_length = float(np.linalg.norm(screen_axis))
+        world_length = float(np.linalg.norm(endpoint - pivot))
+        if screen_length <= 1e-9 or world_length <= 1e-12:
             return None
 
+        screen_unit = screen_axis / screen_length
         mouse_delta = np.array(
             (float(delta.x()), float(delta.y())),
             dtype=float,
         )
+        along_pixels = float(mouse_delta @ screen_unit)
+        millimeters_per_pixel = world_length / screen_length
+        axis_delta = along_pixels * millimeters_per_pixel
+
+        # Prevent a low-angle/perspective edge case from turning a tiny cursor
+        # movement into a large model jump.
         pixel_distance = float(np.linalg.norm(mouse_delta))
-        if pixel_distance <= 1e-9:
-            return np.zeros(2, dtype=float)
-
-        projection, view_matrix, world_per_pixel = self._camera_geometry()
-        view_projection = projection * view_matrix
-
-        bounds = self._item_bounds_mm(item)
-        anchor = bounds.mean(axis=0)
-
-        # Use a basis large enough to remain numerically stable at wide zooms,
-        # then normalize the projected vectors back to pixels per millimeter.
-        basis_mm = max(float(world_per_pixel) * 20.0, 1.0)
-        base = self._project_world_point(
-            tuple(float(value) for value in anchor),
-            view_projection,
-        )
-        x_point = self._project_world_point(
-            (
-                float(anchor[0] + basis_mm),
-                float(anchor[1]),
-                float(anchor[2]),
-            ),
-            view_projection,
-        )
-        y_point = self._project_world_point(
-            (
-                float(anchor[0]),
-                float(anchor[1] + basis_mm),
-                float(anchor[2]),
-            ),
-            view_projection,
-        )
-        if base is None or x_point is None or y_point is None:
-            return None
-
-        jacobian = np.array(
-            (
-                (
-                    (x_point.x() - base.x()) / basis_mm,
-                    (y_point.x() - base.x()) / basis_mm,
-                ),
-                (
-                    (x_point.y() - base.y()) / basis_mm,
-                    (y_point.y() - base.y()) / basis_mm,
-                ),
-            ),
-            dtype=float,
-        )
-        if not np.isfinite(jacobian).all():
-            return None
-
-        # Truncated pseudo-inverse keeps a nearly edge-on axis from exploding
-        # while preserving the intuitive screen direction of the well-defined
-        # axis.  At normal CNC working angles this behaves as true 1:1 dragging.
-        xy_delta = np.linalg.pinv(jacobian, rcond=0.12) @ mouse_delta
-        if not np.isfinite(xy_delta).all():
-            return None
-
-        # Guard against any remaining pathological perspective gain.  One mouse
-        # pixel can move at most ~1.35 view-scale pixels worth of world distance.
-        max_distance = max(
+        max_delta = max(
             float(world_per_pixel) * pixel_distance * 1.35,
             0.02,
         )
-        move_distance = float(np.linalg.norm(xy_delta))
-        if move_distance > max_distance and move_distance > 1e-12:
-            xy_delta *= max_distance / move_distance
+        return max(-max_delta, min(max_delta, axis_delta))
 
-        return xy_delta
+    def _gizmo_axis_vertices(
+        self,
+        axis: int,
+        *,
+        view_projection: QMatrix4x4,
+        world_per_pixel: float,
+    ) -> np.ndarray:
+        data = self._gizmo_axis_data(
+            axis,
+            view_projection=view_projection,
+            world_per_pixel=world_per_pixel,
+        )
+        if data is None:
+            return np.empty((0, 3), dtype=np.float32)
+
+        pivot, endpoint, _start, _end = data
+        direction = endpoint - pivot
+        length = float(np.linalg.norm(direction))
+        if length <= 1e-12:
+            return np.empty((0, 3), dtype=np.float32)
+        direction /= length
+
+        _right, _up, view = self._camera_basis()
+        side = np.cross(direction, view)
+        side_length = float(np.linalg.norm(side))
+        if side_length <= 1e-9:
+            side = np.cross(direction, np.array((0.0, 0.0, 1.0)))
+            side_length = float(np.linalg.norm(side))
+        if side_length <= 1e-9:
+            side = np.array((1.0, 0.0, 0.0), dtype=float)
+        else:
+            side /= side_length
+
+        head_length = length * 0.20
+        wing = head_length * 0.48
+        head_base = endpoint - direction * head_length
+        first_wing = head_base + side * wing
+        second_wing = head_base - side * wing
+
+        return np.asarray(
+            (
+                pivot,
+                endpoint,
+                endpoint,
+                first_wing,
+                endpoint,
+                second_wing,
+            ),
+            dtype=np.float32,
+        )
+
+    def _draw_translation_gizmo(
+        self,
+        view_projection: QMatrix4x4,
+        world_per_pixel: float,
+    ) -> None:
+        if self._selected_gizmo_pivot() is None or self._functions is None:
+            return
+
+        colors = (
+            QVector4D(0.96, 0.30, 0.28, 1.0),
+            QVector4D(0.30, 0.90, 0.38, 1.0),
+            QVector4D(0.30, 0.55, 1.00, 1.0),
+        )
+        active_color = QVector4D(1.0, 0.86, 0.25, 1.0)
+
+        # Translation handles are controls, not scene geometry.  Render them on
+        # top so a handle cannot disappear inside the selected mesh.
+        self._functions.glDisable(GL_DEPTH_TEST)
+        try:
+            for axis, color in enumerate(colors):
+                self._draw_lines(
+                    self._gizmo_axis_vertices(
+                        axis,
+                        view_projection=view_projection,
+                        world_per_pixel=world_per_pixel,
+                    ),
+                    view_projection=view_projection,
+                    color=(
+                        active_color
+                        if axis == self._active_gizmo_axis
+                        else color
+                    ),
+                )
+        finally:
+            self._functions.glEnable(GL_DEPTH_TEST)
 
     def _selected_bounds_geometry(self) -> np.ndarray:
         """Return line vertices for the selected item's world-space AABB."""
@@ -1395,6 +1591,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             view_projection=view_projection,
             color=QVector4D(0.784, 1.0, 0.239, 0.95),
         )
+        self._draw_translation_gizmo(
+            view_projection,
+            world_per_pixel,
+        )
 
     def _pan_pixels(self, delta: QPointF) -> None:
         _projection, _view, world_per_pixel = self._camera_geometry()
@@ -1418,20 +1618,39 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index = None
         self._interaction_distance = 0.0
         self._object_drag_started = False
+        self._active_gizmo_axis = None
 
         if event.button() == Qt.MouseButton.LeftButton:
             force_orbit = bool(
                 event.modifiers() & Qt.KeyboardModifier.AltModifier
             )
-            item_index = None if force_orbit else self.pick_item(event.position())
-            if item_index is not None:
-                self._press_item_index = item_index
-                self.selected_item_index = item_index
-                self.itemSelectionRequested.emit(item_index)
-                self._interaction_mode = "object"
+            gizmo_axis = None if force_orbit else self.pick_gizmo_axis(
+                event.position()
+            )
+            if (
+                gizmo_axis is not None
+                and self.selected_item_index is not None
+            ):
+                self._press_item_index = self.selected_item_index
+                self._active_gizmo_axis = gizmo_axis
+                self._interaction_mode = "gizmo"
                 self.requestUpdate()
             else:
-                self._interaction_mode = "orbit"
+                item_index = (
+                    None
+                    if force_orbit
+                    else self.pick_item(event.position())
+                )
+                if item_index is not None:
+                    # Clicking the mesh selects it, but never moves it.  Mouse
+                    # translation is deliberately gated behind the XYZ gizmo.
+                    self._press_item_index = item_index
+                    self.selected_item_index = item_index
+                    self.itemSelectionRequested.emit(item_index)
+                    self._interaction_mode = "select"
+                    self.requestUpdate()
+                else:
+                    self._interaction_mode = "orbit"
         elif event.button() in {
             Qt.MouseButton.RightButton,
             Qt.MouseButton.MiddleButton,
@@ -1454,25 +1673,24 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
-            and self._interaction_mode == "object"
+            and self._interaction_mode == "gizmo"
             and self._press_item_index is not None
+            and self._active_gizmo_axis is not None
             and self.project is not None
         ):
-            xy_delta = self._object_drag_xy_delta(
+            axis_delta = self._gizmo_axis_drag_delta(
                 self._press_item_index,
+                self._active_gizmo_axis,
                 delta,
             )
-            if xy_delta is not None:
+            if axis_delta is not None and abs(axis_delta) > 1e-12:
                 if not self._object_drag_started:
                     self._object_drag_started = True
                     self.itemTransformStarted.emit(self._press_item_index)
                 item = self.project.items[self._press_item_index]
-                tx, ty, tz = item.transform.translation_mm
-                item.transform.translation_mm = (
-                    tx + float(xy_delta[0]),
-                    ty + float(xy_delta[1]),
-                    tz,
-                )
+                translation = list(item.transform.translation_mm)
+                translation[self._active_gizmo_axis] += float(axis_delta)
+                item.transform.translation_mm = tuple(translation)
                 self.itemTransformChanged.emit(self._press_item_index)
                 self.requestUpdate()
                 self.viewChanged.emit()
@@ -1508,7 +1726,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if (
             event.button() == Qt.MouseButton.LeftButton
-            and self._interaction_mode == "object"
+            and self._interaction_mode == "gizmo"
             and self._object_drag_started
             and self._press_item_index is not None
         ):
@@ -1542,6 +1760,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_mode = None
         self._interaction_distance = 0.0
         self._object_drag_started = False
+        self._active_gizmo_axis = None
+        self.requestUpdate()
         event.accept()
 
     def keyPressEvent(self, event) -> None:
