@@ -241,6 +241,12 @@ class MainWindow(QMainWindow):
         )
         reverse_horizontal.setCheckable(True)
         self._option_buttons["reverse_horizontal"] = reverse_horizontal
+        invert_vertical = viewport_options.add_button(
+            "Invert\nVertical",
+            self._toggle_invert_vertical_option,
+        )
+        invert_vertical.setCheckable(True)
+        self._option_buttons["invert_vertical"] = invert_vertical
         stock_option = viewport_options.add_button("Stock", self._toggle_stock)
         stock_option.setCheckable(True)
         self._option_buttons["stock"] = stock_option
@@ -857,9 +863,15 @@ class MainWindow(QMainWindow):
         stock_visible = self._settings_bool("viewport/show_stock", True)
         grid_visible = self._settings_bool("viewport/show_grid", True)
         rulers_visible = self._settings_bool("viewport/show_rulers", True)
+        # Navigation inversion uses new setting keys because the earlier
+        # reverse-horizontal option had different pan semantics.
         reverse_horizontal = self._settings_bool(
-            "viewport/reverse_horizontal_drag",
-            True,
+            "viewport/reverse_horizontal_navigation",
+            False,
+        )
+        invert_vertical = self._settings_bool(
+            "viewport/invert_vertical_navigation",
+            False,
         )
 
         self.project_panel.setVisible(project_panel_visible)
@@ -870,6 +882,7 @@ class MainWindow(QMainWindow):
         self.viewport.show_grid = grid_visible
         self.viewport.set_rulers_visible(rulers_visible)
         self.viewport.set_reverse_horizontal_drag(reverse_horizontal)
+        self.viewport.set_invert_vertical_drag(invert_vertical)
 
         stored_sizes = self._settings.value("interface/splitter_sizes")
         if isinstance(stored_sizes, list) and len(stored_sizes) == 3:
@@ -902,6 +915,7 @@ class MainWindow(QMainWindow):
         self._set_option_checked("grid", grid_visible)
         self._set_option_checked("rulers", rulers_visible)
         self._set_option_checked("reverse_horizontal", reverse_horizontal)
+        self._set_option_checked("invert_vertical", invert_vertical)
         self.viewport.update()
 
     def _save_viewport_mode(self) -> None:
@@ -936,9 +950,14 @@ class MainWindow(QMainWindow):
         self._settings.setValue("viewport/show_grid", self.viewport.show_grid)
         self._settings.setValue("viewport/show_rulers", self.viewport.rulers_visible)
         self._settings.setValue(
-            "viewport/reverse_horizontal_drag",
+            "viewport/reverse_horizontal_navigation",
             self.viewport.reverse_horizontal_drag,
         )
+        self._settings.setValue(
+            "viewport/invert_vertical_navigation",
+            self.viewport.invert_vertical_drag,
+        )
+        self._settings.remove("viewport/reverse_horizontal_drag")
         self._save_viewport_mode()
         self._settings.sync()
 
@@ -976,7 +995,21 @@ class MainWindow(QMainWindow):
         self._set_option_checked("reverse_horizontal", enabled)
         self._save_interface_options()
         state = "reversed" if enabled else "standard"
-        self.statusBar().showMessage(f"Horizontal viewport drag: {state}", 2500)
+        self.statusBar().showMessage(
+            f"Horizontal pan + orbit: {state}",
+            2500,
+        )
+
+    def _toggle_invert_vertical_option(self) -> None:
+        enabled = not self.viewport.invert_vertical_drag
+        self.viewport.set_invert_vertical_drag(enabled)
+        self._set_option_checked("invert_vertical", enabled)
+        self._save_interface_options()
+        state = "inverted" if enabled else "standard"
+        self.statusBar().showMessage(
+            f"Vertical pan + orbit: {state}",
+            2500,
+        )
 
     def _toggle_stock(self) -> None:
         self.viewport.toggle_stock()
@@ -1029,7 +1062,8 @@ class MainWindow(QMainWindow):
         self.viewport.show_stock = True
         self.viewport.show_grid = True
         self.viewport.set_rulers_visible(True)
-        self.viewport.set_reverse_horizontal_drag(True)
+        self.viewport.set_reverse_horizontal_drag(False)
+        self.viewport.set_invert_vertical_drag(False)
         self.viewport.yaw_deg = 45.0
         self.viewport.elevation_deg = 35.0
         self.viewport.set_orthographic_view()
@@ -1042,9 +1076,10 @@ class MainWindow(QMainWindow):
             "stock",
             "grid",
             "rulers",
-            "reverse_horizontal",
         ):
             self._set_option_checked(key, True)
+        self._set_option_checked("reverse_horizontal", False)
+        self._set_option_checked("invert_vertical", False)
 
         self.viewport.update()
         self._save_interface_options()
