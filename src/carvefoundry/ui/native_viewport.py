@@ -153,11 +153,14 @@ class _GpuMesh:
 
 @dataclass(slots=True)
 class _CameraState:
-    yaw_deg: float = 45.0
-    elevation_deg: float = 35.0
+    # Default to a CNC-friendly XY plan view: +X right, +Y up, with the
+    # stock origin at the lower-left.  Perspective remains the default
+    # projection so orbiting immediately behaves like a 3D workspace.
+    yaw_deg: float = 0.0
+    elevation_deg: float = 90.0
     zoom: float = 1.0
     pan_world: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    projection_mode: str = "orthographic"
+    projection_mode: str = "perspective"
 
 
 class _NativeOpenGLViewport(QOpenGLWindow):
@@ -1382,12 +1385,14 @@ class MeshViewport(QWidget):
 
         self._projection_combo = QComboBox()
         self._projection_combo.addItems(("Orthographic", "Perspective"))
+        self._projection_combo.setCurrentText("Perspective")
         self._projection_combo.currentTextChanged.connect(self._projection_changed)
 
         self._view_combo = QComboBox()
         self._view_combo.addItems(
             ("Free", "Isometric", "Top", "Bottom", "Front", "Back", "Left", "Right")
         )
+        self._view_combo.setCurrentText("Top")
         self._view_combo.currentTextChanged.connect(self._view_changed)
 
         self._controls = QWidget()
@@ -1593,7 +1598,12 @@ class MeshViewport(QWidget):
         self.fit_view()
         self.viewSettingsChanged.emit()
 
-    def set_standard_view(self, name: str) -> None:
+    def set_standard_view(
+        self,
+        name: str,
+        *,
+        projection_mode: str = "orthographic",
+    ) -> None:
         orientations = {
             "Top": (0.0, 90.0),
             "Bottom": (0.0, -90.0),
@@ -1604,13 +1614,22 @@ class MeshViewport(QWidget):
         }
         if name not in orientations:
             raise ValueError(f"Unknown standard view: {name}")
+        if projection_mode not in {"orthographic", "perspective"}:
+            raise ValueError(f"Unknown projection mode: {projection_mode}")
 
-        self._renderer.projection_mode = "orthographic"
+        self._renderer.projection_mode = projection_mode
         self._renderer.yaw_deg, self._renderer.elevation_deg = orientations[name]
-        self._set_projection_combo("Orthographic")
+        self._set_projection_combo(
+            "Perspective" if projection_mode == "perspective" else "Orthographic"
+        )
         self._set_view_combo(name)
         self.fit_view()
         self.viewSettingsChanged.emit()
+
+    def set_default_view(self) -> None:
+        """Restore the default top-down XY view using perspective projection."""
+
+        self.set_standard_view("Top", projection_mode="perspective")
 
     def _orbit_started(self) -> None:
         if self.view_name != "Free":
