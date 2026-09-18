@@ -382,6 +382,7 @@ class RibbonActionsMixin:
             ),
             source_units=item.source_units,
             group_id=group_id,
+            text_properties=item.text_properties,
         )
 
     def _unique_item_name(self, stem: str) -> str:
