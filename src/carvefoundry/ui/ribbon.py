@@ -142,9 +142,9 @@ class RibbonButton(QtWidgets.QToolButton):
         self.setText(text)
         self.setIcon(_ribbon_icon(text))
         self.setObjectName("RibbonPrimary" if primary else "RibbonButton")
-        self.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        self.setIconSize(QtCore.QSize(28, 28))
-        self.setMinimumHeight(68)
+        self.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setIconSize(QtCore.QSize(18, 18))
+        self.setMinimumHeight(38)
         self.setToolTip(text.replace("\n", " "))
 
         # Size to the visible label instead of Qt eliding it with "...".
@@ -152,7 +152,8 @@ class RibbonButton(QtWidgets.QToolButton):
         # every button to the width of its full phrase.
         longest_line = max(text.splitlines(), key=len, default=text)
         label_width = self.fontMetrics().horizontalAdvance(longest_line)
-        self.setMinimumWidth(max(58, label_width + 24))
+        self.setMinimumWidth(max(44, label_width + 32))
+        self.setMaximumWidth(max(92, label_width + 42))
         if callback is not None:
             self.clicked.connect(lambda _checked=False: callback())
 
@@ -173,8 +174,8 @@ class RibbonSelector(QtWidgets.QWidget):
         super().__init__()
         self.setObjectName("RibbonSelector")
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(2, 5, 2, 4)
-        layout.setSpacing(3)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
 
         label = QtWidgets.QLabel(title)
         label.setObjectName("RibbonSelectorTitle")
@@ -198,7 +199,7 @@ class RibbonSelector(QtWidgets.QWidget):
             self.combo.currentTextChanged.connect(callback)
         layout.addWidget(self.combo)
 
-        self.setMinimumHeight(68)
+        self.setMinimumHeight(46)
 
 
 class RibbonSlider(QtWidgets.QWidget):
@@ -220,7 +221,7 @@ class RibbonSlider(QtWidgets.QWidget):
         super().__init__()
         self.setObjectName("RibbonSlider")
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(4, 3, 4, 2)
+        layout.setContentsMargins(3, 2, 3, 1)
         layout.setSpacing(1)
 
         title_label = QtWidgets.QLabel(title)
@@ -265,7 +266,7 @@ class RibbonSlider(QtWidgets.QWidget):
             self.slider.valueChanged.connect(callback)
 
         self.setMinimumWidth(minimum_width)
-        self.setMinimumHeight(68)
+        self.setMinimumHeight(46)
 
     def set_readout(self, text: str) -> None:
         self.readout.setText(text)
@@ -276,10 +277,10 @@ class RibbonGroup(QtWidgets.QFrame):
         super().__init__()
         self.setObjectName("RibbonGroup")
         outer = QtWidgets.QVBoxLayout(self)
-        outer.setContentsMargins(8, 6, 8, 4)
-        outer.setSpacing(3)
+        outer.setContentsMargins(5, 3, 5, 2)
+        outer.setSpacing(2)
         self.buttons = QtWidgets.QHBoxLayout()
-        self.buttons.setSpacing(3)
+        self.buttons.setSpacing(2)
         outer.addLayout(self.buttons, 1)
         label = QtWidgets.QLabel(title)
         label.setObjectName("RibbonGroupTitle")
@@ -374,8 +375,8 @@ class RibbonPage(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.layout_ = QtWidgets.QHBoxLayout(self.content)
-        self.layout_.setContentsMargins(8, 6, 8, 4)
-        self.layout_.setSpacing(6)
+        self.layout_.setContentsMargins(5, 3, 5, 2)
+        self.layout_.setSpacing(4)
         self.layout_.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         self.layout_.setSizeConstraint(
             QtWidgets.QLayout.SizeConstraint.SetMinAndMaxSize
@@ -397,7 +398,7 @@ class Ribbon(QtWidgets.QTabWidget):
         self.setDocumentMode(True)
         self.setMovable(False)
         self.setTabsClosable(False)
-        self.setFixedHeight(140)
+        self.setFixedHeight(104)
 
     def add_page(self, title: str) -> RibbonPage:
         page = RibbonPage()
