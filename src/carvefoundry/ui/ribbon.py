@@ -20,6 +20,7 @@ _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
     "duplicate": ("edit-copy",),
     "move up": ("go-up",),
     "move down": ("go-down",),
+    "select": ("input-mouse", "edit-select", "transform-move"),
     "rectangle": ("draw-rectangle",),
     "ellipse": ("draw-ellipse",),
     "polygon": ("draw-polygon",),
