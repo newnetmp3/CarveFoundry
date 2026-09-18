@@ -111,7 +111,6 @@ void main()
 
 _STOCK_FRAGMENT_SHADER = """
 #version 330 core
-in vec3 v_world_position;
 
 uniform vec4 u_base_color;
 
@@ -119,19 +118,7 @@ out vec4 frag_color;
 
 void main()
 {
-    float warp =
-        sin(v_world_position.y * 0.055) * 3.5
-        + sin(v_world_position.y * 0.017) * 7.0
-        + sin(v_world_position.z * 0.11) * 1.8;
-
-    float broad = 0.5 + 0.5 * sin((v_world_position.x + warp) * 0.16);
-    float fine = 0.5 + 0.5 * sin((v_world_position.x * 0.72) + (warp * 0.55));
-    float grain = mix(broad, fine, 0.35);
-
-    float brightness = 0.78 + grain * 0.22;
-    float alpha = u_base_color.a * (0.82 + grain * 0.18);
-
-    frag_color = vec4(u_base_color.rgb * brightness, alpha);
+    frag_color = u_base_color;
 }
 """
 
