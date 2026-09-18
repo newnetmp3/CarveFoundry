@@ -355,7 +355,7 @@ class MainWindow(_BaseMainWindow):
         try:
             project = load_project(target)
         except ProjectFileError as exc:
-            self.selection_info.setText(f"Project open failed\n{exc}")
+            self._set_activity_info(f"Project open failed\n{exc}")
             self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
             return
 
@@ -367,11 +367,25 @@ class MainWindow(_BaseMainWindow):
     def _project_item_changed(self, list_item) -> None:
         snapshot = capture_workspace(self.project)
         selected_row = self.project_list.currentRow()
-        before = tuple(item.visible for item in self.project.items)
+        before = tuple(
+            (item.name, item.visible)
+            for item in self.project.items
+        )
         super()._project_item_changed(list_item)
-        after = tuple(item.visible for item in self.project.items)
-        if after != before:
-            self._record_undo(snapshot, selected_row, "visibility")
+        after = tuple(
+            (item.name, item.visible)
+            for item in self.project.items
+        )
+        if after == before:
+            return
+
+        renamed = any(
+            old_name != new_name
+            for (old_name, _old_visible), (new_name, _new_visible)
+            in zip(before, after, strict=True)
+        )
+        label = "rename object" if renamed else "visibility"
+        self._record_undo(snapshot, selected_row, label)
 
     def _stock_control_changed(self, value: float) -> None:
         snapshot = capture_workspace(self.project)
