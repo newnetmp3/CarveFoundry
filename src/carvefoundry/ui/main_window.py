@@ -46,6 +46,53 @@ from .ribbon_actions import RibbonActionsMixin
 from .viewport import MeshViewport
 
 
+_FONT_FAMILY_VARIANT_SUFFIXES: tuple[tuple[str, str], ...] = (
+    ("Extra Condensed", "Extra Condensed"),
+    ("ExtraCondensed", "Extra Condensed"),
+    ("Ultra Condensed", "Ultra Condensed"),
+    ("UltraCondensed", "Ultra Condensed"),
+    ("Semi Condensed", "Semi Condensed"),
+    ("SemiCondensed", "Semi Condensed"),
+    ("Semi Expanded", "Semi Expanded"),
+    ("SemiExpanded", "Semi Expanded"),
+    ("Extra Expanded", "Extra Expanded"),
+    ("ExtraExpanded", "Extra Expanded"),
+    ("Ultra Expanded", "Ultra Expanded"),
+    ("UltraExpanded", "Ultra Expanded"),
+    ("Extra Light", "ExtraLight"),
+    ("ExtraLight", "ExtraLight"),
+    ("Ultra Light", "UltraLight"),
+    ("UltraLight", "UltraLight"),
+    ("Semi Light", "SemiLight"),
+    ("SemiLight", "SemiLight"),
+    ("Demi Bold", "DemiBold"),
+    ("DemiBold", "DemiBold"),
+    ("Semi Bold", "SemiBold"),
+    ("SemiBold", "SemiBold"),
+    ("Extra Bold", "ExtraBold"),
+    ("ExtraBold", "ExtraBold"),
+    ("Ultra Bold", "UltraBold"),
+    ("UltraBold", "UltraBold"),
+    ("Condensed", "Condensed"),
+    ("Compressed", "Compressed"),
+    ("Expanded", "Expanded"),
+    ("Extended", "Extended"),
+    ("Narrow", "Narrow"),
+    ("Display", "Display"),
+    ("Headline", "Headline"),
+    ("Caption", "Caption"),
+    ("Text", "Text"),
+    ("Thin", "Thin"),
+    ("Light", "Light"),
+    ("Book", "Book"),
+    ("Medium", "Medium"),
+    ("Bold", "Bold"),
+    ("Black", "Black"),
+    ("Heavy", "Heavy"),
+    ("Regular", "Regular"),
+)
+
+
 class Panel(QFrame):
     def __init__(self, title: str):
         super().__init__()
@@ -917,6 +964,123 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             families = list(QFontDatabase.families())
         return families
 
+    @staticmethod
+    def _font_family_variant_candidate(family: str) -> tuple[str, str]:
+        """Split common family-level alternatives from a font family name."""
+
+        remaining = family.strip()
+        parts: list[str] = []
+        while remaining:
+            matched = False
+            folded = remaining.casefold()
+            for suffix, label in _FONT_FAMILY_VARIANT_SUFFIXES:
+                needle = f" {suffix}".casefold()
+                if not folded.endswith(needle):
+                    continue
+                base = remaining[: -len(suffix)].rstrip()
+                if not base:
+                    continue
+                remaining = base
+                parts.insert(0, label)
+                matched = True
+                break
+            if not matched:
+                break
+        return remaining or family, " ".join(parts) or "Regular"
+
+    @classmethod
+    def _group_text_font_families(
+        cls,
+        families: list[str],
+    ) -> dict[str, list[tuple[str, str]]]:
+        """Group concrete installed families under uncluttered base names."""
+
+        candidates = {
+            family: cls._font_family_variant_candidate(family)
+            for family in families
+        }
+        family_names = {family.casefold() for family in families}
+        candidate_counts: dict[str, int] = {}
+        for base, variant in candidates.values():
+            if variant == "Regular":
+                continue
+            key = base.casefold()
+            candidate_counts[key] = candidate_counts.get(key, 0) + 1
+
+        grouped: dict[str, list[tuple[str, str]]] = {}
+        for family in families:
+            base, variant = candidates[family]
+            can_group = variant != "Regular" and (
+                base.casefold() in family_names
+                or candidate_counts.get(base.casefold(), 0) >= 2
+            )
+            if not can_group:
+                base, variant = family, "Regular"
+            grouped.setdefault(base, []).append((variant, family))
+
+        result: dict[str, list[tuple[str, str]]] = {}
+        for base in sorted(grouped, key=str.casefold):
+            variants = grouped[base]
+            variants.sort(
+                key=lambda item: (
+                    item[0] != "Regular",
+                    item[0].casefold(),
+                    item[1].casefold(),
+                )
+            )
+            result[base] = variants
+        return result
+
+    def _font_group_for_family(self, family: str) -> tuple[str, str]:
+        for base, variants in self._text_font_groups.items():
+            for variant, concrete_family in variants:
+                if concrete_family == family:
+                    return base, variant
+        first_base = next(iter(self._text_font_groups), "")
+        return first_base, "Regular"
+
+    def _selected_text_font_family(self) -> str:
+        if hasattr(self, "text_font_variant_combo"):
+            family = self.text_font_variant_combo.currentData()
+            if isinstance(family, str) and family:
+                return family
+        base = self.text_font_combo.currentText()
+        variants = self._text_font_groups.get(base, [])
+        if variants:
+            return variants[0][1]
+        return QFontInfo(QFont()).family()
+
+    def _refresh_text_font_variants(
+        self,
+        base_family: str,
+        preferred_family: str | None = None,
+    ) -> None:
+        variants = self._text_font_groups.get(base_family, [])
+        self.text_font_variant_combo.blockSignals(True)
+        try:
+            self.text_font_variant_combo.clear()
+            for label, concrete_family in variants:
+                self.text_font_variant_combo.addItem(label, concrete_family)
+                index = self.text_font_variant_combo.count() - 1
+                self.text_font_variant_combo.setItemData(
+                    index,
+                    QFont(concrete_family),
+                    Qt.ItemDataRole.FontRole,
+                )
+            index = -1
+            if preferred_family:
+                index = self.text_font_variant_combo.findData(
+                    preferred_family
+                )
+            if index < 0:
+                index = self.text_font_variant_combo.findText("Regular")
+            self.text_font_variant_combo.setCurrentIndex(max(0, index))
+            self.text_font_variant_combo.setEnabled(
+                self.text_font_variant_combo.count() > 1
+            )
+        finally:
+            self.text_font_variant_combo.blockSignals(False)
+
     def _build_stock_controls(self) -> QWidget:
         widget = QWidget()
         widget.setObjectName("StockControls")
@@ -980,15 +1144,19 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._configure_inspector_form(typography_form)
         layout.addLayout(typography_form)
 
+        installed_families = self._installed_text_font_families()
+        self._text_font_groups = self._group_text_font_families(
+            installed_families
+        )
+
         self.text_font_combo = QComboBox()
-        for family in self._installed_text_font_families():
-            self.text_font_combo.addItem(family)
+        for base_family, variants in self._text_font_groups.items():
+            preview_family = variants[0][1]
+            self.text_font_combo.addItem(base_family, preview_family)
             item_index = self.text_font_combo.count() - 1
-            # Preview each usable text family in its own typeface without
-            # invoking QFontComboBox's eager probing of symbol/icon fonts.
             self.text_font_combo.setItemData(
                 item_index,
-                QFont(family),
+                QFont(preview_family),
                 Qt.ItemDataRole.FontRole,
             )
         self.text_font_combo.setSizeAdjustPolicy(
@@ -997,18 +1165,38 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_font_combo.setMinimumContentsLength(10)
         self._configure_inspector_field(self.text_font_combo)
         self.text_font_combo.setToolTip(
-            "Installed system text fonts, previewed in their own typeface. "
-            "Symbol-only/icon families are hidden because they do not provide "
-            "normal text glyphs for CNC geometry."
-        )
-        default_family = QFontInfo(QFont()).family()
-        default_index = self.text_font_combo.findText(default_family)
-        if default_index >= 0:
-            self.text_font_combo.setCurrentIndex(default_index)
-        self.text_font_combo.currentTextChanged.connect(
-            self._text_font_changed
+            "Base font families, previewed in their own typeface. Family-level "
+            "alternatives such as Condensed or SemiBold are in Variant."
         )
         typography_form.addRow("Font", self.text_font_combo)
+
+        self.text_font_variant_combo = QComboBox()
+        self.text_font_variant_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.text_font_variant_combo.setMinimumContentsLength(8)
+        self._configure_inspector_field(self.text_font_variant_combo)
+        self.text_font_variant_combo.setToolTip(
+            "Installed alternatives belonging to the selected base family."
+        )
+        typography_form.addRow("Variant", self.text_font_variant_combo)
+
+        default_family = QFontInfo(QFont()).family()
+        default_base, _default_variant = self._font_group_for_family(
+            default_family
+        )
+        default_index = self.text_font_combo.findText(default_base)
+        self.text_font_combo.setCurrentIndex(max(0, default_index))
+        self._refresh_text_font_variants(
+            self.text_font_combo.currentText(),
+            default_family,
+        )
+        self.text_font_combo.currentTextChanged.connect(
+            self._text_font_group_changed
+        )
+        self.text_font_variant_combo.currentIndexChanged.connect(
+            self._text_font_variant_changed
+        )
 
         self.text_font_style_combo = QComboBox()
         self.text_font_style_combo.setSizeAdjustPolicy(
@@ -1283,7 +1471,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_cnc_hint.setWordWrap(True)
         layout.addWidget(self.text_cnc_hint)
 
-        initial_family = self.text_font_combo.currentText()
+        initial_family = self._selected_text_font_family()
         self._refresh_text_font_styles(initial_family, "Regular")
         self._update_text_editor_preview(initial_family)
 
@@ -2501,7 +2689,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     ) -> None:
         family = (
             requested_family
-            or self.text_font_combo.currentText()
+            or self._selected_text_font_family()
             or QFont().family()
         )
         preview_font = QFont(family)
@@ -2522,7 +2710,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _update_text_font_availability(self, requested_family: str) -> None:
         installed = set(QFontDatabase.families())
         if requested_family and requested_family not in installed:
-            fallback = self.text_font_combo.currentText()
+            fallback = self._selected_text_font_family()
             self.text_font_warning.setText(
                 f"Font “{requested_family}” is not installed. "
                 f"Showing {fallback or 'the system fallback'}; install the "
@@ -2544,10 +2732,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._updating_text_controls = True
         try:
             self.text_editor.setPlainText(properties.content)
-            font_index = self.text_font_combo.findText(display_family)
-            if font_index < 0:
-                font_index = self.text_font_combo.findText(QFont().family())
+            base_family, _variant = self._font_group_for_family(
+                display_family
+            )
+            font_index = self.text_font_combo.findText(base_family)
             self.text_font_combo.setCurrentIndex(max(0, font_index))
+            self._refresh_text_font_variants(
+                self.text_font_combo.currentText(),
+                display_family,
+            )
+            display_family = self._selected_text_font_family()
             self._refresh_text_font_styles(
                 display_family,
                 properties.font_style,
@@ -2619,7 +2813,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return font.bold(), font.italic()
 
     def _set_text_emphasis_buttons_from_style(self) -> None:
-        family = self.text_font_combo.currentText()
+        family = self._selected_text_font_family()
         style = self.text_font_style_combo.currentText()
         style_bold, style_italic = self._text_style_traits(
             family,
@@ -2640,7 +2834,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         bold: bool,
         italic: bool,
     ) -> None:
-        family = self.text_font_combo.currentText()
+        family = self._selected_text_font_family()
         styles = list(QFontDatabase.styles(family))
         if not styles:
             return
@@ -2678,10 +2872,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._set_text_emphasis_buttons_from_style()
         self._text_control_changed()
 
-    def _text_font_changed(self, family: str) -> None:
+    def _text_font_group_changed(self, base_family: str) -> None:
         if self._updating_text_controls:
             return
-        self._refresh_text_font_styles(family, "Regular")
+        self._refresh_text_font_variants(base_family)
+        self._apply_text_font_selection_change()
+
+    def _text_font_variant_changed(self, _index: int) -> None:
+        if self._updating_text_controls:
+            return
+        self._apply_text_font_selection_change()
+
+    def _apply_text_font_selection_change(self) -> None:
+        family = self._selected_text_font_family()
+        preferred_style = self.text_font_style_combo.currentText() or "Regular"
+        self._refresh_text_font_styles(family, preferred_style)
         self._set_text_emphasis_buttons_from_style()
         self._update_text_font_availability(family)
         self._update_text_editor_preview(family)
@@ -2751,7 +2956,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _text_properties_from_controls(self) -> TextProperties:
         return TextProperties(
             content=self.text_editor.toPlainText(),
-            font_family=self.text_font_combo.currentText(),
+            font_family=self._selected_text_font_family(),
             font_style=self.text_font_style_combo.currentText() or "Regular",
             size_pt=float(self.text_size_spin.value()),
             bold=self.text_bold_button.isChecked(),
