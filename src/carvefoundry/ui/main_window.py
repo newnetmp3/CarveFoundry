@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
 
         interface = options.add_group("Interface")
         project_panel = interface.add_button(
-            "Project Panel",
+            "Project\nPanel",
             self._toggle_project_panel_option,
         )
         project_panel.setCheckable(True)
@@ -224,11 +224,11 @@ class MainWindow(QMainWindow):
         )
         properties_panel.setCheckable(True)
         self._option_buttons["properties_panel"] = properties_panel
-        status_bar = interface.add_button("Status Bar", self._toggle_status_bar_option)
+        status_bar = interface.add_button("Status\nBar", self._toggle_status_bar_option)
         status_bar.setCheckable(True)
         self._option_buttons["status_bar"] = status_bar
         view_controls = interface.add_button(
-            "View Controls",
+            "View\nControls",
             self._toggle_view_controls_option,
         )
         view_controls.setCheckable(True)
@@ -236,7 +236,7 @@ class MainWindow(QMainWindow):
 
         viewport_options = options.add_group("Viewport")
         reverse_horizontal = viewport_options.add_button(
-            "Reverse Horizontal",
+            "Reverse\nHorizontal",
             self._toggle_reverse_horizontal_option,
         )
         reverse_horizontal.setCheckable(True)
