@@ -183,7 +183,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.camera = _CameraState()
         self.show_stock = True
         self.show_grid = True
-        self.reverse_horizontal_drag = True
+        self.reverse_horizontal_drag = False
+        self.invert_vertical_drag = False
 
         self._last_mouse_pos: QPointF | None = None
         self._functions = None
@@ -273,6 +274,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def set_reverse_horizontal_drag(self, enabled: bool) -> None:
         self.reverse_horizontal_drag = bool(enabled)
+
+    def set_invert_vertical_drag(self, enabled: bool) -> None:
+        self.invert_vertical_drag = bool(enabled)
 
     @staticmethod
     def _compile_program(
@@ -1147,10 +1151,14 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         _projection, _view, world_per_pixel = self._camera_geometry()
         right, up, _forward = self._camera_basis()
 
+        # Default pan behaves like grabbing the workpiece: dragging right/down
+        # moves the scene right/down.  The navigation inversion options flip
+        # the corresponding screen axes for both pan and orbit.
         horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
+        vertical = -delta.y() if self.invert_vertical_drag else delta.y()
         world_delta = (
             -right * horizontal * world_per_pixel
-            + up * delta.y() * world_per_pixel
+            + up * vertical * world_per_pixel
         )
         pan = np.asarray(self.camera.pan_world, dtype=float) + world_delta
         self.camera.pan_world = tuple(float(value) for value in pan)
@@ -1168,11 +1176,15 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._last_mouse_pos = event.position()
 
         if event.buttons() & Qt.MouseButton.LeftButton:
-            horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
+            # The preferred default orbit direction is the former reversed
+            # horizontal behavior.  "Reverse Horizontal" flips both orbit and
+            # pan relative to their natural defaults.
+            horizontal = delta.x() if self.reverse_horizontal_drag else -delta.x()
+            vertical = -delta.y() if self.invert_vertical_drag else delta.y()
             self.camera.yaw_deg += horizontal * 0.45
             self.camera.elevation_deg = max(
                 -85.0,
-                min(85.0, self.camera.elevation_deg + delta.y() * 0.35),
+                min(85.0, self.camera.elevation_deg + vertical * 0.35),
             )
             self.orbitStarted.emit()
             self.requestUpdate()
@@ -1459,6 +1471,10 @@ class MeshViewport(QWidget):
         return self._renderer.reverse_horizontal_drag
 
     @property
+    def invert_vertical_drag(self) -> bool:
+        return self._renderer.invert_vertical_drag
+
+    @property
     def rulers_visible(self) -> bool:
         return self._rulers_visible
 
@@ -1506,6 +1522,9 @@ class MeshViewport(QWidget):
 
     def set_reverse_horizontal_drag(self, enabled: bool) -> None:
         self._renderer.set_reverse_horizontal_drag(enabled)
+
+    def set_invert_vertical_drag(self, enabled: bool) -> None:
+        self._renderer.set_invert_vertical_drag(enabled)
 
     def fit_view(self) -> None:
         self._renderer.fit_view()
