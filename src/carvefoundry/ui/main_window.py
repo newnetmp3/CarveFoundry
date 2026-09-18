@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QProgressBar,
     QPushButton,
     QSplitter,
@@ -97,6 +98,19 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status)
 
         self.viewport.viewSettingsChanged.connect(self._save_viewport_mode)
+        self.viewport.itemSelectionRequested.connect(self._viewport_select_item)
+        self.viewport.itemContextMenuRequested.connect(
+            self._show_viewport_item_context_menu
+        )
+        self.viewport.itemTransformStarted.connect(
+            self._viewport_transform_started
+        )
+        self.viewport.itemTransformChanged.connect(
+            self._viewport_transform_changed
+        )
+        self.viewport.itemTransformFinished.connect(
+            self._viewport_transform_finished
+        )
         self._restore_options()
 
     def _build_brand_row(self) -> QWidget:
@@ -668,6 +682,274 @@ class MainWindow(QMainWindow):
             f"{self._number(thickness)} mm"
         )
         self.viewport.update()
+
+    def _viewport_select_item(self, index: int) -> None:
+        """Synchronize a viewport click with the Project/Layers selection."""
+
+        row = index + 1 if 0 <= index < len(self.project.items) else 0
+        if self.project_list.currentRow() != row:
+            self.project_list.setCurrentRow(row)
+        elif row > 0:
+            self.viewport.set_selected_item(index)
+
+    def _viewport_transform_started(self, _index: int) -> None:
+        """Lifecycle hook overridden by the project-history window."""
+
+    def _viewport_transform_changed(self, index: int) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        row = index + 1
+        if self.project_list.currentRow() != row:
+            self.project_list.setCurrentRow(row)
+            return
+        item = self.project.items[index]
+        self._sync_transform_controls(item)
+        self.selection_info.setText(self._mesh_properties_text(item))
+        self.viewport.set_selected_item(index)
+
+    def _viewport_transform_finished(self, index: int) -> None:
+        self._viewport_transform_changed(index)
+        if 0 <= index < len(self.project.items):
+            item = self.project.items[index]
+            x, y, z = item.transform.translation_mm
+            self.statusBar().showMessage(
+                f"Moved {item.name} — X {x:.2f}  Y {y:.2f}  Z {z:.2f} mm",
+                3000,
+            )
+
+    def _before_context_transform(self, _index: int, _label: str) -> None:
+        """History hook for a discrete viewport/context-menu transform."""
+
+    def _after_context_transform(self, _index: int, _label: str) -> None:
+        """History hook for a discrete viewport/context-menu transform."""
+
+    def _apply_context_transform(
+        self,
+        label: str,
+        transform_action,
+    ) -> None:
+        index = self._selected_item_index()
+        item = self._selected_item()
+        if index is None or item is None or item.mesh is None:
+            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            return
+
+        self._before_context_transform(index, label)
+        transform_action(item)
+        item.transform.validate()
+        self._sync_transform_controls(item)
+        self.selection_info.setText(self._mesh_properties_text(item))
+        self.viewport.set_selected_item(index)
+        self.viewport.update()
+        self._after_context_transform(index, label)
+        self.statusBar().showMessage(f"{label}: {item.name}", 3000)
+
+    def _focus_transform_section(self, section: str) -> None:
+        item = self._selected_item()
+        if item is None or item.mesh is None:
+            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            return
+        self.properties_panel.show()
+        self._set_option_checked("properties_panel", True)
+        controls = {
+            "position": self.position_spins,
+            "rotation": self.rotation_spins,
+            "scale": self.scale_spins,
+        }
+        target = controls.get(section, self.position_spins)
+        target[0].setFocus()
+        target[0].selectAll()
+        self.statusBar().showMessage(
+            "Drag the selected object in the viewport or enter exact transform values",
+            4000,
+        )
+
+    def _move_selected_to_stock_origin(self) -> None:
+        def apply(item: ProjectItem) -> None:
+            bounds = item.transformed_bounds_mm()
+            if bounds is None:
+                return
+            tx, ty, tz = item.transform.translation_mm
+            item.transform.translation_mm = (
+                tx - float(bounds[0, 0]),
+                ty - float(bounds[0, 1]),
+                tz,
+            )
+
+        self._apply_context_transform("Move to stock origin", apply)
+
+    def _bottom_selected_to_surface(self) -> None:
+        def apply(item: ProjectItem) -> None:
+            bounds = item.transformed_bounds_mm()
+            if bounds is None:
+                return
+            tx, ty, tz = item.transform.translation_mm
+            item.transform.translation_mm = (
+                tx,
+                ty,
+                tz - float(bounds[0, 2]),
+            )
+
+        self._apply_context_transform("Bottom to Z0", apply)
+
+    def _place_selected_at_stock_origin(self) -> None:
+        def apply(item: ProjectItem) -> None:
+            bounds = item.transformed_bounds_mm()
+            if bounds is None:
+                return
+            tx, ty, tz = item.transform.translation_mm
+            item.transform.translation_mm = (
+                tx - float(bounds[0, 0]),
+                ty - float(bounds[0, 1]),
+                tz - float(bounds[1, 2]),
+            )
+
+        self._apply_context_transform("Place at stock origin", apply)
+
+    def _rotate_selected_axis(self, axis: int, degrees_delta: float) -> None:
+        axis_name = "XYZ"[axis]
+
+        def apply(item: ProjectItem) -> None:
+            rotation = list(item.transform.rotation_deg)
+            rotation[axis] += degrees_delta
+            item.transform.rotation_deg = tuple(rotation)
+
+        sign = "+" if degrees_delta >= 0 else ""
+        self._apply_context_transform(
+            f"Rotate {axis_name} {sign}{degrees_delta:g}°",
+            apply,
+        )
+
+    def _reset_selected_rotation(self) -> None:
+        self._apply_context_transform(
+            "Reset rotation",
+            lambda item: setattr(
+                item.transform,
+                "rotation_deg",
+                (0.0, 0.0, 0.0),
+            ),
+        )
+
+    def _scale_selected_uniform(self, factor: float) -> None:
+        def apply(item: ProjectItem) -> None:
+            item.transform.scale_xyz = tuple(
+                float(value) * factor for value in item.transform.scale_xyz
+            )
+
+        self._apply_context_transform(f"Scale {factor:g}×", apply)
+
+    def _reset_selected_scale(self) -> None:
+        self._apply_context_transform(
+            "Reset scale",
+            lambda item: setattr(
+                item.transform,
+                "scale_xyz",
+                (1.0, 1.0, 1.0),
+            ),
+        )
+
+    def _fit_selected_inside_stock(self) -> None:
+        def apply(item: ProjectItem) -> None:
+            bounds = item.transformed_bounds_mm()
+            if bounds is None:
+                return
+            dimensions = bounds[1] - bounds[0]
+            width = max(float(dimensions[0]), 1e-9)
+            height = max(float(dimensions[1]), 1e-9)
+            factor = 0.95 * min(
+                float(self.project.stock.width_mm) / width,
+                float(self.project.stock.height_mm) / height,
+            )
+            item.transform.scale_xyz = tuple(
+                float(value) * factor for value in item.transform.scale_xyz
+            )
+
+            fitted_bounds = item.transformed_bounds_mm()
+            if fitted_bounds is None:
+                return
+            center = fitted_bounds.mean(axis=0)
+            tx, ty, tz = item.transform.translation_mm
+            item.transform.translation_mm = (
+                tx + float(self.project.stock.width_mm) / 2.0 - float(center[0]),
+                ty + float(self.project.stock.height_mm) / 2.0 - float(center[1]),
+                tz,
+            )
+
+        self._apply_context_transform("Fit inside stock", apply)
+
+    def _show_viewport_item_context_menu(self, index: int, global_pos) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        self._viewport_select_item(index)
+        item = self.project.items[index]
+
+        menu = QMenu(self)
+        menu.addSection(item.name)
+
+        edit_menu = menu.addMenu("Edit Transform")
+        edit_menu.addAction(
+            "Move / Position…",
+            lambda: self._focus_transform_section("position"),
+        )
+        edit_menu.addAction(
+            "Rotate…",
+            lambda: self._focus_transform_section("rotation"),
+        )
+        edit_menu.addAction(
+            "Scale…",
+            lambda: self._focus_transform_section("scale"),
+        )
+
+        move_menu = menu.addMenu("Move / Place")
+        move_menu.addAction("Center in Stock (XY)", self._center_selected_xy)
+        move_menu.addAction(
+            "Move to Stock Origin (XY)",
+            self._move_selected_to_stock_origin,
+        )
+        move_menu.addAction(
+            "Place at Stock Origin + Top Z0",
+            self._place_selected_at_stock_origin,
+        )
+        move_menu.addSeparator()
+        move_menu.addAction("Top to Stock Surface (Z0)", self._top_selected_to_surface)
+        move_menu.addAction(
+            "Bottom to Stock Surface (Z0)",
+            self._bottom_selected_to_surface,
+        )
+
+        rotate_menu = menu.addMenu("Rotate 90°")
+        for axis in range(3):
+            axis_name = "XYZ"[axis]
+            rotate_menu.addAction(
+                f"{axis_name} +90°",
+                lambda _checked=False, a=axis: self._rotate_selected_axis(a, 90.0),
+            )
+            rotate_menu.addAction(
+                f"{axis_name} -90°",
+                lambda _checked=False, a=axis: self._rotate_selected_axis(a, -90.0),
+            )
+        rotate_menu.addSeparator()
+        rotate_menu.addAction("Reset Rotation", self._reset_selected_rotation)
+
+        scale_menu = menu.addMenu("Scale")
+        scale_menu.addAction(
+            "50%",
+            lambda: self._scale_selected_uniform(0.5),
+        )
+        scale_menu.addAction(
+            "200%",
+            lambda: self._scale_selected_uniform(2.0),
+        )
+        scale_menu.addAction("Fit Inside Stock", self._fit_selected_inside_stock)
+        scale_menu.addSeparator()
+        scale_menu.addAction("Reset Scale", self._reset_selected_scale)
+
+        menu.addSeparator()
+        menu.addAction("Reset Full Transform", self._reset_selected_transform)
+        menu.addSeparator()
+        menu.addAction("Duplicate", self._duplicate_selected_item)
+        menu.addAction("Delete", self._delete_selected_item)
+        menu.exec(global_pos)
 
     def _selected_item(self) -> ProjectItem | None:
         row = self.project_list.currentRow()
