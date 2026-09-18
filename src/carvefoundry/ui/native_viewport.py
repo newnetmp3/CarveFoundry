@@ -8,6 +8,7 @@ import numpy as np
 from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
+    QCursor,
     QMatrix4x4,
     QMouseEvent,
     QPainter,
@@ -177,6 +178,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     itemTransformStarted = Signal(int)
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
+    shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDrawModeChanged = Signal(str)
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -209,6 +212,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_distance = 0.0
         self._object_drag_started = False
         self._active_gizmo_axis: int | None = None
+        self._shape_draw_mode: str | None = None
+        self._shape_drag_start_world: np.ndarray | None = None
+        self._shape_drag_current_world: np.ndarray | None = None
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
         self._line_program: QOpenGLShaderProgram | None = None
@@ -318,6 +324,30 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def set_invert_vertical_drag(self, enabled: bool) -> None:
         self.invert_vertical_drag = bool(enabled)
+
+    @property
+    def shape_draw_mode(self) -> str | None:
+        return self._shape_draw_mode
+
+    def set_shape_draw_mode(self, mode: str | None) -> None:
+        normalized = mode.lower() if mode else None
+        allowed = {"rectangle", "ellipse", "polygon", "line", "text"}
+        if normalized is not None and normalized not in allowed:
+            raise ValueError(f"Unsupported shape draw mode: {mode}")
+
+        self._shape_draw_mode = normalized
+        self._shape_drag_start_world = None
+        self._shape_drag_current_world = None
+        self._interaction_mode = None
+        self.setCursor(
+            QCursor(
+                Qt.CursorShape.CrossCursor
+                if normalized is not None
+                else Qt.CursorShape.ArrowCursor
+            )
+        )
+        self.shapeDrawModeChanged.emit(normalized or "")
+        self.requestUpdate()
 
     @staticmethod
     def _compile_program(
@@ -1284,6 +1314,141 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 best_distance = distance
         return best_index
 
+    def _stock_plane_point(self, position: QPointF) -> np.ndarray | None:
+        """Map a screen position onto the top of the stock and clamp to its XY area."""
+
+        if self.project is None:
+            return None
+        ray = self._screen_ray(position)
+        if ray is None:
+            return None
+        origin, direction = ray
+        if abs(float(direction[2])) <= 1e-10:
+            return None
+        distance = -float(origin[2]) / float(direction[2])
+        if distance < 0.0:
+            return None
+
+        point = origin + direction * distance
+        if not np.isfinite(point).all():
+            return None
+        point[0] = max(0.0, min(float(self.project.stock.width_mm), float(point[0])))
+        point[1] = max(0.0, min(float(self.project.stock.height_mm), float(point[1])))
+        point[2] = 0.0
+        return point
+
+    def _constrained_shape_point(
+        self,
+        start: np.ndarray,
+        current: np.ndarray,
+        modifiers: Qt.KeyboardModifier,
+    ) -> np.ndarray:
+        if not modifiers & Qt.KeyboardModifier.ShiftModifier:
+            return current
+
+        result = current.copy()
+        dx = float(current[0] - start[0])
+        dy = float(current[1] - start[1])
+        if self._shape_draw_mode in {"rectangle", "ellipse", "polygon", "text"}:
+            size = max(abs(dx), abs(dy))
+            result[0] = start[0] + (size if dx >= 0.0 else -size)
+            result[1] = start[1] + (size if dy >= 0.0 else -size)
+        elif self._shape_draw_mode == "line":
+            length = float(np.hypot(dx, dy))
+            if length > 1e-9:
+                angle = np.arctan2(dy, dx)
+                snapped = round(angle / (np.pi / 4.0)) * (np.pi / 4.0)
+                result[0] = start[0] + np.cos(snapped) * length
+                result[1] = start[1] + np.sin(snapped) * length
+
+        if self.project is not None:
+            result[0] = max(
+                0.0,
+                min(float(self.project.stock.width_mm), float(result[0])),
+            )
+            result[1] = max(
+                0.0,
+                min(float(self.project.stock.height_mm), float(result[1])),
+            )
+        return result
+
+    def _shape_preview_vertices(self) -> np.ndarray:
+        start = self._shape_drag_start_world
+        end = self._shape_drag_current_world
+        mode = self._shape_draw_mode
+        if start is None or end is None or mode is None:
+            return np.empty((0, 3), dtype=np.float32)
+
+        x0, y0 = float(start[0]), float(start[1])
+        x1, y1 = float(end[0]), float(end[1])
+        z = 0.035
+
+        def segments(points: list[tuple[float, float, float]]) -> np.ndarray:
+            vertices: list[tuple[float, float, float]] = []
+            for first, second in zip(points, points[1:]):
+                vertices.extend((first, second))
+            return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
+        if mode in {"rectangle", "text"}:
+            points = [
+                (x0, y0, z),
+                (x1, y0, z),
+                (x1, y1, z),
+                (x0, y1, z),
+                (x0, y0, z),
+            ]
+            if mode == "text":
+                # A diagonal makes the drag box read as a text frame rather
+                # than another rectangle while the user is drawing it.
+                base = list(segments(points))
+                return np.vstack(
+                    (
+                        np.asarray(base, dtype=np.float32).reshape((-1, 3)),
+                        np.asarray(((x0, y0, z), (x1, y1, z)), dtype=np.float32),
+                    )
+                )
+            return segments(points)
+
+        if mode == "line":
+            return np.asarray(
+                ((x0, y0, z), (x1, y1, z)),
+                dtype=np.float32,
+            )
+
+        center_x = (x0 + x1) / 2.0
+        center_y = (y0 + y1) / 2.0
+        radius_x = abs(x1 - x0) / 2.0
+        radius_y = abs(y1 - y0) / 2.0
+        section_count = 6 if mode == "polygon" else 48
+        points = []
+        for index in range(section_count + 1):
+            angle = 2.0 * np.pi * index / section_count
+            points.append(
+                (
+                    center_x + np.cos(angle) * radius_x,
+                    center_y + np.sin(angle) * radius_y,
+                    z,
+                )
+            )
+        return segments(points)
+
+    def _draw_shape_preview(self, view_projection: QMatrix4x4) -> None:
+        if self._functions is None or self._shape_draw_mode is None:
+            return
+        vertices = self._shape_preview_vertices()
+        if len(vertices) == 0:
+            return
+        self._functions.glDisable(GL_DEPTH_TEST)
+        try:
+            self._draw_lines(
+                vertices,
+                view_projection=view_projection,
+                color=QVector4D(0.30, 0.95, 0.55, 0.98),
+                line_width=2.5,
+            )
+        finally:
+            self._functions.glEnable(GL_DEPTH_TEST)
+
     def _selected_gizmo_pivot(self) -> np.ndarray | None:
         if (
             self.project is None
@@ -1702,6 +1867,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             color=QVector4D(0.784, 1.0, 0.239, 0.95),
         )
         self._draw_toolpath_preview(view_projection)
+        self._draw_shape_preview(view_projection)
         self._draw_translation_gizmo(
             view_projection,
             world_per_pixel,
@@ -1731,6 +1897,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._object_drag_started = False
         self._active_gizmo_axis = None
 
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._shape_draw_mode is not None
+        ):
+            point = self._stock_plane_point(event.position())
+            if point is not None:
+                self._shape_drag_start_world = point
+                self._shape_drag_current_world = point.copy()
+                self._interaction_mode = "shape-draw"
+                self.requestUpdate()
+            event.accept()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             force_orbit = bool(
                 event.modifiers() & Qt.KeyboardModifier.AltModifier
@@ -1753,9 +1932,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                     else self.pick_item(event.position())
                 )
                 if item_index is not None:
-                    # Clicking the mesh selects it, while left-dragging anywhere
-                    # except an XYZ handle continues to orbit the viewport.
-                    # Object translation is deliberately gated behind the gizmo.
                     self._press_item_index = item_index
                     self.selected_item_index = item_index
                     self.itemSelectionRequested.emit(item_index)
@@ -1782,6 +1958,22 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         delta = event.position() - self._last_mouse_pos
         self._last_mouse_pos = event.position()
         self._interaction_distance += abs(delta.x()) + abs(delta.y())
+
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "shape-draw"
+            and self._shape_drag_start_world is not None
+        ):
+            current = self._stock_plane_point(event.position())
+            if current is not None:
+                self._shape_drag_current_world = self._constrained_shape_point(
+                    self._shape_drag_start_world,
+                    current,
+                    event.modifiers(),
+                )
+                self.requestUpdate()
+            event.accept()
+            return
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
@@ -1838,6 +2030,41 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if (
             event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "shape-draw"
+            and self._shape_draw_mode is not None
+            and self._shape_drag_start_world is not None
+        ):
+            current = self._stock_plane_point(event.position())
+            if current is not None:
+                self._shape_drag_current_world = self._constrained_shape_point(
+                    self._shape_drag_start_world,
+                    current,
+                    event.modifiers(),
+                )
+            end = self._shape_drag_current_world
+            start = self._shape_drag_start_world
+            if end is not None:
+                distance = float(np.linalg.norm(end[:2] - start[:2]))
+                if distance >= 0.10:
+                    self.shapeDrawRequested.emit(
+                        self._shape_draw_mode,
+                        float(start[0]),
+                        float(start[1]),
+                        float(end[0]),
+                        float(end[1]),
+                    )
+            self._shape_drag_start_world = None
+            self._shape_drag_current_world = None
+            self._last_mouse_pos = None
+            self._press_pos = None
+            self._interaction_mode = None
+            self._interaction_distance = 0.0
+            self.requestUpdate()
+            event.accept()
+            return
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
             and self._interaction_mode == "gizmo"
             and self._object_drag_started
             and self._press_item_index is not None
@@ -1881,7 +2108,15 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         event.accept()
 
     def keyPressEvent(self, event) -> None:
-        """Nudge the selected object with CNC-friendly metric increments."""
+        """Handle drawing-mode cancellation or nudge the selected object."""
+
+        if (
+            event.key() == Qt.Key.Key_Escape
+            and self._shape_draw_mode is not None
+        ):
+            self.set_shape_draw_mode(None)
+            event.accept()
+            return
 
         if (
             self.project is None
@@ -2059,6 +2294,8 @@ class MeshViewport(QWidget):
     itemTransformStarted = Signal(int)
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
+    shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDrawModeChanged = Signal(str)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968
 
@@ -2086,6 +2323,12 @@ class MeshViewport(QWidget):
         )
         self._renderer.itemTransformFinished.connect(
             self.itemTransformFinished.emit
+        )
+        self._renderer.shapeDrawRequested.connect(
+            self.shapeDrawRequested.emit
+        )
+        self._renderer.shapeDrawModeChanged.connect(
+            self.shapeDrawModeChanged.emit
         )
 
         self._container = QWidget.createWindowContainer(self._renderer, self)
@@ -2220,6 +2463,13 @@ class MeshViewport(QWidget):
     @property
     def simulation_fraction(self) -> float:
         return self._renderer.simulation_fraction
+
+    @property
+    def shape_draw_mode(self) -> str | None:
+        return self._renderer.shape_draw_mode
+
+    def set_shape_draw_mode(self, mode: str | None) -> None:
+        self._renderer.set_shape_draw_mode(mode)
 
     @property
     def reverse_horizontal_drag(self) -> bool:
