@@ -6,14 +6,6 @@ from math import atan2
 
 import numpy as np
 import trimesh
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import (
-    QFont,
-    QFontMetricsF,
-    QGuiApplication,
-    QPainterPath,
-    QPainterPathStroker,
-)
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 from shapely.ops import unary_union
 
@@ -232,8 +224,10 @@ def _text_case(content: str, mode: str) -> str:
     return content
 
 
-def _font_for_text(properties: TextProperties) -> tuple[QFont, float]:
+def _font_for_text(properties: TextProperties):
     """Create a real Qt system font and return millimeters per font unit."""
+
+    from PySide6.QtGui import QFont
 
     millimeters_per_unit = (
         float(properties.size_pt) * _POINTS_TO_MM / _FONT_EM_UNITS
@@ -262,7 +256,7 @@ def _font_for_text(properties: TextProperties) -> tuple[QFont, float]:
 
 def _wrap_text_lines(
     content: str,
-    metrics: QFontMetricsF,
+    metrics,
     *,
     width_units: float | None,
     wrap: bool,
@@ -298,7 +292,10 @@ def _wrap_text_lines(
     return result
 
 
-def _build_text_path(properties: TextProperties) -> tuple[QPainterPath, float]:
+def _build_text_path(properties: TextProperties):
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QFont, QFontMetricsF, QPainterPath, QPainterPathStroker
+
     font, millimeters_per_unit = _font_for_text(properties)
     metrics = QFontMetricsF(font)
     content = _text_case(properties.content, properties.case_mode)
@@ -431,7 +428,7 @@ def _flatten_polygon_geometry(value) -> list[Polygon]:
 
 
 def _text_path_geometry(
-    path: QPainterPath,
+    path,
     millimeters_per_unit: float,
 ):
     """Convert Qt glyph contours into a hole-aware Shapely geometry."""
@@ -538,6 +535,18 @@ def text_mesh(
 
     if not properties.content.strip():
         raise ValueError("Text cannot be blank.")
+
+    try:
+        from PySide6.QtGui import QGuiApplication
+    except ImportError:
+        return _block_text_mesh(
+            properties.content,
+            height_mm=max(
+                0.5,
+                float(properties.size_pt) * _POINTS_TO_MM,
+            ),
+            depth_mm=float(properties.depth_mm),
+        )
 
     if QGuiApplication.instance() is None:
         return _block_text_mesh(
