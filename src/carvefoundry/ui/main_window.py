@@ -1123,6 +1123,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         note.setWordWrap(True)
         grid.addWidget(note, 14, 0, 1, 4)
 
+        self.text_font_warning = QLabel()
+        self.text_font_warning.setObjectName("TextFontWarning")
+        self.text_font_warning.setWordWrap(True)
+        self.text_font_warning.hide()
+        grid.addWidget(self.text_font_warning, 15, 0, 1, 4)
+
         widget.setVisible(False)
         return widget
 
@@ -1533,10 +1539,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
         group = "\nGrouped object" if item.group_id else ""
+        text_details = ""
+        if item.kind.lower() == "text" and item.text_properties is not None:
+            properties = item.text_properties
+            style_parts = [
+                properties.font_style or "Regular",
+                f"{cls._number(properties.size_pt)} pt",
+            ]
+            if properties.bold:
+                style_parts.append("Bold")
+            if properties.italic:
+                style_parts.append("Italic")
+            text_details = (
+                "\nText: "
+                + " • ".join(style_parts)
+                + f"\nFont: {properties.font_family or 'System default'}"
+                + f"\nGeometry: {properties.geometry_mode.title()}"
+            )
 
         return (
             f"{item.name}\n"
-            f"{kind} • {mesh.face_count:,} faces{group}\n\n"
+            f"{kind} • {mesh.face_count:,} faces{group}{text_details}\n\n"
             f"Size XYZ: {size_text} mm\n"
             f"World bounds: {world_size_text} mm\n"
             f"Position XYZ: {position} mm\n"
@@ -2023,6 +2046,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         menu = QMenu(self)
         menu.addSection(item.name)
 
+        if item.kind.lower() == "text":
+            self._add_context_action(
+                menu,
+                "Edit Text…",
+                self._focus_text_editor,
+            )
+            menu.addSeparator()
+
         edit_menu = menu.addMenu("Edit Transform")
         self._add_context_action(
             edit_menu,
@@ -2251,16 +2282,58 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         finally:
             self.text_font_style_combo.blockSignals(False)
 
+    def _update_text_editor_preview(
+        self,
+        requested_family: str | None = None,
+    ) -> None:
+        family = (
+            requested_family
+            or self.text_font_combo.currentFont().family()
+            or QFont().family()
+        )
+        preview_font = QFont(family)
+        style = self.text_font_style_combo.currentText()
+        if style:
+            preview_font.setStyleName(style)
+        if self.text_bold_button.isChecked():
+            preview_font.setBold(True)
+        if self.text_italic_button.isChecked():
+            preview_font.setItalic(True)
+        preview_font.setUnderline(self.text_underline_button.isChecked())
+        preview_font.setStrikeOut(self.text_strike_button.isChecked())
+        preview_font.setPointSizeF(
+            max(10.0, min(22.0, float(self.text_size_spin.value())))
+        )
+        self.text_editor.setFont(preview_font)
+
+    def _update_text_font_availability(self, requested_family: str) -> None:
+        installed = set(QFontDatabase.families())
+        if requested_family and requested_family not in installed:
+            fallback = self.text_font_combo.currentFont().family()
+            self.text_font_warning.setText(
+                f"Font “{requested_family}” is not installed. "
+                f"Showing {fallback or 'the system fallback'}; install the "
+                "original font before editing if exact typography must be preserved."
+            )
+            self.text_font_warning.show()
+            return
+        self.text_font_warning.clear()
+        self.text_font_warning.hide()
+
     def _sync_text_controls(self, item: ProjectItem) -> None:
         properties = item.text_properties or self._legacy_text_properties(item)
         family = properties.font_family or QFont().family()
+        installed_families = set(QFontDatabase.families())
+        display_family = (
+            family if family in installed_families else QFont().family()
+        )
 
         self._updating_text_controls = True
         try:
             self.text_editor.setPlainText(properties.content)
-            self.text_font_combo.setCurrentFont(QFont(family))
+            self.text_font_combo.setCurrentFont(QFont(display_family))
             self._refresh_text_font_styles(
-                family,
+                display_family,
                 properties.font_style,
             )
             self.text_size_spin.setValue(properties.size_pt)
@@ -2309,12 +2382,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         finally:
             self._updating_text_controls = False
 
+        self._update_text_font_availability(family)
+        self._update_text_editor_preview(display_family)
         self._update_text_control_enablement()
 
     def _text_font_changed(self, font: QFont) -> None:
         if self._updating_text_controls:
             return
         self._refresh_text_font_styles(font.family(), "Regular")
+        self._update_text_font_availability(font.family())
+        self._update_text_editor_preview(font.family())
         self._text_control_changed()
 
     def _text_layout_control_changed(self, _checked: bool) -> None:
@@ -2339,6 +2416,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if self._updating_text_controls:
             return
         self._update_text_control_enablement()
+        self._update_text_editor_preview()
         self._text_update_timer.start()
 
     def _text_properties_from_controls(self) -> TextProperties:
