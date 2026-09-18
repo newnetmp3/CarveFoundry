@@ -592,6 +592,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
             for _ in range(3)
         )
+        rotation_planes = (
+            ("X", "YZ"),
+            ("Y", "XZ"),
+            ("Z", "XY"),
+        )
+        for spin, (axis, plane) in zip(
+            self.rotation_spins,
+            rotation_planes,
+            strict=True,
+        ):
+            spin.setToolTip(
+                f"Rotate around the {axis} axis; motion occurs in the {plane} plane."
+            )
+            spin.setAccessibleName(f"Rotation around {axis} axis")
         self.scale_spins = tuple(
             self._configured_spin(
                 minimum=0.001,
@@ -615,21 +629,31 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 grid.addWidget(spin, row, column)
                 spin.valueChanged.connect(self._transform_control_changed)
 
+        rotation_note = QLabel(
+            "Rotation axes: X → YZ plane   Y → XZ plane   Z → XY plane"
+        )
+        rotation_note.setObjectName("Muted")
+        rotation_note.setWordWrap(True)
+        rotation_note.setToolTip(
+            "X/Y/Z name the axis being rotated around, not the plane being rotated."
+        )
+        grid.addWidget(rotation_note, 6, 0, 1, 4)
+
         self.lock_scale = QCheckBox("Lock XYZ scale")
         self.lock_scale.setChecked(True)
-        grid.addWidget(self.lock_scale, 6, 0, 1, 4)
+        grid.addWidget(self.lock_scale, 7, 0, 1, 4)
 
         center_button = QPushButton("Center XY")
         center_button.clicked.connect(self._center_selected_xy)
-        grid.addWidget(center_button, 7, 0, 1, 2)
+        grid.addWidget(center_button, 8, 0, 1, 2)
 
         top_button = QPushButton("Top to Z0")
         top_button.clicked.connect(self._top_selected_to_surface)
-        grid.addWidget(top_button, 7, 2, 1, 2)
+        grid.addWidget(top_button, 8, 2, 1, 2)
 
         reset_button = QPushButton("Reset Transform")
         reset_button.clicked.connect(self._reset_selected_transform)
-        grid.addWidget(reset_button, 8, 0, 1, 4)
+        grid.addWidget(reset_button, 9, 0, 1, 4)
 
         widget.setVisible(False)
         return widget
@@ -909,6 +933,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
     def _rotate_selected_axis(self, axis: int, degrees_delta: float) -> None:
         axis_name = "XYZ"[axis]
+        plane_name = ("YZ", "XZ", "XY")[axis]
 
         def apply(item: ProjectItem) -> None:
             rotation = list(item.transform.rotation_deg)
@@ -917,7 +942,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         sign = "+" if degrees_delta >= 0 else ""
         self._apply_context_transform(
-            f"Rotate {axis_name} {sign}{degrees_delta:g}°",
+            (
+                f"Rotate around {axis_name} {sign}{degrees_delta:g}° "
+                f"({plane_name} plane)"
+            ),
             apply,
         )
 
@@ -1045,14 +1073,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         rotate_menu = menu.addMenu("Rotate 90°")
         for axis in range(3):
             axis_name = "XYZ"[axis]
+            plane_name = ("YZ", "XZ", "XY")[axis]
             self._add_context_action(
                 rotate_menu,
-                f"{axis_name} +90°",
+                f"Around {axis_name} / {plane_name} plane +90°",
                 lambda a=axis: self._rotate_selected_axis(a, 90.0),
             )
             self._add_context_action(
                 rotate_menu,
-                f"{axis_name} -90°",
+                f"Around {axis_name} / {plane_name} plane -90°",
                 lambda a=axis: self._rotate_selected_axis(a, -90.0),
             )
         rotate_menu.addSeparator()
