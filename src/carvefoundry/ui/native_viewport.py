@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from carvefoundry.cam.toolpath import MoveKind
+
 from .gpu_geometry import expand_triangle_positions
 
 if TYPE_CHECKING:
@@ -194,6 +196,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.camera = _CameraState()
         self.show_stock = True
         self.show_grid = True
+        self.show_toolpaths = True
+        self.show_rapids = False
+        self.simulation_fraction = 1.0
         self.reverse_horizontal_drag = False
         self.invert_vertical_drag = False
 
@@ -286,6 +291,21 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def toggle_grid(self) -> None:
         self.show_grid = not self.show_grid
+        self.requestUpdate()
+        self.viewChanged.emit()
+
+    def set_toolpaths_visible(self, visible: bool) -> None:
+        self.show_toolpaths = bool(visible)
+        self.requestUpdate()
+        self.viewChanged.emit()
+
+    def set_rapids_visible(self, visible: bool) -> None:
+        self.show_rapids = bool(visible)
+        self.requestUpdate()
+        self.viewChanged.emit()
+
+    def set_simulation_fraction(self, fraction: float) -> None:
+        self.simulation_fraction = max(0.0, min(1.0, float(fraction)))
         self.requestUpdate()
         self.viewChanged.emit()
 
@@ -1574,6 +1594,70 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             dtype=np.float32,
         )
 
+    def _toolpath_line_geometry(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return cut/plunge and rapid line segments for the visible preview."""
+
+        if self.project is None or not self.project.toolpaths:
+            empty = np.empty((0, 3), dtype=np.float32)
+            return empty, empty
+
+        segments: list[tuple[object, object]] = []
+        for toolpath in self.project.toolpaths:
+            for previous, current in zip(toolpath.moves, toolpath.moves[1:]):
+                segments.append((previous, current))
+
+        if not segments:
+            empty = np.empty((0, 3), dtype=np.float32)
+            return empty, empty
+
+        visible_count = int(round(len(segments) * self.simulation_fraction))
+        if self.simulation_fraction > 0.0:
+            visible_count = max(1, visible_count)
+        visible_segments = segments[:visible_count]
+
+        cut_vertices: list[tuple[float, float, float]] = []
+        rapid_vertices: list[tuple[float, float, float]] = []
+        for previous, current in visible_segments:
+            target = rapid_vertices if current.kind is MoveKind.RAPID else cut_vertices
+            target.extend((previous.xyz, current.xyz))
+
+        cut = np.asarray(cut_vertices, dtype=np.float32).reshape((-1, 3))
+        rapid = np.asarray(rapid_vertices, dtype=np.float32).reshape((-1, 3))
+        return cut, rapid
+
+    def _draw_toolpath_preview(
+        self,
+        view_projection: QMatrix4x4,
+    ) -> None:
+        if (
+            self._functions is None
+            or not self.show_toolpaths
+            or self.project is None
+            or not self.project.toolpaths
+        ):
+            return
+
+        cut_vertices, rapid_vertices = self._toolpath_line_geometry()
+        self._functions.glDisable(GL_DEPTH_TEST)
+        try:
+            self._draw_lines(
+                cut_vertices,
+                view_projection=view_projection,
+                color=QVector4D(0.78, 1.0, 0.24, 0.98),
+                line_width=2.5,
+            )
+            if self.show_rapids:
+                self._draw_lines(
+                    rapid_vertices,
+                    view_projection=view_projection,
+                    color=QVector4D(1.0, 0.62, 0.20, 0.90),
+                    line_width=1.5,
+                )
+        finally:
+            self._functions.glEnable(GL_DEPTH_TEST)
+
     def paintGL(self) -> None:
         if self._functions is None:
             return
@@ -1594,6 +1678,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             view_projection=view_projection,
             color=QVector4D(0.784, 1.0, 0.239, 0.95),
         )
+        self._draw_toolpath_preview(view_projection)
         self._draw_translation_gizmo(
             view_projection,
             world_per_pixel,
@@ -2102,6 +2187,18 @@ class MeshViewport(QWidget):
         self._update_rulers()
 
     @property
+    def toolpaths_visible(self) -> bool:
+        return self._renderer.show_toolpaths
+
+    @property
+    def rapids_visible(self) -> bool:
+        return self._renderer.show_rapids
+
+    @property
+    def simulation_fraction(self) -> float:
+        return self._renderer.simulation_fraction
+
+    @property
     def reverse_horizontal_drag(self) -> bool:
         return self._renderer.reverse_horizontal_drag
 
@@ -2154,6 +2251,15 @@ class MeshViewport(QWidget):
             vertex_bytes,
             vertex_count,
         )
+
+    def set_toolpaths_visible(self, visible: bool) -> None:
+        self._renderer.set_toolpaths_visible(visible)
+
+    def set_rapids_visible(self, visible: bool) -> None:
+        self._renderer.set_rapids_visible(visible)
+
+    def set_simulation_fraction(self, fraction: float) -> None:
+        self._renderer.set_simulation_fraction(fraction)
 
     def set_reverse_horizontal_drag(self, enabled: bool) -> None:
         self._renderer.set_reverse_horizontal_drag(enabled)
