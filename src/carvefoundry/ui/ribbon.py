@@ -149,6 +149,50 @@ class RibbonButton(QtWidgets.QToolButton):
             self.clicked.connect(lambda _checked=False: callback())
 
 
+class RibbonSelector(QtWidgets.QWidget):
+    """Compact labeled selector designed to fit inside the Office-style ribbon."""
+
+    def __init__(
+        self,
+        title: str,
+        values: tuple[str, ...] | list[str],
+        current: str,
+        callback=None,
+        *,
+        tooltip: str = "",
+        minimum_width: int = 108,
+    ):
+        super().__init__()
+        self.setObjectName("RibbonSelector")
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(2, 5, 2, 4)
+        layout.setSpacing(3)
+
+        label = QtWidgets.QLabel(title)
+        label.setObjectName("RibbonSelectorTitle")
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(label)
+
+        self.combo = QtWidgets.QComboBox()
+        self.combo.setObjectName("RibbonCombo")
+        self.combo.addItems(values)
+        self.combo.setMinimumWidth(minimum_width)
+        self.combo.setMaximumWidth(max(minimum_width + 34, 150))
+        if tooltip:
+            self.setToolTip(tooltip)
+            label.setToolTip(tooltip)
+            self.combo.setToolTip(tooltip)
+
+        index = self.combo.findText(current)
+        if index >= 0:
+            self.combo.setCurrentIndex(index)
+        if callback is not None:
+            self.combo.currentTextChanged.connect(callback)
+        layout.addWidget(self.combo)
+
+        self.setMinimumHeight(68)
+
+
 class RibbonGroup(QtWidgets.QFrame):
     def __init__(self, title: str):
         super().__init__()
@@ -175,6 +219,27 @@ class RibbonGroup(QtWidgets.QFrame):
         button = RibbonButton(text, callback, primary=primary)
         self.buttons.addWidget(button)
         return button
+
+    def add_selector(
+        self,
+        title: str,
+        values: tuple[str, ...] | list[str],
+        current: str,
+        callback=None,
+        *,
+        tooltip: str = "",
+        minimum_width: int = 108,
+    ) -> QtWidgets.QComboBox:
+        selector = RibbonSelector(
+            title,
+            values,
+            current,
+            callback,
+            tooltip=tooltip,
+            minimum_width=minimum_width,
+        )
+        self.buttons.addWidget(selector)
+        return selector.combo
 
 
 class RibbonPage(QtWidgets.QWidget):
