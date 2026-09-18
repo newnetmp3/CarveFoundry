@@ -247,6 +247,9 @@ class MainWindow(QMainWindow):
         grid_option = viewport_options.add_button("Grid", self._toggle_grid)
         grid_option.setCheckable(True)
         self._option_buttons["grid"] = grid_option
+        rulers_option = viewport_options.add_button("Rulers", self._toggle_rulers)
+        rulers_option.setCheckable(True)
+        self._option_buttons["rulers"] = rulers_option
         viewport_options.add_button("Fit View", self._fit_view)
 
         projection = options.add_group("Projection")
@@ -853,6 +856,7 @@ class MainWindow(QMainWindow):
         )
         stock_visible = self._settings_bool("viewport/show_stock", True)
         grid_visible = self._settings_bool("viewport/show_grid", True)
+        rulers_visible = self._settings_bool("viewport/show_rulers", True)
         reverse_horizontal = self._settings_bool(
             "viewport/reverse_horizontal_drag",
             True,
@@ -864,6 +868,7 @@ class MainWindow(QMainWindow):
         self.viewport.set_view_controls_visible(view_controls_visible)
         self.viewport.show_stock = stock_visible
         self.viewport.show_grid = grid_visible
+        self.viewport.set_rulers_visible(rulers_visible)
         self.viewport.set_reverse_horizontal_drag(reverse_horizontal)
 
         stored_sizes = self._settings.value("interface/splitter_sizes")
@@ -895,6 +900,7 @@ class MainWindow(QMainWindow):
         self._set_option_checked("view_controls", view_controls_visible)
         self._set_option_checked("stock", stock_visible)
         self._set_option_checked("grid", grid_visible)
+        self._set_option_checked("rulers", rulers_visible)
         self._set_option_checked("reverse_horizontal", reverse_horizontal)
         self.viewport.update()
 
@@ -928,6 +934,7 @@ class MainWindow(QMainWindow):
         )
         self._settings.setValue("viewport/show_stock", self.viewport.show_stock)
         self._settings.setValue("viewport/show_grid", self.viewport.show_grid)
+        self._settings.setValue("viewport/show_rulers", self.viewport.rulers_visible)
         self._settings.setValue(
             "viewport/reverse_horizontal_drag",
             self.viewport.reverse_horizontal_drag,
@@ -985,6 +992,14 @@ class MainWindow(QMainWindow):
         state = "shown" if self.viewport.show_grid else "hidden"
         self.statusBar().showMessage(f"Grid {state}", 2000)
 
+    def _toggle_rulers(self) -> None:
+        visible = not self.viewport.rulers_visible
+        self.viewport.set_rulers_visible(visible)
+        self._set_option_checked("rulers", visible)
+        self._save_interface_options()
+        state = "shown" if visible else "hidden"
+        self.statusBar().showMessage(f"Viewport rulers {state}", 2000)
+
     def _set_perspective_option(self) -> None:
         self.viewport.set_perspective_view()
         self.statusBar().showMessage("Perspective projection", 2000)
@@ -1013,6 +1028,7 @@ class MainWindow(QMainWindow):
         self.viewport.set_view_controls_visible(True)
         self.viewport.show_stock = True
         self.viewport.show_grid = True
+        self.viewport.set_rulers_visible(True)
         self.viewport.set_reverse_horizontal_drag(True)
         self.viewport.yaw_deg = 45.0
         self.viewport.elevation_deg = 35.0
@@ -1025,6 +1041,7 @@ class MainWindow(QMainWindow):
             "view_controls",
             "stock",
             "grid",
+            "rulers",
             "reverse_horizontal",
         ):
             self._set_option_checked(key, True)
