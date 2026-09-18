@@ -224,6 +224,27 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     border-radius: 4px;
     padding: 7px 8px;
 }
+#TextSubheading {
+    color: #c8ff3d;
+    font-size: 11px;
+    font-weight: 800;
+    padding-top: 6px;
+    border-bottom: 1px solid #273149;
+}
+#TextFontWarning {
+    background: #2a2112;
+    color: #ffd166;
+    border: 1px solid #8a6726;
+    border-radius: 6px;
+    padding: 6px 7px;
+}
+#TextCncHint {
+    background: #101827;
+    color: #9fb0c8;
+    border-left: 3px solid #35415a;
+    border-radius: 4px;
+    padding: 6px 7px;
+}
 QScrollArea#InspectorScrollArea,
 #InspectorBody {
     background: transparent;
