@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import atan, degrees, radians, sin, tan
 
 import numpy as np
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import QMatrix4x4, QMouseEvent, QVector3D, QWheelEvent
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
@@ -12,6 +12,8 @@ from .viewport_gpu import MeshViewport as _GpuMeshViewport
 
 class MeshViewport(_GpuMeshViewport):
     """GPU viewport with CAD projection modes and selection-aware framing."""
+
+    viewSettingsChanged = Signal()
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -130,11 +132,13 @@ class MeshViewport(_GpuMeshViewport):
             self.view_name = "Free"
             self._set_view_combo("Free")
         self.fit_view()
+        self.viewSettingsChanged.emit()
 
     def _view_changed(self, text: str) -> None:
         if text == "Free":
             self.view_name = "Free"
             self.update()
+            self.viewSettingsChanged.emit()
             return
         if text == "Isometric":
             self.set_isometric_view()
@@ -149,6 +153,7 @@ class MeshViewport(_GpuMeshViewport):
         self._set_projection_combo("Perspective")
         self._set_view_combo("Free")
         self.fit_view()
+        self.viewSettingsChanged.emit()
 
     def set_orthographic_view(self) -> None:
         """Use a parallel projection at the current camera angle."""
@@ -158,6 +163,7 @@ class MeshViewport(_GpuMeshViewport):
         self._set_projection_combo("Orthographic")
         self._set_view_combo("Free")
         self.fit_view()
+        self.viewSettingsChanged.emit()
 
     def set_isometric_view(self) -> None:
         """Show three axes equally using an orthographic isometric view."""
@@ -169,6 +175,7 @@ class MeshViewport(_GpuMeshViewport):
         self._set_projection_combo("Orthographic")
         self._set_view_combo("Isometric")
         self.fit_view()
+        self.viewSettingsChanged.emit()
 
     def set_standard_view(self, name: str) -> None:
         """Switch to a fixed orthographic Top/Bottom/Front/Back/Left/Right view."""
@@ -190,6 +197,7 @@ class MeshViewport(_GpuMeshViewport):
         self._set_projection_combo("Orthographic")
         self._set_view_combo(name)
         self.fit_view()
+        self.viewSettingsChanged.emit()
 
     def _camera_matrices(self) -> tuple[QMatrix4x4, QMatrix4x4]:
         """Build stable camera matrices while keeping the full scene unclipped.
