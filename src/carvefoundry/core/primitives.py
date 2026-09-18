@@ -6,8 +6,20 @@ from math import atan2
 
 import numpy as np
 import trimesh
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import (
+    QFont,
+    QFontDatabase,
+    QFontMetricsF,
+    QGuiApplication,
+    QPainterPath,
+    QPainterPathStroker,
+)
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+from shapely.ops import unary_union
 
 from .mesh import MeshAsset, mesh_asset_from_geometry
+from .project import TextProperties
 
 
 def _top_at_zero(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
