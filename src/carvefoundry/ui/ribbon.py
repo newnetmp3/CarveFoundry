@@ -193,6 +193,76 @@ class RibbonSelector(QtWidgets.QWidget):
         self.setMinimumHeight(68)
 
 
+class RibbonSlider(QtWidgets.QWidget):
+    """Compact labeled slider with a live CAM readout."""
+
+    def __init__(
+        self,
+        title: str,
+        minimum: int,
+        maximum: int,
+        value: int,
+        callback=None,
+        *,
+        tooltip: str = "",
+        minimum_width: int = 190,
+        low_label: str = "Faster",
+        high_label: str = "More",
+    ):
+        super().__init__()
+        self.setObjectName("RibbonSlider")
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(4, 3, 4, 2)
+        layout.setSpacing(1)
+
+        title_label = QtWidgets.QLabel(title)
+        title_label.setObjectName("RibbonSelectorTitle")
+        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(title_label)
+
+        slider_row = QtWidgets.QHBoxLayout()
+        slider_row.setContentsMargins(0, 0, 0, 0)
+        slider_row.setSpacing(4)
+
+        low = QtWidgets.QLabel(low_label)
+        low.setObjectName("RibbonSliderEnd")
+        slider_row.addWidget(low)
+
+        self.slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.slider.setObjectName("RibbonDetailSlider")
+        self.slider.setRange(int(minimum), int(maximum))
+        self.slider.setValue(int(value))
+        self.slider.setSingleStep(1)
+        self.slider.setPageStep(10)
+        self.slider.setMinimumWidth(max(90, minimum_width - 82))
+        slider_row.addWidget(self.slider, 1)
+
+        high = QtWidgets.QLabel(high_label)
+        high.setObjectName("RibbonSliderEnd")
+        slider_row.addWidget(high)
+        layout.addLayout(slider_row)
+
+        self.readout = QtWidgets.QLabel("")
+        self.readout.setObjectName("RibbonSliderReadout")
+        self.readout.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.readout)
+
+        if tooltip:
+            self.setToolTip(tooltip)
+            title_label.setToolTip(tooltip)
+            self.slider.setToolTip(tooltip)
+            self.readout.setToolTip(tooltip)
+
+        if callback is not None:
+            self.slider.valueChanged.connect(callback)
+
+        self.setMinimumWidth(minimum_width)
+        self.setMinimumHeight(68)
+
+    def set_readout(self, text: str) -> None:
+        self.readout.setText(text)
+
+
 class RibbonGroup(QtWidgets.QFrame):
     def __init__(self, title: str):
         super().__init__()
@@ -240,6 +310,33 @@ class RibbonGroup(QtWidgets.QFrame):
         )
         self.buttons.addWidget(selector)
         return selector.combo
+
+    def add_slider(
+        self,
+        title: str,
+        minimum: int,
+        maximum: int,
+        value: int,
+        callback=None,
+        *,
+        tooltip: str = "",
+        minimum_width: int = 190,
+        low_label: str = "Faster",
+        high_label: str = "More",
+    ) -> RibbonSlider:
+        slider = RibbonSlider(
+            title,
+            minimum,
+            maximum,
+            value,
+            callback,
+            tooltip=tooltip,
+            minimum_width=minimum_width,
+            low_label=low_label,
+            high_label=high_label,
+        )
+        self.buttons.addWidget(slider)
+        return slider
 
 
 class RibbonPage(QtWidgets.QWidget):
