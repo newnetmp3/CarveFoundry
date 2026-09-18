@@ -6,7 +6,6 @@ import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -15,7 +14,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
@@ -302,13 +300,25 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             button.setCheckable(True)
             self._cam_operation_buttons[operation] = button
 
+        active_button = self._cam_operation_buttons.get(
+            self._active_cam_operation
+        )
+        if active_button is not None:
+            active_button.setChecked(True)
+
         cutters = toolpaths.add_group("Cutter")
         all_cutters = self._all_tools()
         cutter_names = [cutter.name for cutter in all_cutters]
+        preferred_cutter = str(
+            self._settings.value(
+                "tools/selected_name",
+                cutter_names[0] if cutter_names else "",
+            )
+        )
         self.tool_combo = cutters.add_selector(
             "Selected Cutter",
             cutter_names,
-            cutter_names[0] if cutter_names else "",
+            preferred_cutter,
             tooltip=(
                 "The active cutter is used for toolpath generation and "
                 "cutter-profile compensation."
@@ -318,7 +328,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         for index, cutter in enumerate(all_cutters):
             self.tool_combo.setItemData(index, cutter)
         self.tool_combo.currentIndexChanged.connect(
-            lambda _index: self._refresh_cam_detail_readouts()
+            self._active_cutter_changed
         )
         cutters.add_button("Library", self._show_tool_library)
         cutters.add_button("New Tool", self._new_tool)
