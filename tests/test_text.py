@@ -1,13 +1,9 @@
-import os
-
 import numpy as np
 from PySide6.QtGui import QFontDatabase, QGuiApplication
 
 from carvefoundry.core.primitives import text_mesh
 from carvefoundry.core.project import TextProperties
 
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 _APP = QGuiApplication.instance() or QGuiApplication([])
 
 
