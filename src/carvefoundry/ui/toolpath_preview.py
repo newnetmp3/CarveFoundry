@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from carvefoundry.cam.gcode import GrblPostSettings, render_grbl
+from carvefoundry.cam.gcode import GrblPostSettings, render_grbl_program
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.project import Project, Stock
 
@@ -80,34 +80,35 @@ class ToolpathPreviewWindow(QMainWindow):
         self.viewport.set_isometric_view()
 
     def _render_program(self) -> tuple[list[str], list[int]]:
-        lines: list[str] = []
+        program = render_grbl_program(
+            self._toolpaths,
+            self._post_settings,
+        )
+        lines = program.rstrip("\n").splitlines()
+        command_lines = [
+            index
+            for index, line in enumerate(lines)
+            if line.lstrip().startswith(("G0 ", "G1 "))
+        ]
+
         move_lines: list[int] = []
-
-        for path_index, toolpath in enumerate(self._toolpaths):
-            if path_index:
-                lines.append("")
-                lines.append(f"(--- Operation {path_index + 1}: {toolpath.name} ---)")
-
-            program = render_grbl(toolpath, self._post_settings)
-            local_lines = program.rstrip("\n").splitlines()
-            local_command_lines = [
-                index
-                for index, line in enumerate(local_lines)
-                if line.lstrip().startswith(("G0 ", "G1 "))
+        command_offset = 0
+        for toolpath in self._toolpaths:
+            # Each operation contributes one Safe-Z command before its moves and
+            # one after. The commands in between map 1:1 to Toolpath.moves.
+            command_offset += 1
+            available = command_lines[
+                command_offset : command_offset + len(toolpath.moves)
             ]
-            offset = len(lines)
-            lines.extend(local_lines)
-
-            # render_grbl emits one initial safe-Z G0 before the toolpath moves
-            # and a final safe-Z G0 after them.  The middle commands map 1:1 to
-            # Toolpath.moves.
-            available = local_command_lines[1 : 1 + len(toolpath.moves)]
             if len(available) == len(toolpath.moves):
-                move_lines.extend(offset + index for index in available)
+                move_lines.extend(available)
             else:
-                move_lines.extend([offset] * len(toolpath.moves))
+                fallback = command_lines[0] if command_lines else 0
+                move_lines.extend([fallback] * len(toolpath.moves))
+            command_offset += len(toolpath.moves) + 1
 
         return lines, move_lines
+
 
     def _build_ui(self) -> None:
         root = QWidget()
