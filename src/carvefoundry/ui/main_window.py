@@ -1129,6 +1129,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_font_warning.hide()
         grid.addWidget(self.text_font_warning, 15, 0, 1, 4)
 
+        self.text_cnc_hint = QLabel()
+        self.text_cnc_hint.setObjectName("TextCncHint")
+        self.text_cnc_hint.setWordWrap(True)
+        grid.addWidget(self.text_cnc_hint, 16, 0, 1, 4)
+
         widget.setVisible(False)
         return widget
 
@@ -1669,6 +1674,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._settings.sync()
             self._invalidate_toolpaths("Selected cutter")
         self._refresh_cam_detail_readouts()
+        if hasattr(self, "text_cnc_hint"):
+            self._update_text_cnc_hint()
 
     def _ensure_inspector_visible(self) -> None:
         self.properties_panel.show()
@@ -2410,6 +2417,39 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_box_width_spin.setEnabled(True)
         self.text_outline_width_spin.setEnabled(
             self.text_geometry_combo.currentData() == "outline"
+        )
+        self._update_text_cnc_hint()
+
+    def _update_text_cnc_hint(self) -> None:
+        if not hasattr(self, "text_cnc_hint"):
+            return
+        cutter = (
+            self.tool_combo.currentData()
+            if hasattr(self, "tool_combo")
+            else None
+        )
+        diameter = getattr(cutter, "diameter_mm", None)
+        if diameter is None:
+            self.text_cnc_hint.setText(
+                "Choose a cutter on Toolpaths to compare it with text geometry."
+            )
+            return
+
+        diameter = float(diameter)
+        if (
+            self.text_geometry_combo.currentData() == "outline"
+            and self.text_outline_width_spin.value() < diameter
+        ):
+            self.text_cnc_hint.setText(
+                f"Machining warning: {self.text_outline_width_spin.value():.3f} mm "
+                f"outline is narrower than the {diameter:.3f} mm active cutter. "
+                "Use a smaller cutter, widen the outline, or use a V-carve strategy."
+            )
+            return
+
+        self.text_cnc_hint.setText(
+            f"Active cutter: {diameter:.3f} mm. Fine glyph details may require "
+            "a smaller cutter or V-carve; Preview the calculated toolpath before cutting."
         )
 
     def _text_control_changed(self, *_args) -> None:
