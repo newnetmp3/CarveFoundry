@@ -1026,10 +1026,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._settings.sync()
         self._refresh_cam_detail_readouts()
 
-    def _focus_stock_section(self) -> None:
+    def _ensure_inspector_visible(self) -> None:
         self.properties_panel.show()
         self.inspector_button.setChecked(True)
         self._set_option_checked("properties_panel", True)
+
+        sizes = self.workspace_splitter.sizes()
+        if len(sizes) == 2 and sizes[1] < 40:
+            preferred = self._properties_panel_default_width()
+            total = max(sum(sizes), preferred + 520)
+            self.workspace_splitter.setSizes(
+                [max(520, total - preferred), preferred]
+            )
+        self._save_interface_options()
+
+    def _focus_stock_section(self) -> None:
+        self._ensure_inspector_visible()
         if self.project_list.currentRow() != 0:
             self.project_list.setCurrentRow(0)
         self.stock_spins[0].setFocus(Qt.FocusReason.OtherFocusReason)
@@ -1150,17 +1162,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.statusBar().showMessage("Select an STL mesh first", 3000)
             return
 
-        self.properties_panel.show()
-        self.inspector_button.setChecked(True)
-        self._set_option_checked("properties_panel", True)
-
-        # Restore a useful inspector width if it was previously hidden.
-        sizes = self.workspace_splitter.sizes()
-        if len(sizes) == 2 and sizes[1] < 40:
-            preferred = self._properties_panel_default_width()
-            total = max(sum(sizes), 1)
-            canvas = max(520, total - preferred)
-            self.workspace_splitter.setSizes([canvas, preferred])
+        self._ensure_inspector_visible()
 
         controls = {
             "position": self.position_spins,
