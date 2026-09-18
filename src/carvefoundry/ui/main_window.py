@@ -1145,18 +1145,30 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "No calculated toolpath for the current job.",
             )
 
+    def _toolpath_source_names(self, toolpaths) -> list[str]:
+        names_by_id = {
+            item.item_id: item.name
+            for item in self.project.items
+        }
+        names: list[str] = []
+        for path in toolpaths:
+            name = (
+                names_by_id.get(path.source_item_id)
+                if path.source_item_id
+                else None
+            ) or path.source_item_name
+            if name and name not in names:
+                names.append(name)
+        return names
+
     def _sync_toolpath_state_from_project(self) -> None:
         if self.project.toolpaths:
             self._toolpaths_stale_reason = None
             operation_names = " + ".join(
                 path.name for path in self.project.toolpaths
             )
-            source_names = list(
-                dict.fromkeys(
-                    path.source_item_name
-                    for path in self.project.toolpaths
-                    if path.source_item_name
-                )
+            source_names = self._toolpath_source_names(
+                self.project.toolpaths
             )
             source_text = ", ".join(source_names) if source_names else "Unknown"
             total_moves = sum(
@@ -2634,13 +2646,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             path.estimated_cutting_minutes for path in toolpaths
         )
         operation_names = " + ".join(path.name for path in toolpaths)
-        source_names = list(
-            dict.fromkeys(
-                path.source_item_name
-                for path in toolpaths
-                if path.source_item_name
-            )
-        )
+        source_names = self._toolpath_source_names(toolpaths)
         source_text = ", ".join(source_names) if source_names else "Unknown"
         self._set_activity_info(
             f"G-code exported\n{output_path}\n\n"
