@@ -25,6 +25,7 @@ class ProjectItemSnapshot:
     scale_xyz: tuple[float, float, float]
     source_units: ModelUnits
     group_id: str | None
+    item_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,7 @@ def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
         scale_xyz=tuple(item.transform.scale_xyz),
         source_units=item.source_units,
         group_id=item.group_id,
+        item_id=item.item_id,
     )
 
 
@@ -79,6 +81,7 @@ def _restore_item(snapshot: ProjectItemSnapshot) -> ProjectItem:
         ),
         source_units=snapshot.source_units,
         group_id=snapshot.group_id,
+        item_id=snapshot.item_id,
     )
 
 
