@@ -45,7 +45,7 @@ from ..core.project_file import (
 from ..core.units import ModelUnits
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
-from .ribbon import Ribbon
+from .ribbon import Ribbon, _ribbon_icon
 from .ribbon_actions import RibbonActionsMixin
 from .tool_rail import ToolRail
 from .viewport import MeshViewport
@@ -280,6 +280,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         tooltip: str = "",
     ) -> QAction:
         action = QAction(text, self)
+        icon_label = text.replace("…", "").split(" / ", 1)[0]
+        action.setIcon(_ribbon_icon(icon_label))
         action.setCheckable(checkable)
         action.setChecked(bool(checked))
         if tooltip:
