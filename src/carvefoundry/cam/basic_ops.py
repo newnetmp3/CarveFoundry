@@ -41,7 +41,7 @@ DETAIL_FAST_STEPOVER_FRACTION = 0.20
 DETAIL_FINE_STEPOVER_FRACTION = 0.04
 
 
-def detail_stepover_fraction(detail: int | float) -> float:
+def detail_stepover_fraction(detail: float) -> float:
     """Map a 0-100 detail control to cutter-relative raster stepover.
 
     Zero favors speed at 20% of cutter diameter. One hundred favors detail at
