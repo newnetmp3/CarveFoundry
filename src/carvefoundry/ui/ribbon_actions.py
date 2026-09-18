@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from math import pi
+from math import atan2, degrees, hypot, pi
 from pathlib import Path
 from uuid import uuid4
 
@@ -175,6 +175,8 @@ class RibbonActionsMixin:
         self._clipboard_items: list[ProjectItem] = []
         self._active_cam_operation = "finish"
         self._tabs_enabled = False
+        self._active_shape_tool: str | None = None
+        self._shape_tool_buttons: dict[str, object] = {}
         self._custom_tools = self._load_custom_tools()
 
         self._simulation_timer = QTimer(self)
@@ -519,79 +521,182 @@ class RibbonActionsMixin:
         self._after_ribbon_mutation(f"create {kind}", True)
         self.statusBar().showMessage(f"Created {item.name}", 3000)
 
-    def _create_rectangle(self) -> None:
-        form = _ActionForm(self, "Rectangle")
-        form.add_double("width", "Width", 50.0, minimum=0.1, suffix=" mm")
-        form.add_double("height", "Height", 30.0, minimum=0.1, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
+    def _set_shape_tool(self, tool: str) -> None:
+        """Activate one paint-style shape tool in the viewport."""
+
+        button = self._shape_tool_buttons.get(tool)
+        wants_active = bool(button is None or button.isChecked())
+        if self._active_shape_tool == tool and not wants_active:
+            self._active_shape_tool = None
+            self.viewport.set_shape_draw_mode(None)
+            self.statusBar().showMessage("Shape drawing tool off", 2000)
             return
-        self._add_generated_item(
-            "Rectangle",
-            "rectangle",
-            rectangle_mesh(form.value("width"), form.value("height"), form.value("depth")),
+
+        self._active_shape_tool = tool
+        for name, shape_button in self._shape_tool_buttons.items():
+            shape_button.blockSignals(True)
+            try:
+                shape_button.setChecked(name == tool)
+            finally:
+                shape_button.blockSignals(False)
+
+        self.viewport.set_shape_draw_mode(tool)
+        label = tool.title()
+        self.statusBar().showMessage(
+            f"{label} tool — drag on the stock to draw • Shift constrains • Esc exits"
         )
+
+    def _shape_draw_mode_changed(self, mode: str) -> None:
+        self._active_shape_tool = mode or None
+        for name, button in self._shape_tool_buttons.items():
+            button.blockSignals(True)
+            try:
+                button.setChecked(name == mode)
+            finally:
+                button.blockSignals(False)
+
+    def _add_drawn_item(
+        self,
+        name: str,
+        kind: str,
+        mesh,
+        transform: Transform3D,
+    ) -> None:
+        item = ProjectItem(
+            name=self._unique_item_name(name),
+            kind=kind,
+            mesh=mesh,
+            transform=transform,
+            source_units=ModelUnits.MILLIMETERS,
+        )
+        self._before_ribbon_mutation(f"draw {kind}")
+        self.project.items.append(item)
+        self._refresh_project_list(len(self.project.items))
+        self.viewport.update()
+        self._after_ribbon_mutation(f"draw {kind}", True)
+        self.statusBar().showMessage(f"Drew {item.name}", 2500)
+
+    def _shape_drawn(
+        self,
+        tool: str,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+    ) -> None:
+        """Create geometry from a click-drag gesture on the stock."""
+
+        min_x, max_x = sorted((float(x0), float(x1)))
+        min_y, max_y = sorted((float(y0), float(y1)))
+        width = max_x - min_x
+        height = max_y - min_y
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        depth = 1.0
+
+        if tool in {"rectangle", "ellipse", "polygon", "text"} and (
+            width < 0.10 or height < 0.10
+        ):
+            self.statusBar().showMessage("Drag farther to create the shape", 2500)
+            return
+
+        if tool == "rectangle":
+            mesh = rectangle_mesh(width, height, depth)
+            transform = Transform3D(
+                translation_mm=(center_x, center_y, 0.0)
+            )
+            self._add_drawn_item("Rectangle", "rectangle", mesh, transform)
+            return
+
+        if tool == "ellipse":
+            mesh = ellipse_mesh(width, height, depth)
+            transform = Transform3D(
+                translation_mm=(center_x, center_y, 0.0)
+            )
+            self._add_drawn_item("Ellipse", "ellipse", mesh, transform)
+            return
+
+        if tool == "polygon":
+            # Start from a unit regular hexagon and stretch it to the drag box.
+            mesh = polygon_mesh(6, 1.0, depth)
+            transform = Transform3D(
+                translation_mm=(center_x, center_y, 0.0),
+                scale_xyz=(width, height, 1.0),
+            )
+            self._add_drawn_item("Polygon", "polygon", mesh, transform)
+            return
+
+        if tool == "line":
+            dx = float(x1 - x0)
+            dy = float(y1 - y0)
+            length = hypot(dx, dy)
+            if length < 0.10:
+                self.statusBar().showMessage("Drag farther to create the line", 2500)
+                return
+            mesh = line_mesh(length, 2.0, depth)
+            transform = Transform3D(
+                translation_mm=(
+                    (float(x0) + float(x1)) / 2.0,
+                    (float(y0) + float(y1)) / 2.0,
+                    0.0,
+                ),
+                rotation_deg=(0.0, 0.0, degrees(atan2(dy, dx))),
+            )
+            self._add_drawn_item("Line", "line", mesh, transform)
+            return
+
+        if tool == "text":
+            text, accepted = QInputDialog.getText(
+                self,
+                "Text",
+                "Text",
+                text="CARVE",
+            )
+            if not accepted or not text.strip():
+                return
+            text_height = max(height, 1.0)
+            try:
+                mesh = text_mesh(
+                    text.strip(),
+                    height_mm=text_height,
+                    depth_mm=depth,
+                )
+                source_width = float(mesh.dimensions[0])
+                if source_width > width and source_width > 1e-9:
+                    text_height *= width / source_width
+                    mesh = text_mesh(
+                        text.strip(),
+                        height_mm=max(text_height, 0.5),
+                        depth_mm=depth,
+                    )
+            except ValueError as exc:
+                self.statusBar().showMessage(str(exc), 5000)
+                return
+
+            bounds = np.asarray(mesh.bounds, dtype=float)
+            transform = Transform3D(
+                translation_mm=(
+                    min_x - float(bounds[0, 0]),
+                    min_y - float(bounds[0, 1]),
+                    -float(bounds[1, 2]),
+                )
+            )
+            self._add_drawn_item(text.strip(), "text", mesh, transform)
+
+    def _create_rectangle(self) -> None:
+        self._set_shape_tool("rectangle")
 
     def _create_ellipse(self) -> None:
-        form = _ActionForm(self, "Ellipse")
-        form.add_double("width", "Width", 50.0, minimum=0.1, suffix=" mm")
-        form.add_double("height", "Height", 30.0, minimum=0.1, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._add_generated_item(
-            "Ellipse",
-            "ellipse",
-            ellipse_mesh(form.value("width"), form.value("height"), form.value("depth")),
-        )
+        self._set_shape_tool("ellipse")
 
     def _create_polygon(self) -> None:
-        form = _ActionForm(self, "Polygon")
-        form.add_int("sides", "Sides", 6, minimum=3, maximum=64)
-        form.add_double("diameter", "Diameter", 50.0, minimum=0.1, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._add_generated_item(
-            "Polygon",
-            "polygon",
-            polygon_mesh(
-                int(form.value("sides")),
-                form.value("diameter"),
-                form.value("depth"),
-            ),
-        )
+        self._set_shape_tool("polygon")
 
     def _create_line(self) -> None:
-        form = _ActionForm(self, "Line")
-        form.add_double("length", "Length", 50.0, minimum=0.1, suffix=" mm")
-        form.add_double("width", "Stroke width", 2.0, minimum=0.1, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._add_generated_item(
-            "Line",
-            "line",
-            line_mesh(form.value("length"), form.value("width"), form.value("depth")),
-        )
+        self._set_shape_tool("line")
 
     def _create_text(self) -> None:
-        form = _ActionForm(self, "Text")
-        form.add_line("text", "Text", "CARVE")
-        form.add_double("height", "Character height", 20.0, minimum=1.0, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            mesh = text_mesh(
-                str(form.value("text")),
-                height_mm=form.value("height"),
-                depth_mm=form.value("depth"),
-            )
-        except ValueError as exc:
-            self.statusBar().showMessage(str(exc), 5000)
-            return
-        self._add_generated_item(str(form.value("text")).strip() or "Text", "text", mesh)
+        self._set_shape_tool("text")
 
     def _create_pen_path(self) -> None:
         form = _ActionForm(self, "Pen / Polyline")
