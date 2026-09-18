@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread
@@ -1740,14 +1741,43 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.statusBar().showMessage("Reset selected mesh transform", 3000)
 
     def _duplicate_selected_item(self) -> None:
-        index = self._selected_item_index()
-        if index is None:
-            self.statusBar().showMessage("Select a design item to duplicate", 3000)
+        indices = self._selected_design_indices(expand_groups=True)
+        if not indices:
+            self.statusBar().showMessage("Select one or more design objects", 3000)
             return
-        new_index, duplicate = self.project.duplicate_item(index)
-        self._refresh_project_list(new_index + 1)
+
+        group_map: dict[str, str] = {}
+        duplicates: list[ProjectItem] = []
+        for index in indices:
+            source = self.project.items[index]
+            source_path = Path(source.name)
+            duplicate_name = self._unique_item_name(
+                f"{source_path.stem} copy{source_path.suffix}"
+            )
+            group_id = None
+            if source.group_id:
+                group_id = group_map.setdefault(
+                    source.group_id,
+                    uuid4().hex,
+                )
+            duplicates.append(
+                self._clone_item(
+                    source,
+                    name=duplicate_name,
+                    group_id=group_id,
+                    offset_mm=(5.0, 5.0, 0.0),
+                )
+            )
+
+        self.project.items.extend(duplicates)
+        self._refresh_project_list(len(self.project.items))
         self.viewport.update()
-        self.statusBar().showMessage(f"Duplicated {duplicate.name}", 3000)
+
+        if len(duplicates) == 1:
+            message = f"Duplicated {duplicates[0].name} • offset 5 mm"
+        else:
+            message = f"Duplicated {len(duplicates)} objects • offset 5 mm"
+        self.statusBar().showMessage(message, 3000)
 
     def _delete_selected_item(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
