@@ -145,7 +145,7 @@ class MainWindow(_BaseMainWindow):
 
         self.viewport.set_project(self.project)
         self._refresh_project_list(entry.selected_row)
-        self.viewport.fit_view()
+        self._sync_toolpath_state_from_project()
         self.statusBar().showMessage(f"Undo: {entry.label}", 3000)
 
     def _redo(self) -> None:
@@ -172,7 +172,7 @@ class MainWindow(_BaseMainWindow):
 
         self.viewport.set_project(self.project)
         self._refresh_project_list(entry.selected_row)
-        self.viewport.fit_view()
+        self._sync_toolpath_state_from_project()
         self.statusBar().showMessage(f"Redo: {entry.label}", 3000)
 
     def _set_project(
@@ -244,7 +244,7 @@ class MainWindow(_BaseMainWindow):
             saved_path = save_project(self.project, path)
         except ProjectFileError as exc:
             self.project.name = original_name
-            self.selection_info.setText(f"Project save failed\n{exc}")
+            self._set_activity_info(f"Project save failed\n{exc}")
             self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
             self._update_project_title()
             return False
