@@ -62,6 +62,22 @@ def test_inspector_stays_compact_without_clipping_field_minimums() -> None:
         window.close()
 
 
+def test_inspector_scrollbar_matches_ribbon_scroll_policy() -> None:
+    window = MainWindow()
+    try:
+        scroll_area = window.properties_panel.scroll_area
+        assert (
+            scroll_area.verticalScrollBarPolicy()
+            == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        assert (
+            scroll_area.horizontalScrollBarPolicy()
+            == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+    finally:
+        window.close()
+
+
 def test_font_family_grouping_separates_common_variants() -> None:
     groups = MainWindow._group_text_font_families(
         [
