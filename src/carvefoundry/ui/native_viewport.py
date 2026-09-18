@@ -1645,12 +1645,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                     else self.pick_item(event.position())
                 )
                 if item_index is not None:
-                    # Clicking the mesh selects it, but never moves it.  Mouse
-                    # translation is deliberately gated behind the XYZ gizmo.
+                    # Clicking the mesh selects it, while left-dragging anywhere
+                    # except an XYZ handle continues to orbit the viewport.
+                    # Object translation is deliberately gated behind the gizmo.
                     self._press_item_index = item_index
                     self.selected_item_index = item_index
                     self.itemSelectionRequested.emit(item_index)
-                    self._interaction_mode = "select"
+                    self._interaction_mode = "orbit"
                     self.requestUpdate()
                 else:
                     self._interaction_mode = "orbit"
@@ -1738,7 +1739,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             event.button() == Qt.MouseButton.LeftButton
             and self._interaction_mode == "orbit"
             and self._interaction_distance < 4.0
+            and self._press_item_index is None
         ):
+            # A simple click on empty space clears selection.  A simple click on
+            # a mesh keeps the item selected, while a drag on either location
+            # orbits the viewport.
             self.selected_item_index = None
             self.itemSelectionRequested.emit(-1)
             self.requestUpdate()
