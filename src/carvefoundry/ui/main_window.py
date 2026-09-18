@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -36,6 +37,7 @@ from ..core.project_file import (
 )
 from ..core.units import ModelUnits
 from .import_worker import ImportWorker
+from .layers_popup import LayersPopup
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .viewport import MeshViewport
@@ -66,6 +68,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._updating_transform_controls = False
         self._updating_stock_controls = False
         self._updating_project_list = False
+        self._updating_object_selector = False
         self._import_thread: QThread | None = None
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
@@ -98,6 +101,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         status.addPermanentWidget(self.import_progress)
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
+        self._install_shortcuts()
 
         self.viewport.viewSettingsChanged.connect(self._save_viewport_mode)
         self.viewport.itemSelectionRequested.connect(self._viewport_select_item)
