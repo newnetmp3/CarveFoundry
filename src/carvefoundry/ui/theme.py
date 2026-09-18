@@ -250,6 +250,27 @@ QScrollArea#InspectorScrollArea,
     background: transparent;
     border: 0;
 }
+QScrollArea#InspectorScrollArea QScrollBar:vertical {
+    background: #0e1425;
+    width: 7px;
+    margin: 8px 0;
+}
+QScrollArea#InspectorScrollArea QScrollBar::handle:vertical {
+    background: #35415a;
+    border-radius: 3px;
+    min-height: 36px;
+}
+QScrollArea#InspectorScrollArea QScrollBar::handle:vertical:hover {
+    background: #c8ff3d;
+}
+QScrollArea#InspectorScrollArea QScrollBar::add-line:vertical,
+QScrollArea#InspectorScrollArea QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollArea#InspectorScrollArea QScrollBar::add-page:vertical,
+QScrollArea#InspectorScrollArea QScrollBar::sub-page:vertical {
+    background: transparent;
+}
 #LayersPopup {
     background: #0e1425;
     border: 1px solid #3a465f;
