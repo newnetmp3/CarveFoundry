@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -48,14 +49,25 @@ class Panel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
         self.header = QLabel(title)
         self.header.setObjectName("PanelHeader")
         self.header.setContentsMargins(10, 8, 10, 8)
         layout.addWidget(self.header)
+
         self.body = QWidget()
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(8, 8, 8, 8)
-        layout.addWidget(self.body, 1)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("InspectorScrollArea")
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.scroll_area.setWidget(self.body)
+        layout.addWidget(self.scroll_area, 1)
 
 
 class MainWindow(RibbonActionsMixin, QMainWindow):
