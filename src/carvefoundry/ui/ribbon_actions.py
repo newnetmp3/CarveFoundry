@@ -940,7 +940,9 @@ class RibbonActionsMixin:
     def _estimated_detail_raster_lines(self, stepover_mm: float) -> int | None:
         if stepover_mm <= 0.0:
             return None
-        item = self._selected_item() if hasattr(self, "_selected_item") else None
+        if not hasattr(self, "project_list"):
+            return None
+        item = self._selected_item()
         if item is None:
             return None
         bounds = item.transformed_bounds_mm()
