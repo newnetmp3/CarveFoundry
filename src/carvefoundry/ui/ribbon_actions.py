@@ -385,7 +385,7 @@ class RibbonActionsMixin:
         return f"{stem} {number}"
 
     # ------------------------------------------------------------------
-    # Home / clipboard / arrange
+    # Design / clipboard / arrange
     # ------------------------------------------------------------------
     def _redo(self) -> None:
         self.statusBar().showMessage("Nothing to redo", 3000)
@@ -891,7 +891,7 @@ class RibbonActionsMixin:
         self._add_generated_item(Path(path).stem + " trace", "trace", mesh)
 
     # ------------------------------------------------------------------
-    # Carve / 3D toolpaths
+    # Toolpaths / CAM
     # ------------------------------------------------------------------
     def _register_cam_selector(self, key: str, combo: QComboBox) -> None:
         self._cam_selector_widgets.setdefault(key, []).append(combo)
@@ -1338,7 +1338,7 @@ class RibbonActionsMixin:
             else None
         )
         cutter_name = cutter.name if isinstance(cutter, Cutter) else "selected cutter"
-        self.selection_info.setText(
+        self._set_activity_info(
             f"Toolpath operation\n{labels.get(operation, operation)}\n\n"
             f"Cutter: {cutter_name}\n"
             "Adjust Path Design or Motion as needed, then press Calculate."
@@ -1501,7 +1501,7 @@ class RibbonActionsMixin:
             else:
                 raise ValueError(f"Unknown CAM operation: {operation}")
         except (RuntimeError, ValueError) as exc:
-            self.selection_info.setText(f"Toolpath calculation failed\n{exc}")
+            self._set_activity_info(f"Toolpath calculation failed\n{exc}")
             self.statusBar().showMessage(f"Toolpath failed: {exc}", 8000)
             return
 
@@ -1557,7 +1557,7 @@ class RibbonActionsMixin:
             path.estimated_cutting_minutes for path in generated_toolpaths
         )
         operation_names = " + ".join(path.name for path in generated_toolpaths)
-        self.selection_info.setText(
+        self._set_activity_info(
             f"Toolpath ready\n{operation_names}\n\n"
             f"Cutter: {toolpath.cutter.name}\n"
             f"Moves: {total_moves:,}\n"
@@ -1602,7 +1602,7 @@ class RibbonActionsMixin:
         self.statusBar().showMessage("Opened toolpath backplot preview", 3000)
 
     # ------------------------------------------------------------------
-    # Tools
+    # Cutter tools / feeds and speeds
     # ------------------------------------------------------------------
     def _tool_to_dict(self, tool: Cutter) -> dict[str, object]:
         return {
@@ -1843,7 +1843,7 @@ class RibbonActionsMixin:
         chipload = float(form.value("chipload"))
         feed = rpm * flutes * chipload
         surface_speed = pi * cutter.diameter_mm * rpm / 1000.0
-        self.selection_info.setText(
+        self._set_activity_info(
             f"Feeds & speeds estimate\n{cutter.name}\n\n"
             f"Feed: {feed:.0f} mm/min\n"
             f"Spindle: {rpm:,} RPM\n"
@@ -2125,7 +2125,7 @@ class RibbonActionsMixin:
         dialog.show()
 
     # ------------------------------------------------------------------
-    # View / simulation
+    # View / toolpath simulation
     # ------------------------------------------------------------------
     def _set_2d_view(self) -> None:
         self.viewport.set_standard_view("Top", projection_mode="orthographic")
