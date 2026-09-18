@@ -184,6 +184,60 @@ class ToolRail(QFrame):
         if callback is not None:
             callback()
 
+    def add_menu(
+        self,
+        key: str,
+        label: str,
+        menu: QMenu,
+        *,
+        tooltip: str,
+        primary_callback: Callable[[], None] | None = None,
+        checkable: bool = False,
+    ) -> QToolButton:
+        """Add an icon button backed by a full command menu/flyout."""
+
+        button = self._button(
+            label,
+            tooltip=tooltip,
+            checkable=checkable,
+        )
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.setMenu(menu)
+        if primary_callback is not None:
+            button.clicked.connect(
+                lambda _checked=False, fn=primary_callback: fn()
+            )
+        else:
+            button.setPopupMode(
+                QToolButton.ToolButtonPopupMode.InstantPopup
+            )
+        self.buttons[key] = button
+        self._layout.addWidget(button)
+        return button
+
+    def add_action_tool(
+        self,
+        key: str,
+        action: QAction,
+        *,
+        tooltip: str | None = None,
+    ) -> QToolButton:
+        """Add a compact rail button driven by a shared QAction."""
+
+        button = self._button(
+            action.text(),
+            tooltip=tooltip or action.toolTip() or action.text(),
+            checkable=action.isCheckable(),
+        )
+        button.setDefaultAction(action)
+        button.setObjectName("ToolRailButton")
+        button.setIconSize(QSize(20, 20))
+        button.setFixedSize(38, 38)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.buttons[key] = button
+        self._layout.addWidget(button)
+        return button
+
     def add_separator(self) -> None:
         separator = QFrame()
         separator.setObjectName("ToolRailSeparator")
