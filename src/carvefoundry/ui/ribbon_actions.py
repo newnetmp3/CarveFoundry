@@ -1224,6 +1224,9 @@ class RibbonActionsMixin:
             finally:
                 combo.blockSignals(False)
 
+        for action in getattr(self, "_cam_menu_choice_actions", {}).get(key, []):
+            action.setChecked(action.text() == value)
+
         if key == "direction":
             self._refresh_cam_detail_readouts()
 
