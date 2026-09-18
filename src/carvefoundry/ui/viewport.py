@@ -64,6 +64,15 @@ class MeshViewport(_GpuMeshViewport):
         self._view_controls.move(x, 7)
         self._view_controls.raise_()
 
+    def set_view_controls_visible(self, visible: bool) -> None:
+        self._view_controls.setVisible(bool(visible))
+        if visible:
+            self._position_view_controls()
+
+    @property
+    def view_controls_visible(self) -> bool:
+        return self._view_controls.isVisible()
+
     def resizeGL(self, width: int, height: int) -> None:
         super().resizeGL(width, height)
         self._position_view_controls()
