@@ -263,11 +263,19 @@ class ToolpathPreviewWindow(QMainWindow):
         cutter_names = ", ".join(
             dict.fromkeys(path.cutter.name for path in self._toolpaths)
         )
+        source_names = ", ".join(
+            dict.fromkeys(
+                path.source_item_name
+                for path in self._toolpaths
+                if path.source_item_name
+            )
+        )
         total_minutes = sum(
             path.estimated_cutting_minutes for path in self._toolpaths
         )
+        source_prefix = f"{source_names}  •  " if source_names else ""
         self._summary_label.setText(
-            f"{operation_names}  •  {cutter_names}  •  "
+            f"{source_prefix}{operation_names}  •  {cutter_names}  •  "
             f"{len(self._moves):,} moves  •  ~{total_minutes:.1f} min cutting"
         )
         return panel
