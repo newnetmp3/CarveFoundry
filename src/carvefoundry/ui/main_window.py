@@ -649,6 +649,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.properties_panel.ensurePolished()
         self.stock_widget.ensurePolished()
+        self.transform_widget.ensurePolished()
         self.tool_combo.ensurePolished()
 
         body_margins = self.properties_panel.body_layout.contentsMargins()
@@ -670,6 +671,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         content_width = max(
             self.properties_panel.header.sizeHint().width(),
             self.stock_widget.sizeHint().width(),
+            self.transform_widget.sizeHint().width(),
             self.tool_combo.sizeHint().width(),
             selection_width,
         )
