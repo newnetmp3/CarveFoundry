@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from math import atan2, ceil, degrees, hypot, pi, sqrt
 from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor, QFont, QImage
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -54,7 +55,7 @@ from carvefoundry.core.primitives import (
     rectangle_mesh,
     text_mesh,
 )
-from carvefoundry.core.project import ProjectItem
+from carvefoundry.core.project import ProjectItem, TextProperties
 from carvefoundry.core.tools import DEFAULT_TOOLS, Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
@@ -680,13 +681,16 @@ class RibbonActionsMixin:
         kind: str,
         mesh,
         transform: Transform3D,
-    ) -> None:
+        *,
+        text_properties: TextProperties | None = None,
+    ) -> ProjectItem:
         item = ProjectItem(
             name=self._unique_item_name(name),
             kind=kind,
             mesh=mesh,
             transform=transform,
             source_units=ModelUnits.MILLIMETERS,
+            text_properties=text_properties,
         )
         self._before_ribbon_mutation(f"draw {kind}")
         self.project.items.append(item)
@@ -694,6 +698,7 @@ class RibbonActionsMixin:
         self.viewport.update()
         self._after_ribbon_mutation(f"draw {kind}", True)
         self.statusBar().showMessage(f"Drew {item.name}", 2500)
+        return item
 
     def _shape_drawn(
         self,
@@ -765,30 +770,28 @@ class RibbonActionsMixin:
             return
 
         if tool == "text":
-            text, accepted = QInputDialog.getText(
-                self,
-                "Text",
-                "Text",
-                text="CARVE",
+            size_pt = max(6.0, height * 72.0 / 25.4)
+            properties = TextProperties(
+                content="Text",
+                font_family=QFont().family(),
+                font_style="Regular",
+                size_pt=size_pt,
+                box_width_mm=max(width, 0.1),
+                depth_mm=depth,
             )
-            if not accepted or not text.strip():
-                return
-            text_height = max(height, 1.0)
             try:
-                mesh = text_mesh(
-                    text.strip(),
-                    height_mm=text_height,
-                    depth_mm=depth,
-                )
+                mesh = text_mesh(properties=properties)
                 source_width = float(mesh.dimensions[0])
                 if source_width > width and source_width > 1e-9:
-                    text_height *= width / source_width
-                    mesh = text_mesh(
-                        text.strip(),
-                        height_mm=max(text_height, 0.5),
-                        depth_mm=depth,
+                    properties = replace(
+                        properties,
+                        size_pt=max(
+                            4.0,
+                            properties.size_pt * width / source_width,
+                        ),
                     )
-            except ValueError as exc:
+                    mesh = text_mesh(properties=properties)
+            except (RuntimeError, ValueError) as exc:
                 self.statusBar().showMessage(str(exc), 5000)
                 return
 
@@ -800,7 +803,15 @@ class RibbonActionsMixin:
                     -float(bounds[1, 2]),
                 )
             )
-            self._add_drawn_item(text.strip(), "text", mesh, transform)
+            self._add_drawn_item(
+                "Text",
+                "text",
+                mesh,
+                transform,
+                text_properties=properties,
+            )
+            self._focus_text_editor()
+            return
 
     def _create_rectangle(self) -> None:
         self._set_shape_tool("rectangle")
