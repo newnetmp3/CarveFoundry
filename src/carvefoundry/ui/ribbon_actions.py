@@ -1615,6 +1615,7 @@ class RibbonActionsMixin:
             toolpaths=list(self.project.toolpaths),
             stock=self.project.stock,
             post_settings=self._grbl_post_settings(),
+            source_names=self._toolpath_source_names(self.project.toolpaths),
             parent=self,
         )
         window.destroyed.connect(
