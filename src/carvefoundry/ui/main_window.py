@@ -166,6 +166,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
             line.addWidget(button)
 
+        self.machine_status_label = QLabel("OFFLINE")
+        self.machine_status_label.setObjectName("MachineStatus")
+        self.machine_status_label.setToolTip(
+            "Machine connection status"
+        )
+        line.addWidget(self.machine_status_label)
+
         mode = QLabel("DESIGN + CAM")
         mode.setObjectName("AccentText")
         line.addWidget(mode)
@@ -478,7 +485,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         setup.add_button("Origin", self._machine_origin)
         setup.add_button("Postprocessor", self._postprocessor_settings_dialog)
         control = machine.add_group("Control")
-        control.add_button("Connect", self._connect_machine, primary=True)
+        self._machine_connect_button = control.add_button(
+            "Connect",
+            self._connect_machine,
+            primary=True,
+        )
+        self._machine_connect_button.setCheckable(True)
         control.add_button("Probe", self._probe_machine)
         control.add_button("Jog", self._show_jog_controls)
 
