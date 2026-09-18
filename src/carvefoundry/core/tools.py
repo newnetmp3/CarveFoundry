@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from enum import StrEnum
-from bisect import bisect_right
+from itertools import pairwise
 from math import radians, sqrt, tan
 
 
@@ -65,7 +66,7 @@ class Cutter:
                 raise ValueError("custom cutter profile radii cannot be negative")
             if any(height < 0 for height in heights):
                 raise ValueError("custom cutter profile heights cannot be negative")
-            if any(next_radius <= radius for radius, next_radius in zip(radii, radii[1:])):
+            if any(next_radius <= radius for radius, next_radius in pairwise(radii)):
                 raise ValueError("custom cutter profile radii must increase strictly")
             if radii[-1] > self.radius_mm + 1e-9:
                 raise ValueError("custom cutter profile exceeds the cutter radius")
