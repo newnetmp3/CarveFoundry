@@ -26,6 +26,8 @@ GL_COLOR_BUFFER_BIT = 0x00004000
 GL_DEPTH_BUFFER_BIT = 0x00000100
 GL_DEPTH_TEST = 0x0B71
 GL_BLEND = 0x0BE2
+GL_CULL_FACE = 0x0B44
+GL_BACK = 0x0405
 GL_SCISSOR_TEST = 0x0C11
 GL_SRC_ALPHA = 0x0302
 GL_ONE_MINUS_SRC_ALPHA = 0x0303
@@ -674,19 +676,13 @@ class MeshViewport(QOpenGLWidget):
                 dtype=np.float32,
             )
 
+            # Only draw the top perimeter. Hidden bottom/vertical edges
+            # read as ghost copies through the translucent stock while orbiting.
             edge_indices = (
                 (0, 1),
                 (1, 2),
                 (2, 3),
                 (3, 0),
-                (4, 5),
-                (5, 6),
-                (6, 7),
-                (7, 4),
-                (0, 4),
-                (1, 5),
-                (2, 6),
-                (3, 7),
             )
             edges = np.asarray(
                 [corners[index] for pair in edge_indices for index in pair],
@@ -750,6 +746,12 @@ class MeshViewport(QOpenGLWidget):
             QVector4D(0.72, 0.74, 0.78, 0.23),
         )
 
+        # Render only outward/front-facing stock faces. Without culling,
+        # the translucent underside and rear faces show through the top surface
+        # and look like camera-motion ghosting.
+        self._functions.glEnable(GL_CULL_FACE)
+        self._functions.glCullFace(GL_BACK)
+
         # Keep the translucent stock from hiding relief geometry below Z0.
         self._functions.glDepthMask(False)
         self._line_vao.bind()
@@ -757,6 +759,7 @@ class MeshViewport(QOpenGLWidget):
         self._line_vao.release()
         self._functions.glDepthMask(True)
 
+        self._functions.glDisable(GL_CULL_FACE)
         self._stock_program.release()
 
     def _draw_stock(self, view_projection: QMatrix4x4) -> None:
