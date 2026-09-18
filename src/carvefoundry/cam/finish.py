@@ -21,12 +21,18 @@ class Finish3DSettings:
     surface_spacing_mm: float
     raster: RasterFinishingSettings
     max_surface_samples: int = 2_000_000
+    surface_padding_mm: float = 0.0
+    background_z_mm: float | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.surface_spacing_mm) or self.surface_spacing_mm <= 0:
             raise ValueError("surface_spacing_mm must be finite and greater than zero.")
         if self.max_surface_samples < 4:
             raise ValueError("max_surface_samples must be at least four.")
+        if not isfinite(self.surface_padding_mm) or self.surface_padding_mm < 0:
+            raise ValueError("surface_padding_mm must be finite and non-negative.")
+        if self.background_z_mm is not None and not isfinite(self.background_z_mm):
+            raise ValueError("background_z_mm must be finite when supplied.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +42,13 @@ class Finish3DResult:
     toolpath: Toolpath
 
 
-def _estimated_sample_count(mesh: trimesh.Trimesh, spacing_mm: float) -> int:
+def _estimated_sample_count(
+    mesh: trimesh.Trimesh,
+    spacing_mm: float,
+    padding_mm: float = 0.0,
+) -> int:
     bounds = np.asarray(mesh.bounds, dtype=float)
-    span = bounds[1, :2] - bounds[0, :2]
+    span = bounds[1, :2] - bounds[0, :2] + 2.0 * padding_mm
     if np.any(span <= 0):
         raise ValueError("Mesh must have non-zero XY dimensions for 3-axis finishing.")
     x_count = max(2, ceil(float(span[0]) / spacing_mm) + 1)
@@ -60,7 +70,11 @@ def calculate_3d_finish(
     radial profile; no cutter family is substituted or approximated as a ball.
     """
 
-    sample_count = _estimated_sample_count(mesh_mm, settings.surface_spacing_mm)
+    sample_count = _estimated_sample_count(
+        mesh_mm,
+        settings.surface_spacing_mm,
+        settings.surface_padding_mm,
+    )
     if sample_count > settings.max_surface_samples:
         raise ValueError(
             f"Requested surface grid would contain {sample_count:,} samples; "
@@ -70,6 +84,8 @@ def calculate_3d_finish(
     surface = HeightField.from_mesh_top_surface(
         mesh_mm,
         spacing_mm=settings.surface_spacing_mm,
+        padding_mm=settings.surface_padding_mm,
+        fill_missing_z_mm=settings.background_z_mm,
     )
     contact = compensate_height_field(surface, cutter)
     toolpath = generate_raster_finishing(contact, settings.raster, name=name)
