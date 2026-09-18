@@ -368,6 +368,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         cutters.add_button("Library", self._show_tool_library)
         cutters.add_button("New Tool", self._new_tool)
+        cutters.add_button("Custom Profile", self._new_custom_profile_tool)
         cutters.add_button("Calculator", self._feeds_speeds_calculator)
 
         path_design = toolpaths.add_group("Path Design")
@@ -521,6 +522,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         camera = view.add_group("Camera")
         camera.add_button("Fit View", self._fit_view, primary=True)
+        camera.add_button("2D Top", self._set_2d_view)
         camera.add_button("Perspective", self._set_perspective_option)
         camera.add_button("Orthographic", self._set_orthographic_option)
         camera.add_button("Isometric", self._set_isometric_option)
