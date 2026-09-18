@@ -851,7 +851,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             "left": [],
             "right": [],
         }
-        if self.project is None or not self.show_grid:
+        if self.project is None:
             return ticks
 
         projection, view_matrix, world_per_pixel = self._camera_geometry()
