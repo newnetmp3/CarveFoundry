@@ -309,8 +309,17 @@ class RibbonActionsMixin:
     def _before_ribbon_mutation(self, _label: str) -> None:
         """History hook supplied by project_window.MainWindow."""
 
-    def _after_ribbon_mutation(self, _label: str, _changed: bool) -> None:
+    def _after_ribbon_mutation(self, label: str, changed: bool) -> None:
         """History hook supplied by project_window.MainWindow."""
+
+        if not changed:
+            return
+        normalized = label.strip().lower()
+        if normalized in {"group", "ungroup"}:
+            return
+        if normalized.startswith("calculate "):
+            return
+        self._invalidate_toolpaths("Project geometry")
 
     def _selected_design_indices(self, *, expand_groups: bool = False) -> list[int]:
         rows = sorted(
@@ -907,6 +916,7 @@ class RibbonActionsMixin:
         mark_custom: bool = True,
     ) -> None:
         detail = max(0, min(100, int(value)))
+        previous_detail = self._cam_detail
         self._cam_detail = detail
         self._settings.setValue("cam/design/detail", detail)
 
@@ -934,6 +944,8 @@ class RibbonActionsMixin:
 
         self._settings.sync()
         self._refresh_cam_detail_readouts()
+        if detail != previous_detail:
+            self._invalidate_toolpaths("Toolpath detail")
 
         fraction = detail_stepover_fraction(detail)
         cutter = (
@@ -1025,6 +1037,7 @@ class RibbonActionsMixin:
             "3d_cut_style": "_cam_3d_cut_style",
         }
         attribute = attributes[key]
+        previous_value = getattr(self, attribute)
         setattr(self, attribute, value)
         self._settings.setValue(f"cam/design/{key}", value)
 
@@ -1063,6 +1076,9 @@ class RibbonActionsMixin:
 
         if key == "direction":
             self._refresh_cam_detail_readouts()
+
+        if value != previous_value:
+            self._invalidate_toolpaths("Toolpath settings")
 
         self.statusBar().showMessage(
             f"Toolpath {key.replace('_', ' ')}: {value}",
@@ -1240,6 +1256,7 @@ class RibbonActionsMixin:
             mark_custom=True,
         )
         self._settings.sync()
+        self._invalidate_toolpaths("Advanced toolpath settings")
         self.statusBar().showMessage("Advanced toolpath settings saved", 3000)
 
     def _quality_stepover_fraction(self) -> float:
@@ -1308,7 +1325,10 @@ class RibbonActionsMixin:
         )
 
     def _select_cam_operation(self, operation: str) -> None:
+        previous_operation = self._active_cam_operation
         self._active_cam_operation = operation
+        if operation != previous_operation:
+            self._invalidate_toolpaths("Toolpath operation")
         labels = {
             "profile": "Profile",
             "pocket": "Pocket",
@@ -1373,6 +1393,7 @@ class RibbonActionsMixin:
     def _toggle_tabs_operation(self) -> None:
         self._tabs_enabled = not self._tabs_enabled
         self._settings.setValue("cam/tabs_enabled", self._tabs_enabled)
+        self._invalidate_toolpaths("Tab settings")
         self._settings.sync()
         if self._tabs_button is not None:
             self._tabs_button.setChecked(self._tabs_enabled)
@@ -1545,6 +1566,7 @@ class RibbonActionsMixin:
 
         self._before_ribbon_mutation(f"calculate {operation}")
         self.project.toolpaths = generated_toolpaths
+        self._toolpaths_stale_reason = None
         self.viewport.set_toolpaths_visible(True)
         self.viewport.set_simulation_fraction(1.0)
         self.viewport.update()
@@ -1565,6 +1587,7 @@ class RibbonActionsMixin:
             f"Rapid distance: {total_rapid:.1f} mm\n"
             f"Estimated cutting: {total_minutes:.1f} min"
         )
+        self._sync_toolpath_output_state()
         self.statusBar().showMessage(
             f"Calculated {operation_names}",
             5000,
