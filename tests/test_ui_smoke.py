@@ -1,12 +1,7 @@
-import os
-
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.ui.main_window import MainWindow
 
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("QT_OPENGL", "software")
 _APP = QApplication.instance() or QApplication([])
 
 
