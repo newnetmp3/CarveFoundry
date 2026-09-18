@@ -1750,15 +1750,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.statusBar().showMessage(f"Duplicated {duplicate.name}", 3000)
 
     def _delete_selected_item(self) -> None:
-        index = self._selected_item_index()
-        if index is None:
-            self.statusBar().showMessage("Stock cannot be deleted", 3000)
+        indices = self._selected_design_indices(expand_groups=True)
+        if not indices:
+            self.statusBar().showMessage("Select one or more design objects", 3000)
             return
-        removed = self.project.remove_item(index)
-        next_row = min(index + 1, len(self.project.items))
+
+        removed_names = [
+            self.project.items[index].name
+            for index in indices
+        ]
+        for index in reversed(indices):
+            self.project.remove_item(index)
+
+        next_row = min(indices[0] + 1, len(self.project.items))
         self._refresh_project_list(next_row)
         self.viewport.update()
-        self.statusBar().showMessage(f"Deleted {removed.name}", 3000)
+
+        if len(removed_names) == 1:
+            message = f"Deleted {removed_names[0]}"
+        else:
+            message = f"Deleted {len(removed_names)} objects"
+        self.statusBar().showMessage(message, 3000)
 
     def _move_selected_item(self, offset: int) -> None:
         index = self._selected_item_index()
