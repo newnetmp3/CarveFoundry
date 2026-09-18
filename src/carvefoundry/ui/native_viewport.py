@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import (
+    QColor,
     QMatrix4x4,
     QMouseEvent,
+    QPainter,
     QSurfaceFormat,
     QVector3D,
     QVector4D,
@@ -23,6 +25,7 @@ from PySide6.QtOpenGL import (
 )
 from PySide6.QtWidgets import (
     QComboBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
@@ -163,6 +166,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     rendererStatusChanged = Signal(str)
     orbitStarted = Signal()
     fitRequested = Signal()
+    viewChanged = Signal()
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -236,6 +240,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def set_selected_item(self, index: int | None) -> None:
         self.selected_item_index = index
         self.requestUpdate()
+        self.viewChanged.emit()
 
     def prepare_mesh_upload(
         self,
@@ -255,6 +260,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.camera.zoom = 1.0
         self.camera.pan_world = (0.0, 0.0, 0.0)
         self.requestUpdate()
+        self.viewChanged.emit()
 
     def toggle_stock(self) -> None:
         self.show_stock = not self.show_stock
@@ -263,6 +269,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def toggle_grid(self) -> None:
         self.show_grid = not self.show_grid
         self.requestUpdate()
+        self.viewChanged.emit()
 
     def set_reverse_horizontal_drag(self, enabled: bool) -> None:
         self.reverse_horizontal_drag = bool(enabled)
@@ -377,6 +384,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def resizeGL(self, width: int, height: int) -> None:
         if self._functions is not None:
             self._functions.glViewport(0, 0, max(width, 1), max(height, 1))
+        self.viewChanged.emit()
 
     @staticmethod
     def _bounds_corners(bounds: np.ndarray) -> np.ndarray:
@@ -725,6 +733,198 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             nice = 10.0
         return nice * scale
 
+    def _grid_step(self, world_per_pixel: float, width_mm: float, height_mm: float) -> float:
+        """Return the exact adaptive spacing shared by grid lines and rulers."""
+
+        step = self._nice_grid_step(max(world_per_pixel * 55.0, 1e-6))
+        stock_floor = self._nice_grid_step(max(width_mm, height_mm) / 200.0)
+        return max(step, stock_floor)
+
+    def _project_world_point(
+        self,
+        point: tuple[float, float, float],
+        view_projection: QMatrix4x4,
+    ) -> QPointF | None:
+        clip = view_projection * QVector4D(
+            float(point[0]),
+            float(point[1]),
+            float(point[2]),
+            1.0,
+        )
+        w = float(clip.w())
+        if w <= 1e-9:
+            return None
+        ndc_x = float(clip.x()) / w
+        ndc_y = float(clip.y()) / w
+        return QPointF(
+            (ndc_x + 1.0) * 0.5 * max(self.width(), 1),
+            (1.0 - ndc_y) * 0.5 * max(self.height(), 1),
+        )
+
+    @staticmethod
+    def _segment_intersects_viewport(
+        first: QPointF,
+        second: QPointF,
+        width: float,
+        height: float,
+    ) -> bool:
+        """Liang-Barsky clip test for a projected finite stock grid line."""
+
+        x0, y0 = first.x(), first.y()
+        dx = second.x() - x0
+        dy = second.y() - y0
+        t_min, t_max = 0.0, 1.0
+        for p, q in (
+            (-dx, x0),
+            (dx, width - x0),
+            (-dy, y0),
+            (dy, height - y0),
+        ):
+            if abs(p) < 1e-12:
+                if q < 0.0:
+                    return False
+                continue
+            ratio = q / p
+            if p < 0.0:
+                t_min = max(t_min, ratio)
+            else:
+                t_max = min(t_max, ratio)
+            if t_min > t_max:
+                return False
+        return True
+
+    @staticmethod
+    def _line_edge_intersections(
+        first: QPointF,
+        second: QPointF,
+        width: float,
+        height: float,
+    ) -> dict[str, float]:
+        """Intersect the infinite projected grid line with viewport edges."""
+
+        x0, y0 = first.x(), first.y()
+        dx = second.x() - x0
+        dy = second.y() - y0
+        intersections: dict[str, float] = {}
+        epsilon = 1e-9
+
+        if abs(dx) > epsilon:
+            for side, x_edge in (("left", 0.0), ("right", width)):
+                t = (x_edge - x0) / dx
+                y = y0 + t * dy
+                if -0.5 <= y <= height + 0.5:
+                    intersections[side] = max(0.0, min(height, y))
+
+        if abs(dy) > epsilon:
+            for side, y_edge in (("top", 0.0), ("bottom", height)):
+                t = (y_edge - y0) / dy
+                x = x0 + t * dx
+                if -0.5 <= x <= width + 0.5:
+                    intersections[side] = max(0.0, min(width, x))
+
+        return intersections
+
+    @staticmethod
+    def _format_ruler_coordinate(value: float, step: float) -> str:
+        if step >= 10.0:
+            decimals = 0
+        elif step >= 1.0:
+            decimals = 1
+        elif step >= 0.1:
+            decimals = 2
+        else:
+            decimals = 3
+        return f"{value:.{decimals}f}".rstrip("0").rstrip(".")
+
+    def ruler_ticks(self) -> dict[str, list[tuple[float, str]]]:
+        """Return screen-edge ticks tied to visible stock-plane grid lines.
+
+        Stock coordinates are always expressed in millimeters with the lower-left
+        stock corner defined as X=0, Y=0.  Each visible projected grid line gets
+        one edge label so the coordinates remain readable when the stock edges
+        themselves are outside the zoomed viewport.
+        """
+
+        ticks: dict[str, list[tuple[float, str]]] = {
+            "top": [],
+            "bottom": [],
+            "left": [],
+            "right": [],
+        }
+        if self.project is None or not self.show_grid:
+            return ticks
+
+        projection, view_matrix, world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        viewport_width = float(max(self.width(), 1))
+        viewport_height = float(max(self.height(), 1))
+        stock_width = float(self.project.stock.width_mm)
+        stock_height = float(self.project.stock.height_mm)
+        step = self._grid_step(world_per_pixel, stock_width, stock_height)
+
+        def values(limit: float) -> list[float]:
+            count = max(0, int(floor(limit / step + 1e-9)))
+            result = [index * step for index in range(count + 1)]
+            if not result or abs(result[-1] - limit) > max(step * 1e-6, 1e-7):
+                result.append(limit)
+            return result
+
+        def add_line(
+            axis: str,
+            value: float,
+            start: tuple[float, float, float],
+            end: tuple[float, float, float],
+            priority: tuple[str, ...],
+        ) -> None:
+            first = self._project_world_point(start, view_projection)
+            second = self._project_world_point(end, view_projection)
+            if first is None or second is None:
+                return
+            if not self._segment_intersects_viewport(
+                first,
+                second,
+                viewport_width,
+                viewport_height,
+            ):
+                return
+            intersections = self._line_edge_intersections(
+                first,
+                second,
+                viewport_width,
+                viewport_height,
+            )
+            if not intersections:
+                return
+            label = (
+                f"{axis} "
+                f"{self._format_ruler_coordinate(value, step)}"
+            )
+            for side in priority:
+                if side in intersections:
+                    ticks[side].append((intersections[side], label))
+                    return
+
+        z = 0.002
+        for x in values(stock_width):
+            add_line(
+                "X",
+                x,
+                (x, 0.0, z),
+                (x, stock_height, z),
+                ("bottom", "top", "right", "left"),
+            )
+
+        for y in values(stock_height):
+            add_line(
+                "Y",
+                y,
+                (0.0, y, z),
+                (stock_width, y, z),
+                ("left", "right", "bottom", "top"),
+            )
+
+        return ticks
+
     def _stock_geometry(
         self,
         world_per_pixel: float,
@@ -775,9 +975,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if not self.show_grid:
             return surfaces, edges, empty, empty
 
-        step = self._nice_grid_step(max(world_per_pixel * 55.0, 1e-6))
-        stock_floor = self._nice_grid_step(max(w, h) / 200.0)
-        step = max(step, stock_floor)
+        step = self._grid_step(world_per_pixel, w, h)
 
         minor: list[tuple[float, float, float]] = []
         major: list[tuple[float, float, float]] = []
@@ -951,11 +1149,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             )
             self.orbitStarted.emit()
             self.requestUpdate()
+            self.viewChanged.emit()
         elif event.buttons() & (
             Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
         ):
             self._pan_pixels(delta)
             self.requestUpdate()
+            self.viewChanged.emit()
 
         event.accept()
 
@@ -969,11 +1169,84 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if steps:
             self.zoom = self.camera.zoom * (1.20**steps)
             self.requestUpdate()
+            self.viewChanged.emit()
         event.accept()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         self.fitRequested.emit()
         event.accept()
+
+
+class _RulerBand(QWidget):
+    """Thin screen-space ruler drawn outside the native OpenGL child window."""
+
+    def __init__(self, side: str) -> None:
+        super().__init__()
+        self.side = side
+        self._ticks: list[tuple[float, str]] = []
+        self.setObjectName("ViewportRuler")
+        if side in {"top", "bottom"}:
+            self.setFixedHeight(26)
+        else:
+            self.setFixedWidth(58)
+
+    def set_ticks(self, ticks: list[tuple[float, str]]) -> None:
+        self._ticks = sorted(ticks, key=lambda item: item[0])
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.fillRect(self.rect(), QColor(14, 20, 37))
+        painter.setPen(QColor(105, 117, 139))
+
+        horizontal = self.side in {"top", "bottom"}
+        if horizontal:
+            edge_y = self.height() - 1 if self.side == "top" else 0
+            painter.drawLine(0, edge_y, self.width(), edge_y)
+        else:
+            edge_x = self.width() - 1 if self.side == "left" else 0
+            painter.drawLine(edge_x, 0, edge_x, self.height())
+
+        painter.setPen(QColor(199, 208, 224))
+        metrics = painter.fontMetrics()
+        last_end = -10_000.0
+        for position, label in self._ticks:
+            if horizontal:
+                text_width = metrics.horizontalAdvance(label)
+                start = max(2.0, min(self.width() - text_width - 2.0, position - text_width / 2.0))
+                if start < last_end + 7.0:
+                    continue
+                if self.side == "top":
+                    painter.drawLine(int(position), self.height() - 1, int(position), self.height() - 6)
+                    text_y = 2
+                else:
+                    painter.drawLine(int(position), 0, int(position), 5)
+                    text_y = 8
+                painter.drawText(int(start), text_y + metrics.ascent(), label)
+                last_end = start + text_width
+            else:
+                text_height = metrics.height()
+                start_y = max(1.0, min(self.height() - text_height - 1.0, position - text_height / 2.0))
+                if start_y < last_end + 5.0:
+                    continue
+                if self.side == "left":
+                    painter.drawLine(self.width() - 1, int(position), self.width() - 6, int(position))
+                    rect_x = 2
+                    align = Qt.AlignmentFlag.AlignRight
+                else:
+                    painter.drawLine(0, int(position), 5, int(position))
+                    rect_x = 6
+                    align = Qt.AlignmentFlag.AlignLeft
+                painter.drawText(
+                    rect_x,
+                    int(start_y),
+                    self.width() - rect_x - 3,
+                    text_height,
+                    int(align | Qt.AlignmentFlag.AlignVCenter),
+                    label,
+                )
+                last_end = start_y + text_height
 
 
 class MeshViewport(QWidget):
@@ -992,11 +1265,37 @@ class MeshViewport(QWidget):
         self._renderer.rendererStatusChanged.connect(self._renderer_status_changed)
         self._renderer.orbitStarted.connect(self._orbit_started)
         self._renderer.fitRequested.connect(self.fit_view)
+        self._renderer.viewChanged.connect(self._update_rulers)
 
         self._container = QWidget.createWindowContainer(self._renderer, self)
         self._container.setObjectName("NativeViewportContainer")
         self._container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._container.setMinimumSize(360, 220)
+
+        self._rulers_visible = True
+        self._top_ruler = _RulerBand("top")
+        self._bottom_ruler = _RulerBand("bottom")
+        self._left_ruler = _RulerBand("left")
+        self._right_ruler = _RulerBand("right")
+        self._ruler_bands = (
+            self._top_ruler,
+            self._bottom_ruler,
+            self._left_ruler,
+            self._right_ruler,
+        )
+
+        self._viewport_shell = QWidget()
+        self._viewport_shell.setObjectName("ViewportShell")
+        shell_layout = QGridLayout(self._viewport_shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+        shell_layout.addWidget(self._top_ruler, 0, 1)
+        shell_layout.addWidget(self._left_ruler, 1, 0)
+        shell_layout.addWidget(self._container, 1, 1)
+        shell_layout.addWidget(self._right_ruler, 1, 2)
+        shell_layout.addWidget(self._bottom_ruler, 2, 1)
+        shell_layout.setRowStretch(1, 1)
+        shell_layout.setColumnStretch(1, 1)
 
         self._status_label = QLabel("Native OpenGL initializing…")
         self._status_label.setObjectName("Muted")
@@ -1027,7 +1326,8 @@ class MeshViewport(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._controls)
-        layout.addWidget(self._container, 1)
+        layout.addWidget(self._viewport_shell, 1)
+        self._update_rulers()
 
     @property
     def project(self) -> Project | None:
@@ -1084,10 +1384,15 @@ class MeshViewport(QWidget):
     @show_grid.setter
     def show_grid(self, value: bool) -> None:
         self._renderer.show_grid = bool(value)
+        self._update_rulers()
 
     @property
     def reverse_horizontal_drag(self) -> bool:
         return self._renderer.reverse_horizontal_drag
+
+    @property
+    def rulers_visible(self) -> bool:
+        return self._rulers_visible
 
     @property
     def view_controls_visible(self) -> bool:
@@ -1095,6 +1400,21 @@ class MeshViewport(QWidget):
 
     def set_view_controls_visible(self, visible: bool) -> None:
         self._controls.setVisible(bool(visible))
+
+    def set_rulers_visible(self, visible: bool) -> None:
+        self._rulers_visible = bool(visible)
+        for band in self._ruler_bands:
+            band.setVisible(self._rulers_visible)
+        self._update_rulers()
+
+    def _update_rulers(self) -> None:
+        if not hasattr(self, "_ruler_bands") or not self._rulers_visible:
+            return
+        ticks = self._renderer.ruler_ticks()
+        self._top_ruler.set_ticks(ticks["top"])
+        self._bottom_ruler.set_ticks(ticks["bottom"])
+        self._left_ruler.set_ticks(ticks["left"])
+        self._right_ruler.set_ticks(ticks["right"])
 
     def set_project(self, project: Project) -> None:
         self._renderer.set_project(project)
@@ -1127,9 +1447,11 @@ class MeshViewport(QWidget):
 
     def toggle_grid(self) -> None:
         self._renderer.toggle_grid()
+        self._update_rulers()
 
     def update(self, *args) -> None:
         self._renderer.requestUpdate()
+        self._update_rulers()
         super().update(*args)
 
     def _set_projection_combo(self, text: str) -> None:
