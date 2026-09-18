@@ -967,6 +967,16 @@ class RibbonActionsMixin:
             suffix=" mm",
         )
         form.add_double(
+            "bit_length",
+            "Usable bit length (0 = not enforced)",
+            float(self._settings.value("cam/usable_bit_length_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            decimals=3,
+            step=0.5,
+            suffix=" mm",
+        )
+        form.add_double(
             "tab_height",
             "Tab height",
             float(self._settings.value("cam/tab_height_mm", 2.0)),
@@ -975,6 +985,23 @@ class RibbonActionsMixin:
             decimals=3,
             step=0.25,
             suffix=" mm",
+        )
+        form.add_double(
+            "tab_width",
+            "Tab width",
+            float(self._settings.value("cam/tab_width_mm", 6.0)),
+            minimum=0.5,
+            maximum=100.0,
+            decimals=3,
+            step=0.5,
+            suffix=" mm",
+        )
+        form.add_int(
+            "tab_count",
+            "Tab count",
+            int(self._settings.value("cam/tab_count", 4)),
+            minimum=1,
+            maximum=32,
         )
         form.add_double(
             "local_clearance",
@@ -1018,7 +1045,10 @@ class RibbonActionsMixin:
             "cam/stepover_percent": form.value("pocket_stepover"),
             "cam/finish_stepover_percent": form.value("finish_stepover"),
             "cam/padding_mm": form.value("padding"),
+            "cam/usable_bit_length_mm": form.value("bit_length"),
             "cam/tab_height_mm": form.value("tab_height"),
+            "cam/tab_width_mm": form.value("tab_width"),
+            "cam/tab_count": form.value("tab_count"),
             "cam/local_link_clearance_mm": form.value("local_clearance"),
             "cam/direct_link_tolerance_mm": form.value("link_tolerance"),
             "cam/custom_ramp_angle_deg": form.value("ramp_angle"),
@@ -1167,9 +1197,17 @@ class RibbonActionsMixin:
             finish_stepover_fraction=self._quality_stepover_fraction(),
             overall_depth_mm=cut_depth if cut_depth > 0.0 else None,
             padding_mm=float(self._settings.value("cam/padding_mm", 0.0)),
+            usable_bit_length_mm=(
+                float(self._settings.value("cam/usable_bit_length_mm", 0.0))
+                or None
+            ),
             tab_height_mm=float(
                 self._settings.value("cam/tab_height_mm", 2.0)
             ),
+            tab_width_mm=float(
+                self._settings.value("cam/tab_width_mm", 6.0)
+            ),
+            tab_count=int(self._settings.value("cam/tab_count", 4)),
             tabs_enabled=self._tabs_enabled,
             milling_direction=self._milling_direction(),
             pocket_strategy=self._pocket_strategy_for_bounds(bounds),
@@ -1271,7 +1309,10 @@ class RibbonActionsMixin:
                 finish_stepover_fraction=settings.finish_stepover_fraction,
                 overall_depth_mm=self.project.stock.thickness_mm,
                 padding_mm=settings.padding_mm,
+                usable_bit_length_mm=settings.usable_bit_length_mm,
                 tab_height_mm=settings.tab_height_mm,
+                tab_width_mm=settings.tab_width_mm,
+                tab_count=settings.tab_count,
                 tabs_enabled=self._tabs_enabled,
                 milling_direction=settings.milling_direction,
                 pocket_strategy=settings.pocket_strategy,
