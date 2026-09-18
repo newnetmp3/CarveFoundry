@@ -86,6 +86,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_target_project: Project | None = None
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
+        self._history_action_buttons: dict[str, list[object]] = {
+            "undo": [],
+            "redo": [],
+        }
         self._toolpath_output_buttons: list[object] = []
         self._model_selection_buttons: list[object] = []
         self._selection_action_buttons: dict[str, object] = {}
@@ -171,6 +175,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 lambda _checked=False, fn=callback: fn()
             )
             line.addWidget(button)
+            key = title.lower()
+            if key in self._history_action_buttons:
+                self._history_action_buttons[key].append(button)
 
         self.machine_status_label = QLabel("OFFLINE")
         self.machine_status_label.setObjectName("MachineStatus")
@@ -232,8 +239,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         # DESIGN: geometry creation, editing, arrangement, and object management.
         design = self.ribbon.add_page("Design")
         edit = design.add_group("Edit")
-        edit.add_button("Undo", self._undo)
-        edit.add_button("Redo", self._redo)
+        undo_button = edit.add_button("Undo", self._undo)
+        redo_button = edit.add_button("Redo", self._redo)
+        self._history_action_buttons["undo"].append(undo_button)
+        self._history_action_buttons["redo"].append(redo_button)
         self._selection_action_buttons["cut"] = edit.add_button(
             "Cut",
             self._cut_selected_items,
@@ -1072,6 +1081,33 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             button = self._selection_action_buttons.get(name)
             if button is not None:
                 button.setEnabled(enabled)
+            if hasattr(self, "layers_popup"):
+                popup_button = self.layers_popup.action_buttons.get(name)
+                if popup_button is not None:
+                    popup_button.setEnabled(enabled)
+
+    def _set_history_action_state(
+        self,
+        *,
+        can_undo: bool,
+        can_redo: bool,
+        undo_label: str | None = None,
+        redo_label: str | None = None,
+    ) -> None:
+        for button in self._history_action_buttons["undo"]:
+            button.setEnabled(can_undo)
+            button.setToolTip(
+                f"Undo: {undo_label} • Ctrl+Z"
+                if can_undo and undo_label
+                else "Nothing to undo"
+            )
+        for button in self._history_action_buttons["redo"]:
+            button.setEnabled(can_redo)
+            button.setToolTip(
+                f"Redo: {redo_label} • Ctrl+Y"
+                if can_redo and redo_label
+                else "Nothing to redo"
+            )
 
     def _sync_toolpath_output_state(self) -> None:
         has_toolpaths = bool(self.project.toolpaths)
