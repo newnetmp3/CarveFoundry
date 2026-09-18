@@ -124,6 +124,9 @@ class Panel(QFrame):
         self.scroll_area.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+        self.scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
         self.scroll_area.setWidget(self.body)
         layout.addWidget(self.scroll_area, 1)
 
