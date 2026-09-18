@@ -506,16 +506,17 @@ class MainWindow(QMainWindow):
         if mesh is None:
             return f"{item.kind.upper()}\n{item.name}"
 
-        transformed = item.transformed_mesh()
-        assert transformed is not None
+        placed_bounds = item.transformed_bounds_mm()
+        assert placed_bounds is not None
+        placed_dimensions_array = placed_bounds[1] - placed_bounds[0]
         placed_dimensions = " × ".join(
-            cls._number(float(value)) for value in transformed.extents
+            cls._number(float(value)) for value in placed_dimensions_array
         )
         placed_minimum = ", ".join(
-            cls._number(float(value)) for value in transformed.bounds[0]
+            cls._number(float(value)) for value in placed_bounds[0]
         )
         placed_maximum = ", ".join(
-            cls._number(float(value)) for value in transformed.bounds[1]
+            cls._number(float(value)) for value in placed_bounds[1]
         )
         metadata_units = mesh.units or "none (STL normally stores no unit)"
         return (
@@ -1241,15 +1242,16 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Import result discarded — project changed", 6000)
             return
 
-        info_list = list(infos)
+        prepared_list = list(infos)
         failure_list = list(failures)
-        if info_list:
-            self._before_import_items_added(len(info_list))
+        if prepared_list:
+            self._before_import_items_added(len(prepared_list))
 
         imported: list[ProjectItem] = []
         source_only_count = 0
 
-        for info in info_list:
+        for prepared in prepared_list:
+            info = prepared.info
             mesh = info.mesh
             if mesh is None:
                 item = ProjectItem(info.path.name, info.path, info.kind)
@@ -1265,6 +1267,12 @@ class MainWindow(QMainWindow):
                     transform=transform,
                     source_units=source_units,
                 )
+                if prepared.gpu_vertex_bytes is not None:
+                    self.viewport.prepare_mesh_upload(
+                        mesh.mesh,
+                        prepared.gpu_vertex_bytes,
+                        prepared.gpu_vertex_count,
+                    )
             self.project.items.append(item)
             imported.append(item)
 
