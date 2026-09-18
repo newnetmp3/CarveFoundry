@@ -16,6 +16,20 @@ QMainWindow, #AppRoot { background: #0b1020; }
 }
 #AppName { color: #ffffff; font-size: 18px; font-weight: 700; }
 #AppAccent { color: #c8ff3d; font-size: 18px; font-weight: 800; }
+#MachineStatus {
+    background: #151b2a;
+    color: #8f9aae;
+    border: 1px solid #303a50;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 800;
+}
+#MachineStatus[connected="true"] {
+    background: #152516;
+    color: #c8ff3d;
+    border-color: #5b7a2a;
+}
 QPushButton#TitleQuickButton {
     background: transparent;
     color: #aeb8ca;
