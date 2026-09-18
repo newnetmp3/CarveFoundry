@@ -65,3 +65,95 @@ def test_outline_text_geometry_is_distinct_from_filled_text() -> None:
     assert filled.mesh.is_watertight
     assert outlined.mesh.is_watertight
     assert not np.isclose(filled.mesh.volume, outlined.mesh.volume)
+
+def test_text_box_alignment_preserves_layout_origin() -> None:
+    family = _test_font_family()
+    common = {
+        "content": "CARVE",
+        "font_family": family,
+        "size_pt": 36.0,
+        "box_width_mm": 100.0,
+        "depth_mm": 1.0,
+    }
+
+    left = text_mesh(
+        properties=TextProperties(**common, alignment="left")
+    ).mesh
+    center = text_mesh(
+        properties=TextProperties(**common, alignment="center")
+    ).mesh
+    right = text_mesh(
+        properties=TextProperties(**common, alignment="right")
+    ).mesh
+
+    assert np.isclose(left.extents[0], center.extents[0], rtol=1e-4)
+    assert np.isclose(center.extents[0], right.extents[0], rtol=1e-4)
+    assert left.bounds[0, 0] < center.bounds[0, 0] < right.bounds[0, 0]
+
+
+def test_character_and_line_spacing_change_text_dimensions() -> None:
+    family = _test_font_family()
+    tight = text_mesh(
+        properties=TextProperties(
+            content="CARVE",
+            font_family=family,
+            size_pt=36.0,
+            depth_mm=1.0,
+        )
+    ).mesh
+    spaced = text_mesh(
+        properties=TextProperties(
+            content="CARVE",
+            font_family=family,
+            size_pt=36.0,
+            character_spacing_mm=1.0,
+            depth_mm=1.0,
+        )
+    ).mesh
+    normal_lines = text_mesh(
+        properties=TextProperties(
+            content="CARVE\nFOUNDRY",
+            font_family=family,
+            size_pt=36.0,
+            line_spacing_percent=100.0,
+            depth_mm=1.0,
+        )
+    ).mesh
+    loose_lines = text_mesh(
+        properties=TextProperties(
+            content="CARVE\nFOUNDRY",
+            font_family=family,
+            size_pt=36.0,
+            line_spacing_percent=180.0,
+            depth_mm=1.0,
+        )
+    ).mesh
+
+    assert spaced.extents[0] > tight.extents[0]
+    assert loose_lines.extents[1] > normal_lines.extents[1]
+
+
+def test_text_effects_are_part_of_cnc_geometry() -> None:
+    family = _test_font_family()
+    plain = text_mesh(
+        properties=TextProperties(
+            content="CARVE",
+            font_family=family,
+            size_pt=36.0,
+            depth_mm=1.0,
+        )
+    ).mesh
+    decorated = text_mesh(
+        properties=TextProperties(
+            content="CARVE",
+            font_family=family,
+            size_pt=36.0,
+            underline=True,
+            strikeout=True,
+            depth_mm=1.0,
+        )
+    ).mesh
+
+    assert decorated.is_watertight
+    assert decorated.volume > plain.volume
+
