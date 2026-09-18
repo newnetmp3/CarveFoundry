@@ -100,7 +100,12 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     background: #12192a;
     border-bottom: 1px solid #242e44;
 }
-#MeshViewport { background: #111827; }
+#MeshViewport, #ViewportShell { background: #111827; }
+#ViewportRuler {
+    background: #0e1425;
+    color: #c7d0e0;
+    font-size: 10px;
+}
 #SectionHeading { color: #ffffff; font-weight: 700; padding-top: 4px; }
 #TransformControls { border-top: 1px solid #242e44; }
 #CanvasHint { color: #7f8aa0; font-size: 13px; }
