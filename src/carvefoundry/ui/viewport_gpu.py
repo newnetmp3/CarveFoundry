@@ -168,6 +168,8 @@ class MeshViewport(QOpenGLWidget):
         self.setMinimumSize(360, 260)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.setAutoFillBackground(False)
         self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
 
         self._overlay_label = QLabel(self)
@@ -882,13 +884,13 @@ class MeshViewport(QOpenGLWidget):
                 -85.0,
                 min(85.0, self.elevation_deg + delta.y() * 0.35),
             )
-            self.update()
+            self.update(self.rect())
         elif event.buttons() & (
             Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
         ):
             horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
             self.pan_px += QPointF(horizontal, delta.y())
-            self.update()
+            self.update(self.rect())
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
