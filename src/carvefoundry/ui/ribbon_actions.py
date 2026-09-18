@@ -33,6 +33,7 @@ from carvefoundry.cam.basic_ops import (
     BasicCamSettings,
     MillingDirection,
     PocketStrategy,
+    ReliefStyle,
     center_drill,
     finish_3d,
     rectangular_engrave,
@@ -233,6 +234,15 @@ class RibbonActionsMixin:
             "cam/design/milling",
             "Default",
             ("Default", "Climb (CCW)", "Conventional (CW)"),
+        )
+        self._cam_3d_cut_style = saved_choice(
+            "cam/design/3d_cut_style",
+            "Model Boundary Relief",
+            (
+                "Model Boundary Relief",
+                "Rectangle Relief",
+                "Full Depth Cutout",
+            ),
         )
         self._tabs_enabled = bool(
             self._settings.value("cam/tabs_enabled", False, type=bool)
@@ -857,6 +867,7 @@ class RibbonActionsMixin:
             "entry": "_cam_entry",
             "linking": "_cam_linking",
             "milling": "_cam_milling",
+            "3d_cut_style": "_cam_3d_cut_style",
         }
         attribute = attributes[key]
         setattr(self, attribute, value)
@@ -1052,6 +1063,12 @@ class RibbonActionsMixin:
             "Conventional (CW)": MillingDirection.CONVENTIONAL,
         }.get(self._cam_milling, MillingDirection.DEFAULT)
 
+    def _relief_style(self) -> ReliefStyle:
+        return {
+            "Rectangle Relief": ReliefStyle.RECTANGLE,
+            "Full Depth Cutout": ReliefStyle.FULL_DEPTH,
+        }.get(self._cam_3d_cut_style, ReliefStyle.MODEL_BOUNDARY)
+
     def _link_mode(self) -> RasterLinkMode:
         return {
             "Local Lift": RasterLinkMode.LOCAL_LIFT,
@@ -1156,6 +1173,7 @@ class RibbonActionsMixin:
             tabs_enabled=self._tabs_enabled,
             milling_direction=self._milling_direction(),
             pocket_strategy=self._pocket_strategy_for_bounds(bounds),
+            relief_style=self._relief_style(),
             raster_axis=self._raster_axis_for_mesh(mesh),
             raster_link_mode=self._link_mode(),
             local_link_clearance_mm=float(
@@ -1239,22 +1257,67 @@ class RibbonActionsMixin:
             self.statusBar().showMessage(f"Toolpath failed: {exc}", 8000)
             return
 
+        generated_toolpaths = [toolpath]
+        if (
+            operation == "finish"
+            and self._relief_style() is ReliefStyle.FULL_DEPTH
+        ):
+            cutout_settings = BasicCamSettings(
+                safe_z_mm=settings.safe_z_mm,
+                feed_mm_min=settings.feed_mm_min,
+                plunge_feed_mm_min=settings.plunge_feed_mm_min,
+                max_stepdown_mm=settings.max_stepdown_mm,
+                stepover_fraction=settings.stepover_fraction,
+                finish_stepover_fraction=settings.finish_stepover_fraction,
+                overall_depth_mm=self.project.stock.thickness_mm,
+                padding_mm=settings.padding_mm,
+                tab_height_mm=settings.tab_height_mm,
+                tabs_enabled=True if self._tabs_enabled else False,
+                milling_direction=settings.milling_direction,
+                pocket_strategy=settings.pocket_strategy,
+                relief_style=ReliefStyle.FULL_DEPTH,
+                raster_axis=settings.raster_axis,
+                raster_link_mode=settings.raster_link_mode,
+                local_link_clearance_mm=settings.local_link_clearance_mm,
+                direct_link_tolerance_mm=settings.direct_link_tolerance_mm,
+                ramp_angle_deg=settings.ramp_angle_deg,
+            )
+            generated_toolpaths.append(
+                rectangular_profile(
+                    bounds,
+                    cutter,
+                    cutout_settings,
+                    name="Full Depth Cutout",
+                    offset_mode="outside",
+                )
+            )
+
         self._before_ribbon_mutation(f"calculate {operation}")
-        self.project.toolpaths = [toolpath]
+        self.project.toolpaths = generated_toolpaths
         self.viewport.set_toolpaths_visible(True)
         self.viewport.set_simulation_fraction(1.0)
         self.viewport.update()
         self._after_ribbon_mutation(f"calculate {operation}", True)
 
-        self.selection_info.setText(
-            f"Toolpath ready\n{toolpath.name}\n\n"
-            f"Cutter: {toolpath.cutter.name}\n"
-            f"Moves: {len(toolpath.moves):,}\n"
-            f"Cut distance: {toolpath.cutting_distance_mm:.1f} mm\n"
-            f"Rapid distance: {toolpath.rapid_distance_mm:.1f} mm\n"
-            f"Estimated cutting: {toolpath.estimated_cutting_minutes:.1f} min"
+        total_moves = sum(len(path.moves) for path in generated_toolpaths)
+        total_cut = sum(path.cutting_distance_mm for path in generated_toolpaths)
+        total_rapid = sum(path.rapid_distance_mm for path in generated_toolpaths)
+        total_minutes = sum(
+            path.estimated_cutting_minutes for path in generated_toolpaths
         )
-        self.statusBar().showMessage(f"Calculated {toolpath.name}", 5000)
+        operation_names = " + ".join(path.name for path in generated_toolpaths)
+        self.selection_info.setText(
+            f"Toolpath ready\n{operation_names}\n\n"
+            f"Cutter: {toolpath.cutter.name}\n"
+            f"Moves: {total_moves:,}\n"
+            f"Cut distance: {total_cut:.1f} mm\n"
+            f"Rapid distance: {total_rapid:.1f} mm\n"
+            f"Estimated cutting: {total_minutes:.1f} min"
+        )
+        self.statusBar().showMessage(
+            f"Calculated {operation_names}",
+            5000,
+        )
 
     def _preview_toolpaths(self) -> None:
         if not self.project.toolpaths:
