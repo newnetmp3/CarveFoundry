@@ -1,6 +1,5 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
-
 _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
     "new": ("document-new",),
     "open": ("document-open",),
