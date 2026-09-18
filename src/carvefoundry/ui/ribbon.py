@@ -1,8 +1,8 @@
-from __future__ import annotations
+import collections.abc as cabc
 
-from collections.abc import Callable
-
-from PySide6 import QtCore, QtGui, QtWidgets
+import PySide6.QtCore as QtCore
+import PySide6.QtGui as QtGui
+import PySide6.QtWidgets as QtWidgets
 
 
 _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
@@ -130,7 +130,7 @@ class RibbonButton(QtWidgets.QToolButton):
     def __init__(
         self,
         text: str,
-        callback: Callable[[], None] | None = None,
+        callback: cabc.Callable[[], None] | None = None,
         *,
         primary: bool = False,
     ):
@@ -172,7 +172,7 @@ class RibbonGroup(QtWidgets.QFrame):
     def add_button(
         self,
         text: str,
-        callback: Callable[[], None] | None = None,
+        callback: cabc.Callable[[], None] | None = None,
         *,
         primary: bool = False,
     ) -> RibbonButton:
