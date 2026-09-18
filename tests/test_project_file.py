@@ -7,7 +7,7 @@ import trimesh
 
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.primitives import rectangle_mesh
-from carvefoundry.core.project import Project, ProjectItem, Stock
+from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
 from carvefoundry.core.project_file import (
     LEGACY_PROJECT_FILE_VERSION,
     PROJECT_FILE_MAGIC,
@@ -189,3 +189,44 @@ def test_generated_mesh_and_group_round_trip(tmp_path: Path) -> None:
     assert item.group_id == "group-1"
     assert item.mesh is not None
     assert np.allclose(item.mesh.dimensions, (25.0, 15.0, 2.0))
+
+
+
+def test_editable_text_properties_round_trip(tmp_path: Path) -> None:
+    properties = TextProperties(
+        content="Chief\nPetty Officer",
+        font_family="DejaVu Sans",
+        font_style="Bold",
+        size_pt=42.5,
+        bold=True,
+        italic=True,
+        underline=True,
+        strikeout=True,
+        alignment="center",
+        character_spacing_mm=0.35,
+        word_spacing_mm=0.6,
+        kerning=False,
+        line_spacing_percent=125.0,
+        horizontal_scale_percent=90.0,
+        wrap_to_width=True,
+        box_width_mm=88.0,
+        depth_mm=2.5,
+        geometry_mode="outline",
+        outline_width_mm=0.7,
+        case_mode="uppercase",
+    )
+    project = Project(
+        items=[
+            ProjectItem(
+                "Title",
+                kind="text",
+                mesh=rectangle_mesh(20.0, 10.0, 1.0),
+                text_properties=properties,
+            )
+        ]
+    )
+
+    path = save_project(project, tmp_path / "text.cf3d")
+    loaded = load_project(path)
+
+    assert loaded.items[0].text_properties == properties
