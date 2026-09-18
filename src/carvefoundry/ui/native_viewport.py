@@ -215,8 +215,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index: int | None = None
         self._interaction_mode: str | None = None
         self._interaction_distance = 0.0
-        self._selection_drag_start_screen = None
-        self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis: int | None = None
         self._shape_draw_mode: str | None = None
