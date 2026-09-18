@@ -24,6 +24,7 @@ class ProjectItemSnapshot:
     rotation_deg: tuple[float, float, float]
     scale_xyz: tuple[float, float, float]
     source_units: ModelUnits
+    group_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,7 @@ def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
         rotation_deg=tuple(item.transform.rotation_deg),
         scale_xyz=tuple(item.transform.scale_xyz),
         source_units=item.source_units,
+        group_id=item.group_id,
     )
 
 
@@ -76,6 +78,7 @@ def _restore_item(snapshot: ProjectItemSnapshot) -> ProjectItem:
             scale_xyz=snapshot.scale_xyz,
         ),
         source_units=snapshot.source_units,
+        group_id=snapshot.group_id,
     )
 
 
