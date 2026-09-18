@@ -64,6 +64,8 @@ class HeightField:
         mesh: trimesh.Trimesh,
         *,
         spacing_mm: float,
+        padding_mm: float = 0.0,
+        fill_missing_z_mm: float | None = None,
     ) -> HeightField:
         """Rasterize the top-most Z surface of *mesh* onto a regular XY grid.
 
@@ -74,6 +76,10 @@ class HeightField:
 
         if spacing_mm <= 0 or not np.isfinite(spacing_mm):
             raise ValueError("spacing_mm must be a finite value greater than zero.")
+        if padding_mm < 0 or not np.isfinite(padding_mm):
+            raise ValueError("padding_mm must be finite and non-negative.")
+        if fill_missing_z_mm is not None and not np.isfinite(fill_missing_z_mm):
+            raise ValueError("fill_missing_z_mm must be finite when supplied.")
         vertices = np.asarray(mesh.vertices, dtype=float)
         faces = np.asarray(mesh.faces, dtype=np.int64)
         if len(vertices) == 0 or len(faces) == 0:
@@ -82,8 +88,8 @@ class HeightField:
             raise ValueError("Cannot rasterize a mesh with non-finite vertices.")
 
         bounds = np.asarray(mesh.bounds, dtype=float)
-        min_x, min_y = bounds[0, :2]
-        max_x, max_y = bounds[1, :2]
+        min_x, min_y = bounds[0, :2] - padding_mm
+        max_x, max_y = bounds[1, :2] + padding_mm
         span_x = float(max_x - min_x)
         span_y = float(max_y - min_y)
         if span_x <= 0 or span_y <= 0:
@@ -138,7 +144,11 @@ class HeightField:
             target = z_field[iy0 : iy1 + 1, ix0 : ix1 + 1]
             np.maximum(target, np.where(inside, interpolated_z, -np.inf), out=target)
 
-        z_field[~np.isfinite(z_field)] = np.nan
-        if not np.isfinite(z_field).any():
-            raise ValueError("Mesh produced no top-surface samples.")
+        missing = ~np.isfinite(z_field)
+        if fill_missing_z_mm is None:
+            z_field[missing] = np.nan
+            if not np.isfinite(z_field).any():
+                raise ValueError("Mesh produced no top-surface samples.")
+        else:
+            z_field[missing] = float(fill_missing_z_mm)
         return cls(x_axis, y_axis, z_field)
