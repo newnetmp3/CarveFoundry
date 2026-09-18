@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.gcode import GrblPostSettings, render_grbl
-from carvefoundry.cam.toolpath import Toolpath, ToolpathMove
+from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.project import Project, Stock
 
 from .viewport import MeshViewport
