@@ -420,7 +420,7 @@ class RibbonActionsMixin:
         self._refresh_project_list(
             min(indices[0] + 1, len(self.project.items))
         )
-        self.viewport.fit_view()
+        self.viewport.update()
         self._after_ribbon_mutation("cut", True)
         self.statusBar().showMessage(f"Cut {len(indices)} item(s)", 2500)
 
@@ -625,7 +625,7 @@ class RibbonActionsMixin:
         self._before_ribbon_mutation(f"create {kind}")
         self.project.items.append(item)
         self._refresh_project_list(len(self.project.items))
-        self.viewport.fit_view()
+        self.viewport.update()
         self._after_ribbon_mutation(f"create {kind}", True)
         self.statusBar().showMessage(f"Created {item.name}", 3000)
 
