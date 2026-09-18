@@ -175,12 +175,14 @@ _FONT_5X7: dict[str, tuple[str, ...]] = {
 }
 
 
-def text_mesh(
+def _block_text_mesh(
     text: str,
     *,
-    height_mm: float = 20.0,
-    depth_mm: float = 1.0,
+    height_mm: float,
+    depth_mm: float,
 ) -> MeshAsset:
+    """Legacy/headless text fallback used when no Qt GUI font engine exists."""
+
     clean = text.upper()
     if not clean.strip():
         raise ValueError("Text cannot be empty.")
@@ -201,13 +203,13 @@ def text_mesh(
             for column, bit in enumerate(row_bits):
                 if bit != "1":
                     continue
-                block = trimesh.creation.box(
+                cell_mesh = trimesh.creation.box(
                     extents=(stroke, stroke, depth_mm),
                 )
                 x = x_offset + (column + 0.5) * cell
                 y = (6 - row + 0.5) * cell
-                block.apply_translation((x, y, -depth_mm / 2.0))
-                parts.append(block)
+                cell_mesh.apply_translation((x, y, -depth_mm / 2.0))
+                parts.append(cell_mesh)
 
     if not parts:
         raise ValueError("Text produced no geometry.")
@@ -215,6 +217,340 @@ def text_mesh(
     bounds = np.asarray(mesh.bounds, dtype=float)
     mesh.apply_translation((-bounds[0, 0], -bounds[0, 1], 0.0))
     return mesh_asset_from_geometry(mesh)
+
+
+_FONT_EM_UNITS = 1000
+_POINTS_TO_MM = 25.4 / 72.0
+
+
+def _text_case(content: str, mode: str) -> str:
+    if mode == "uppercase":
+        return content.upper()
+    if mode == "lowercase":
+        return content.lower()
+    if mode == "title":
+        return content.title()
+    return content
+
+
+def _font_for_text(properties: TextProperties) -> tuple[QFont, float]:
+    """Create a real Qt system font and return millimeters per font unit."""
+
+    millimeters_per_unit = (
+        float(properties.size_pt) * _POINTS_TO_MM / _FONT_EM_UNITS
+    )
+    font = QFont(properties.font_family) if properties.font_family else QFont()
+    if properties.font_style:
+        font.setStyleName(properties.font_style)
+    font.setPixelSize(_FONT_EM_UNITS)
+    font.setBold(bool(properties.bold))
+    font.setItalic(bool(properties.italic))
+    font.setKerning(bool(properties.kerning))
+    font.setStretch(
+        max(1, min(4000, round(float(properties.horizontal_scale_percent))))
+    )
+    font.setLetterSpacing(
+        QFont.SpacingType.AbsoluteSpacing,
+        float(properties.character_spacing_mm) / millimeters_per_unit,
+    )
+    font.setWordSpacing(
+        float(properties.word_spacing_mm) / millimeters_per_unit
+    )
+    return font, millimeters_per_unit
+
+
+def _wrap_text_lines(
+    content: str,
+    metrics: QFontMetricsF,
+    *,
+    width_units: float | None,
+    wrap: bool,
+) -> list[tuple[str, bool]]:
+    """Return line/final-in-paragraph pairs for CNC text layout."""
+
+    paragraphs = content.split("\n")
+    result: list[tuple[str, bool]] = []
+
+    for paragraph in paragraphs:
+        if not wrap or width_units is None or width_units <= 0:
+            result.append((paragraph, True))
+            continue
+        if not paragraph:
+            result.append(("", True))
+            continue
+
+        words = paragraph.split(" ")
+        current = ""
+        lines: list[str] = []
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if current and metrics.horizontalAdvance(candidate) > width_units:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        lines.append(current)
+
+        for index, line in enumerate(lines):
+            result.append((line, index == len(lines) - 1))
+
+    return result
+
+
+def _build_text_path(properties: TextProperties) -> tuple[QPainterPath, float]:
+    font, millimeters_per_unit = _font_for_text(properties)
+    metrics = QFontMetricsF(font)
+    content = _text_case(properties.content, properties.case_mode)
+
+    width_units = (
+        float(properties.box_width_mm) / millimeters_per_unit
+        if properties.box_width_mm > 0
+        else None
+    )
+    lines = _wrap_text_lines(
+        content,
+        metrics,
+        width_units=width_units,
+        wrap=bool(properties.wrap_to_width),
+    )
+    natural_widths = [
+        float(metrics.horizontalAdvance(line))
+        for line, _final in lines
+    ]
+    layout_width = (
+        width_units
+        if width_units is not None and width_units > 0
+        else max(natural_widths, default=0.0)
+    )
+
+    glyph_path = QPainterPath()
+    decoration_path = QPainterPath()
+    baseline = float(metrics.ascent())
+    line_advance = max(
+        1.0,
+        float(metrics.lineSpacing())
+        * float(properties.line_spacing_percent)
+        / 100.0,
+    )
+
+    for (line, final_in_paragraph), natural_width in zip(
+        lines,
+        natural_widths,
+        strict=True,
+    ):
+        line_font = QFont(font)
+        line_metrics = metrics
+
+        if (
+            properties.alignment == "justify"
+            and not final_in_paragraph
+            and layout_width > natural_width
+            and line.count(" ") > 0
+        ):
+            extra_per_space = (
+                layout_width - natural_width
+            ) / line.count(" ")
+            line_font.setWordSpacing(
+                font.wordSpacing() + extra_per_space
+            )
+            line_metrics = QFontMetricsF(line_font)
+
+        line_width = float(line_metrics.horizontalAdvance(line))
+        if properties.alignment == "center":
+            x = max(0.0, (layout_width - line_width) / 2.0)
+        elif properties.alignment == "right":
+            x = max(0.0, layout_width - line_width)
+        else:
+            x = 0.0
+
+        if line:
+            glyph_path.addText(
+                QPointF(x, baseline),
+                line_font,
+                line,
+            )
+
+            decoration_thickness = max(
+                1.0,
+                float(line_metrics.lineWidth()),
+            )
+            if properties.underline:
+                underline_y = baseline + float(line_metrics.underlinePos())
+                decoration_path.addRect(
+                    x,
+                    underline_y,
+                    line_width,
+                    decoration_thickness,
+                )
+            if properties.strikeout:
+                strike_y = baseline - float(line_metrics.strikeOutPos())
+                decoration_path.addRect(
+                    x,
+                    strike_y,
+                    line_width,
+                    decoration_thickness,
+                )
+
+        baseline += line_advance
+
+    if properties.geometry_mode == "outline":
+        stroker = QPainterPathStroker()
+        stroker.setWidth(
+            max(
+                1.0,
+                float(properties.outline_width_mm)
+                / millimeters_per_unit,
+            )
+        )
+        stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
+        result = stroker.createStroke(glyph_path)
+        result.addPath(decoration_path)
+    else:
+        result = glyph_path
+        result.addPath(decoration_path)
+
+    result.setFillRule(Qt.FillRule.WindingFill)
+    return result, millimeters_per_unit
+
+
+def _flatten_polygon_geometry(value) -> list[Polygon]:
+    if value.is_empty:
+        return []
+    if isinstance(value, Polygon):
+        return [value]
+    if isinstance(value, MultiPolygon):
+        return [polygon for polygon in value.geoms if not polygon.is_empty]
+    if hasattr(value, "geoms"):
+        result: list[Polygon] = []
+        for geometry in value.geoms:
+            result.extend(_flatten_polygon_geometry(geometry))
+        return result
+    return []
+
+
+def _text_path_geometry(
+    path: QPainterPath,
+    millimeters_per_unit: float,
+):
+    """Convert Qt glyph contours into a hole-aware Shapely geometry."""
+
+    contours: list[Polygon] = []
+    for polygon in path.toSubpathPolygons():
+        coordinates = [
+            (
+                float(point.x()) * millimeters_per_unit,
+                -float(point.y()) * millimeters_per_unit,
+            )
+            for point in polygon
+        ]
+        if len(coordinates) < 3:
+            continue
+        candidate = Polygon(coordinates)
+        if not candidate.is_valid:
+            candidate = candidate.buffer(0)
+        for part in _flatten_polygon_geometry(candidate):
+            if part.area > 1e-8:
+                contours.append(part)
+
+    if not contours:
+        raise ValueError("The selected font produced no usable text outlines.")
+
+    depths: list[int] = []
+    for index, contour in enumerate(contours):
+        depth = sum(
+            1
+            for other_index, other in enumerate(contours)
+            if other_index != index
+            and other.area > contour.area
+            and other.contains(contour)
+        )
+        depths.append(depth)
+
+    geometry = GeometryCollection()
+    for depth in sorted(set(depths)):
+        level = unary_union(
+            [
+                contour
+                for contour, contour_depth in zip(
+                    contours,
+                    depths,
+                    strict=True,
+                )
+                if contour_depth == depth
+            ]
+        )
+        if depth % 2 == 0:
+            geometry = geometry.union(level)
+        else:
+            geometry = geometry.difference(level)
+
+    if not geometry.is_valid:
+        geometry = geometry.buffer(0)
+    if geometry.is_empty:
+        raise ValueError("The selected font produced empty text geometry.")
+    return geometry
+
+
+def _extrude_text_geometry(geometry, depth_mm: float) -> MeshAsset:
+    parts: list[trimesh.Trimesh] = []
+    for polygon in _flatten_polygon_geometry(geometry):
+        if polygon.area <= 1e-8:
+            continue
+        mesh = trimesh.creation.extrude_polygon(
+            polygon,
+            height=float(depth_mm),
+            engine="earcut",
+        )
+        mesh.apply_translation((0.0, 0.0, -float(depth_mm)))
+        parts.append(mesh)
+
+    if not parts:
+        raise ValueError("Text produced no machinable geometry.")
+
+    mesh = trimesh.util.concatenate(parts)
+    bounds = np.asarray(mesh.bounds, dtype=float)
+    mesh.apply_translation((-bounds[0, 0], -bounds[0, 1], 0.0))
+    return mesh_asset_from_geometry(mesh)
+
+
+def text_mesh(
+    text: str | None = None,
+    *,
+    height_mm: float = 20.0,
+    depth_mm: float = 1.0,
+    properties: TextProperties | None = None,
+) -> MeshAsset:
+    """Build editable CNC text from actual Qt/system font outlines."""
+
+    if properties is None:
+        content = text or ""
+        properties = TextProperties(
+            content=content,
+            size_pt=max(
+                1.0,
+                float(height_mm) / _POINTS_TO_MM,
+            ),
+            depth_mm=float(depth_mm),
+        )
+    properties.validate()
+
+    if not properties.content.strip():
+        raise ValueError("Text cannot be blank.")
+
+    if QGuiApplication.instance() is None:
+        return _block_text_mesh(
+            properties.content,
+            height_mm=max(
+                0.5,
+                float(properties.size_pt) * _POINTS_TO_MM,
+            ),
+            depth_mm=float(properties.depth_mm),
+        )
+
+    path, millimeters_per_unit = _build_text_path(properties)
+    geometry = _text_path_geometry(path, millimeters_per_unit)
+    return _extrude_text_geometry(geometry, properties.depth_mm)
 
 
 def bitmap_runs_mesh(
