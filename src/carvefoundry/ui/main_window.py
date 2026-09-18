@@ -1306,7 +1306,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                     )
                     + "\nDouble-click or press F2 to rename."
                 )
-                list_item.setData(Qt.ItemDataRole.UserRole, len(self.project_list) - 1)
                 list_item.setFlags(
                     list_item.flags()
                     | Qt.ItemFlag.ItemIsUserCheckable
@@ -1437,6 +1436,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             finally:
                 self.object_selector.blockSignals(False)
 
+            kind = (
+                "STL"
+                if project_item.kind.lower() == "stl"
+                else project_item.kind.upper()
+            )
+            group_text = "\nGrouped object" if project_item.group_id else ""
+            source_size = self._source_dimensions_text(project_item)
+            list_item.setToolTip(
+                f"{kind} • {project_item.name}{group_text}"
+                + (
+                    f"\nSource size: {source_size}"
+                    if source_size
+                    else ""
+                )
+                + "\nDouble-click or press F2 to rename."
+            )
             self.selection_info.setText(
                 self._mesh_properties_text(project_item)
             )
