@@ -1682,6 +1682,36 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _fit_view(self) -> None:
         self.viewport.fit_view()
 
+    def _install_shortcuts(self) -> None:
+        """Install predictable desktop shortcuts for frequent workspace actions."""
+
+        bindings = (
+            ("New Project", QKeySequence.StandardKey.New, self._new_project),
+            ("Open Project", QKeySequence.StandardKey.Open, self._open_project),
+            ("Save Project", QKeySequence.StandardKey.Save, self._save_project),
+            ("Save Project As", "Ctrl+Shift+S", self._save_project_as),
+            ("Undo", QKeySequence.StandardKey.Undo, self._undo),
+            ("Redo", QKeySequence.StandardKey.Redo, self._redo),
+            ("Cut", QKeySequence.StandardKey.Cut, self._cut_selected_items),
+            ("Copy", QKeySequence.StandardKey.Copy, self._copy_selected_items),
+            ("Paste", QKeySequence.StandardKey.Paste, self._paste_items),
+            ("Delete", QKeySequence(Qt.Key.Key_Delete), self._delete_selected_item),
+            ("Duplicate", "Ctrl+D", self._duplicate_selected_item),
+            ("Layers", "Ctrl+Shift+L", self._show_layers_popup),
+            ("Inspector", "Ctrl+Shift+I", self._toggle_properties_panel_option),
+            ("Fit View", "Ctrl+0", self._fit_view),
+        )
+
+        self._shortcut_actions: list[QAction] = []
+        for title, shortcut, callback in bindings:
+            action = QAction(title, self)
+            action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(
+                lambda _checked=False, fn=callback: fn()
+            )
+            self.addAction(action)
+            self._shortcut_actions.append(action)
+
     def _set_option_checked(self, key: str, checked: bool) -> None:
         button = self._option_buttons.get(key)
         if button is not None:
@@ -1691,14 +1721,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return bool(self._settings.value(key, default, type=bool))
 
     def _restore_options(self) -> None:
-        project_panel_visible = self._settings_bool(
-            "interface/project_panel_visible",
-            True,
-        )
-        properties_panel_visible = self._settings_bool(
-            "interface/properties_panel_visible",
-            True,
-        )
+        if self._settings.contains("interface/inspector_visible"):
+            inspector_visible = self._settings_bool(
+                "interface/inspector_visible",
+                True,
+            )
+        else:
+            inspector_visible = self._settings_bool(
+                "interface/properties_panel_visible",
+                True,
+            )
+
         status_bar_visible = self._settings_bool(
             "interface/status_bar_visible",
             True,
@@ -1710,8 +1743,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         stock_visible = self._settings_bool("viewport/show_stock", True)
         grid_visible = self._settings_bool("viewport/show_grid", True)
         rulers_visible = self._settings_bool("viewport/show_rulers", True)
-        # Navigation inversion uses new setting keys because the earlier
-        # reverse-horizontal option had different pan semantics.
         reverse_horizontal = self._settings_bool(
             "viewport/reverse_horizontal_navigation",
             False,
@@ -1721,8 +1752,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             False,
         )
 
-        self.project_panel.setVisible(project_panel_visible)
-        self.properties_panel.setVisible(properties_panel_visible)
+        self.properties_panel.setVisible(inspector_visible)
+        self.inspector_button.setChecked(inspector_visible)
         self.statusBar().setVisible(status_bar_visible)
         self.viewport.set_view_controls_visible(view_controls_visible)
         self.viewport.show_stock = stock_visible
@@ -1733,14 +1764,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         stored_sizes = self._settings.value("interface/splitter_sizes")
         restored_splitter = False
-        if isinstance(stored_sizes, list) and len(stored_sizes) == 3:
+        if isinstance(stored_sizes, list):
             try:
                 sizes = [max(0, int(value)) for value in stored_sizes]
             except (TypeError, ValueError):
                 sizes = []
-            if len(sizes) == 3 and sum(sizes) > 0:
+
+            if len(sizes) == 2 and sum(sizes) > 0:
                 self.workspace_splitter.setSizes(sizes)
                 restored_splitter = True
+            elif len(sizes) == 3 and sum(sizes) > 0:
+                # Migrate the old Project | Canvas | Properties splitter.
+                self.workspace_splitter.setSizes(
+                    [sizes[0] + sizes[1], sizes[2]]
+                )
+                restored_splitter = True
+
         if not restored_splitter:
             self.workspace_splitter.setSizes(
                 self._default_workspace_splitter_sizes()
@@ -1767,8 +1806,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         else:
             self.viewport.set_orthographic_view()
 
-        self._set_option_checked("project_panel", project_panel_visible)
-        self._set_option_checked("properties_panel", properties_panel_visible)
+        self._set_option_checked("properties_panel", inspector_visible)
         self._set_option_checked("status_bar", status_bar_visible)
         self._set_option_checked("view_controls", view_controls_visible)
         self._set_option_checked("stock", stock_visible)
@@ -1787,11 +1825,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
     def _save_interface_options(self) -> None:
         self._settings.setValue(
-            "interface/project_panel_visible",
-            self.project_panel.isVisible(),
-        )
-        self._settings.setValue(
-            "interface/properties_panel_visible",
+            "interface/inspector_visible",
             self.properties_panel.isVisible(),
         )
         self._settings.setValue(
@@ -1817,20 +1851,32 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "viewport/invert_vertical_navigation",
             self.viewport.invert_vertical_drag,
         )
+        self._settings.remove("interface/project_panel_visible")
+        self._settings.remove("interface/properties_panel_visible")
         self._settings.remove("viewport/reverse_horizontal_drag")
         self._save_viewport_mode()
         self._settings.sync()
 
     def _toggle_project_panel_option(self) -> None:
-        visible = not self.project_panel.isVisible()
-        self.project_panel.setVisible(visible)
-        self._set_option_checked("project_panel", visible)
-        self._save_interface_options()
+        """Compatibility alias: the former project pane is now the Layers popup."""
+
+        self._show_layers_popup()
 
     def _toggle_properties_panel_option(self) -> None:
         visible = not self.properties_panel.isVisible()
         self.properties_panel.setVisible(visible)
+        self.inspector_button.setChecked(visible)
         self._set_option_checked("properties_panel", visible)
+
+        if visible:
+            sizes = self.workspace_splitter.sizes()
+            if len(sizes) == 2 and sizes[1] < 40:
+                preferred = self._properties_panel_default_width()
+                total = max(sum(sizes), preferred + 520)
+                self.workspace_splitter.setSizes(
+                    [max(520, total - preferred), preferred]
+                )
+
         self._save_interface_options()
 
     def _toggle_status_bar_option(self) -> None:
@@ -1913,8 +1959,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._settings.remove("interface")
         self._settings.remove("viewport")
 
-        self.project_panel.show()
+        self.layers_popup.hide()
         self.properties_panel.show()
+        self.inspector_button.setChecked(True)
         self.statusBar().show()
         self.workspace_splitter.setSizes(
             self._default_workspace_splitter_sizes()
@@ -1929,7 +1976,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.viewport.set_default_view()
 
         for key in (
-            "project_panel",
             "properties_panel",
             "status_bar",
             "view_controls",
@@ -1943,7 +1989,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.viewport.update()
         self._save_interface_options()
-        self.statusBar().showMessage("Interface options reset", 3000)
+        self.statusBar().showMessage("Workspace layout reset", 3000)
 
     def _set_project(
         self,
