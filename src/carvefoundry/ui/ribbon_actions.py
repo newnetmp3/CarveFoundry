@@ -1301,12 +1301,31 @@ class RibbonActionsMixin:
             "rest": "3D Rest",
             "waterline": "3D Waterline",
         }
+
+        for name, button in getattr(
+            self,
+            "_cam_operation_buttons",
+            {},
+        ).items():
+            button.blockSignals(True)
+            try:
+                button.setChecked(name == operation)
+            finally:
+                button.blockSignals(False)
+
+        cutter = (
+            self.tool_combo.currentData()
+            if hasattr(self, "tool_combo")
+            else None
+        )
+        cutter_name = cutter.name if isinstance(cutter, Cutter) else "selected cutter"
         self.selection_info.setText(
-            f"CAM operation selected\n{labels.get(operation, operation)}\n\n"
-            "Choose the cutter in Properties / Carve, then press Calculate."
+            f"Toolpath operation\n{labels.get(operation, operation)}\n\n"
+            f"Cutter: {cutter_name}\n"
+            "Adjust Path Design or Motion as needed, then press Calculate."
         )
         self.statusBar().showMessage(
-            f"Selected CAM operation: {labels.get(operation, operation)}",
+            f"Toolpath operation: {labels.get(operation, operation)}",
             3000,
         )
 
