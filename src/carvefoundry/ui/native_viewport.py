@@ -263,11 +263,20 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             "perspective" if value == "perspective" else "orthographic"
         )
 
-    def set_project(self, project: Project) -> None:
+    def set_project(
+        self,
+        project: Project,
+        *,
+        fit_view: bool = True,
+    ) -> None:
         self.project = project
         self.selected_item_index = None
         self._prepared_mesh_uploads.clear()
-        self.fit_view()
+        if fit_view:
+            self.fit_view()
+        else:
+            self.requestUpdate()
+            self.viewChanged.emit()
 
     def set_selected_item(self, index: int | None) -> None:
         self.selected_item_index = index
@@ -2604,8 +2613,13 @@ class MeshViewport(QWidget):
         self._left_ruler.set_ticks(ticks["left"])
         self._right_ruler.set_ticks(ticks["right"])
 
-    def set_project(self, project: Project) -> None:
-        self._renderer.set_project(project)
+    def set_project(
+        self,
+        project: Project,
+        *,
+        fit_view: bool = True,
+    ) -> None:
+        self._renderer.set_project(project, fit_view=fit_view)
         self._update_empty_status()
 
     def set_selected_item(self, index: int | None) -> None:
