@@ -935,7 +935,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         grid.addWidget(QLabel("Style"), 4, 0)
         self.text_font_style_combo = QComboBox()
         self.text_font_style_combo.currentTextChanged.connect(
-            self._text_control_changed
+            self._text_style_changed
         )
         grid.addWidget(self.text_font_style_combo, 4, 1, 1, 2)
 
@@ -969,7 +969,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             button.setCheckable(True)
             button.setMaximumWidth(38)
             button.setToolTip(tooltip)
-            button.toggled.connect(self._text_control_changed)
+            if button in (
+                self.text_bold_button,
+                self.text_italic_button,
+            ):
+                button.toggled.connect(self._text_emphasis_changed)
+            else:
+                button.toggled.connect(self._text_control_changed)
             format_layout.addWidget(button)
         format_layout.addStretch(1)
         grid.addWidget(QLabel("Effects"), 5, 0)
@@ -2417,8 +2423,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 properties.font_style,
             )
             self.text_size_spin.setValue(properties.size_pt)
-            self.text_bold_button.setChecked(properties.bold)
-            self.text_italic_button.setChecked(properties.italic)
+            style_bold, style_italic = self._text_style_traits(
+                display_family,
+                self.text_font_style_combo.currentText(),
+            )
+            self.text_bold_button.setChecked(
+                properties.bold or style_bold
+            )
+            self.text_italic_button.setChecked(
+                properties.italic or style_italic
+            )
             self.text_underline_button.setChecked(properties.underline)
             self.text_strike_button.setChecked(properties.strikeout)
 
@@ -2466,10 +2480,79 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._update_text_editor_preview(display_family)
         self._update_text_control_enablement()
 
+    @staticmethod
+    def _text_style_traits(
+        family: str,
+        style: str,
+    ) -> tuple[bool, bool]:
+        font = QFontDatabase.font(family, style, 12)
+        return font.bold(), font.italic()
+
+    def _set_text_emphasis_buttons_from_style(self) -> None:
+        family = self.text_font_combo.currentFont().family()
+        style = self.text_font_style_combo.currentText()
+        style_bold, style_italic = self._text_style_traits(
+            family,
+            style,
+        )
+        self.text_bold_button.blockSignals(True)
+        self.text_italic_button.blockSignals(True)
+        try:
+            self.text_bold_button.setChecked(style_bold)
+            self.text_italic_button.setChecked(style_italic)
+        finally:
+            self.text_bold_button.blockSignals(False)
+            self.text_italic_button.blockSignals(False)
+
+    def _choose_text_style_for_emphasis(
+        self,
+        *,
+        bold: bool,
+        italic: bool,
+    ) -> None:
+        family = self.text_font_combo.currentFont().family()
+        styles = list(QFontDatabase.styles(family))
+        if not styles:
+            return
+
+        current = self.text_font_style_combo.currentText()
+        candidates = [
+            style
+            for style in styles
+            if self._text_style_traits(family, style) == (bold, italic)
+        ]
+        if not candidates:
+            return
+
+        preferred = current if current in candidates else candidates[0]
+        index = self.text_font_style_combo.findText(preferred)
+        if index >= 0 and index != self.text_font_style_combo.currentIndex():
+            self.text_font_style_combo.blockSignals(True)
+            try:
+                self.text_font_style_combo.setCurrentIndex(index)
+            finally:
+                self.text_font_style_combo.blockSignals(False)
+
+    def _text_emphasis_changed(self, _checked: bool) -> None:
+        if self._updating_text_controls:
+            return
+        self._choose_text_style_for_emphasis(
+            bold=self.text_bold_button.isChecked(),
+            italic=self.text_italic_button.isChecked(),
+        )
+        self._text_control_changed()
+
+    def _text_style_changed(self, _style: str) -> None:
+        if self._updating_text_controls:
+            return
+        self._set_text_emphasis_buttons_from_style()
+        self._text_control_changed()
+
     def _text_font_changed(self, font: QFont) -> None:
         if self._updating_text_controls:
             return
         self._refresh_text_font_styles(font.family(), "Regular")
+        self._set_text_emphasis_buttons_from_style()
         self._update_text_font_availability(font.family())
         self._update_text_editor_preview(font.family())
         self._text_control_changed()
