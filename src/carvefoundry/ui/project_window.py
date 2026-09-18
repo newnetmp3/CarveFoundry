@@ -52,6 +52,10 @@ class MainWindow(_BaseMainWindow):
             tuple[object, ...],
             str,
         ] | None = None
+        self._pending_text_properties_undo: tuple[
+            WorkspaceSnapshot,
+            int,
+        ] | None = None
         self._pending_ribbon_undo: tuple[
             WorkspaceSnapshot,
             int,
@@ -113,6 +117,7 @@ class MainWindow(_BaseMainWindow):
         self._pending_import_undo = None
         self._pending_viewport_transform_undo = None
         self._pending_context_transform_undo = None
+        self._pending_text_properties_undo = None
         self._pending_ribbon_undo = None
         if hasattr(self, "_history_action_buttons"):
             self._sync_history_action_state()
@@ -535,6 +540,25 @@ class MainWindow(_BaseMainWindow):
                 selected_row,
                 pending_label or label,
             )
+
+    def _before_text_properties_change(self, index: int) -> None:
+        super()._before_text_properties_change(index)
+        if not 0 <= index < len(self.project.items):
+            self._pending_text_properties_undo = None
+            return
+        self._pending_text_properties_undo = (
+            capture_workspace(self.project),
+            self.project_list.currentRow(),
+        )
+
+    def _after_text_properties_change(self, index: int) -> None:
+        super()._after_text_properties_change(index)
+        pending = self._pending_text_properties_undo
+        self._pending_text_properties_undo = None
+        if pending is None:
+            return
+        snapshot, selected_row = pending
+        self._record_undo(snapshot, selected_row, "edit text")
 
     def _before_ribbon_mutation(self, label: str) -> None:
         super()._before_ribbon_mutation(label)
