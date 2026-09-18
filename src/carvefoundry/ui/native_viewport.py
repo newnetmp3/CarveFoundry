@@ -175,6 +175,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     fitRequested = Signal()
     viewChanged = Signal()
     itemSelectionRequested = Signal(int)
+    selectionRequested = Signal(object, str)
     itemContextMenuRequested = Signal(int, QPoint)
     itemTransformStarted = Signal(int)
     itemTransformChanged = Signal(int)
@@ -197,6 +198,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         self.project = project
         self.selected_item_index: int | None = None
+        self.selected_item_indices: set[int] = set()
         self.camera = _CameraState()
         self.show_stock = True
         self.show_grid = True
@@ -213,11 +215,16 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index: int | None = None
         self._interaction_mode: str | None = None
         self._interaction_distance = 0.0
+        self._selection_drag_start_screen = None
+        self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis: int | None = None
         self._shape_draw_mode: str | None = None
         self._shape_drag_start_world: np.ndarray | None = None
         self._shape_drag_current_world: np.ndarray | None = None
+        self._selection_drag_start_screen: QPointF | None = None
+        self._selection_drag_current_screen: QPointF | None = None
+        self._selection_drag_mode = "replace"
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
         self._line_program: QOpenGLShaderProgram | None = None
@@ -271,6 +278,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     ) -> None:
         self.project = project
         self.selected_item_index = None
+        self.selected_item_indices.clear()
+        self._selection_drag_start_screen = None
+        self._selection_drag_current_screen = None
         self._prepared_mesh_uploads.clear()
         if fit_view:
             self.fit_view()
@@ -279,9 +289,71 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self.viewChanged.emit()
 
     def set_selected_item(self, index: int | None) -> None:
-        self.selected_item_index = index
+        self.set_selected_items(
+            [] if index is None else [index],
+            primary=index,
+        )
+
+    def set_selected_items(
+        self,
+        indices: list[int] | tuple[int, ...] | set[int],
+        *,
+        primary: int | None = None,
+    ) -> None:
+        valid = {
+            int(index)
+            for index in indices
+            if self.project is not None
+            and 0 <= int(index) < len(self.project.items)
+        }
+        self.selected_item_indices = valid
+        if primary in valid:
+            self.selected_item_index = int(primary)
+        elif valid:
+            self.selected_item_index = max(valid)
+        else:
+            self.selected_item_index = None
         self.requestUpdate()
         self.viewChanged.emit()
+
+    @staticmethod
+    def _selection_mode_for_modifiers(
+        modifiers: Qt.KeyboardModifier,
+    ) -> str:
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            return "toggle"
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            return "add"
+        return "replace"
+
+    def _apply_local_selection(
+        self,
+        indices: list[int],
+        mode: str,
+    ) -> None:
+        incoming = {
+            int(index)
+            for index in indices
+            if self.project is not None
+            and 0 <= int(index) < len(self.project.items)
+        }
+        selected = set(self.selected_item_indices)
+        if mode == "add":
+            selected |= incoming
+        elif mode == "toggle":
+            selected ^= incoming
+        else:
+            selected = incoming
+
+        primary = None
+        if incoming:
+            for index in reversed(indices):
+                if int(index) in selected:
+                    primary = int(index)
+                    break
+        if primary is None and self.selected_item_index in selected:
+            primary = self.selected_item_index
+        self.set_selected_items(selected, primary=primary)
 
     def prepare_mesh_upload(
         self,
@@ -1247,7 +1319,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 )
                 color = (
                     QVector4D(0.784, 1.0, 0.239, 1.0)
-                    if item_index == self.selected_item_index
+                    if item_index in self.selected_item_indices
                     else QVector4D(0.357, 0.557, 0.839, 1.0)
                 )
                 self._mesh_program.setUniformValue("u_color", color)
@@ -1488,7 +1560,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def _selected_gizmo_pivot(self) -> np.ndarray | None:
         if (
             self.project is None
+            or len(self.selected_item_indices) != 1
             or self.selected_item_index is None
+            or self.selected_item_index not in self.selected_item_indices
             or not 0 <= self.selected_item_index < len(self.project.items)
         ):
             return None
@@ -1777,28 +1851,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self._functions.glEnable(GL_DEPTH_TEST)
 
     def _selected_bounds_geometry(self) -> np.ndarray:
-        """Return line vertices for the selected item's world-space AABB."""
+        """Return world-space AABB line vertices for every selected item."""
 
-        if (
-            self.project is None
-            or self.selected_item_index is None
-            or not 0 <= self.selected_item_index < len(self.project.items)
-        ):
-            return np.empty((0, 3), dtype=np.float32)
-        item = self.project.items[self.selected_item_index]
-        if not item.visible or item.mesh is None:
+        if self.project is None or not self.selected_item_indices:
             return np.empty((0, 3), dtype=np.float32)
 
-        minimum, maximum = self._item_bounds_mm(item)
-        corners = np.array(
-            [
-                (x, y, z)
-                for x in (minimum[0], maximum[0])
-                for y in (minimum[1], maximum[1])
-                for z in (minimum[2], maximum[2])
-            ],
-            dtype=np.float32,
-        )
         edges = (
             (0, 1),
             (0, 2),
@@ -1813,10 +1870,119 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             (5, 7),
             (6, 7),
         )
+        vertices: list[np.ndarray] = []
+        for item_index in sorted(self.selected_item_indices):
+            if not 0 <= item_index < len(self.project.items):
+                continue
+            item = self.project.items[item_index]
+            if not item.visible or item.mesh is None:
+                continue
+            minimum, maximum = self._item_bounds_mm(item)
+            corners = np.array(
+                [
+                    (x, y, z)
+                    for x in (minimum[0], maximum[0])
+                    for y in (minimum[1], maximum[1])
+                    for z in (minimum[2], maximum[2])
+                ],
+                dtype=np.float32,
+            )
+            vertices.extend(
+                corners[index]
+                for edge in edges
+                for index in edge
+            )
+        if not vertices:
+            return np.empty((0, 3), dtype=np.float32)
+        return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
+    def _selection_indices_in_screen_rect(
+        self,
+        first: QPointF,
+        second: QPointF,
+    ) -> list[int]:
+        """Return visible objects whose projected bounds intersect a marquee."""
+
+        if self.project is None:
+            return []
+
+        left = min(first.x(), second.x())
+        right = max(first.x(), second.x())
+        top = min(first.y(), second.y())
+        bottom = max(first.y(), second.y())
+
+        projection, view_matrix, _world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        selected: list[int] = []
+        for index, item in enumerate(self.project.items):
+            if not item.visible or item.mesh is None:
+                continue
+            corners = self._bounds_corners(self._item_bounds_mm(item))
+            projected = [
+                self._project_world_point(
+                    tuple(float(value) for value in corner),
+                    view_projection,
+                )
+                for corner in corners
+            ]
+            visible = [point for point in projected if point is not None]
+            if not visible:
+                continue
+            item_left = min(point.x() for point in visible)
+            item_right = max(point.x() for point in visible)
+            item_top = min(point.y() for point in visible)
+            item_bottom = max(point.y() for point in visible)
+            if not (
+                item_right < left
+                or item_left > right
+                or item_bottom < top
+                or item_top > bottom
+            ):
+                selected.append(index)
+        return selected
+
+    def _selection_marquee_vertices(self) -> np.ndarray:
+        start = self._selection_drag_start_screen
+        current = self._selection_drag_current_screen
+        if start is None or current is None:
+            return np.empty((0, 3), dtype=np.float32)
+
+        width = float(max(self.width(), 1))
+        height = float(max(self.height(), 1))
+
+        def ndc(point: QPointF) -> tuple[float, float, float]:
+            return (
+                2.0 * float(point.x()) / width - 1.0,
+                1.0 - 2.0 * float(point.y()) / height,
+                0.0,
+            )
+
+        a = ndc(start)
+        c = ndc(current)
+        b = (c[0], a[1], 0.0)
+        d = (a[0], c[1], 0.0)
         return np.asarray(
-            [corners[index] for edge in edges for index in edge],
+            (a, b, b, c, c, d, d, a),
             dtype=np.float32,
         )
+
+    def _draw_selection_marquee(self) -> None:
+        if (
+            self._functions is None
+            or self._selection_drag_start_screen is None
+            or self._selection_drag_current_screen is None
+        ):
+            return
+        self._functions.glDisable(GL_DEPTH_TEST)
+        try:
+            self._draw_lines(
+                self._selection_marquee_vertices(),
+                view_projection=QMatrix4x4(),
+                color=QVector4D(0.784, 1.0, 0.239, 0.98),
+                line_width=1.5,
+            )
+        finally:
+            self._functions.glEnable(GL_DEPTH_TEST)
 
     def _toolpath_line_geometry(
         self,
@@ -1972,6 +2138,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         )
         self._draw_toolpath_preview(view_projection, world_per_pixel)
         self._draw_shape_preview(view_projection)
+        self._draw_selection_marquee()
         self._draw_translation_gizmo(
             view_projection,
             world_per_pixel,
@@ -2018,8 +2185,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             return
 
         if event.button() == Qt.MouseButton.LeftButton:
+            modifiers = event.modifiers()
             force_orbit = bool(
-                event.modifiers() & Qt.KeyboardModifier.AltModifier
+                modifiers & Qt.KeyboardModifier.AltModifier
             )
             gizmo_axis = None if force_orbit else self.pick_gizmo_axis(
                 event.position()
@@ -2032,20 +2200,29 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 self._active_gizmo_axis = gizmo_axis
                 self._interaction_mode = "gizmo"
                 self.requestUpdate()
+            elif force_orbit:
+                self._interaction_mode = "orbit"
             else:
-                item_index = (
-                    None
-                    if force_orbit
-                    else self.pick_item(event.position())
-                )
+                item_index = self.pick_item(event.position())
+                selection_mode = self._selection_mode_for_modifiers(modifiers)
                 if item_index is not None:
                     self._press_item_index = item_index
-                    self.selected_item_index = item_index
-                    self.itemSelectionRequested.emit(item_index)
+                    self._apply_local_selection(
+                        [item_index],
+                        selection_mode,
+                    )
+                    self.selectionRequested.emit(
+                        [item_index],
+                        selection_mode,
+                    )
                     self._interaction_mode = "orbit"
                     self.requestUpdate()
                 else:
-                    self._interaction_mode = "orbit"
+                    self._selection_drag_start_screen = event.position()
+                    self._selection_drag_current_screen = event.position()
+                    self._selection_drag_mode = selection_mode
+                    self._interaction_mode = "marquee"
+                    self.requestUpdate()
         elif event.button() in {
             Qt.MouseButton.RightButton,
             Qt.MouseButton.MiddleButton,
@@ -2079,6 +2256,15 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                     event.modifiers(),
                 )
                 self.requestUpdate()
+            event.accept()
+            return
+
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "marquee"
+        ):
+            self._selection_drag_current_screen = event.position()
+            self.requestUpdate()
             event.accept()
             return
 
@@ -2179,15 +2365,28 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self.itemTransformFinished.emit(self._press_item_index)
         elif (
             event.button() == Qt.MouseButton.LeftButton
-            and self._interaction_mode == "orbit"
-            and self._interaction_distance < 4.0
-            and self._press_item_index is None
+            and self._interaction_mode == "marquee"
+            and self._selection_drag_start_screen is not None
         ):
-            # A simple click on empty space clears selection.  A simple click on
-            # a mesh keeps the item selected, while a drag on either location
-            # orbits the viewport.
-            self.selected_item_index = None
-            self.itemSelectionRequested.emit(-1)
+            self._selection_drag_current_screen = event.position()
+            if self._interaction_distance >= 4.0:
+                indices = self._selection_indices_in_screen_rect(
+                    self._selection_drag_start_screen,
+                    self._selection_drag_current_screen,
+                )
+                self._apply_local_selection(
+                    indices,
+                    self._selection_drag_mode,
+                )
+                self.selectionRequested.emit(
+                    indices,
+                    self._selection_drag_mode,
+                )
+            elif self._selection_drag_mode == "replace":
+                self._apply_local_selection([], "replace")
+                self.selectionRequested.emit([], "replace")
+            self._selection_drag_start_screen = None
+            self._selection_drag_current_screen = None
             self.requestUpdate()
         elif (
             event.button() == Qt.MouseButton.RightButton
@@ -2196,7 +2395,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             item_index = self.pick_item(event.position())
             if item_index is not None:
-                self.selected_item_index = item_index
+                self._apply_local_selection([item_index], "replace")
+                self.selectionRequested.emit([item_index], "replace")
                 self.itemSelectionRequested.emit(item_index)
                 self.itemContextMenuRequested.emit(
                     item_index,
@@ -2209,6 +2409,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index = None
         self._interaction_mode = None
         self._interaction_distance = 0.0
+        self._selection_drag_start_screen = None
+        self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis = None
         self.requestUpdate()
@@ -2227,7 +2429,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             self.project is None
+            or len(self.selected_item_indices) != 1
             or self.selected_item_index is None
+            or self.selected_item_index not in self.selected_item_indices
             or not 0 <= self.selected_item_index < len(self.project.items)
         ):
             super().keyPressEvent(event)
@@ -2397,6 +2601,7 @@ class MeshViewport(QWidget):
 
     viewSettingsChanged = Signal()
     itemSelectionRequested = Signal(int)
+    selectionRequested = Signal(object, str)
     itemContextMenuRequested = Signal(int, QPoint)
     itemTransformStarted = Signal(int)
     itemTransformChanged = Signal(int)
@@ -2418,6 +2623,9 @@ class MeshViewport(QWidget):
         self._renderer.viewChanged.connect(self._update_rulers)
         self._renderer.itemSelectionRequested.connect(
             self.itemSelectionRequested.emit
+        )
+        self._renderer.selectionRequested.connect(
+            self.selectionRequested.emit
         )
         self._renderer.itemContextMenuRequested.connect(
             self.itemContextMenuRequested.emit
@@ -2627,6 +2835,15 @@ class MeshViewport(QWidget):
 
     def set_selected_item(self, index: int | None) -> None:
         self._renderer.set_selected_item(index)
+        self._update_empty_status()
+
+    def set_selected_items(
+        self,
+        indices: list[int] | tuple[int, ...] | set[int],
+        *,
+        primary: int | None = None,
+    ) -> None:
+        self._renderer.set_selected_items(indices, primary=primary)
         self._update_empty_status()
 
     def prepare_mesh_upload(
