@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
-from math import ceil, isfinite
+from math import ceil, hypot, isfinite, radians, tan
 
 import numpy as np
 import trimesh
@@ -149,6 +149,44 @@ def _cut(
     )
 
 
+def _enter_depth(
+    moves: list[ToolpathMove],
+    start: tuple[float, float],
+    next_point: tuple[float, float],
+    target_z: float,
+    previous_depth_z: float,
+    settings: BasicCamSettings,
+) -> tuple[float, float]:
+    """Enter material vertically or by ramping along the first toolpath segment."""
+
+    _rapid(moves, start[0], start[1], settings.safe_z_mm)
+    if settings.ramp_angle_deg is None:
+        _plunge(moves, start[0], start[1], target_z, settings)
+        return start
+
+    # Move through already-cleared air/material to the previous pass level, then
+    # descend while advancing along the actual toolpath.
+    entry_z = min(0.0, previous_depth_z)
+    _plunge(moves, start[0], start[1], entry_z, settings)
+
+    dx = next_point[0] - start[0]
+    dy = next_point[1] - start[1]
+    segment_length = hypot(dx, dy)
+    if segment_length <= 1e-9:
+        _plunge(moves, start[0], start[1], target_z, settings)
+        return start
+
+    depth_delta = abs(target_z - entry_z)
+    required_length = depth_delta / tan(radians(settings.ramp_angle_deg))
+    fraction = min(1.0, required_length / segment_length)
+    ramp_end = (
+        start[0] + dx * fraction,
+        start[1] + dy * fraction,
+    )
+    _cut(moves, ramp_end[0], ramp_end[1], target_z, settings)
+    return ramp_end
+
+
 def _padded_xy_bounds(
     bounds: np.ndarray,
     padding_mm: float,
@@ -192,6 +230,7 @@ def rectangular_profile(
         raise ValueError("Selected geometry is too small for this profile offset.")
     target_z = _target_depth(data, settings)
     moves: list[ToolpathMove] = []
+    previous_depth = 0.0
 
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
         corners = [
@@ -209,10 +248,23 @@ def rectangular_profile(
                 (max_x, min_y),
                 (min_x, min_y),
             ]
-        _rapid(moves, corners[0][0], corners[0][1], settings.safe_z_mm)
-        _plunge(moves, corners[0][0], corners[0][1], depth, settings)
+        final_tab_pass = settings.tabs_enabled and depth <= target_z + 1e-9
+        if final_tab_pass:
+            _rapid(moves, corners[0][0], corners[0][1], settings.safe_z_mm)
+            _plunge(moves, corners[0][0], corners[0][1], depth, settings)
+        else:
+            ramp_end = _enter_depth(
+                moves,
+                corners[0],
+                corners[1],
+                depth,
+                previous_depth,
+                settings,
+            )
+            if ramp_end != corners[0] and ramp_end != corners[1]:
+                _cut(moves, corners[1][0], corners[1][1], depth, settings)
 
-        if settings.tabs_enabled and depth <= target_z + 1e-9:
+        if final_tab_pass:
             tab_z = min(0.0, depth + settings.tab_height_mm)
             for start, end in pairwise(corners):
                 x0, y0 = start
@@ -225,11 +277,15 @@ def rectangular_profile(
                 _cut(moves, second[0], second[1], depth, settings)
                 _cut(moves, x1, y1, depth, settings)
         else:
-            for x, y in corners[1:]:
+            start_index = 1
+            if settings.ramp_angle_deg is not None:
+                start_index = 2
+            for x, y in corners[start_index:]:
                 _cut(moves, x, y, depth, settings)
 
         last = moves[-1]
         _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+        previous_depth = depth
 
     return Toolpath(
         name=name,
@@ -262,6 +318,7 @@ def rectangular_pocket(
     stepover = max(cutter.diameter_mm * settings.stepover_fraction, 0.05)
 
     moves: list[ToolpathMove] = []
+    previous_depth = 0.0
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
         if settings.pocket_strategy is PocketStrategy.OFFSET:
             inset = 0.0
@@ -290,12 +347,24 @@ def rectangular_pocket(
                         (left, bottom),
                     ]
                 if first_loop:
-                    _rapid(moves, loop[0][0], loop[0][1], settings.safe_z_mm)
-                    _plunge(moves, loop[0][0], loop[0][1], depth, settings)
+                    ramp_end = _enter_depth(
+                        moves,
+                        loop[0],
+                        loop[1],
+                        depth,
+                        previous_depth,
+                        settings,
+                    )
                     first_loop = False
+                    start_index = 1
+                    if settings.ramp_angle_deg is not None:
+                        if ramp_end != loop[1]:
+                            _cut(moves, loop[1][0], loop[1][1], depth, settings)
+                        start_index = 2
                 else:
                     _cut(moves, loop[0][0], loop[0][1], depth, settings)
-                for x, y in loop[1:]:
+                    start_index = 1
+                for x, y in loop[start_index:]:
                     _cut(moves, x, y, depth, settings)
                 inset += stepover
         else:
@@ -330,17 +399,26 @@ def rectangular_pocket(
                         float(line_value),
                     )
                 if first_line:
-                    _rapid(moves, start[0], start[1], settings.safe_z_mm)
-                    _plunge(moves, start[0], start[1], depth, settings)
+                    ramp_end = _enter_depth(
+                        moves,
+                        start,
+                        end,
+                        depth,
+                        previous_depth,
+                        settings,
+                    )
                     first_line = False
+                    if ramp_end != end:
+                        _cut(moves, end[0], end[1], depth, settings)
                 else:
                     _cut(moves, start[0], start[1], depth, settings)
-                _cut(moves, end[0], end[1], depth, settings)
+                    _cut(moves, end[0], end[1], depth, settings)
                 reverse = not reverse
 
         if moves:
             last = moves[-1]
             _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+        previous_depth = depth
 
     return Toolpath(
         name=name,
@@ -376,9 +454,20 @@ def rectangular_engrave(
         (min_x, min_y),
     ]
     moves: list[ToolpathMove] = []
-    _rapid(moves, points[0][0], points[0][1], settings.safe_z_mm)
-    _plunge(moves, points[0][0], points[0][1], z, settings)
-    for x, y in points[1:]:
+    ramp_end = _enter_depth(
+        moves,
+        points[0],
+        points[1],
+        z,
+        0.0,
+        settings,
+    )
+    start_index = 1
+    if settings.ramp_angle_deg is not None:
+        if ramp_end != points[1]:
+            _cut(moves, points[1][0], points[1][1], z, settings)
+        start_index = 2
+    for x, y in points[start_index:]:
         _cut(moves, x, y, z, settings)
     _rapid(moves, points[-1][0], points[-1][1], settings.safe_z_mm)
     return Toolpath(
