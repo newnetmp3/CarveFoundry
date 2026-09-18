@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from math import atan2, cos, pi, sin
-from typing import Iterable
+from collections.abc import Iterable
+from itertools import pairwise
+from math import atan2
 
 import numpy as np
 import trimesh
@@ -86,7 +87,7 @@ def polyline_mesh(
         raise ValueError("Polyline width/depth must be greater than zero.")
 
     parts: list[trimesh.Trimesh] = []
-    for start, end in zip(points, points[1:]):
+    for start, end in pairwise(points):
         delta = end - start
         length = float(np.linalg.norm(delta))
         if length <= 1e-9:
@@ -180,7 +181,7 @@ def text_mesh(
     parts: list[trimesh.Trimesh] = []
 
     for char_index, char in enumerate(clean):
-        pattern = _FONT_5X7.get(char, _FONT_5X7["?"] if "?" in _FONT_5X7 else None)
+        pattern = _FONT_5X7.get(char)
         if pattern is None:
             pattern = ("11111","10001","00010","00100","00100","00000","00100")
         x_offset = char_index * advance
