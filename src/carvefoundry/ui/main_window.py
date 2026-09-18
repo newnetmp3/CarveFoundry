@@ -56,6 +56,7 @@ class Panel(QFrame):
         layout.addWidget(self.header)
 
         self.body = QWidget()
+        self.body.setObjectName("InspectorBody")
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(8, 8, 8, 8)
 
