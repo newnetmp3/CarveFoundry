@@ -1151,6 +1151,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             operation_names = " + ".join(
                 path.name for path in self.project.toolpaths
             )
+            source_names = list(
+                dict.fromkeys(
+                    path.source_item_name
+                    for path in self.project.toolpaths
+                    if path.source_item_name
+                )
+            )
+            source_text = ", ".join(source_names) if source_names else "Unknown"
             total_moves = sum(
                 len(path.moves) for path in self.project.toolpaths
             )
@@ -1161,6 +1169,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._set_activity_info(
                 "Toolpath available\n"
                 f"{operation_names}\n\n"
+                f"Source: {source_text}\n"
                 f"Moves: {total_moves:,}\n"
                 f"Estimated cutting: {total_minutes:.1f} min"
             )
@@ -2625,9 +2634,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             path.estimated_cutting_minutes for path in toolpaths
         )
         operation_names = " + ".join(path.name for path in toolpaths)
+        source_names = list(
+            dict.fromkeys(
+                path.source_item_name
+                for path in toolpaths
+                if path.source_item_name
+            )
+        )
+        source_text = ", ".join(source_names) if source_names else "Unknown"
         self._set_activity_info(
             f"G-code exported\n{output_path}\n\n"
             f"Operations: {operation_names}\n"
+            f"Source: {source_text}\n"
             f"Cutter: {toolpath.cutter.name}\n"
             f"Moves: {total_moves:,}\n"
             f"Estimated cutting time: {total_minutes:.1f} min "
