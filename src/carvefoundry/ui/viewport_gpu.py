@@ -342,9 +342,8 @@ class MeshViewport(QOpenGLWidget):
 
     def _model_numpy(self, item: ProjectItem) -> np.ndarray:
         assert item.mesh is not None
-        source_mesh = item.mesh.mesh
         units_scale = float(item.source_units.millimeters_per_unit)
-        source_bounds = np.asarray(source_mesh.bounds, dtype=float)
+        source_bounds = np.asarray(item.mesh.bounds, dtype=float)
         pivot_mm = source_bounds.mean(axis=0) * units_scale
 
         unit_matrix = np.eye(4, dtype=float)
@@ -358,7 +357,7 @@ class MeshViewport(QOpenGLWidget):
 
     def _item_bounds_mm(self, item: ProjectItem) -> np.ndarray:
         assert item.mesh is not None
-        source_bounds = np.asarray(item.mesh.mesh.bounds, dtype=float)
+        source_bounds = np.asarray(item.mesh.bounds, dtype=float)
         corners = self._bounds_corners(source_bounds)
         homogeneous = np.column_stack((corners, np.ones(len(corners))))
         transformed = (self._model_numpy(item) @ homogeneous.T).T[:, :3]
