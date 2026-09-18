@@ -45,6 +45,21 @@ class ProjectItem:
         mesh.apply_scale(self.source_units.millimeters_per_unit)
         return mesh
 
+    def local_size_mm(self) -> np.ndarray | None:
+        """Return XYZ model size after units/scale but before rotation.
+
+        Keeping Size independent of rotation gives the transform editor stable
+        CAD-style dimensions: rotating a model does not make its Size fields
+        change just because its world-axis bounding box changed.
+        """
+
+        if self.mesh is None:
+            return None
+        source_dimensions = np.asarray(self.mesh.dimensions, dtype=float)
+        source_dimensions *= float(self.source_units.millimeters_per_unit)
+        scale = np.asarray(self.transform.scale_xyz, dtype=float)
+        return source_dimensions * scale
+
     def transformed_bounds_mm(self) -> np.ndarray | None:
         """Return fast conservative placed bounds without copying the full mesh."""
 
