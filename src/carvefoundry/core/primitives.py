@@ -206,7 +206,8 @@ def _block_text_mesh(
         raise ValueError("Text produced no geometry.")
     mesh = trimesh.util.concatenate(parts)
     bounds = np.asarray(mesh.bounds, dtype=float)
-    mesh.apply_translation((-bounds[0, 0], -bounds[0, 1], 0.0))
+    x_shift = 0.0 if preserve_x_origin else -bounds[0, 0]
+    mesh.apply_translation((x_shift, -bounds[0, 1], 0.0))
     return mesh_asset_from_geometry(mesh)
 
 
@@ -490,7 +491,12 @@ def _text_path_geometry(
     return geometry
 
 
-def _extrude_text_geometry(geometry, depth_mm: float) -> MeshAsset:
+def _extrude_text_geometry(
+    geometry,
+    depth_mm: float,
+    *,
+    preserve_x_origin: bool = False,
+) -> MeshAsset:
     parts: list[trimesh.Trimesh] = []
     for polygon in _flatten_polygon_geometry(geometry):
         if polygon.area <= 1e-8:
@@ -560,7 +566,11 @@ def text_mesh(
 
     path, millimeters_per_unit = _build_text_path(properties)
     geometry = _text_path_geometry(path, millimeters_per_unit)
-    return _extrude_text_geometry(geometry, properties.depth_mm)
+    return _extrude_text_geometry(
+        geometry,
+        properties.depth_mm,
+        preserve_x_origin=properties.box_width_mm > 0,
+    )
 
 
 def bitmap_runs_mesh(
