@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from carvefoundry.cam.toolpath import Toolpath
 
 from .mesh import MeshAsset
-from .transform import Transform3D, placement_on_stock
+from .transform import Transform3D
 from .units import ModelUnits
 
 
@@ -39,6 +39,27 @@ class ProjectItem:
         mesh = self.mesh.mesh.copy()
         mesh.apply_scale(self.source_units.millimeters_per_unit)
         return mesh
+
+    def transformed_bounds_mm(self) -> np.ndarray | None:
+        """Return fast conservative placed bounds without copying the full mesh."""
+
+        if self.mesh is None:
+            return None
+        bounds = np.asarray(self.mesh.bounds, dtype=float)
+        bounds *= float(self.source_units.millimeters_per_unit)
+        minimum, maximum = bounds
+        corners = np.array(
+            [
+                (x, y, z)
+                for x in (minimum[0], maximum[0])
+                for y in (minimum[1], maximum[1])
+                for z in (minimum[2], maximum[2])
+            ],
+            dtype=float,
+        )
+        pivot = tuple(float(value) for value in bounds.mean(axis=0))
+        transformed = self.transform.apply_points(corners, pivot=pivot)
+        return np.vstack((transformed.min(axis=0), transformed.max(axis=0)))
 
     def transformed_mesh(self) -> trimesh.Trimesh | None:
         """Return geometry exactly as the viewport/CAM should see it, in millimeters."""
@@ -73,12 +94,15 @@ class Project:
         """Place newly imported geometry in a useful stock-relative starting position."""
 
         units = source_units or ModelUnits.from_metadata(mesh.units)
-        mesh_mm = mesh.mesh.copy()
-        mesh_mm.apply_scale(units.millimeters_per_unit)
-        return placement_on_stock(
-            mesh_mm,
-            stock_width_mm=self.stock.width_mm,
-            stock_height_mm=self.stock.height_mm,
+        bounds = np.asarray(mesh.bounds, dtype=float)
+        bounds *= float(units.millimeters_per_unit)
+        center = bounds.mean(axis=0)
+        return Transform3D(
+            translation_mm=(
+                float(self.stock.width_mm / 2.0 - center[0]),
+                float(self.stock.height_mm / 2.0 - center[1]),
+                float(-bounds[1, 2]),
+            )
         )
 
     def remove_item(self, index: int) -> ProjectItem:
