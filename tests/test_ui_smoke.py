@@ -14,23 +14,38 @@ from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
 _APP = QApplication.instance() or QApplication([])
 
 
-def test_photoshop_style_tool_rail_and_compact_ribbon() -> None:
+def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
     window = MainWindow()
     try:
         assert window.tool_rail.width() == 46
-        assert window.ribbon.height() == 104
+        assert window.ribbon.isHidden()
+        assert window.main_menu_bar.isVisible() is False
+        assert [
+            action.text()
+            for action in window.main_menu_bar.actions()
+        ] == [
+            "File",
+            "Edit",
+            "Design",
+            "Model",
+            "Toolpaths",
+            "Machine",
+            "View",
+        ]
         assert {
             "select",
             "shapes",
             "line",
             "text",
-            "pen",
+            "vector",
+            "file",
+            "edit",
             "arrange",
+            "model",
             "cam",
-            "import",
-            "layers",
-            "inspector",
-            "fit",
+            "cutter",
+            "machine",
+            "view",
         }.issubset(window.tool_rail.buttons)
         assert window.tool_rail.buttons["select"].isChecked()
         assert len(window.tool_rail.buttons["shapes"].menu().actions()) == 3
