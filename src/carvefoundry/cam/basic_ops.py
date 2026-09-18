@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from math import ceil, isfinite
 
 import numpy as np
@@ -123,7 +124,7 @@ def rectangular_profile(
 
         if settings.tabs_enabled and depth <= target_z + 1e-9:
             tab_z = min(0.0, depth + settings.tab_height_mm)
-            for start, end in zip(corners, corners[1:]):
+            for start, end in pairwise(corners):
                 x0, y0 = start
                 x1, y1 = end
                 first = (x0 + (x1 - x0) * 0.40, y0 + (y1 - y0) * 0.40)
