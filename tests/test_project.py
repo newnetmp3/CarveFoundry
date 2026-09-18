@@ -134,3 +134,24 @@ def test_fast_transformed_bounds_match_unrotated_mesh_bounds() -> None:
     assert fast_bounds is not None
     assert transformed is not None
     assert np.allclose(fast_bounds, transformed.bounds)
+
+
+def test_local_size_uses_units_and_scale_but_not_rotation() -> None:
+    asset = mesh_asset_from_geometry(
+        trimesh.creation.box(extents=(1.0, 2.0, 0.5))
+    )
+    item = ProjectItem(
+        "sized-inch-part.stl",
+        kind="stl",
+        mesh=asset,
+        source_units=ModelUnits.INCHES,
+        transform=Transform3D(
+            rotation_deg=(37.0, 21.0, 83.0),
+            scale_xyz=(2.0, 0.5, 3.0),
+        ),
+    )
+
+    size = item.local_size_mm()
+
+    assert size is not None
+    assert np.allclose(size, (50.8, 25.4, 38.1))
