@@ -36,6 +36,7 @@ class MainWindow(_BaseMainWindow):
     def __init__(self) -> None:
         self._project_dirty = False
         self._undo_stack: list[_UndoEntry] = []
+        self._redo_stack: list[_UndoEntry] = []
         self._history_state_id = 0
         self._history_next_id = 1
         self._saved_state_id = 0
@@ -49,6 +50,11 @@ class MainWindow(_BaseMainWindow):
             WorkspaceSnapshot,
             int,
             tuple[object, ...],
+            str,
+        ] | None = None
+        self._pending_ribbon_undo: tuple[
+            WorkspaceSnapshot,
+            int,
             str,
         ] | None = None
         super().__init__()
@@ -83,12 +89,14 @@ class MainWindow(_BaseMainWindow):
 
     def _reset_undo_history(self) -> None:
         self._undo_stack.clear()
+        self._redo_stack.clear()
         self._history_state_id = 0
         self._history_next_id = 1
         self._saved_state_id = 0
         self._pending_import_undo = None
         self._pending_viewport_transform_undo = None
         self._pending_context_transform_undo = None
+        self._pending_ribbon_undo = None
 
     def _record_undo(
         self,
@@ -106,6 +114,7 @@ class MainWindow(_BaseMainWindow):
         )
         if len(self._undo_stack) > 100:
             self._undo_stack.pop(0)
+        self._redo_stack.clear()
 
         self._history_state_id = self._history_next_id
         self._history_next_id += 1
@@ -118,6 +127,17 @@ class MainWindow(_BaseMainWindow):
             return
 
         entry = self._undo_stack.pop()
+        self._redo_stack.append(
+            _UndoEntry(
+                snapshot=capture_workspace(self.project),
+                selected_row=self.project_list.currentRow(),
+                state_id=self._history_state_id,
+                label=entry.label,
+            )
+        )
+        if len(self._redo_stack) > 100:
+            self._redo_stack.pop(0)
+
         restore_workspace(self.project, entry.snapshot)
         self._history_state_id = entry.state_id
         self._project_dirty = self._history_state_id != self._saved_state_id
@@ -127,6 +147,33 @@ class MainWindow(_BaseMainWindow):
         self._refresh_project_list(entry.selected_row)
         self.viewport.fit_view()
         self.statusBar().showMessage(f"Undo: {entry.label}", 3000)
+
+    def _redo(self) -> None:
+        if not self._redo_stack:
+            self.statusBar().showMessage("Nothing to redo", 3000)
+            return
+
+        entry = self._redo_stack.pop()
+        self._undo_stack.append(
+            _UndoEntry(
+                snapshot=capture_workspace(self.project),
+                selected_row=self.project_list.currentRow(),
+                state_id=self._history_state_id,
+                label=entry.label,
+            )
+        )
+        if len(self._undo_stack) > 100:
+            self._undo_stack.pop(0)
+
+        restore_workspace(self.project, entry.snapshot)
+        self._history_state_id = entry.state_id
+        self._project_dirty = self._history_state_id != self._saved_state_id
+        self._update_project_title()
+
+        self.viewport.set_project(self.project)
+        self._refresh_project_list(entry.selected_row)
+        self.viewport.fit_view()
+        self.statusBar().showMessage(f"Redo: {entry.label}", 3000)
 
     def _set_project(
         self,
@@ -452,6 +499,27 @@ class MainWindow(_BaseMainWindow):
                 selected_row,
                 pending_label or label,
             )
+
+    def _before_ribbon_mutation(self, label: str) -> None:
+        super()._before_ribbon_mutation(label)
+        self._pending_ribbon_undo = (
+            capture_workspace(self.project),
+            self.project_list.currentRow(),
+            label,
+        )
+
+    def _after_ribbon_mutation(self, label: str, changed: bool) -> None:
+        super()._after_ribbon_mutation(label, changed)
+        pending = self._pending_ribbon_undo
+        self._pending_ribbon_undo = None
+        if not changed or pending is None:
+            return
+        snapshot, selected_row, pending_label = pending
+        self._record_undo(
+            snapshot,
+            selected_row,
+            pending_label or label,
+        )
 
     def _before_import_items_added(self, count: int) -> None:
         if count <= 0:
