@@ -182,6 +182,11 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     border-radius: 8px;
     padding: 8px;
 }
+QScrollArea#InspectorScrollArea,
+#InspectorBody {
+    background: transparent;
+    border: 0;
+}
 #LayersPopup {
     background: #0e1425;
     border: 1px solid #3a465f;
