@@ -1133,10 +1133,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         if has_toolpaths:
             self._toolpaths_stale_reason = None
+            source_names = self._toolpath_source_names(
+                self.project.toolpaths
+            )
+            operation_names = " + ".join(
+                path.name for path in self.project.toolpaths
+            )
+            source_text = ", ".join(source_names) if source_names else "Unknown source"
             self._set_cam_status(
                 "ready",
                 "CAM: READY",
-                "Calculated toolpath is current and available to preview or export.",
+                (
+                    f"{operation_names} for {source_text}. "
+                    "Current and available to preview or export."
+                ),
             )
         elif self._toolpaths_stale_reason:
             self._set_cam_status(
