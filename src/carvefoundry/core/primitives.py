@@ -9,7 +9,6 @@ import trimesh
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import (
     QFont,
-    QFontDatabase,
     QFontMetricsF,
     QGuiApplication,
     QPainterPath,
@@ -243,8 +242,10 @@ def _font_for_text(properties: TextProperties) -> tuple[QFont, float]:
     if properties.font_style:
         font.setStyleName(properties.font_style)
     font.setPixelSize(_FONT_EM_UNITS)
-    font.setBold(bool(properties.bold))
-    font.setItalic(bool(properties.italic))
+    if properties.bold:
+        font.setBold(True)
+    if properties.italic:
+        font.setItalic(True)
     font.setKerning(bool(properties.kerning))
     font.setStretch(
         max(1, min(4000, round(float(properties.horizontal_scale_percent))))
