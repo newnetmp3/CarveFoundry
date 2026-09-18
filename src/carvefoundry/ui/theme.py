@@ -106,6 +106,59 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     color: #c7d0e0;
     font-size: 10px;
 }
+#BackplotRoot, #BackplotCanvas { background: #111827; }
+#BackplotTopBar, #BackplotTransport {
+    background: #0e1425;
+    border-bottom: 1px solid #242e44;
+}
+#BackplotTransport {
+    border-top: 1px solid #242e44;
+    border-bottom: 0;
+}
+#BackplotSidebar {
+    background: #0e1425;
+    border-right: 1px solid #242e44;
+}
+#BackplotSectionHeader {
+    background: #12192a;
+    color: #dce4f0;
+    border: 1px solid #242e44;
+    border-radius: 5px;
+    padding: 5px 7px;
+    font-weight: 700;
+}
+QPlainTextEdit#BackplotCode {
+    background: #f7f8fa;
+    color: #1a2230;
+    border: 1px solid #2a3550;
+    border-radius: 5px;
+    selection-background-color: #d9e8ba;
+    selection-color: #111827;
+    padding: 3px;
+}
+#BackplotDRO {
+    background: #0a0f1c;
+    color: #c8ff3d;
+    border: 1px solid #2a3550;
+    border-radius: 4px;
+    padding: 6px;
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 700;
+}
+#BackplotTransport QToolButton {
+    background: #20283a;
+    color: #ffffff;
+    border: 1px solid #35415a;
+    border-radius: 5px;
+    min-width: 34px;
+    min-height: 28px;
+}
+#BackplotTransport QToolButton:hover {
+    background: #c8ff3d;
+    color: #0b1020;
+    border-color: #c8ff3d;
+}
 #SectionHeading { color: #ffffff; font-weight: 700; padding-top: 4px; }
 #TransformControls { border-top: 1px solid #242e44; }
 #CanvasHint { color: #7f8aa0; font-size: 13px; }
