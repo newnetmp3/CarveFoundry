@@ -322,6 +322,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
         shapes = design.add_group("Draw")
+        self._navigation_tool_button = shapes.add_button(
+            "Select",
+            self._activate_navigation_tool,
+            primary=True,
+        )
+        self._navigation_tool_button.setCheckable(True)
+        self._navigation_tool_button.setChecked(True)
+        self._navigation_tool_button.setToolTip(
+            "Select / Navigate: return to normal object selection and viewport "
+            "navigation. Esc also exits an active drawing tool."
+        )
         shape_actions = (
             ("rectangle", "Rectangle", self._create_rectangle),
             ("ellipse", "Ellipse", self._create_ellipse),
@@ -334,7 +345,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             button.setCheckable(True)
             button.setToolTip(
                 f"{title}: drag directly on the stock to draw. "
-                "Hold Shift to constrain. Press Esc to exit the tool."
+                "Hold Shift to constrain. Alt+drag temporarily orbits. "
+                "Press Esc or Select to exit the tool."
             )
             self._shape_tool_buttons[tool] = button
 
@@ -3370,6 +3382,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Duplicate", "Ctrl+D", self._duplicate_selected_item),
             ("Layers", "Ctrl+Shift+L", self._show_layers_popup),
             ("Inspector", "Ctrl+Shift+I", self._toggle_properties_panel_option),
+            ("Select / Cancel Tool", "Escape", self._cancel_active_tool),
             ("Fit View", "Ctrl+0", self._fit_view),
         )
 
