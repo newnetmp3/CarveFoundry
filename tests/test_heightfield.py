@@ -38,3 +38,21 @@ def test_height_field_rejects_nonuniform_axes() -> None:
             np.array([0.0, 1.0]),
             np.zeros((2, 3)),
         )
+
+
+def test_heightfield_padding_and_background_fill() -> None:
+    mesh = trimesh.creation.box(extents=(4.0, 4.0, 2.0))
+
+    field = HeightField.from_mesh_top_surface(
+        mesh,
+        spacing_mm=1.0,
+        padding_mm=2.0,
+        fill_missing_z_mm=-1.0,
+    )
+
+    assert field.bounds_xy_mm == pytest.approx((-4.0, -4.0, 4.0, 4.0))
+    assert np.isfinite(field.z_mm).all()
+    assert field.z_mm[0, 0] == pytest.approx(-1.0)
+    center_x = int(np.argmin(np.abs(field.x_mm)))
+    center_y = int(np.argmin(np.abs(field.y_mm)))
+    assert field.z_mm[center_y, center_x] == pytest.approx(1.0)
