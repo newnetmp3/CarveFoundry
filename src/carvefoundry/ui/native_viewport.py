@@ -5,7 +5,7 @@ from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QMatrix4x4,
@@ -170,6 +170,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     orbitStarted = Signal()
     fitRequested = Signal()
     viewChanged = Signal()
+    itemSelectionRequested = Signal(int)
+    itemContextMenuRequested = Signal(int, QPoint)
+    itemTransformStarted = Signal(int)
+    itemTransformChanged = Signal(int)
+    itemTransformFinished = Signal(int)
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -190,6 +195,12 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.invert_vertical_drag = False
 
         self._last_mouse_pos: QPointF | None = None
+        self._press_pos: QPointF | None = None
+        self._press_item_index: int | None = None
+        self._interaction_mode: str | None = None
+        self._interaction_distance = 0.0
+        self._object_drag_last_world: np.ndarray | None = None
+        self._object_drag_started = False
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
         self._line_program: QOpenGLShaderProgram | None = None
@@ -1134,6 +1145,151 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         self._mesh_program.release()
 
+    def _screen_ray(
+        self,
+        position: QPointF,
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """Return a world-space ray for a viewport pixel."""
+
+        projection, view_matrix, _world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        inverse, invertible = view_projection.inverted()
+        if not invertible:
+            return None
+
+        width = float(max(self.width(), 1))
+        height = float(max(self.height(), 1))
+        ndc_x = 2.0 * float(position.x()) / width - 1.0
+        ndc_y = 1.0 - 2.0 * float(position.y()) / height
+
+        near_point = inverse.map(QVector3D(ndc_x, ndc_y, -1.0))
+        far_point = inverse.map(QVector3D(ndc_x, ndc_y, 1.0))
+        origin = np.array(
+            (near_point.x(), near_point.y(), near_point.z()),
+            dtype=float,
+        )
+        far = np.array(
+            (far_point.x(), far_point.y(), far_point.z()),
+            dtype=float,
+        )
+        direction = far - origin
+        length = float(np.linalg.norm(direction))
+        if not np.isfinite(length) or length <= 1e-12:
+            return None
+        return origin, direction / length
+
+    @staticmethod
+    def _ray_bounds_distance(
+        origin: np.ndarray,
+        direction: np.ndarray,
+        bounds: np.ndarray,
+    ) -> float | None:
+        """Return the nearest ray/AABB hit distance, or None."""
+
+        t_min = 0.0
+        t_max = float("inf")
+        for axis in range(3):
+            component = float(direction[axis])
+            low = float(bounds[0, axis])
+            high = float(bounds[1, axis])
+            coordinate = float(origin[axis])
+            if abs(component) <= 1e-12:
+                if coordinate < low or coordinate > high:
+                    return None
+                continue
+            first = (low - coordinate) / component
+            second = (high - coordinate) / component
+            if first > second:
+                first, second = second, first
+            t_min = max(t_min, first)
+            t_max = min(t_max, second)
+            if t_max < t_min:
+                return None
+        return t_min if t_max >= 0.0 else None
+
+    def pick_item(self, position: QPointF) -> int | None:
+        """Pick the nearest visible mesh using transformed 3D bounds."""
+
+        if self.project is None:
+            return None
+        ray = self._screen_ray(position)
+        if ray is None:
+            return None
+        origin, direction = ray
+        _projection, _view, world_per_pixel = self._camera_geometry()
+        padding = max(float(world_per_pixel) * 4.0, 0.05)
+
+        best_index: int | None = None
+        best_distance = float("inf")
+        for index, item in enumerate(self.project.items):
+            if not item.visible or item.mesh is None:
+                continue
+            bounds = self._item_bounds_mm(item).copy()
+            bounds[0] -= padding
+            bounds[1] += padding
+            distance = self._ray_bounds_distance(origin, direction, bounds)
+            if distance is not None and distance < best_distance:
+                best_index = index
+                best_distance = distance
+        return best_index
+
+    def _screen_to_stock_plane(self, position: QPointF) -> np.ndarray | None:
+        """Map a screen point to the stock XY plane at Z0."""
+
+        ray = self._screen_ray(position)
+        if ray is None:
+            return None
+        origin, direction = ray
+        if abs(float(direction[2])) <= 1e-9:
+            return None
+        distance = -float(origin[2]) / float(direction[2])
+        if distance < 0.0:
+            return None
+        point = origin + direction * distance
+        return point if np.isfinite(point).all() else None
+
+    def _selected_bounds_geometry(self) -> np.ndarray:
+        """Return line vertices for the selected item's world-space AABB."""
+
+        if (
+            self.project is None
+            or self.selected_item_index is None
+            or not 0 <= self.selected_item_index < len(self.project.items)
+        ):
+            return np.empty((0, 3), dtype=np.float32)
+        item = self.project.items[self.selected_item_index]
+        if not item.visible or item.mesh is None:
+            return np.empty((0, 3), dtype=np.float32)
+
+        minimum, maximum = self._item_bounds_mm(item)
+        corners = np.array(
+            [
+                (x, y, z)
+                for x in (minimum[0], maximum[0])
+                for y in (minimum[1], maximum[1])
+                for z in (minimum[2], maximum[2])
+            ],
+            dtype=np.float32,
+        )
+        edges = (
+            (0, 1),
+            (0, 2),
+            (0, 4),
+            (1, 3),
+            (1, 5),
+            (2, 3),
+            (2, 6),
+            (3, 7),
+            (4, 5),
+            (4, 6),
+            (5, 7),
+            (6, 7),
+        )
+        return np.asarray(
+            [corners[index] for edge in edges for index in edge],
+            dtype=np.float32,
+        )
+
     def paintGL(self) -> None:
         if self._functions is None:
             return
@@ -1149,6 +1305,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         view_projection = projection * view_matrix
         self._draw_stock(view_projection, world_per_pixel)
         self._draw_meshes(view_projection)
+        self._draw_lines(
+            self._selected_bounds_geometry(),
+            view_projection=view_projection,
+            color=QVector4D(0.784, 1.0, 0.239, 0.95),
+        )
 
     def _pan_pixels(self, delta: QPointF) -> None:
         _projection, _view, world_per_pixel = self._camera_geometry()
@@ -1168,6 +1329,37 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last_mouse_pos = event.position()
+        self._press_pos = event.position()
+        self._press_item_index = None
+        self._interaction_distance = 0.0
+        self._object_drag_last_world = None
+        self._object_drag_started = False
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            force_orbit = bool(
+                event.modifiers() & Qt.KeyboardModifier.AltModifier
+            )
+            item_index = None if force_orbit else self.pick_item(event.position())
+            if item_index is not None:
+                self._press_item_index = item_index
+                self.selected_item_index = item_index
+                self.itemSelectionRequested.emit(item_index)
+                self._interaction_mode = "object"
+                self._object_drag_last_world = self._screen_to_stock_plane(
+                    event.position()
+                )
+                self.requestUpdate()
+            else:
+                self._interaction_mode = "orbit"
+        elif event.button() in {
+            Qt.MouseButton.RightButton,
+            Qt.MouseButton.MiddleButton,
+        }:
+            self._interaction_mode = "pan"
+            self._press_item_index = self.pick_item(event.position())
+        else:
+            self._interaction_mode = None
+
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -1177,13 +1369,42 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         delta = event.position() - self._last_mouse_pos
         self._last_mouse_pos = event.position()
+        self._interaction_distance += abs(delta.x()) + abs(delta.y())
 
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            # The preferred default orbit direction is the former reversed
-            # horizontal behavior.  "Reverse Horizontal" flips both orbit and
-            # pan relative to their natural defaults.
-            horizontal = delta.x() if self.reverse_horizontal_drag else -delta.x()
-            vertical = -delta.y() if self.invert_vertical_drag else delta.y()
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "object"
+            and self._press_item_index is not None
+            and self.project is not None
+        ):
+            current_world = self._screen_to_stock_plane(event.position())
+            previous_world = self._object_drag_last_world
+            if current_world is not None and previous_world is not None:
+                if not self._object_drag_started:
+                    self._object_drag_started = True
+                    self.itemTransformStarted.emit(self._press_item_index)
+                item = self.project.items[self._press_item_index]
+                tx, ty, tz = item.transform.translation_mm
+                world_delta = current_world - previous_world
+                item.transform.translation_mm = (
+                    tx + float(world_delta[0]),
+                    ty + float(world_delta[1]),
+                    tz,
+                )
+                self._object_drag_last_world = current_world
+                self.itemTransformChanged.emit(self._press_item_index)
+                self.requestUpdate()
+                self.viewChanged.emit()
+        elif (
+            event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "orbit"
+        ):
+            horizontal = (
+                delta.x() if self.reverse_horizontal_drag else -delta.x()
+            )
+            vertical = (
+                -delta.y() if self.invert_vertical_drag else delta.y()
+            )
             self.camera.yaw_deg += horizontal * 0.45
             self.camera.elevation_deg = max(
                 -89.9,
@@ -1192,8 +1413,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self.orbitStarted.emit()
             self.requestUpdate()
             self.viewChanged.emit()
-        elif event.buttons() & (
-            Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
+        elif (
+            event.buttons()
+            & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton)
+            and self._interaction_mode == "pan"
         ):
             self._pan_pixels(delta)
             self.requestUpdate()
@@ -1202,7 +1425,86 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "object"
+            and self._object_drag_started
+            and self._press_item_index is not None
+        ):
+            self.itemTransformFinished.emit(self._press_item_index)
+        elif (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "orbit"
+            and self._interaction_distance < 4.0
+        ):
+            self.selected_item_index = None
+            self.itemSelectionRequested.emit(-1)
+            self.requestUpdate()
+        elif (
+            event.button() == Qt.MouseButton.RightButton
+            and self._interaction_mode == "pan"
+            and self._interaction_distance < 4.0
+        ):
+            item_index = self.pick_item(event.position())
+            if item_index is not None:
+                self.selected_item_index = item_index
+                self.itemSelectionRequested.emit(item_index)
+                self.itemContextMenuRequested.emit(
+                    item_index,
+                    event.globalPosition().toPoint(),
+                )
+                self.requestUpdate()
+
         self._last_mouse_pos = None
+        self._press_pos = None
+        self._press_item_index = None
+        self._interaction_mode = None
+        self._interaction_distance = 0.0
+        self._object_drag_last_world = None
+        self._object_drag_started = False
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        """Nudge the selected object with CNC-friendly metric increments."""
+
+        if (
+            self.project is None
+            or self.selected_item_index is None
+            or not 0 <= self.selected_item_index < len(self.project.items)
+        ):
+            super().keyPressEvent(event)
+            return
+
+        modifiers = event.modifiers()
+        step = 10.0 if modifiers & Qt.KeyboardModifier.ShiftModifier else 1.0
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            step = 0.1
+
+        dx = dy = dz = 0.0
+        if event.key() == Qt.Key.Key_Left:
+            dx = -step
+        elif event.key() == Qt.Key.Key_Right:
+            dx = step
+        elif event.key() == Qt.Key.Key_Up:
+            dy = step
+        elif event.key() == Qt.Key.Key_Down:
+            dy = -step
+        elif event.key() == Qt.Key.Key_PageUp:
+            dz = step
+        elif event.key() == Qt.Key.Key_PageDown:
+            dz = -step
+        else:
+            super().keyPressEvent(event)
+            return
+
+        item = self.project.items[self.selected_item_index]
+        tx, ty, tz = item.transform.translation_mm
+        self.itemTransformStarted.emit(self.selected_item_index)
+        item.transform.translation_mm = (tx + dx, ty + dy, tz + dz)
+        self.itemTransformChanged.emit(self.selected_item_index)
+        self.itemTransformFinished.emit(self.selected_item_index)
+        self.requestUpdate()
+        self.viewChanged.emit()
         event.accept()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -1336,6 +1638,11 @@ class MeshViewport(QWidget):
     """Widget wrapper around a native QOpenGLWindow CAD viewport."""
 
     viewSettingsChanged = Signal()
+    itemSelectionRequested = Signal(int)
+    itemContextMenuRequested = Signal(int, QPoint)
+    itemTransformStarted = Signal(int)
+    itemTransformChanged = Signal(int)
+    itemTransformFinished = Signal(int)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968
 
@@ -1349,6 +1656,21 @@ class MeshViewport(QWidget):
         self._renderer.orbitStarted.connect(self._orbit_started)
         self._renderer.fitRequested.connect(self.fit_view)
         self._renderer.viewChanged.connect(self._update_rulers)
+        self._renderer.itemSelectionRequested.connect(
+            self.itemSelectionRequested.emit
+        )
+        self._renderer.itemContextMenuRequested.connect(
+            self.itemContextMenuRequested.emit
+        )
+        self._renderer.itemTransformStarted.connect(
+            self.itemTransformStarted.emit
+        )
+        self._renderer.itemTransformChanged.connect(
+            self.itemTransformChanged.emit
+        )
+        self._renderer.itemTransformFinished.connect(
+            self.itemTransformFinished.emit
+        )
 
         self._container = QWidget.createWindowContainer(self._renderer, self)
         self._container.setObjectName("NativeViewportContainer")
