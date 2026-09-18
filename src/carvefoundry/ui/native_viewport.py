@@ -2004,6 +2004,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._shape_draw_mode is not None
+            and not (
+                event.modifiers() & Qt.KeyboardModifier.AltModifier
+            )
         ):
             point = self._stock_plane_point(event.position())
             if point is not None:
