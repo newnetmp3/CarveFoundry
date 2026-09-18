@@ -59,6 +59,7 @@ class MainWindow(_BaseMainWindow):
         ] | None = None
         super().__init__()
         self._update_project_title()
+        self._sync_history_action_state()
 
     @staticmethod
     def _transform_signature(item: ProjectItem) -> tuple[object, ...]:
@@ -68,6 +69,22 @@ class MainWindow(_BaseMainWindow):
             tuple(transform.translation_mm),
             tuple(transform.rotation_deg),
             tuple(transform.scale_xyz),
+        )
+
+    def _sync_history_action_state(self) -> None:
+        self._set_history_action_state(
+            can_undo=bool(self._undo_stack),
+            can_redo=bool(self._redo_stack),
+            undo_label=(
+                self._undo_stack[-1].label
+                if self._undo_stack
+                else None
+            ),
+            redo_label=(
+                self._redo_stack[-1].label
+                if self._redo_stack
+                else None
+            ),
         )
 
     def _update_project_title(self) -> None:
@@ -97,6 +114,8 @@ class MainWindow(_BaseMainWindow):
         self._pending_viewport_transform_undo = None
         self._pending_context_transform_undo = None
         self._pending_ribbon_undo = None
+        if hasattr(self, "_history_action_buttons"):
+            self._sync_history_action_state()
 
     def _record_undo(
         self,
@@ -120,6 +139,7 @@ class MainWindow(_BaseMainWindow):
         self._history_next_id += 1
         self._project_dirty = self._history_state_id != self._saved_state_id
         self._update_project_title()
+        self._sync_history_action_state()
 
     def _undo(self) -> None:
         if not self._undo_stack:
@@ -146,6 +166,7 @@ class MainWindow(_BaseMainWindow):
         self.viewport.set_project(self.project)
         self._refresh_project_list(entry.selected_row)
         self._sync_toolpath_state_from_project()
+        self._sync_history_action_state()
         self.statusBar().showMessage(f"Undo: {entry.label}", 3000)
 
     def _redo(self) -> None:
@@ -173,6 +194,7 @@ class MainWindow(_BaseMainWindow):
         self.viewport.set_project(self.project)
         self._refresh_project_list(entry.selected_row)
         self._sync_toolpath_state_from_project()
+        self._sync_history_action_state()
         self.statusBar().showMessage(f"Redo: {entry.label}", 3000)
 
     def _set_project(
