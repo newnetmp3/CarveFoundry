@@ -1121,6 +1121,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 self._rapids_view_button.setChecked(False)
             if self._simulation_button is not None:
                 self._simulation_button.setChecked(False)
+        else:
+            if self._toolpaths_view_button is not None:
+                self._toolpaths_view_button.setChecked(
+                    self.viewport.toolpaths_visible
+                )
+            if self._rapids_view_button is not None:
+                self._rapids_view_button.setChecked(
+                    self.viewport.rapids_visible
+                )
 
         if has_toolpaths:
             self._toolpaths_stale_reason = None
