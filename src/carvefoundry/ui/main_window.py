@@ -86,6 +86,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_target_project: Project | None = None
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
+        self._toolpath_output_buttons: list[object] = []
+        self._model_selection_buttons: list[object] = []
+        self._calculate_button = None
+        self._toolpaths_stale_reason: str | None = None
         self._init_ribbon_action_state()
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
@@ -221,7 +225,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         import_group.add_button("G-code", lambda: self._import_file("G-code"))
 
         output = file_page.add_group("Output")
-        output.add_button("Export G-code", self._export_gcode)
+        file_export = output.add_button("Export G-code", self._export_gcode)
+        self._toolpath_output_buttons.append(file_export)
 
         # DESIGN: geometry creation, editing, arrangement, and object management.
         design = self.ribbon.add_page("Design")
@@ -273,29 +278,28 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         stock.add_button("Fit View", self._fit_view)
 
         transform = model.add_group("Transform")
-        transform.add_button(
-            "Position",
-            lambda: self._focus_transform_section("position"),
-        )
-        transform.add_button(
-            "Rotate",
-            lambda: self._focus_transform_section("rotation"),
-        )
-        transform.add_button(
-            "Size",
-            lambda: self._focus_transform_section("size"),
-            primary=True,
-        )
-        transform.add_button(
-            "Scale",
-            lambda: self._focus_transform_section("scale"),
-        )
+        for title, section, primary in (
+            ("Position", "position", False),
+            ("Rotate", "rotation", False),
+            ("Size", "size", True),
+            ("Scale", "scale", False),
+        ):
+            button = transform.add_button(
+                title,
+                lambda name=section: self._focus_transform_section(name),
+                primary=primary,
+            )
+            self._model_selection_buttons.append(button)
 
         placement = model.add_group("Placement")
-        placement.add_button("Center XY", self._center_selected_xy)
-        placement.add_button("Top to Z0", self._top_selected_to_surface)
-        placement.add_button("Fit Stock", self._fit_selected_inside_stock)
-        placement.add_button("Reset", self._reset_selected_transform)
+        for title, callback in (
+            ("Center XY", self._center_selected_xy),
+            ("Top to Z0", self._top_selected_to_surface),
+            ("Fit Stock", self._fit_selected_inside_stock),
+            ("Reset", self._reset_selected_transform),
+        ):
+            button = placement.add_button(title, callback)
+            self._model_selection_buttons.append(button)
 
         # TOOLPATHS: all CAM work lives in one workflow tab.
         toolpaths = self.ribbon.add_page("Toolpaths")
@@ -470,14 +474,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         motion.add_button("Advanced", self._toolpath_design_advanced)
 
         generate = toolpaths.add_group("Generate")
-        generate.add_button("Calculate", self._calculate_toolpath, primary=True)
-        generate.add_button("Preview", self._preview_toolpaths)
+        self._calculate_button = generate.add_button(
+            "Calculate",
+            self._calculate_toolpath,
+            primary=True,
+        )
+        preview_button = generate.add_button(
+            "Preview",
+            self._preview_toolpaths,
+        )
+        self._toolpath_output_buttons.append(preview_button)
         self._simulation_button = generate.add_button(
             "Simulate",
             self._simulate_toolpaths,
         )
         self._simulation_button.setCheckable(True)
-        generate.add_button("Export G-code", self._export_gcode)
+        self._toolpath_output_buttons.append(self._simulation_button)
+        toolpath_export = generate.add_button(
+            "Export G-code",
+            self._export_gcode,
+        )
+        self._toolpath_output_buttons.append(toolpath_export)
 
         # MACHINE: physical machine configuration and control only.
         machine = self.ribbon.add_page("Machine")
@@ -514,11 +531,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         self._toolpaths_view_button.setCheckable(True)
         self._toolpaths_view_button.setChecked(True)
+        self._toolpath_output_buttons.append(self._toolpaths_view_button)
         self._rapids_view_button = display.add_button(
             "Rapids",
             self._toggle_rapids_view,
         )
         self._rapids_view_button.setCheckable(True)
+        self._toolpath_output_buttons.append(self._rapids_view_button)
 
         camera = view.add_group("Camera")
         camera.add_button("Fit View", self._fit_view, primary=True)
@@ -647,6 +666,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.layers_button.clicked.connect(self._show_layers_popup)
         canvas_bar_layout.addWidget(self.layers_button)
         canvas_bar_layout.addStretch(1)
+
+        self.cam_status_label = QLabel("CAM: NONE")
+        self.cam_status_label.setObjectName("CamStatus")
+        self.cam_status_label.setProperty("state", "none")
+        self.cam_status_label.setToolTip(
+            "No calculated toolpath for the current job."
+        )
+        canvas_bar_layout.addWidget(self.cam_status_label)
 
         fit_button = QPushButton("Fit")
         fit_button.setToolTip("Fit the entire job to the viewport")
