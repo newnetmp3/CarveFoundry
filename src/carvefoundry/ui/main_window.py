@@ -678,6 +678,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.properties_panel = Panel("Inspector")
         self.properties_panel.setObjectName("InspectorPanel")
+
+        selection_heading = QLabel("Selection")
+        selection_heading.setObjectName("SectionHeading")
+        self.properties_panel.body_layout.addWidget(selection_heading)
+
         self.selection_info = QLabel()
         self.selection_info.setWordWrap(True)
         self.selection_info.setObjectName("InspectorSummary")
@@ -688,6 +693,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.transform_widget = self._build_transform_controls()
         self.properties_panel.body_layout.addWidget(self.transform_widget)
+
+        activity_heading = QLabel("Job / CAM")
+        activity_heading.setObjectName("SectionHeading")
+        self.properties_panel.body_layout.addWidget(activity_heading)
+
+        self.activity_info = QLabel(
+            "No calculated toolpath. Choose an operation on Toolpaths when ready."
+        )
+        self.activity_info.setWordWrap(True)
+        self.activity_info.setObjectName("ActivitySummary")
+        self.properties_panel.body_layout.addWidget(self.activity_info)
 
         inspector_hint = QLabel(
             "Cutter selection and CAM settings are grouped on the Toolpaths ribbon."
@@ -931,6 +947,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         widget.setVisible(False)
         return widget
+
+    def _set_activity_info(self, text: str) -> None:
+        if hasattr(self, "activity_info"):
+            self.activity_info.setText(text)
 
     @staticmethod
     def _number(value: float) -> str:
@@ -2165,7 +2185,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         try:
             project = load_project(project_path)
         except ProjectFileError as exc:
-            self.selection_info.setText(f"Project open failed\n{exc}")
+            self._set_activity_info(f"Project open failed\n{exc}")
             self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
             return
         self._set_project(project, project_path=project_path)
@@ -2199,7 +2219,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         try:
             saved_path = save_project(self.project, path)
         except ProjectFileError as exc:
-            self.selection_info.setText(f"Project save failed\n{exc}")
+            self._set_activity_info(f"Project save failed\n{exc}")
             self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
             return
         self.project_path = saved_path
@@ -2209,7 +2229,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _export_gcode(self) -> None:
         toolpaths = self.project.toolpaths
         if not toolpaths:
-            self.selection_info.setText(
+            self._set_activity_info(
                 "No calculated toolpaths to export.\n\n"
                 "Calculate a toolpath first, then return to Export G-code."
             )
@@ -2244,7 +2264,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                     self._grbl_post_settings(),
                 )
         except (OSError, ValueError) as exc:
-            self.selection_info.setText(f"G-code export failed\n{exc}")
+            self._set_activity_info(f"G-code export failed\n{exc}")
             self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
             return
 
@@ -2253,7 +2273,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             path.estimated_cutting_minutes for path in toolpaths
         )
         operation_names = " + ".join(path.name for path in toolpaths)
-        self.selection_info.setText(
+        self._set_activity_info(
             f"G-code exported\n{output_path}\n\n"
             f"Operations: {operation_names}\n"
             f"Cutter: {toolpath.cutter.name}\n"
@@ -2338,7 +2358,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
     def _import_completed(self, infos: object, failures: object) -> None:
         if self.project is not self._import_target_project:
-            self.selection_info.setText(
+            self._set_activity_info(
                 "Import finished, but the active project changed while it was loading.\n\n"
                 "The loaded data was not added to the new project."
             )
@@ -2389,7 +2409,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             failure_text = "\n".join(failure_list[:8])
             if len(failure_list) > 8:
                 failure_text += f"\n… and {len(failure_list) - 8} more"
-            self.selection_info.setText(
+            self._set_activity_info(
                 f"Import completed with {len(failure_list)} failure(s)\n\n{failure_text}"
             )
 
@@ -2419,7 +2439,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         del count
 
     def _import_failed(self, message: str) -> None:
-        self.selection_info.setText(f"Import failed\n{message}")
+        self._set_activity_info(f"Import failed\n{message}")
         self.statusBar().showMessage(f"Import failed: {message}", 8000)
 
     def _import_thread_finished(self) -> None:
