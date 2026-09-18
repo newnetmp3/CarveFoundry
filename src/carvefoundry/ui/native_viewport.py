@@ -714,6 +714,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         *,
         view_projection: QMatrix4x4,
         color: QVector4D,
+        line_width: float = 1.0,
     ) -> None:
         if (
             self._functions is None
@@ -734,7 +735,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._line_program.setUniformValue("u_mvp", view_projection)
         self._line_program.setUniformValue("u_color", color)
         self._line_vao.bind()
-        self._functions.glDrawArrays(GL_LINES, 0, len(line_vertices))
+        self._functions.glLineWidth(max(1.0, float(line_width)))
+        try:
+            self._functions.glDrawArrays(GL_LINES, 0, len(line_vertices))
+        finally:
+            self._functions.glLineWidth(1.0)
         self._line_vao.release()
         self._line_program.release()
 
@@ -1513,6 +1518,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._functions.glDisable(GL_DEPTH_TEST)
         try:
             for axis, color in enumerate(colors):
+                active = axis == self._active_gizmo_axis
                 self._draw_lines(
                     self._gizmo_axis_vertices(
                         axis,
@@ -1520,11 +1526,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                         world_per_pixel=world_per_pixel,
                     ),
                     view_projection=view_projection,
-                    color=(
-                        active_color
-                        if axis == self._active_gizmo_axis
-                        else color
-                    ),
+                    color=active_color if active else color,
+                    line_width=4.0 if active else 3.0,
                 )
         finally:
             self._functions.glEnable(GL_DEPTH_TEST)
