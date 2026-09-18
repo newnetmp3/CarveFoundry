@@ -22,6 +22,15 @@ class RibbonButton(QToolButton):
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         self.setIconSize(QSize(22, 22))
         self.setMinimumHeight(52)
+
+        # Size to the visible label instead of Qt eliding it with "...".
+        # Multiline labels keep dense ribbon groups readable without forcing
+        # every button to the width of its full phrase.
+        longest_line = max(text.splitlines(), key=len, default=text)
+        label_width = self.fontMetrics().horizontalAdvance(longest_line)
+        self.setMinimumWidth(max(58, label_width + 24))
+        if "\n" in text:
+            self.setToolTip(text.replace("\n", " "))
         if callback is not None:
             self.clicked.connect(lambda _checked=False: callback())
 
