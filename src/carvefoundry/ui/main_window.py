@@ -1268,9 +1268,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
     def _item_list_text(self, item: ProjectItem) -> str:
-        group = "  • grouped" if item.group_id else ""
-        kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
-        return f"{kind}  {item.name}{group}"
+        return item.name
 
     @staticmethod
     def _object_selector_text(item: ProjectItem) -> str:
@@ -1292,12 +1290,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
             for project_item in self.project.items:
                 list_item = QListWidgetItem(self._item_list_text(project_item))
-                list_item.setToolTip(
-                    f"{project_item.name}\n"
-                    f"Source size: {self._source_dimensions_text(project_item)}"
+                kind = (
+                    "STL"
+                    if project_item.kind.lower() == "stl"
+                    else project_item.kind.upper()
                 )
+                group_text = "\nGrouped object" if project_item.group_id else ""
+                source_size = self._source_dimensions_text(project_item)
+                list_item.setToolTip(
+                    f"{kind} • {project_item.name}{group_text}"
+                    + (
+                        f"\nSource size: {source_size}"
+                        if source_size
+                        else ""
+                    )
+                    + "\nDouble-click or press F2 to rename."
+                )
+                list_item.setData(Qt.ItemDataRole.UserRole, len(self.project_list) - 1)
                 list_item.setFlags(
-                    list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+                    list_item.flags()
+                    | Qt.ItemFlag.ItemIsUserCheckable
+                    | Qt.ItemFlag.ItemIsEditable
                 )
                 list_item.setCheckState(
                     Qt.CheckState.Checked
@@ -1380,11 +1393,65 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         index = row - 1
         if index >= len(self.project.items):
             return
+
+        project_item = self.project.items[index]
         visible = list_item.checkState() == Qt.CheckState.Checked
-        self.project.items[index].visible = visible
+        visibility_changed = visible != project_item.visible
+        project_item.visible = visible
+
+        requested_name = list_item.text().strip()
+        if not requested_name:
+            requested_name = project_item.name
+
+        other_names = {
+            item.name
+            for other_index, item in enumerate(self.project.items)
+            if other_index != index
+        }
+        unique_name = requested_name
+        if unique_name in other_names:
+            base = requested_name
+            number = 2
+            while f"{base} {number}" in other_names:
+                number += 1
+            unique_name = f"{base} {number}"
+
+        renamed = unique_name != project_item.name
+        if renamed:
+            old_name = project_item.name
+            project_item.name = unique_name
+            self._updating_project_list = True
+            list_item.blockSignals(True)
+            try:
+                list_item.setText(unique_name)
+            finally:
+                list_item.blockSignals(False)
+                self._updating_project_list = False
+
+            self.object_selector.blockSignals(True)
+            try:
+                self.object_selector.setItemText(
+                    row,
+                    self._object_selector_text(project_item),
+                )
+            finally:
+                self.object_selector.blockSignals(False)
+
+            self.selection_info.setText(
+                self._mesh_properties_text(project_item)
+            )
+            self.statusBar().showMessage(
+                f"Renamed {old_name} → {unique_name}",
+                2500,
+            )
+        elif visibility_changed:
+            state = "visible" if visible else "hidden"
+            self.statusBar().showMessage(
+                f"{project_item.name} {state}",
+                2000,
+            )
+
         self.viewport.update()
-        state = "visible" if visible else "hidden"
-        self.statusBar().showMessage(f"{self.project.items[index].name} {state}", 2000)
 
     def _sync_stock_controls(self) -> None:
         self._updating_stock_controls = True
