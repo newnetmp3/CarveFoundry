@@ -278,6 +278,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             vertex_bytes,
             int(vertex_count),
         )
+        # The prepared upload can arrive between regular expose/paint events.
+        # Request a frame immediately so newly imported geometry does not wait
+        # for mouse or keyboard interaction before becoming visible.
+        self.requestUpdate()
 
     def fit_view(self) -> None:
         self.camera.zoom = 1.0
@@ -1142,37 +1146,55 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             return
 
-        self._mesh_program.bind()
-        self._mesh_program.setUniformValue("u_view_projection", view_projection)
-        self._mesh_program.setUniformValue(
-            "u_light_direction",
-            QVector3D(0.35, -0.45, 0.82),
-        )
-
+        # Resolve/upload meshes before binding the draw shader.  _upload_mesh()
+        # briefly binds and releases this same program while configuring a new
+        # VAO.  Doing that in the middle of a draw pass used to leave the shader
+        # unbound for the first frame after import, so the selection bounds were
+        # visible but the newly imported mesh was not.  Once cached, a later
+        # viewport interaction skipped the upload path and the model appeared.
+        render_items: list[tuple[int, ProjectItem, _GpuMesh]] = []
         for item_index, item in enumerate(self.project.items):
             if not item.visible or item.mesh is None:
                 continue
-
             gpu_mesh = self._gpu_mesh_for_item(item)
-            if gpu_mesh is None:
-                continue
+            if gpu_mesh is not None:
+                render_items.append((item_index, item, gpu_mesh))
 
+        if not render_items:
+            return
+
+        self._mesh_program.bind()
+        try:
             self._mesh_program.setUniformValue(
-                "u_model",
-                self._qmatrix_from_numpy(self._model_numpy(item)),
+                "u_view_projection",
+                view_projection,
             )
-            color = (
-                QVector4D(0.784, 1.0, 0.239, 1.0)
-                if item_index == self.selected_item_index
-                else QVector4D(0.357, 0.557, 0.839, 1.0)
+            self._mesh_program.setUniformValue(
+                "u_light_direction",
+                QVector3D(0.35, -0.45, 0.82),
             )
-            self._mesh_program.setUniformValue("u_color", color)
 
-            gpu_mesh.vao.bind()
-            self._functions.glDrawArrays(GL_TRIANGLES, 0, gpu_mesh.vertex_count)
-            gpu_mesh.vao.release()
+            for item_index, item, gpu_mesh in render_items:
+                self._mesh_program.setUniformValue(
+                    "u_model",
+                    self._qmatrix_from_numpy(self._model_numpy(item)),
+                )
+                color = (
+                    QVector4D(0.784, 1.0, 0.239, 1.0)
+                    if item_index == self.selected_item_index
+                    else QVector4D(0.357, 0.557, 0.839, 1.0)
+                )
+                self._mesh_program.setUniformValue("u_color", color)
 
-        self._mesh_program.release()
+                gpu_mesh.vao.bind()
+                self._functions.glDrawArrays(
+                    GL_TRIANGLES,
+                    0,
+                    gpu_mesh.vertex_count,
+                )
+                gpu_mesh.vao.release()
+        finally:
+            self._mesh_program.release()
 
     def _screen_ray(
         self,
