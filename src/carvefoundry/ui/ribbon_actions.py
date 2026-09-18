@@ -872,6 +872,15 @@ class RibbonActionsMixin:
         attribute = attributes[key]
         setattr(self, attribute, value)
         self._settings.setValue(f"cam/design/{key}", value)
+        if (
+            key == "3d_cut_style"
+            and value == "Full Depth Cutout"
+            and not self._tabs_enabled
+        ):
+            self._tabs_enabled = True
+            self._settings.setValue("cam/tabs_enabled", True)
+            if self._tabs_button is not None:
+                self._tabs_button.setChecked(True)
         self._settings.sync()
 
         for combo in self._cam_selector_widgets.get(key, []):
