@@ -142,6 +142,30 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return row
 
     def _populate_ribbon(self) -> None:
+        def add_cam_selector(
+            group,
+            key: str,
+            title: str,
+            values: tuple[str, ...],
+            current: str,
+            tooltip: str,
+            *,
+            minimum_width: int = 108,
+        ):
+            combo = group.add_selector(
+                title,
+                values,
+                current,
+                lambda value, setting=key: self._set_cam_design_option(
+                    setting,
+                    value,
+                ),
+                tooltip=tooltip,
+                minimum_width=minimum_width,
+            )
+            self._register_cam_selector(key, combo)
+            return combo
+
         file_page = self.ribbon.add_page("File")
         project = file_page.add_group("Project")
         project.add_button("New", self._new_project)
@@ -226,6 +250,101 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._toggle_tabs_operation,
         )
         self._tabs_button.setCheckable(True)
+        self._tabs_button.setChecked(self._tabs_enabled)
+
+        path_design = carve.add_group("Toolpath Design")
+        add_cam_selector(
+            path_design,
+            "cut_type",
+            "Cut Type",
+            ("Auto", "Pocket", "On Path", "Outside", "Inside"),
+            self._cam_cut_type,
+            (
+                "Easel-style cut type. Auto uses the selected operation; "
+                "Pocket clears inside; On Path centers the cutter; Outside "
+                "and Inside offset by the cutter radius."
+            ),
+            minimum_width=98,
+        )
+        add_cam_selector(
+            path_design,
+            "direction",
+            "Direction",
+            (
+                "Smart Serpentine",
+                "Offset",
+                "Raster X",
+                "Raster Y",
+                "Raster 45°",
+                "Raster 135°",
+            ),
+            self._cam_direction,
+            (
+                "Toolpath pattern/direction. Smart Serpentine chooses the "
+                "long axis for fewer rows. Offset applies to 2D pockets; "
+                "45°/135° are available for 3D finishing."
+            ),
+            minimum_width=126,
+        )
+        add_cam_selector(
+            path_design,
+            "quality",
+            "Finish",
+            (
+                "Fast 15%",
+                "Balanced 10%",
+                "Detail 8%",
+                "Fine 6%",
+                "Custom",
+            ),
+            self._cam_quality,
+            (
+                "3D finishing stepover. 15% favors speed; 8% and 6% favor "
+                "surface detail. Custom uses Advanced settings."
+            ),
+            minimum_width=108,
+        )
+
+        motion = carve.add_group("Motion")
+        add_cam_selector(
+            motion,
+            "entry",
+            "Entry",
+            ("Plunge", "Ramp 5°", "Ramp 20°", "Custom Ramp"),
+            self._cam_entry,
+            (
+                "Material entry. Easel-style ramping lowers tool load; "
+                "5° is gentle, while 20° is useful for many wood jobs."
+            ),
+            minimum_width=98,
+        )
+        add_cam_selector(
+            motion,
+            "milling",
+            "Milling",
+            ("Default", "Climb (CCW)", "Conventional (CW)"),
+            self._cam_milling,
+            (
+                "Milling direction for outlines and offset fills. "
+                "Climb uses CCW; Conventional uses CW."
+            ),
+            minimum_width=116,
+        )
+        add_cam_selector(
+            motion,
+            "linking",
+            "Linking",
+            ("Smart Min-Lift", "Local Lift", "Full Retract"),
+            self._cam_linking,
+            (
+                "Smart Min-Lift keeps serpentine rows connected when safe, "
+                "uses a small local Z lift when needed, and full Safe Z only "
+                "across disconnected areas."
+            ),
+            minimum_width=112,
+        )
+        motion.add_button("Advanced", self._toolpath_design_advanced)
+
         calculate = carve.add_group("Toolpaths")
         calculate.add_button("Calculate", self._calculate_toolpath, primary=True)
         calculate.add_button("Preview", self._preview_toolpaths)
@@ -263,6 +382,48 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         strategies.add_button(
             "Waterline",
             lambda: self._select_cam_operation("waterline"),
+        )
+
+        finish_design = three_d.add_group("Finish Design")
+        add_cam_selector(
+            finish_design,
+            "direction",
+            "Direction",
+            (
+                "Smart Serpentine",
+                "Offset",
+                "Raster X",
+                "Raster Y",
+                "Raster 45°",
+                "Raster 135°",
+            ),
+            self._cam_direction,
+            "3D raster direction; X/Y/45°/135° can be aligned to wood grain.",
+            minimum_width=126,
+        )
+        add_cam_selector(
+            finish_design,
+            "quality",
+            "Stepover",
+            (
+                "Fast 15%",
+                "Balanced 10%",
+                "Detail 8%",
+                "Fine 6%",
+                "Custom",
+            ),
+            self._cam_quality,
+            "3D finishing stepover presets; smaller percentages improve finish.",
+            minimum_width=108,
+        )
+        add_cam_selector(
+            finish_design,
+            "linking",
+            "Linking",
+            ("Smart Min-Lift", "Local Lift", "Full Retract"),
+            self._cam_linking,
+            "Controls row-to-row retract behavior for raster toolpaths.",
+            minimum_width=112,
         )
 
         tools = self.ribbon.add_page("Tools")
