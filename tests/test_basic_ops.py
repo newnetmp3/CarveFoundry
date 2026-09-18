@@ -1,7 +1,10 @@
 import numpy as np
+import pytest
 
 from carvefoundry.cam.basic_ops import (
     BasicCamSettings,
+    MillingDirection,
+    PocketStrategy,
     center_drill,
     rectangular_pocket,
     rectangular_profile,
@@ -74,3 +77,103 @@ def test_center_drill_reaches_target_depth() -> None:
     plunges = [move for move in toolpath.moves if move.kind is MoveKind.PLUNGE]
     assert plunges
     assert plunges[-1].z_mm == -4.0
+
+
+def test_profile_inside_offset_uses_cutter_radius() -> None:
+    toolpath = rectangular_profile(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(max_stepdown_mm=10.0),
+        offset_mode="inside",
+    )
+
+    cut_xy = [
+        (move.x_mm, move.y_mm)
+        for move in toolpath.moves
+        if move.kind is MoveKind.CUT
+    ]
+    assert (57.0, 23.0) in cut_xy
+    assert (13.0, 47.0) in cut_xy
+
+
+def test_overall_depth_overrides_geometry_depth() -> None:
+    toolpath = rectangular_profile(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            overall_depth_mm=2.5,
+            max_stepdown_mm=10.0,
+        ),
+    )
+
+    assert min(move.z_mm for move in toolpath.moves) == -2.5
+
+
+def test_raster_y_pocket_runs_along_y_axis() -> None:
+    toolpath = rectangular_pocket(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            max_stepdown_mm=10.0,
+            stepover_fraction=0.5,
+            pocket_strategy=PocketStrategy.RASTER_Y,
+        ),
+    )
+
+    cutting = [
+        move
+        for move in toolpath.moves
+        if move.kind in {MoveKind.PLUNGE, MoveKind.CUT}
+    ]
+    assert cutting[0].x_mm == cutting[1].x_mm
+    assert cutting[0].y_mm != cutting[1].y_mm
+
+
+def test_offset_pocket_generates_nested_loops() -> None:
+    toolpath = rectangular_pocket(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            max_stepdown_mm=10.0,
+            stepover_fraction=0.5,
+            pocket_strategy=PocketStrategy.OFFSET,
+        ),
+    )
+
+    cuts = [move for move in toolpath.moves if move.kind is MoveKind.CUT]
+    assert len(cuts) > 4
+
+
+def test_ramp_entry_reaches_depth_while_advancing_xy() -> None:
+    toolpath = rectangular_profile(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            max_stepdown_mm=10.0,
+            ramp_angle_deg=20.0,
+        ),
+    )
+
+    plunge = next(move for move in toolpath.moves if move.kind is MoveKind.PLUNGE)
+    first_cut = next(move for move in toolpath.moves if move.kind is MoveKind.CUT)
+    assert plunge.z_mm == 0.0
+    assert first_cut.z_mm == -4.0
+    assert (first_cut.x_mm, first_cut.y_mm) != (
+        plunge.x_mm,
+        plunge.y_mm,
+    )
+
+
+def test_conventional_profile_reverses_outline_direction() -> None:
+    toolpath = rectangular_profile(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            max_stepdown_mm=10.0,
+            milling_direction=MillingDirection.CONVENTIONAL,
+        ),
+    )
+
+    cuts = [move for move in toolpath.moves if move.kind is MoveKind.CUT]
+    assert cuts[0].x_mm == pytest.approx(7.0)
+    assert cuts[0].y_mm == pytest.approx(53.0)
