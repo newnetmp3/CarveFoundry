@@ -1566,6 +1566,7 @@ class RibbonActionsMixin:
             )
 
         for generated in generated_toolpaths:
+            generated.source_item_id = item.item_id
             generated.source_item_name = item.name
 
         self._before_ribbon_mutation(f"calculate {operation}")
