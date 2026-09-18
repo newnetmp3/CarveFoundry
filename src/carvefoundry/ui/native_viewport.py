@@ -199,7 +199,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index: int | None = None
         self._interaction_mode: str | None = None
         self._interaction_distance = 0.0
-        self._object_drag_last_world: np.ndarray | None = None
         self._object_drag_started = False
         self._functions = None
         self._mesh_program: QOpenGLShaderProgram | None = None
@@ -1233,20 +1232,106 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 best_distance = distance
         return best_index
 
-    def _screen_to_stock_plane(self, position: QPointF) -> np.ndarray | None:
-        """Map a screen point to the stock XY plane at Z0."""
+    def _object_drag_xy_delta(
+        self,
+        item_index: int,
+        delta: QPointF,
+    ) -> np.ndarray | None:
+        """Convert a screen drag into a stable XY move for one selected item.
 
-        ray = self._screen_ray(position)
-        if ray is None:
+        The previous implementation intersected successive mouse rays with the
+        global stock Z0 plane.  At oblique camera angles that plane can be far
+        from the selected geometry, magnifying tiny mouse motion and even making
+        the apparent drag direction feel reversed.
+
+        Instead, measure the local screen-space effect of +X and +Y at the
+        selected object's current center and solve that 2D mapping directly.
+        A gain cap prevents near-edge-on views from producing huge XY jumps.
+        """
+
+        if (
+            self.project is None
+            or not 0 <= item_index < len(self.project.items)
+        ):
             return None
-        origin, direction = ray
-        if abs(float(direction[2])) <= 1e-9:
+        item = self.project.items[item_index]
+        if not item.visible or item.mesh is None:
             return None
-        distance = -float(origin[2]) / float(direction[2])
-        if distance < 0.0:
+
+        mouse_delta = np.array(
+            (float(delta.x()), float(delta.y())),
+            dtype=float,
+        )
+        pixel_distance = float(np.linalg.norm(mouse_delta))
+        if pixel_distance <= 1e-9:
+            return np.zeros(2, dtype=float)
+
+        projection, view_matrix, world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+
+        bounds = self._item_bounds_mm(item)
+        anchor = bounds.mean(axis=0)
+
+        # Use a basis large enough to remain numerically stable at wide zooms,
+        # then normalize the projected vectors back to pixels per millimeter.
+        basis_mm = max(float(world_per_pixel) * 20.0, 1.0)
+        base = self._project_world_point(
+            tuple(float(value) for value in anchor),
+            view_projection,
+        )
+        x_point = self._project_world_point(
+            (
+                float(anchor[0] + basis_mm),
+                float(anchor[1]),
+                float(anchor[2]),
+            ),
+            view_projection,
+        )
+        y_point = self._project_world_point(
+            (
+                float(anchor[0]),
+                float(anchor[1] + basis_mm),
+                float(anchor[2]),
+            ),
+            view_projection,
+        )
+        if base is None or x_point is None or y_point is None:
             return None
-        point = origin + direction * distance
-        return point if np.isfinite(point).all() else None
+
+        jacobian = np.array(
+            (
+                (
+                    (x_point.x() - base.x()) / basis_mm,
+                    (y_point.x() - base.x()) / basis_mm,
+                ),
+                (
+                    (x_point.y() - base.y()) / basis_mm,
+                    (y_point.y() - base.y()) / basis_mm,
+                ),
+            ),
+            dtype=float,
+        )
+        if not np.isfinite(jacobian).all():
+            return None
+
+        # Truncated pseudo-inverse keeps a nearly edge-on axis from exploding
+        # while preserving the intuitive screen direction of the well-defined
+        # axis.  At normal CNC working angles this behaves as true 1:1 dragging.
+        xy_delta = np.linalg.pinv(jacobian, rcond=0.12) @ mouse_delta
+        if not np.isfinite(xy_delta).all():
+            return None
+
+        # Guard against any remaining pathological perspective gain.  One mouse
+        # pixel can move at most ~1.35 view-scale pixels worth of world distance.
+        max_distance = max(
+            float(world_per_pixel) * pixel_distance * 1.35,
+            0.02,
+        )
+        move_distance = float(np.linalg.norm(xy_delta))
+        if move_distance > max_distance and move_distance > 1e-12:
+            xy_delta *= max_distance / move_distance
+
+        return xy_delta
 
     def _selected_bounds_geometry(self) -> np.ndarray:
         """Return line vertices for the selected item's world-space AABB."""
@@ -1332,7 +1417,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_pos = event.position()
         self._press_item_index = None
         self._interaction_distance = 0.0
-        self._object_drag_last_world = None
         self._object_drag_started = False
 
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1345,9 +1429,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 self.selected_item_index = item_index
                 self.itemSelectionRequested.emit(item_index)
                 self._interaction_mode = "object"
-                self._object_drag_last_world = self._screen_to_stock_plane(
-                    event.position()
-                )
                 self.requestUpdate()
             else:
                 self._interaction_mode = "orbit"
@@ -1377,21 +1458,21 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             and self._press_item_index is not None
             and self.project is not None
         ):
-            current_world = self._screen_to_stock_plane(event.position())
-            previous_world = self._object_drag_last_world
-            if current_world is not None and previous_world is not None:
+            xy_delta = self._object_drag_xy_delta(
+                self._press_item_index,
+                delta,
+            )
+            if xy_delta is not None:
                 if not self._object_drag_started:
                     self._object_drag_started = True
                     self.itemTransformStarted.emit(self._press_item_index)
                 item = self.project.items[self._press_item_index]
                 tx, ty, tz = item.transform.translation_mm
-                world_delta = current_world - previous_world
                 item.transform.translation_mm = (
-                    tx + float(world_delta[0]),
-                    ty + float(world_delta[1]),
+                    tx + float(xy_delta[0]),
+                    ty + float(xy_delta[1]),
                     tz,
                 )
-                self._object_drag_last_world = current_world
                 self.itemTransformChanged.emit(self._press_item_index)
                 self.requestUpdate()
                 self.viewChanged.emit()
@@ -1460,7 +1541,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._press_item_index = None
         self._interaction_mode = None
         self._interaction_distance = 0.0
-        self._object_drag_last_world = None
         self._object_drag_started = False
         event.accept()
 
