@@ -177,3 +177,37 @@ def test_conventional_profile_reverses_outline_direction() -> None:
     cuts = [move for move in toolpath.moves if move.kind is MoveKind.CUT]
     assert cuts[0].x_mm == pytest.approx(7.0)
     assert cuts[0].y_mm == pytest.approx(53.0)
+
+
+def test_usable_bit_length_blocks_overdeep_profile() -> None:
+    with pytest.raises(ValueError, match="usable bit length"):
+        rectangular_profile(
+            _bounds(),
+            _tool(),
+            BasicCamSettings(
+                overall_depth_mm=4.0,
+                usable_bit_length_mm=2.0,
+                max_stepdown_mm=10.0,
+            ),
+        )
+
+
+def test_configurable_tab_count_creates_requested_tab_zones() -> None:
+    toolpath = rectangular_profile(
+        _bounds(),
+        _tool(),
+        BasicCamSettings(
+            max_stepdown_mm=10.0,
+            tabs_enabled=True,
+            tab_height_mm=1.5,
+            tab_width_mm=4.0,
+            tab_count=6,
+        ),
+    )
+
+    tab_moves = [
+        move
+        for move in toolpath.moves
+        if move.kind is MoveKind.CUT and move.z_mm == pytest.approx(-2.5)
+    ]
+    assert len(tab_moves) >= 6
