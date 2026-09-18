@@ -343,10 +343,35 @@ class RibbonPage(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setObjectName("RibbonPage")
-        self.layout_ = QtWidgets.QHBoxLayout(self)
-        self.layout_.setContentsMargins(8, 6, 8, 6)
+
+        outer = QtWidgets.QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setObjectName("RibbonScrollArea")
+        self.scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.scroll_area.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        self.content = QtWidgets.QWidget()
+        self.content.setObjectName("RibbonPageContent")
+        self.content.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Minimum,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        self.layout_ = QtWidgets.QHBoxLayout(self.content)
+        self.layout_.setContentsMargins(8, 6, 8, 4)
         self.layout_.setSpacing(6)
         self.layout_.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        self.scroll_area.setWidget(self.content)
+        outer.addWidget(self.scroll_area)
 
     def add_group(self, title: str) -> RibbonGroup:
         group = RibbonGroup(title)
