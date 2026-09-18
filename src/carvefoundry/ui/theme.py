@@ -276,6 +276,25 @@ QComboBox#ObjectSelector:hover {
     color: #c8ff3d;
     border-color: #3a465f;
 }
+#CamStatus {
+    background: #151b2a;
+    color: #8f9aae;
+    border: 1px solid #303a50;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 800;
+}
+#CamStatus[state="ready"] {
+    background: #152516;
+    color: #c8ff3d;
+    border-color: #5b7a2a;
+}
+#CamStatus[state="stale"] {
+    background: #2a2112;
+    color: #ffd166;
+    border-color: #8a6726;
+}
 #MeshViewport, #ViewportShell { background: #111827; }
 #ViewportRuler {
     background: #0e1425;
