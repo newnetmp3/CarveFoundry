@@ -34,7 +34,29 @@ QTabWidget#Ribbon QTabBar::tab:selected {
     color: #c8ff3d;
     border-bottom: 2px solid #c8ff3d;
 }
-#RibbonPage { background: #0e1425; }
+#RibbonPage, #RibbonPageContent, #RibbonScrollArea {
+    background: #0e1425;
+}
+QScrollArea#RibbonScrollArea {
+    border: 0;
+}
+QScrollArea#RibbonScrollArea QScrollBar:horizontal {
+    background: #0e1425;
+    height: 7px;
+    margin: 0 8px;
+}
+QScrollArea#RibbonScrollArea QScrollBar::handle:horizontal {
+    background: #35415a;
+    border-radius: 3px;
+    min-width: 36px;
+}
+QScrollArea#RibbonScrollArea QScrollBar::handle:horizontal:hover {
+    background: #c8ff3d;
+}
+QScrollArea#RibbonScrollArea QScrollBar::add-line:horizontal,
+QScrollArea#RibbonScrollArea QScrollBar::sub-line:horizontal {
+    width: 0;
+}
 #RibbonGroup {
     background: #12192a;
     border: 1px solid #242e44;
@@ -134,10 +156,40 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     color: #586276;
     border-color: transparent;
 }
-#WorkspacePanel {
+#WorkspacePanel, #InspectorPanel {
     background: #0e1425;
     border: 1px solid #232b3e;
     border-radius: 12px;
+}
+#InspectorSummary {
+    background: #0f1626;
+    color: #b9c4d6;
+    border: 1px solid #242e44;
+    border-radius: 8px;
+    padding: 8px;
+}
+#LayersPopup {
+    background: #0e1425;
+    border: 1px solid #3a465f;
+    border-radius: 10px;
+}
+#LayersPopupTitle {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+}
+QListWidget#LayersList {
+    background: #0b1120;
+    border: 1px solid #242e44;
+    border-radius: 8px;
+}
+QComboBox#ObjectSelector {
+    background: #0b1120;
+    border-color: #35415a;
+    padding-left: 9px;
+}
+QComboBox#ObjectSelector:hover {
+    border-color: #c8ff3d;
 }
 #PanelHeader {
     background: #12192a;
@@ -154,6 +206,14 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
 #ViewportBar {
     background: #12192a;
     border-bottom: 1px solid #242e44;
+}
+#ViewportBar QLabel {
+    background: transparent;
+}
+#ViewportBar QPushButton:checked {
+    background: #202a40;
+    color: #c8ff3d;
+    border-color: #3a465f;
 }
 #MeshViewport, #ViewportShell { background: #111827; }
 #ViewportRuler {
