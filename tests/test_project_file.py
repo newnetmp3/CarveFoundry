@@ -61,6 +61,7 @@ def test_project_round_trip_embeds_stl_and_transform(tmp_path: Path) -> None:
     assert loaded_item.transform.translation_mm == transform.translation_mm
     assert loaded_item.transform.rotation_deg == transform.rotation_deg
     assert loaded_item.transform.scale_xyz == transform.scale_xyz
+    assert loaded_item.item_id == project.items[0].item_id
 
 
 def test_saved_project_is_native_container_with_current_manifest(tmp_path: Path) -> None:
