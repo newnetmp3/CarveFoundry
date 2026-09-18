@@ -2178,6 +2178,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
             self._sync_stock_controls()
             self.stock_widget.setVisible(True)
+            self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
             self._refresh_cam_detail_readouts()
@@ -2189,6 +2190,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if item_index >= len(self.project.items):
             self.selection_info.setText("No design selected")
             self.stock_widget.setVisible(False)
+            self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
             self._refresh_cam_detail_readouts()
@@ -2201,12 +2203,242 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.viewport.set_selected_item(item_index)
         self.stock_widget.setVisible(False)
         has_mesh = item.mesh is not None
+        is_text = item.kind.lower() == "text" and has_mesh
+        self.text_widget.setVisible(is_text)
         self.transform_widget.setVisible(has_mesh)
+        if is_text:
+            self._sync_text_controls(item)
         if has_mesh:
             self._sync_transform_controls(item)
         self._refresh_cam_detail_readouts()
         self._sync_selection_action_state()
         self._sync_toolpath_output_state()
+
+    def _legacy_text_properties(self, item: ProjectItem) -> TextProperties:
+        dimensions = (
+            np.asarray(item.mesh.dimensions, dtype=float)
+            * float(item.source_units.millimeters_per_unit)
+            if item.mesh is not None
+            else np.array((40.0, 12.0, 1.0), dtype=float)
+        )
+        content = item.name.strip() or "Text"
+        return TextProperties(
+            content=content,
+            font_family=QFont().family(),
+            size_pt=max(6.0, float(dimensions[1]) * 72.0 / 25.4),
+            box_width_mm=max(0.1, float(dimensions[0])),
+            depth_mm=max(0.05, float(dimensions[2])),
+        )
+
+    def _refresh_text_font_styles(
+        self,
+        family: str,
+        preferred: str | None = None,
+    ) -> None:
+        styles = list(QFontDatabase.styles(family))
+        if not styles:
+            styles = ["Regular"]
+
+        current = preferred or self.text_font_style_combo.currentText()
+        self.text_font_style_combo.blockSignals(True)
+        try:
+            self.text_font_style_combo.clear()
+            self.text_font_style_combo.addItems(styles)
+            index = self.text_font_style_combo.findText(current)
+            if index < 0:
+                index = self.text_font_style_combo.findText("Regular")
+            self.text_font_style_combo.setCurrentIndex(max(0, index))
+        finally:
+            self.text_font_style_combo.blockSignals(False)
+
+    def _sync_text_controls(self, item: ProjectItem) -> None:
+        properties = item.text_properties or self._legacy_text_properties(item)
+        family = properties.font_family or QFont().family()
+
+        self._updating_text_controls = True
+        try:
+            self.text_editor.setPlainText(properties.content)
+            self.text_font_combo.setCurrentFont(QFont(family))
+            self._refresh_text_font_styles(
+                family,
+                properties.font_style,
+            )
+            self.text_size_spin.setValue(properties.size_pt)
+            self.text_bold_button.setChecked(properties.bold)
+            self.text_italic_button.setChecked(properties.italic)
+            self.text_underline_button.setChecked(properties.underline)
+            self.text_strike_button.setChecked(properties.strikeout)
+
+            alignment_index = self.text_alignment_combo.findData(
+                properties.alignment
+            )
+            self.text_alignment_combo.setCurrentIndex(
+                max(0, alignment_index)
+            )
+            case_index = self.text_case_combo.findData(properties.case_mode)
+            self.text_case_combo.setCurrentIndex(max(0, case_index))
+
+            self.text_kerning_check.setChecked(properties.kerning)
+            self.text_wrap_check.setChecked(properties.wrap_to_width)
+            self.text_character_spacing_spin.setValue(
+                properties.character_spacing_mm
+            )
+            self.text_word_spacing_spin.setValue(
+                properties.word_spacing_mm
+            )
+            self.text_line_spacing_spin.setValue(
+                properties.line_spacing_percent
+            )
+            self.text_horizontal_scale_spin.setValue(
+                properties.horizontal_scale_percent
+            )
+            self.text_box_width_spin.setValue(
+                max(0.1, properties.box_width_mm or 0.1)
+            )
+
+            geometry_index = self.text_geometry_combo.findData(
+                properties.geometry_mode
+            )
+            self.text_geometry_combo.setCurrentIndex(
+                max(0, geometry_index)
+            )
+            self.text_outline_width_spin.setValue(
+                properties.outline_width_mm
+            )
+            self.text_depth_spin.setValue(properties.depth_mm)
+        finally:
+            self._updating_text_controls = False
+
+        self._update_text_control_enablement()
+
+    def _text_font_changed(self, font: QFont) -> None:
+        if self._updating_text_controls:
+            return
+        self._refresh_text_font_styles(font.family(), "Regular")
+        self._text_control_changed()
+
+    def _text_layout_control_changed(self, _checked: bool) -> None:
+        self._update_text_control_enablement()
+        self._text_control_changed()
+
+    def _text_geometry_control_changed(self, _index: int) -> None:
+        self._update_text_control_enablement()
+        self._text_control_changed()
+
+    def _update_text_control_enablement(self) -> None:
+        if not hasattr(self, "text_wrap_check"):
+            return
+        self.text_box_width_spin.setEnabled(
+            self.text_wrap_check.isChecked()
+        )
+        self.text_outline_width_spin.setEnabled(
+            self.text_geometry_combo.currentData() == "outline"
+        )
+
+    def _text_control_changed(self, *_args) -> None:
+        if self._updating_text_controls:
+            return
+        self._update_text_control_enablement()
+        self._text_update_timer.start()
+
+    def _text_properties_from_controls(self) -> TextProperties:
+        return TextProperties(
+            content=self.text_editor.toPlainText(),
+            font_family=self.text_font_combo.currentFont().family(),
+            font_style=self.text_font_style_combo.currentText() or "Regular",
+            size_pt=float(self.text_size_spin.value()),
+            bold=self.text_bold_button.isChecked(),
+            italic=self.text_italic_button.isChecked(),
+            underline=self.text_underline_button.isChecked(),
+            strikeout=self.text_strike_button.isChecked(),
+            alignment=str(
+                self.text_alignment_combo.currentData() or "left"
+            ),
+            character_spacing_mm=float(
+                self.text_character_spacing_spin.value()
+            ),
+            word_spacing_mm=float(self.text_word_spacing_spin.value()),
+            kerning=self.text_kerning_check.isChecked(),
+            line_spacing_percent=float(self.text_line_spacing_spin.value()),
+            horizontal_scale_percent=float(
+                self.text_horizontal_scale_spin.value()
+            ),
+            wrap_to_width=self.text_wrap_check.isChecked(),
+            box_width_mm=float(self.text_box_width_spin.value()),
+            depth_mm=float(self.text_depth_spin.value()),
+            geometry_mode=str(
+                self.text_geometry_combo.currentData() or "filled"
+            ),
+            outline_width_mm=float(
+                self.text_outline_width_spin.value()
+            ),
+            case_mode=str(self.text_case_combo.currentData() or "normal"),
+        )
+
+    def _before_text_properties_change(self, _index: int) -> None:
+        """History hook supplied by project_window.MainWindow."""
+
+    def _after_text_properties_change(self, _index: int) -> None:
+        """History hook supplied by project_window.MainWindow."""
+
+    def _apply_text_properties_from_controls(self) -> None:
+        if self._updating_text_controls:
+            return
+        index = self._selected_item_index()
+        item = self._selected_item()
+        if (
+            index is None
+            or item is None
+            or item.kind.lower() != "text"
+            or item.mesh is None
+        ):
+            return
+
+        properties = self._text_properties_from_controls()
+        if not properties.content.strip():
+            self.statusBar().showMessage(
+                "Text object cannot be blank",
+                3500,
+            )
+            return
+        if item.text_properties == properties:
+            return
+
+        try:
+            properties.validate()
+            generated_mesh = text_mesh(properties=properties)
+        except (RuntimeError, ValueError) as exc:
+            self._set_activity_info(f"Text update failed\n{exc}")
+            self.statusBar().showMessage(
+                f"Could not update text: {exc}",
+                6000,
+            )
+            return
+
+        self._before_text_properties_change(index)
+        item.mesh = generated_mesh
+        item.text_properties = properties
+        # Loaded generated objects can point at a materialized embedded STL.
+        # Once edited, saving must embed the newly generated mesh instead.
+        item.source_path = None
+        self._invalidate_toolpaths("Text geometry")
+        self._sync_transform_controls(item)
+        self.selection_info.setText(self._mesh_properties_text(item))
+        self.viewport.set_selected_item(index)
+        self.viewport.update()
+        self._after_text_properties_change(index)
+        self.statusBar().showMessage(
+            f"Updated text: {item.name}",
+            2500,
+        )
+
+    def _focus_text_editor(self) -> None:
+        item = self._selected_item()
+        if item is None or item.kind.lower() != "text":
+            return
+        self._ensure_inspector_visible()
+        self.text_editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.text_editor.selectAll()
 
     def _sync_transform_controls(self, item: ProjectItem) -> None:
         self._updating_transform_controls = True
