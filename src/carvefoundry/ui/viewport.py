@@ -353,7 +353,7 @@ class MeshViewport(_GpuMeshViewport):
         if steps:
             self.zoom *= 1.20**steps
             self.zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, self.zoom))
-            self.update()
+            self.update(self.rect())
         event.accept()
 
 
