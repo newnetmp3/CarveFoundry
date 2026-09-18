@@ -45,6 +45,7 @@ from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
+from .tool_rail import ToolRail
 from .viewport import MeshViewport
 
 _FONT_FAMILY_VARIANT_SUFFIXES: tuple[tuple[str, str], ...] = (
@@ -733,10 +734,188 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         self._settings.sync()
 
+    def _build_tool_rail(self) -> ToolRail:
+        """Build the compact, icon-first tool rail used beside the canvas."""
+
+        rail = ToolRail(self)
+        rail.add_tool(
+            "select",
+            "Select",
+            self._activate_navigation_tool,
+            tooltip=(
+                "Select / Marquee (V)\n"
+                "Click selects one object. Ctrl-click toggles, Shift-click adds, "
+                "drag empty space box-selects, Alt-drag orbits."
+            ),
+            checkable=True,
+        )
+
+        rail.add_flyout(
+            "shapes",
+            "Rectangle",
+            (
+                (
+                    "rectangle",
+                    "Rectangle",
+                    self._create_rectangle,
+                    "Rectangle tool — drag on the stock to draw.",
+                ),
+                (
+                    "ellipse",
+                    "Ellipse",
+                    self._create_ellipse,
+                    "Ellipse tool — drag on the stock to draw.",
+                ),
+                (
+                    "polygon",
+                    "Polygon",
+                    self._create_polygon,
+                    "Polygon tool — sides are set in the tool options bar.",
+                ),
+            ),
+            tooltip="Shape tools — click arrow to choose Rectangle, Ellipse, or Polygon.",
+            checkable=True,
+        )
+        rail.add_tool(
+            "line",
+            "Line",
+            self._create_line,
+            tooltip="Line tool — drag to draw. Shift constrains to 45° increments.",
+            checkable=True,
+        )
+        rail.add_tool(
+            "text",
+            "Text",
+            self._create_text,
+            tooltip="Text tool — drag a text box; typography appears in Inspector.",
+            checkable=True,
+        )
+        rail.add_tool(
+            "pen",
+            "Pen",
+            self._create_pen_path,
+            tooltip="Pen / freehand vector tool.",
+        )
+
+        rail.add_separator()
+        rail.add_flyout(
+            "arrange",
+            "Align",
+            (
+                (
+                    "align",
+                    "Align",
+                    self._align_selected_items,
+                    "Align the selected objects.",
+                ),
+                (
+                    "center",
+                    "Center",
+                    self._center_selected_items,
+                    "Center the complete selection on the stock.",
+                ),
+                (
+                    "group",
+                    "Group",
+                    self._group_selected_items,
+                    "Group two or more selected objects.",
+                ),
+                (
+                    "ungroup",
+                    "Ungroup",
+                    self._ungroup_selected_items,
+                    "Ungroup the selected grouped objects.",
+                ),
+            ),
+            tooltip="Arrange tools — align, center, group, or ungroup.",
+        )
+        rail.add_flyout(
+            "cam",
+            "V-Carve",
+            (
+                (
+                    "cam_profile",
+                    "Profile",
+                    lambda: self._select_cam_operation("profile"),
+                    "Select Profile CAM operation.",
+                ),
+                (
+                    "cam_pocket",
+                    "Pocket",
+                    lambda: self._select_cam_operation("pocket"),
+                    "Select Pocket CAM operation.",
+                ),
+                (
+                    "cam_vcarve",
+                    "V-Carve",
+                    lambda: self._select_cam_operation("vcarve"),
+                    "Select cutter-aware V-Carve operation.",
+                ),
+                (
+                    "cam_engrave",
+                    "Engrave",
+                    lambda: self._select_cam_operation("engrave"),
+                    "Select Engrave operation.",
+                ),
+                (
+                    "cam_drill",
+                    "Drill",
+                    lambda: self._select_cam_operation("drill"),
+                    "Select Drill operation.",
+                ),
+                (
+                    "cam_rough",
+                    "Rough",
+                    lambda: self._select_cam_operation("rough"),
+                    "Select 3D Rough operation.",
+                ),
+                (
+                    "cam_finish",
+                    "Finish",
+                    lambda: self._select_cam_operation("finish"),
+                    "Select 3D Finish operation.",
+                ),
+            ),
+            tooltip="CAM operations — choose a toolpath strategy from the flyout.",
+        )
+
+        rail.add_stretch()
+        rail.add_tool(
+            "import",
+            "Import",
+            self._import_file,
+            tooltip="Import STL, SVG, DXF, image, or G-code.",
+        )
+        rail.add_tool(
+            "layers",
+            "Layers",
+            self._show_layers_popup,
+            tooltip="Objects & Layers (Ctrl+Shift+L).",
+        )
+        rail.add_tool(
+            "inspector",
+            "Inspector",
+            self._toggle_properties_panel_option,
+            tooltip="Show or hide Inspector (Ctrl+Shift+I).",
+            checkable=True,
+        )
+        rail.add_tool(
+            "fit",
+            "Fit View",
+            self._fit_view,
+            tooltip="Fit the complete job to the viewport (Ctrl+0).",
+        )
+        rail.set_active_draw_tool(None)
+        return rail
+
     def _build_workspace(self) -> QWidget:
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        self.tool_rail = self._build_tool_rail()
+        layout.addWidget(self.tool_rail)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -987,7 +1166,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         splitter.addWidget(self.properties_panel)
         splitter.setSizes(self._default_workspace_splitter_sizes(1500))
         splitter.setStretchFactor(0, 1)
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, 1)
         return wrapper
 
     def _properties_panel_default_width(self) -> int:
@@ -3604,6 +3783,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Duplicate", "Ctrl+D", self._duplicate_selected_item),
             ("Layers", "Ctrl+Shift+L", self._show_layers_popup),
             ("Inspector", "Ctrl+Shift+I", self._toggle_properties_panel_option),
+            ("Select Tool", "V", self._activate_navigation_tool),
             ("Select / Cancel Tool", "Escape", self._cancel_active_tool),
             ("Fit View", "Ctrl+0", self._fit_view),
         )
