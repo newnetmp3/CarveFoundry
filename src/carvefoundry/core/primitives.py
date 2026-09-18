@@ -293,8 +293,8 @@ def _wrap_text_lines(
 
 
 def _build_text_path(properties: TextProperties):
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QFont, QFontMetricsF, QPainterPath, QPainterPathStroker
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QFont, QFontMetricsF, QPainterPath
 
     font, millimeters_per_unit = _font_for_text(properties)
     metrics = QFontMetricsF(font)
@@ -391,25 +391,7 @@ def _build_text_path(properties: TextProperties):
 
         baseline += line_advance
 
-    if properties.geometry_mode == "outline":
-        stroker = QPainterPathStroker()
-        stroker.setWidth(
-            max(
-                1.0,
-                float(properties.outline_width_mm)
-                / millimeters_per_unit,
-            )
-        )
-        stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
-        result = stroker.createStroke(glyph_path)
-        result.addPath(decoration_path)
-    else:
-        result = glyph_path
-        result.addPath(decoration_path)
-
-    result.setFillRule(Qt.FillRule.WindingFill)
-    return result, millimeters_per_unit
+    return glyph_path, decoration_path, millimeters_per_unit
 
 
 def _flatten_polygon_geometry(value) -> list[Polygon]:
@@ -496,16 +478,6 @@ def _extrude_text_geometry(
     *,
     preserve_x_origin: bool = False,
 ) -> MeshAsset:
-    # Font backends can return several touching or nearly coincident outline
-    # polygons.  Normalize them in 2D before extrusion so Earcut does not
-    # produce separate seam vertices for what is logically one CNC region.
-    polygons = _flatten_polygon_geometry(geometry)
-    if not polygons:
-        raise ValueError("Text produced no machinable geometry.")
-    geometry = unary_union(polygons)
-    if not geometry.is_valid:
-        geometry = geometry.buffer(0)
-
     parts: list[trimesh.Trimesh] = []
     for polygon in _flatten_polygon_geometry(geometry):
         if polygon.area <= 1e-8:
@@ -522,10 +494,6 @@ def _extrude_text_geometry(
         raise ValueError("Text produced no machinable geometry.")
 
     mesh = trimesh.util.concatenate(parts)
-    # Qt/fontconfig can emit coincident contour vertices differently across
-    # Linux distributions.  Let Trimesh weld those seams and discard
-    # degenerate/duplicate faces before the mesh reaches CAM.
-    mesh.process(validate=True)
     bounds = np.asarray(mesh.bounds, dtype=float)
     x_shift = 0.0 if preserve_x_origin else -bounds[0, 0]
     mesh.apply_translation((x_shift, -bounds[0, 1], 0.0))
@@ -578,8 +546,35 @@ def text_mesh(
             depth_mm=float(properties.depth_mm),
         )
 
-    path, millimeters_per_unit = _build_text_path(properties)
-    geometry = _text_path_geometry(path, millimeters_per_unit)
+    glyph_path, decoration_path, millimeters_per_unit = _build_text_path(
+        properties
+    )
+    geometry = _text_path_geometry(glyph_path, millimeters_per_unit)
+
+    if properties.geometry_mode == "outline":
+        # Build the CNC outline from the already hole-aware glyph polygons
+        # instead of QPainterPathStroker output.  Qt's stroker can emit
+        # touching/self-overlapping subpaths differently across fontconfig
+        # versions, which in turn can create non-watertight extrusion seams.
+        geometry = geometry.boundary.buffer(
+            float(properties.outline_width_mm) / 2.0,
+            quad_segs=12,
+            cap_style="round",
+            join_style="round",
+        )
+
+    if not decoration_path.isEmpty():
+        decoration_geometry = _text_path_geometry(
+            decoration_path,
+            millimeters_per_unit,
+        )
+        geometry = geometry.union(decoration_geometry)
+
+    if not geometry.is_valid:
+        geometry = geometry.buffer(0)
+    if geometry.is_empty:
+        raise ValueError("The selected font produced empty text geometry.")
+
     return _extrude_text_geometry(
         geometry,
         properties.depth_mm,
