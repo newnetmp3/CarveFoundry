@@ -34,6 +34,7 @@ class ProjectItem:
     mesh: MeshAsset | None = None
     transform: Transform3D = field(default_factory=Transform3D)
     source_units: ModelUnits = ModelUnits.MILLIMETERS
+    group_id: str | None = None
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
@@ -152,6 +153,7 @@ class Project:
                 scale_xyz=tuple(source.transform.scale_xyz),
             ),
             source_units=source.source_units,
+            group_id=None,
         )
         new_index = index + 1
         self.items.insert(new_index, duplicate)
