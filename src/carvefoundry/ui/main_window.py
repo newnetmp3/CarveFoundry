@@ -1349,31 +1349,23 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             for _ in range(3)
         )
 
-        def add_axis_row(title: str, spins: tuple[QDoubleSpinBox, ...]) -> None:
+        def add_axis_group(
+            title: str,
+            spins: tuple[QDoubleSpinBox, ...],
+        ) -> None:
             title_label = QLabel(title)
             title_label.setObjectName("InspectorFieldHeading")
             layout.addWidget(title_label)
 
-            axis_widget = QWidget()
-            axis_widget.setMinimumWidth(0)
-            axis_layout = QGridLayout(axis_widget)
-            axis_layout.setContentsMargins(0, 0, 0, 0)
-            axis_layout.setHorizontalSpacing(5)
-            axis_layout.setVerticalSpacing(2)
-            for column, (axis, spin) in enumerate(
-                zip(("X", "Y", "Z"), spins, strict=True)
-            ):
-                axis_label = QLabel(axis)
-                axis_label.setObjectName("Muted")
-                axis_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                axis_layout.addWidget(axis_label, 0, column)
-                axis_layout.addWidget(spin, 1, column)
-                axis_layout.setColumnStretch(column, 1)
+            axis_form = QFormLayout()
+            self._configure_inspector_form(axis_form)
+            for axis, spin in zip(("X", "Y", "Z"), spins, strict=True):
+                axis_form.addRow(axis, spin)
                 spin.valueChanged.connect(self._transform_control_changed)
-            layout.addWidget(axis_widget)
+            layout.addLayout(axis_form)
 
-        add_axis_row("Position", self.position_spins)
-        add_axis_row("Rotate about", self.rotation_spins)
+        add_axis_group("Position", self.position_spins)
+        add_axis_group("Rotate about", self.rotation_spins)
 
         rotation_note = QLabel(
             "Rotation axes: X → YZ plane   Y → XZ plane   Z → XY plane"
@@ -1385,8 +1377,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         layout.addWidget(rotation_note)
 
-        add_axis_row("Size", self.size_spins)
-        add_axis_row("Scale", self.scale_spins)
+        add_axis_group("Size", self.size_spins)
+        add_axis_group("Scale", self.scale_spins)
 
         lock_bar = QWidget()
         lock_bar.setMinimumWidth(0)
