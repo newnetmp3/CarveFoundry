@@ -894,6 +894,238 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         return widget
 
+    def _build_text_controls(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("TextControls")
+        grid = QGridLayout(widget)
+        grid.setContentsMargins(0, 6, 0, 10)
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(6)
+
+        heading = QLabel("Text")
+        heading.setObjectName("SectionHeading")
+        grid.addWidget(heading, 0, 0, 1, 4)
+
+        self.text_editor = QPlainTextEdit()
+        self.text_editor.setPlaceholderText("Enter text…")
+        self.text_editor.setMinimumHeight(72)
+        self.text_editor.setMaximumHeight(120)
+        self.text_editor.setTabChangesFocus(True)
+        self.text_editor.textChanged.connect(self._text_control_changed)
+        grid.addWidget(self.text_editor, 1, 0, 1, 4)
+
+        grid.addWidget(QLabel("Font"), 2, 0)
+        self.text_font_combo = QFontComboBox()
+        self.text_font_combo.setFontFilters(
+            QFontComboBox.FontFilter.ScalableFonts
+        )
+        self.text_font_combo.setToolTip(
+            "Installed scalable system fonts. The selected font's real glyph "
+            "outlines are used to build CNC geometry."
+        )
+        self.text_font_combo.currentFontChanged.connect(
+            self._text_font_changed
+        )
+        grid.addWidget(self.text_font_combo, 2, 1, 1, 3)
+
+        grid.addWidget(QLabel("Style"), 3, 0)
+        self.text_font_style_combo = QComboBox()
+        self.text_font_style_combo.currentTextChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(self.text_font_style_combo, 3, 1, 1, 2)
+
+        self.text_size_spin = self._configured_spin(
+            minimum=1.0,
+            maximum=1000.0,
+            decimals=1,
+            step=1.0,
+            suffix=" pt",
+        )
+        self.text_size_spin.setToolTip(
+            "Font point size, matching conventional word-processor sizing."
+        )
+        self.text_size_spin.valueChanged.connect(self._text_control_changed)
+        grid.addWidget(self.text_size_spin, 3, 3)
+
+        format_bar = QWidget()
+        format_layout = QHBoxLayout(format_bar)
+        format_layout.setContentsMargins(0, 0, 0, 0)
+        format_layout.setSpacing(4)
+        self.text_bold_button = QPushButton("B")
+        self.text_italic_button = QPushButton("I")
+        self.text_underline_button = QPushButton("U")
+        self.text_strike_button = QPushButton("S")
+        for button, tooltip in (
+            (self.text_bold_button, "Bold"),
+            (self.text_italic_button, "Italic"),
+            (self.text_underline_button, "Underline"),
+            (self.text_strike_button, "Strikethrough"),
+        ):
+            button.setCheckable(True)
+            button.setMaximumWidth(38)
+            button.setToolTip(tooltip)
+            button.toggled.connect(self._text_control_changed)
+            format_layout.addWidget(button)
+        format_layout.addStretch(1)
+        grid.addWidget(QLabel("Effects"), 4, 0)
+        grid.addWidget(format_bar, 4, 1, 1, 3)
+
+        grid.addWidget(QLabel("Align"), 5, 0)
+        self.text_alignment_combo = QComboBox()
+        for title, value in (
+            ("Left", "left"),
+            ("Center", "center"),
+            ("Right", "right"),
+            ("Justified", "justify"),
+        ):
+            self.text_alignment_combo.addItem(title, value)
+        self.text_alignment_combo.currentIndexChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(self.text_alignment_combo, 5, 1)
+
+        grid.addWidget(QLabel("Case"), 5, 2)
+        self.text_case_combo = QComboBox()
+        for title, value in (
+            ("Normal", "normal"),
+            ("UPPERCASE", "uppercase"),
+            ("lowercase", "lowercase"),
+            ("Title Case", "title"),
+        ):
+            self.text_case_combo.addItem(title, value)
+        self.text_case_combo.currentIndexChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(self.text_case_combo, 5, 3)
+
+        self.text_kerning_check = QCheckBox("Pair kerning")
+        self.text_kerning_check.setChecked(True)
+        self.text_kerning_check.setToolTip(
+            "Use the selected font's kerning pairs when positioning glyphs."
+        )
+        self.text_kerning_check.toggled.connect(self._text_control_changed)
+        grid.addWidget(self.text_kerning_check, 6, 0, 1, 2)
+
+        self.text_wrap_check = QCheckBox("Wrap to width")
+        self.text_wrap_check.toggled.connect(self._text_layout_control_changed)
+        grid.addWidget(self.text_wrap_check, 6, 2, 1, 2)
+
+        self.text_character_spacing_spin = self._configured_spin(
+            minimum=-25.0,
+            maximum=100.0,
+            decimals=3,
+            step=0.1,
+            suffix=" mm",
+        )
+        self.text_character_spacing_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Character spacing"), 7, 0, 1, 2)
+        grid.addWidget(self.text_character_spacing_spin, 7, 2, 1, 2)
+
+        self.text_word_spacing_spin = self._configured_spin(
+            minimum=-25.0,
+            maximum=100.0,
+            decimals=3,
+            step=0.25,
+            suffix=" mm",
+        )
+        self.text_word_spacing_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Word spacing"), 8, 0, 1, 2)
+        grid.addWidget(self.text_word_spacing_spin, 8, 2, 1, 2)
+
+        self.text_line_spacing_spin = self._configured_spin(
+            minimum=25.0,
+            maximum=500.0,
+            decimals=1,
+            step=5.0,
+            suffix=" %",
+        )
+        self.text_line_spacing_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Line spacing"), 9, 0, 1, 2)
+        grid.addWidget(self.text_line_spacing_spin, 9, 2, 1, 2)
+
+        self.text_horizontal_scale_spin = self._configured_spin(
+            minimum=10.0,
+            maximum=400.0,
+            decimals=1,
+            step=5.0,
+            suffix=" %",
+        )
+        self.text_horizontal_scale_spin.setToolTip(
+            "Horizontally stretch or condense character width."
+        )
+        self.text_horizontal_scale_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Character width"), 10, 0, 1, 2)
+        grid.addWidget(self.text_horizontal_scale_spin, 10, 2, 1, 2)
+
+        self.text_box_width_spin = self._configured_spin(
+            minimum=0.1,
+            maximum=100000.0,
+            decimals=3,
+            step=1.0,
+            suffix=" mm",
+        )
+        self.text_box_width_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Text box width"), 11, 0, 1, 2)
+        grid.addWidget(self.text_box_width_spin, 11, 2, 1, 2)
+
+        grid.addWidget(QLabel("Geometry"), 12, 0)
+        self.text_geometry_combo = QComboBox()
+        self.text_geometry_combo.addItem("Filled", "filled")
+        self.text_geometry_combo.addItem("Outline", "outline")
+        self.text_geometry_combo.currentIndexChanged.connect(
+            self._text_geometry_control_changed
+        )
+        grid.addWidget(self.text_geometry_combo, 12, 1)
+
+        self.text_outline_width_spin = self._configured_spin(
+            minimum=0.05,
+            maximum=50.0,
+            decimals=3,
+            step=0.1,
+            suffix=" mm",
+        )
+        self.text_outline_width_spin.valueChanged.connect(
+            self._text_control_changed
+        )
+        grid.addWidget(QLabel("Outline"), 12, 2)
+        grid.addWidget(self.text_outline_width_spin, 12, 3)
+
+        self.text_depth_spin = self._configured_spin(
+            minimum=0.05,
+            maximum=1000.0,
+            decimals=3,
+            step=0.25,
+            suffix=" mm",
+        )
+        self.text_depth_spin.setToolTip(
+            "Extruded text thickness. Text top remains at the object's Z level."
+        )
+        self.text_depth_spin.valueChanged.connect(self._text_control_changed)
+        grid.addWidget(QLabel("Depth"), 13, 0, 1, 2)
+        grid.addWidget(self.text_depth_spin, 13, 2, 1, 2)
+
+        note = QLabel(
+            "Font geometry comes from the installed system font. "
+            "Filled/Outline controls the solid CNC mesh, not a screen-only style."
+        )
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        grid.addWidget(note, 14, 0, 1, 4)
+
+        widget.setVisible(False)
+        return widget
+
     def _build_transform_controls(self) -> QWidget:
         widget = QWidget()
         widget.setObjectName("TransformControls")
