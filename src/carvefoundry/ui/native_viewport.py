@@ -863,7 +863,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         step = self._grid_step(world_per_pixel, stock_width, stock_height)
 
         def values(limit: float) -> list[float]:
-            count = max(0, int(floor(limit / step + 1e-9)))
+            count = max(0, floor(limit / step + 1e-9))
             result = [index * step for index in range(count + 1)]
             if not result or abs(result[-1] - limit) > max(step * 1e-6, 1e-7):
                 result.append(limit)
