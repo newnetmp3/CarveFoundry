@@ -60,6 +60,10 @@ class LayersPopup(QFrame):
         self.list_widget.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
+        self.list_widget.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
         self.list_widget.setMinimumHeight(180)
         layout.addWidget(self.list_widget, 1)
 
