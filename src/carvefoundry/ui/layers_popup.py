@@ -65,14 +65,16 @@ class LayersPopup(QFrame):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(5)
-        for title, callback in (
-            ("Up", move_up),
-            ("Down", move_down),
-            ("Duplicate", duplicate),
-            ("Delete", delete),
+        self.action_buttons: dict[str, QPushButton] = {}
+        for key, title, callback in (
+            ("move_up", "Up", move_up),
+            ("move_down", "Down", move_down),
+            ("duplicate", "Duplicate", duplicate),
+            ("delete", "Delete", delete),
         ):
             button = QPushButton(title)
             button.clicked.connect(lambda _checked=False, fn=callback: fn())
+            self.action_buttons[key] = button
             buttons.addWidget(button)
         layout.addLayout(buttons)
 
