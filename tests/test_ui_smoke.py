@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import text_mesh
@@ -19,6 +19,42 @@ def test_main_window_builds_text_inspector_offscreen() -> None:
         assert window.text_font_style_combo.count() > 0
         assert window.text_geometry_combo.count() == 2
         assert window.text_widget.isHidden()
+    finally:
+        window.close()
+
+
+def test_inspector_stays_compact_without_clipping_field_minimums() -> None:
+    window = MainWindow()
+    try:
+        assert window.properties_panel.minimumWidth() == 260
+        assert (
+            window.properties_panel.body.sizePolicy().horizontalPolicy()
+            == QSizePolicy.Policy.Ignored
+        )
+        assert window.text_widget.minimumSizeHint().width() <= 260
+        assert window.transform_widget.minimumSizeHint().width() <= 260
+
+        responsive_fields = (
+            window.text_font_combo,
+            window.text_font_style_combo,
+            window.text_size_spin,
+            window.text_alignment_combo,
+            window.text_case_combo,
+            window.text_character_spacing_spin,
+            window.text_word_spacing_spin,
+            window.text_line_spacing_spin,
+            window.text_horizontal_scale_spin,
+            window.text_box_width_spin,
+            window.text_geometry_combo,
+            window.text_outline_width_spin,
+            window.text_depth_spin,
+            window.source_units_combo,
+            *window.position_spins,
+            *window.rotation_spins,
+            *window.size_spins,
+            *window.scale_spins,
+        )
+        assert all(field.minimumWidth() == 0 for field in responsive_fields)
     finally:
         window.close()
 
