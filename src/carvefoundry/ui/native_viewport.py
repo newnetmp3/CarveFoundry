@@ -1612,7 +1612,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             empty = np.empty((0, 3), dtype=np.float32)
             return empty, empty
 
-        visible_count = int(round(len(segments) * self.simulation_fraction))
+        visible_count = round(len(segments) * self.simulation_fraction)
         if self.simulation_fraction > 0.0:
             visible_count = max(1, visible_count)
         visible_segments = segments[:visible_count]
