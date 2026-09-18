@@ -1,6 +1,6 @@
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import QApplication, QComboBox, QSizePolicy
 
 from carvefoundry.cam.toolpath import Toolpath
@@ -116,6 +116,47 @@ def test_text_font_selector_previews_grouped_families_and_variants() -> None:
             concrete_family = window.text_font_variant_combo.itemData(index)
             assert isinstance(item_font, QFont)
             assert item_font.family() == concrete_family
+    finally:
+        window.close()
+
+
+def test_select_tool_and_escape_cancel_active_drawing_mode() -> None:
+    window = MainWindow()
+    try:
+        select_button = window._navigation_tool_button
+        rectangle_button = window._shape_tool_buttons["rectangle"]
+
+        assert select_button is not None
+        assert select_button.isChecked()
+        assert window.viewport.shape_draw_mode is None
+
+        rectangle_button.setChecked(True)
+        window._set_shape_tool("rectangle")
+        assert window._active_shape_tool == "rectangle"
+        assert window.viewport.shape_draw_mode == "rectangle"
+        assert rectangle_button.isChecked()
+        assert not select_button.isChecked()
+
+        window._activate_navigation_tool()
+        assert window._active_shape_tool is None
+        assert window.viewport.shape_draw_mode is None
+        assert select_button.isChecked()
+        assert not rectangle_button.isChecked()
+
+        rectangle_button.setChecked(True)
+        window._set_shape_tool("rectangle")
+        escape_action = next(
+            action
+            for action in window._shortcut_actions
+            if action.text() == "Select / Cancel Tool"
+        )
+        assert escape_action.shortcut() == QKeySequence("Escape")
+        escape_action.trigger()
+
+        assert window._active_shape_tool is None
+        assert window.viewport.shape_draw_mode is None
+        assert select_button.isChecked()
+        assert not rectangle_button.isChecked()
     finally:
         window.close()
 
