@@ -46,10 +46,10 @@ class Panel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        header = QLabel(title)
-        header.setObjectName("PanelHeader")
-        header.setContentsMargins(10, 8, 10, 8)
-        layout.addWidget(header)
+        self.header = QLabel(title)
+        self.header.setObjectName("PanelHeader")
+        self.header.setContentsMargins(10, 8, 10, 8)
+        layout.addWidget(self.header)
         self.body = QWidget()
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(8, 8, 8, 8)
@@ -356,10 +356,55 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.project_panel)
         splitter.addWidget(canvas)
         splitter.addWidget(self.properties_panel)
-        splitter.setSizes([250, 970, 330])
+        splitter.setSizes(self._default_workspace_splitter_sizes(1550))
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter)
         return wrapper
+
+    def _properties_panel_default_width(self) -> int:
+        """Return the narrowest useful width for the initially loaded panel."""
+
+        self.properties_panel.ensurePolished()
+        self.stock_widget.ensurePolished()
+        self.tool_combo.ensurePolished()
+
+        body_margins = self.properties_panel.body_layout.contentsMargins()
+        frame_padding = self.properties_panel.frameWidth() * 2
+        outer_padding = (
+            body_margins.left()
+            + body_margins.right()
+            + frame_padding
+        )
+
+        selection_width = max(
+            (
+                self.selection_info.fontMetrics().horizontalAdvance(line)
+                for line in self.selection_info.text().splitlines()
+                if line
+            ),
+            default=0,
+        )
+        content_width = max(
+            self.properties_panel.header.sizeHint().width(),
+            self.stock_widget.sizeHint().width(),
+            self.tool_combo.sizeHint().width(),
+            selection_width,
+        )
+        return content_width + outer_padding
+
+    def _default_workspace_splitter_sizes(
+        self,
+        total_width: int | None = None,
+    ) -> list[int]:
+        if total_width is None:
+            total_width = sum(self.workspace_splitter.sizes())
+        if total_width <= 0:
+            total_width = 1550
+
+        project_width = 250
+        properties_width = self._properties_panel_default_width()
+        canvas_width = max(360, total_width - project_width - properties_width)
+        return [project_width, canvas_width, properties_width]
 
     @staticmethod
     def _configured_spin(
@@ -885,6 +930,7 @@ class MainWindow(QMainWindow):
         self.viewport.set_invert_vertical_drag(invert_vertical)
 
         stored_sizes = self._settings.value("interface/splitter_sizes")
+        restored_splitter = False
         if isinstance(stored_sizes, list) and len(stored_sizes) == 3:
             try:
                 sizes = [max(0, int(value)) for value in stored_sizes]
@@ -892,6 +938,11 @@ class MainWindow(QMainWindow):
                 sizes = []
             if len(sizes) == 3 and sum(sizes) > 0:
                 self.workspace_splitter.setSizes(sizes)
+                restored_splitter = True
+        if not restored_splitter:
+            self.workspace_splitter.setSizes(
+                self._default_workspace_splitter_sizes()
+            )
 
         projection = str(
             self._settings.value("viewport/projection_mode", "orthographic")
@@ -1056,7 +1107,9 @@ class MainWindow(QMainWindow):
         self.project_panel.show()
         self.properties_panel.show()
         self.statusBar().show()
-        self.workspace_splitter.setSizes([250, 970, 330])
+        self.workspace_splitter.setSizes(
+            self._default_workspace_splitter_sizes()
+        )
 
         self.viewport.set_view_controls_visible(True)
         self.viewport.show_stock = True
