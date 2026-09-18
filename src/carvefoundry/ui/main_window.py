@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QMenuBar,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from ..cam.gcode import write_grbl, write_grbl_program
@@ -175,10 +177,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         layout.setSpacing(0)
 
         layout.addWidget(self._build_brand_row())
+
+        # Keep the former ribbon as a non-visible compatibility host for the
+        # existing live CAM widgets while presenting a Photopea-style menu bar
+        # and vertical tool rail to the user.
         self.ribbon = Ribbon()
         self._populate_ribbon()
-        self.ribbon.currentChanged.connect(self._ribbon_tab_changed)
-        layout.addWidget(self.ribbon)
+        self.ribbon.hide()
+
+        self._build_command_actions()
+        self.main_menu_bar = self._build_main_menu_bar()
+        layout.addWidget(self.main_menu_bar)
         layout.addWidget(self._build_workspace(), 1)
 
         status = QStatusBar()
