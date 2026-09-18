@@ -7,6 +7,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      LIBGL_ALWAYS_SOFTWARE: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -16,6 +19,16 @@ jobs:
     name: Python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Qt runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libegl-mesa0 \
+            libgl1 \
+            libgl1-mesa-dri \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
