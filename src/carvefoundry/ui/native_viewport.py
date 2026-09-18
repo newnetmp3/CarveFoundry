@@ -835,8 +835,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     @staticmethod
     def _format_ruler_coordinate(value: float, step: float) -> str:
         if step >= 10.0:
-            decimals = 0
-        elif step >= 1.0:
+            return f"{value:.0f}"
+        if step >= 1.0:
             decimals = 1
         elif step >= 0.1:
             decimals = 2
