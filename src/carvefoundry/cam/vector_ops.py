@@ -86,7 +86,14 @@ def projected_regions(mesh: trimesh.Trimesh) -> BaseGeometry:
 
     positive = np.flatnonzero(normals[:, 2] > 1e-7)
     negative = np.flatnonzero(normals[:, 2] < -1e-7)
-    face_indices = positive if len(positive) else negative
+    face_areas = np.asarray(mesh.area_faces, dtype=float)
+    positive_weight = float(
+        np.sum(face_areas[positive] * np.abs(normals[positive, 2]))
+    )
+    negative_weight = float(
+        np.sum(face_areas[negative] * np.abs(normals[negative, 2]))
+    )
+    face_indices = positive if positive_weight >= negative_weight else negative
     if not len(face_indices):
         raise ValueError("Selected model has no XY-projectable faces.")
 
@@ -335,6 +342,47 @@ def _order_paths(paths: list[np.ndarray]) -> list[np.ndarray]:
     return ordered
 
 
+def _order_tagged_paths(
+    paths: list[tuple[np.ndarray, bool]],
+) -> list[tuple[np.ndarray, bool]]:
+    remaining = [
+        (np.asarray(points, dtype=float), bool(tag))
+        for points, tag in paths
+        if len(points) >= 2
+    ]
+    if not remaining:
+        return []
+
+    ordered: list[tuple[np.ndarray, bool]] = [remaining.pop(0)]
+    while remaining:
+        target = ordered[-1][0][-1]
+        best_index = 0
+        best_points = remaining[0][0]
+        best_tag = remaining[0][1]
+        best_distance = float("inf")
+        for index, (points, tag) in enumerate(remaining):
+            candidate = points
+            if _closed(points):
+                candidate = _rotate_closed_path(points, target)
+                distance = float(np.linalg.norm(candidate[0] - target))
+            else:
+                start_distance = float(np.linalg.norm(points[0] - target))
+                end_distance = float(np.linalg.norm(points[-1] - target))
+                if end_distance < start_distance:
+                    candidate = points[::-1].copy()
+                    distance = end_distance
+                else:
+                    distance = start_distance
+            if distance < best_distance:
+                best_distance = distance
+                best_index = index
+                best_points = candidate
+                best_tag = tag
+        remaining.pop(best_index)
+        ordered.append((best_points, best_tag))
+    return ordered
+
+
 def _signed_area(points: np.ndarray) -> float:
     ring = points[:-1] if _closed(points) else points
     if len(ring) < 3:
@@ -487,13 +535,7 @@ def geometry_profile(
     previous_depth = 0.0
 
     for depth in _depth_passes(target_z, settings.max_stepdown_mm):
-        ordered = _order_paths([points for points, _exterior in rings])
-        role_by_key = {
-            tuple(np.round(points[0], 8)): exterior
-            for points, exterior in rings
-        }
-        for points in ordered:
-            exterior = role_by_key.get(tuple(np.round(points[0], 8)), True)
+        for points, exterior in _order_tagged_paths(rings):
             start_index = _enter_depth(
                 moves,
                 points,
