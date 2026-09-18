@@ -873,17 +873,42 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 result.append(limit)
             return result
 
+        def point_is_visible(point: QPointF) -> bool:
+            return (
+                -0.5 <= point.x() <= viewport_width + 0.5
+                and -0.5 <= point.y() <= viewport_height + 0.5
+            )
+
         def add_line(
             axis: str,
             value: float,
             start: tuple[float, float, float],
             end: tuple[float, float, float],
+            axis_side: str,
             priority: tuple[str, ...],
         ) -> None:
             first = self._project_world_point(start, view_projection)
             second = self._project_world_point(end, view_projection)
             if first is None or second is None:
                 return
+
+            label = f"{axis} {self._format_ruler_coordinate(value, step)}"
+
+            # When the stock's coordinate axis is visible, anchor the ruler
+            # directly to it.  X values come from Y=0 and Y values come from
+            # X=0, so the projected stock origin is always labeled 0,0.
+            if point_is_visible(first):
+                position = (
+                    first.x()
+                    if axis_side in {"top", "bottom"}
+                    else first.y()
+                )
+                ticks[axis_side].append((position, label))
+                return
+
+            # Once the coordinate axis moves off-screen during a zoom or pan,
+            # keep the scale useful by attaching each visible grid line to the
+            # viewport edge that it actually crosses.
             if not self._segment_intersects_viewport(
                 first,
                 second,
@@ -899,10 +924,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             )
             if not intersections:
                 return
-            label = (
-                f"{axis} "
-                f"{self._format_ruler_coordinate(value, step)}"
-            )
             for side in priority:
                 if side in intersections:
                     ticks[side].append((intersections[side], label))
@@ -915,6 +936,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 x,
                 (x, 0.0, z),
                 (x, stock_height, z),
+                "bottom",
                 ("bottom", "top", "right", "left"),
             )
 
@@ -924,6 +946,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 y,
                 (0.0, y, z),
                 (stock_width, y, z),
+                "left",
                 ("left", "right", "bottom", "top"),
             )
 
@@ -1195,7 +1218,15 @@ class _RulerBand(QWidget):
             self.setFixedWidth(58)
 
     def set_ticks(self, ticks: list[tuple[float, str]]) -> None:
-        self._ticks = sorted(ticks, key=lambda item: item[0])
+        # Give the coordinate origin first claim on ruler space.  Remaining
+        # labels are then laid out spatially and skipped only when necessary.
+        self._ticks = sorted(
+            ticks,
+            key=lambda item: (
+                not item[1].endswith(" 0"),
+                item[0],
+            ),
+        )
         self.update()
 
     def paintEvent(self, _event) -> None:
@@ -1214,43 +1245,76 @@ class _RulerBand(QWidget):
 
         painter.setPen(QColor(199, 208, 224))
         metrics = painter.fontMetrics()
-        last_end = -10_000.0
+        occupied: list[tuple[float, float]] = []
+
+        def overlaps(start: float, end: float, gap: float) -> bool:
+            return any(
+                start < used_end + gap and end > used_start - gap
+                for used_start, used_end in occupied
+            )
+
         for position, label in self._ticks:
             if horizontal:
                 text_width = metrics.horizontalAdvance(label)
-                start = max(2.0, min(self.width() - text_width - 2.0, position - text_width / 2.0))
-                if start < last_end + 7.0:
+                start = max(
+                    2.0,
+                    min(
+                        self.width() - text_width - 2.0,
+                        position - text_width / 2.0,
+                    ),
+                )
+                end = start + text_width
+                if overlaps(start, end, 7.0):
                     continue
                 if self.side == "top":
-                    painter.drawLine(int(position), self.height() - 1, int(position), self.height() - 6)
+                    painter.drawLine(
+                        int(position),
+                        self.height() - 1,
+                        int(position),
+                        self.height() - 6,
+                    )
                     text_y = 2
                 else:
                     painter.drawLine(int(position), 0, int(position), 5)
                     text_y = 8
                 painter.drawText(int(start), text_y + metrics.ascent(), label)
-                last_end = start + text_width
+                occupied.append((start, end))
             else:
                 text_height = metrics.height()
-                start_y = max(1.0, min(self.height() - text_height - 1.0, position - text_height / 2.0))
-                if start_y < last_end + 5.0:
+                start_y = max(
+                    1.0,
+                    min(
+                        self.height() - text_height - 1.0,
+                        position - text_height / 2.0,
+                    ),
+                )
+                end_y = start_y + text_height
+                if overlaps(start_y, end_y, 5.0):
                     continue
                 if self.side == "left":
-                    painter.drawLine(self.width() - 1, int(position), self.width() - 6, int(position))
+                    painter.drawLine(
+                        self.width() - 1,
+                        int(position),
+                        self.width() - 6,
+                        int(position),
+                    )
                     rect_x = 2
+                    text_width = self.width() - rect_x - 10
                     align = Qt.AlignmentFlag.AlignRight
                 else:
                     painter.drawLine(0, int(position), 5, int(position))
-                    rect_x = 6
+                    rect_x = 10
+                    text_width = self.width() - rect_x - 3
                     align = Qt.AlignmentFlag.AlignLeft
                 painter.drawText(
                     rect_x,
                     int(start_y),
-                    self.width() - rect_x - 3,
+                    text_width,
                     text_height,
                     int(align | Qt.AlignmentFlag.AlignVCenter),
                     label,
                 )
-                last_end = start_y + text_height
+                occupied.append((start_y, end_y))
 
 
 class MeshViewport(QWidget):
