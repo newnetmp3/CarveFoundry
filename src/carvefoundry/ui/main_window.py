@@ -5,14 +5,7 @@ from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer
-from PySide6.QtGui import (
-    QAction,
-    QFont,
-    QFontDatabase,
-    QFontInfo,
-    QKeySequence,
-    QShortcut,
-)
+from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -51,7 +44,6 @@ from .layers_popup import LayersPopup
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .viewport import MeshViewport
-
 
 _FONT_FAMILY_VARIANT_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("Extra Condensed", "Extra Condensed"),
