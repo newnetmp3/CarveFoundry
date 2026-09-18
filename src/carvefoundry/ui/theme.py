@@ -297,6 +297,43 @@ QComboBox#ObjectSelector:hover {
     color: #c8ff3d;
     border-color: #3a465f;
 }
+#ToolOptionsBar {
+    background: #0f1626;
+    border-bottom: 1px solid #2a3550;
+}
+#ToolOptionsBar QLabel {
+    background: transparent;
+}
+#ToolOptionsTitle {
+    color: #c8ff3d;
+    font-weight: 800;
+    padding-right: 8px;
+}
+#ToolOptionsValue {
+    color: #dce4f0;
+    padding: 4px 7px;
+    border: 1px solid #2a3550;
+    border-radius: 6px;
+    background: #12192a;
+}
+QPushButton#ToolApplyButton {
+    color: #c8ff3d;
+    font-size: 16px;
+    font-weight: 900;
+    padding: 3px;
+}
+QPushButton#ToolCancelButton {
+    color: #ff9b9b;
+    font-size: 15px;
+    font-weight: 900;
+    padding: 3px;
+}
+QPushButton#ToolApplyButton:hover,
+QPushButton#ToolCancelButton:hover {
+    background: #c8ff3d;
+    color: #0b1020;
+    border-color: #c8ff3d;
+}
 #CamStatus {
     background: #151b2a;
     color: #8f9aae;
