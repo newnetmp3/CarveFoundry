@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
 
 from carvefoundry.cam.basic_ops import (
     BasicCamSettings,
+    MillingDirection,
+    PocketStrategy,
     center_drill,
     finish_3d,
     rectangular_engrave,
@@ -39,6 +41,7 @@ from carvefoundry.cam.basic_ops import (
     waterline_3d,
 )
 from carvefoundry.cam.gcode import GrblPostSettings
+from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.core.primitives import (
     bitmap_runs_mesh,
     ellipse_mesh,
@@ -178,6 +181,62 @@ class RibbonActionsMixin:
         self._tabs_enabled = False
         self._active_shape_tool: str | None = None
         self._shape_tool_buttons: dict[str, object] = {}
+        self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
+
+        def saved_choice(
+            key: str,
+            default: str,
+            allowed: tuple[str, ...],
+        ) -> str:
+            value = str(self._settings.value(key, default))
+            return value if value in allowed else default
+
+        self._cam_cut_type = saved_choice(
+            "cam/design/cut_type",
+            "Auto",
+            ("Auto", "Pocket", "On Path", "Outside", "Inside"),
+        )
+        self._cam_direction = saved_choice(
+            "cam/design/direction",
+            "Smart Serpentine",
+            (
+                "Smart Serpentine",
+                "Offset",
+                "Raster X",
+                "Raster Y",
+                "Raster 45°",
+                "Raster 135°",
+            ),
+        )
+        self._cam_quality = saved_choice(
+            "cam/design/quality",
+            "Balanced 10%",
+            (
+                "Fast 15%",
+                "Balanced 10%",
+                "Detail 8%",
+                "Fine 6%",
+                "Custom",
+            ),
+        )
+        self._cam_entry = saved_choice(
+            "cam/design/entry",
+            "Plunge",
+            ("Plunge", "Ramp 5°", "Ramp 20°", "Custom Ramp"),
+        )
+        self._cam_linking = saved_choice(
+            "cam/design/linking",
+            "Smart Min-Lift",
+            ("Smart Min-Lift", "Local Lift", "Full Retract"),
+        )
+        self._cam_milling = saved_choice(
+            "cam/design/milling",
+            "Default",
+            ("Default", "Climb (CCW)", "Conventional (CW)"),
+        )
+        self._tabs_enabled = bool(
+            self._settings.value("cam/tabs_enabled", False, type=bool)
+        )
         self._custom_tools = self._load_custom_tools()
 
         self._simulation_timer = QTimer(self)
@@ -787,6 +846,251 @@ class RibbonActionsMixin:
     # ------------------------------------------------------------------
     # Carve / 3D toolpaths
     # ------------------------------------------------------------------
+    def _register_cam_selector(self, key: str, combo: QComboBox) -> None:
+        self._cam_selector_widgets.setdefault(key, []).append(combo)
+
+    def _set_cam_design_option(self, key: str, value: str) -> None:
+        attributes = {
+            "cut_type": "_cam_cut_type",
+            "direction": "_cam_direction",
+            "quality": "_cam_quality",
+            "entry": "_cam_entry",
+            "linking": "_cam_linking",
+            "milling": "_cam_milling",
+        }
+        attribute = attributes[key]
+        setattr(self, attribute, value)
+        self._settings.setValue(f"cam/design/{key}", value)
+        self._settings.sync()
+
+        for combo in self._cam_selector_widgets.get(key, []):
+            if combo.currentText() == value:
+                continue
+            combo.blockSignals(True)
+            try:
+                index = combo.findText(value)
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+            finally:
+                combo.blockSignals(False)
+
+        self.statusBar().showMessage(
+            f"Toolpath {key.replace('_', ' ')}: {value}",
+            2500,
+        )
+
+    def _toolpath_design_advanced(self) -> None:
+        form = _ActionForm(self, "Advanced Toolpath Design")
+        form.add_double(
+            "safe_z",
+            "Global Safe Z",
+            float(self._settings.value("cam/safe_z_mm", 1.5)),
+            minimum=0.05,
+            maximum=100.0,
+            decimals=3,
+            step=0.1,
+            suffix=" mm",
+        )
+        form.add_double(
+            "cut_depth",
+            "Overall cut depth (0 = design/model)",
+            float(self._settings.value("cam/overall_depth_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            decimals=3,
+            step=0.25,
+            suffix=" mm",
+        )
+        form.add_double(
+            "feed",
+            "Cut feed",
+            float(self._settings.value("cam/feed_mm_min", 1000.0)),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm/min",
+        )
+        form.add_double(
+            "plunge",
+            "Plunge feed",
+            float(self._settings.value("cam/plunge_mm_min", 300.0)),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm/min",
+        )
+        form.add_double(
+            "stepdown",
+            "Depth per pass",
+            float(self._settings.value("cam/stepdown_mm", 2.0)),
+            minimum=0.05,
+            maximum=1000.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "pocket_stepover",
+            "2D pocket stepover",
+            float(self._settings.value("cam/stepover_percent", 45.0)),
+            minimum=1.0,
+            maximum=100.0,
+            decimals=1,
+            step=1.0,
+            suffix=" %",
+        )
+        form.add_double(
+            "finish_stepover",
+            "Custom 3D finishing stepover",
+            float(self._settings.value("cam/finish_stepover_percent", 10.0)),
+            minimum=1.0,
+            maximum=100.0,
+            decimals=1,
+            step=1.0,
+            suffix=" %",
+        )
+        form.add_double(
+            "padding",
+            "Relief / path padding",
+            float(self._settings.value("cam/padding_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            decimals=3,
+            step=0.5,
+            suffix=" mm",
+        )
+        form.add_double(
+            "tab_height",
+            "Tab height",
+            float(self._settings.value("cam/tab_height_mm", 2.0)),
+            minimum=0.1,
+            maximum=100.0,
+            decimals=3,
+            step=0.25,
+            suffix=" mm",
+        )
+        form.add_double(
+            "local_clearance",
+            "Smart-link local clearance",
+            float(self._settings.value("cam/local_link_clearance_mm", 0.5)),
+            minimum=0.05,
+            maximum=25.0,
+            decimals=3,
+            step=0.1,
+            suffix=" mm",
+        )
+        form.add_double(
+            "link_tolerance",
+            "Direct-link surface tolerance",
+            float(self._settings.value("cam/direct_link_tolerance_mm", 0.02)),
+            minimum=0.0,
+            maximum=5.0,
+            decimals=3,
+            step=0.01,
+            suffix=" mm",
+        )
+        form.add_double(
+            "ramp_angle",
+            "Custom ramp angle",
+            float(self._settings.value("cam/custom_ramp_angle_deg", 10.0)),
+            minimum=0.5,
+            maximum=89.0,
+            decimals=1,
+            step=0.5,
+            suffix="°",
+        )
+        if form.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        values = {
+            "cam/safe_z_mm": form.value("safe_z"),
+            "cam/overall_depth_mm": form.value("cut_depth"),
+            "cam/feed_mm_min": form.value("feed"),
+            "cam/plunge_mm_min": form.value("plunge"),
+            "cam/stepdown_mm": form.value("stepdown"),
+            "cam/stepover_percent": form.value("pocket_stepover"),
+            "cam/finish_stepover_percent": form.value("finish_stepover"),
+            "cam/padding_mm": form.value("padding"),
+            "cam/tab_height_mm": form.value("tab_height"),
+            "cam/local_link_clearance_mm": form.value("local_clearance"),
+            "cam/direct_link_tolerance_mm": form.value("link_tolerance"),
+            "cam/custom_ramp_angle_deg": form.value("ramp_angle"),
+        }
+        for setting_key, setting_value in values.items():
+            self._settings.setValue(setting_key, setting_value)
+        self._settings.sync()
+        self.statusBar().showMessage("Advanced toolpath settings saved", 3000)
+
+    def _quality_stepover_fraction(self) -> float:
+        values = {
+            "Fast 15%": 0.15,
+            "Balanced 10%": 0.10,
+            "Detail 8%": 0.08,
+            "Fine 6%": 0.06,
+        }
+        if self._cam_quality in values:
+            return values[self._cam_quality]
+        return max(
+            0.01,
+            min(
+                1.0,
+                float(self._settings.value("cam/finish_stepover_percent", 10.0))
+                / 100.0,
+            ),
+        )
+
+    def _ramp_angle(self) -> float | None:
+        if self._cam_entry == "Ramp 5°":
+            return 5.0
+        if self._cam_entry == "Ramp 20°":
+            return 20.0
+        if self._cam_entry == "Custom Ramp":
+            return float(
+                self._settings.value("cam/custom_ramp_angle_deg", 10.0)
+            )
+        return None
+
+    def _milling_direction(self) -> MillingDirection:
+        return {
+            "Climb (CCW)": MillingDirection.CLIMB,
+            "Conventional (CW)": MillingDirection.CONVENTIONAL,
+        }.get(self._cam_milling, MillingDirection.DEFAULT)
+
+    def _link_mode(self) -> RasterLinkMode:
+        return {
+            "Local Lift": RasterLinkMode.LOCAL_LIFT,
+            "Full Retract": RasterLinkMode.FULL_RETRACT,
+        }.get(self._cam_linking, RasterLinkMode.SMART)
+
+    def _raster_axis_for_mesh(self, mesh) -> RasterAxis:
+        direction = self._cam_direction
+        if direction == "Raster Y":
+            return RasterAxis.Y
+        if direction == "Raster 45°":
+            return RasterAxis.DIAGONAL_45
+        if direction == "Raster 135°":
+            return RasterAxis.DIAGONAL_135
+        if direction == "Raster X":
+            return RasterAxis.X
+
+        bounds = np.asarray(mesh.bounds, dtype=float)
+        span = bounds[1, :2] - bounds[0, :2]
+        return RasterAxis.X if span[0] >= span[1] else RasterAxis.Y
+
+    def _pocket_strategy_for_bounds(self, bounds: np.ndarray) -> PocketStrategy:
+        if self._cam_direction == "Offset":
+            return PocketStrategy.OFFSET
+        if self._cam_direction == "Raster Y":
+            return PocketStrategy.RASTER_Y
+        if self._cam_direction == "Raster X":
+            return PocketStrategy.RASTER_X
+
+        span = np.asarray(bounds, dtype=float)[1, :2] - np.asarray(
+            bounds,
+            dtype=float,
+        )[0, :2]
+        return (
+            PocketStrategy.RASTER_X
+            if span[0] >= span[1]
+            else PocketStrategy.RASTER_Y
+        )
+
     def _select_cam_operation(self, operation: str) -> None:
         self._active_cam_operation = operation
         labels = {
@@ -811,6 +1115,8 @@ class RibbonActionsMixin:
 
     def _toggle_tabs_operation(self) -> None:
         self._tabs_enabled = not self._tabs_enabled
+        self._settings.setValue("cam/tabs_enabled", self._tabs_enabled)
+        self._settings.sync()
         if self._tabs_button is not None:
             self._tabs_button.setChecked(self._tabs_enabled)
         self.statusBar().showMessage(
@@ -818,65 +1124,48 @@ class RibbonActionsMixin:
             2500,
         )
 
-    def _cam_settings(self) -> BasicCamSettings | None:
-        form = _ActionForm(self, "Calculate Toolpath")
-        form.add_double(
-            "safe_z",
-            "Safe Z",
-            float(self._settings.value("cam/safe_z_mm", 5.0)),
-            minimum=0.01,
-            suffix=" mm",
-        )
-        form.add_double(
-            "feed",
-            "Cut feed",
-            float(self._settings.value("cam/feed_mm_min", 1000.0)),
-            minimum=1.0,
-            maximum=100000.0,
-            suffix=" mm/min",
-        )
-        form.add_double(
-            "plunge",
-            "Plunge feed",
-            float(self._settings.value("cam/plunge_mm_min", 300.0)),
-            minimum=1.0,
-            maximum=100000.0,
-            suffix=" mm/min",
-        )
-        form.add_double(
-            "stepdown",
-            "Max stepdown",
-            float(self._settings.value("cam/stepdown_mm", 2.0)),
-            minimum=0.05,
-            maximum=1000.0,
-            suffix=" mm",
-        )
-        form.add_double(
-            "stepover",
-            "2D stepover",
-            float(self._settings.value("cam/stepover_fraction", 0.45)),
-            minimum=0.01,
-            maximum=1.0,
-            decimals=3,
-            step=0.05,
-        )
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return None
-
-        settings = BasicCamSettings(
-            safe_z_mm=form.value("safe_z"),
-            feed_mm_min=form.value("feed"),
-            plunge_feed_mm_min=form.value("plunge"),
-            max_stepdown_mm=form.value("stepdown"),
-            stepover_fraction=form.value("stepover"),
+    def _cam_settings(
+        self,
+        bounds: np.ndarray,
+        mesh,
+    ) -> BasicCamSettings:
+        cut_depth = float(self._settings.value("cam/overall_depth_mm", 0.0))
+        return BasicCamSettings(
+            safe_z_mm=float(self._settings.value("cam/safe_z_mm", 1.5)),
+            feed_mm_min=float(self._settings.value("cam/feed_mm_min", 1000.0)),
+            plunge_feed_mm_min=float(
+                self._settings.value("cam/plunge_mm_min", 300.0)
+            ),
+            max_stepdown_mm=float(
+                self._settings.value("cam/stepdown_mm", 2.0)
+            ),
+            stepover_fraction=max(
+                0.01,
+                min(
+                    1.0,
+                    float(self._settings.value("cam/stepover_percent", 45.0))
+                    / 100.0,
+                ),
+            ),
+            finish_stepover_fraction=self._quality_stepover_fraction(),
+            overall_depth_mm=cut_depth if cut_depth > 0.0 else None,
+            padding_mm=float(self._settings.value("cam/padding_mm", 0.0)),
+            tab_height_mm=float(
+                self._settings.value("cam/tab_height_mm", 2.0)
+            ),
             tabs_enabled=self._tabs_enabled,
+            milling_direction=self._milling_direction(),
+            pocket_strategy=self._pocket_strategy_for_bounds(bounds),
+            raster_axis=self._raster_axis_for_mesh(mesh),
+            raster_link_mode=self._link_mode(),
+            local_link_clearance_mm=float(
+                self._settings.value("cam/local_link_clearance_mm", 0.5)
+            ),
+            direct_link_tolerance_mm=float(
+                self._settings.value("cam/direct_link_tolerance_mm", 0.02)
+            ),
+            ramp_angle_deg=self._ramp_angle(),
         )
-        self._settings.setValue("cam/safe_z_mm", settings.safe_z_mm)
-        self._settings.setValue("cam/feed_mm_min", settings.feed_mm_min)
-        self._settings.setValue("cam/plunge_mm_min", settings.plunge_feed_mm_min)
-        self._settings.setValue("cam/stepdown_mm", settings.max_stepdown_mm)
-        self._settings.setValue("cam/stepover_fraction", settings.stepover_fraction)
-        return settings
 
     def _calculate_toolpath(self) -> None:
         item = self._selected_item()
@@ -887,18 +1176,36 @@ class RibbonActionsMixin:
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
             return
-        settings = self._cam_settings()
-        if settings is None:
-            return
-
         bounds = item.transformed_bounds_mm()
         mesh = item.transformed_mesh()
         assert bounds is not None and mesh is not None
+        settings = self._cam_settings(bounds, mesh)
         operation = self._active_cam_operation
 
         self.statusBar().showMessage(f"Calculating {operation} toolpath…")
         try:
-            if operation == "profile":
+            cut_type = self._cam_cut_type
+            if (
+                cut_type == "Pocket"
+                and operation in {"profile", "pocket", "engrave"}
+            ):
+                toolpath = rectangular_pocket(bounds, cutter, settings)
+            elif (
+                cut_type in {"On Path", "Outside", "Inside"}
+                and operation in {"profile", "pocket", "engrave"}
+            ):
+                offset_mode = {
+                    "On Path": "on",
+                    "Outside": "outside",
+                    "Inside": "inside",
+                }[cut_type]
+                toolpath = rectangular_profile(
+                    bounds,
+                    cutter,
+                    settings,
+                    offset_mode=offset_mode,
+                )
+            elif operation == "profile":
                 toolpath = rectangular_profile(bounds, cutter, settings)
             elif operation == "pocket":
                 toolpath = rectangular_pocket(bounds, cutter, settings)
@@ -979,7 +1286,6 @@ class RibbonActionsMixin:
         window.raise_()
         window.activateWindow()
         self.statusBar().showMessage("Opened toolpath backplot preview", 3000)
-
 
     # ------------------------------------------------------------------
     # Tools
