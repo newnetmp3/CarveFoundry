@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from carvefoundry.cam.gcode import normalize_gcode_path, render_grbl, write_grbl
+from carvefoundry.cam.gcode import (
+    normalize_gcode_path,
+    render_grbl,
+    render_grbl_program,
+    write_grbl,
+    write_grbl_program,
+)
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.tools import Cutter, ToolType
 
@@ -53,3 +59,29 @@ def test_write_grbl_replaces_unknown_suffix_with_nc(tmp_path: Path) -> None:
     assert path.is_file()
     assert not (tmp_path / "finish.txt").exists()
     assert not (tmp_path / "finish.nc.tmp").exists()
+
+
+def test_multi_operation_program_has_one_header_and_one_end() -> None:
+    first = _toolpath()
+    second = _toolpath()
+    second.name = "Cutout"
+
+    program = render_grbl_program([first, second])
+    lines = program.splitlines()
+
+    assert lines.count("G90") == 1
+    assert lines.count("G21") == 1
+    assert lines.count("M2") == 1
+    assert "(Operation 1: Finish)" in lines
+    assert "(Operation 2: Cutout)" in lines
+
+
+def test_write_multi_operation_grbl(tmp_path: Path) -> None:
+    path = write_grbl_program(
+        [_toolpath(), _toolpath()],
+        tmp_path / "combined.nc",
+    )
+
+    text = path.read_text(encoding="ascii")
+    assert text.count("(Operation ") == 2
+    assert text.endswith("M2\n")
