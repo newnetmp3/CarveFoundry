@@ -981,15 +981,25 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         layout.addLayout(typography_form)
 
         self.text_font_combo = QComboBox()
-        self.text_font_combo.addItems(self._installed_text_font_families())
+        for family in self._installed_text_font_families():
+            self.text_font_combo.addItem(family)
+            item_index = self.text_font_combo.count() - 1
+            # Preview each usable text family in its own typeface without
+            # invoking QFontComboBox's eager probing of symbol/icon fonts.
+            self.text_font_combo.setItemData(
+                item_index,
+                QFont(family),
+                Qt.ItemDataRole.FontRole,
+            )
         self.text_font_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.text_font_combo.setMinimumContentsLength(10)
         self._configure_inspector_field(self.text_font_combo)
         self.text_font_combo.setToolTip(
-            "Installed system text fonts. Symbol-only/icon families are hidden "
-            "because they do not provide normal text glyphs for CNC geometry."
+            "Installed system text fonts, previewed in their own typeface. "
+            "Symbol-only/icon families are hidden because they do not provide "
+            "normal text glyphs for CNC geometry."
         )
         default_family = QFontInfo(QFont()).family()
         default_index = self.text_font_combo.findText(default_family)
