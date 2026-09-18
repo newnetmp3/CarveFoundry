@@ -205,6 +205,51 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     color: #586276;
     border-color: transparent;
 }
+QMenuBar#MainMenuBar {
+    background: #111827;
+    color: #e7ecf4;
+    border-top: 1px solid #20283a;
+    border-bottom: 1px solid #273149;
+    spacing: 1px;
+    padding: 1px 6px;
+}
+QMenuBar#MainMenuBar::item {
+    background: transparent;
+    padding: 4px 9px;
+    border-radius: 4px;
+}
+QMenuBar#MainMenuBar::item:selected,
+QMenuBar#MainMenuBar::item:pressed {
+    background: #263149;
+    color: #c8ff3d;
+}
+QMenuBar#MainMenuBar QMenu {
+    background: #111827;
+    color: #edf1f7;
+    border: 1px solid #35415a;
+    padding: 4px;
+}
+QMenuBar#MainMenuBar QMenu::item {
+    padding: 6px 26px 6px 10px;
+    border-radius: 4px;
+}
+QMenuBar#MainMenuBar QMenu::item:selected {
+    background: #c8ff3d;
+    color: #0b1020;
+}
+QMenuBar#MainMenuBar QMenu::separator {
+    height: 1px;
+    background: #2b354d;
+    margin: 4px 7px;
+}
+#ToolRailMenuWidget {
+    background: #111827;
+}
+#ToolRailMenuLabel {
+    color: #9da8ba;
+    font-size: 11px;
+    font-weight: 700;
+}
 #ToolRail {
     background: #0e1425;
     border: 1px solid #232b3e;
