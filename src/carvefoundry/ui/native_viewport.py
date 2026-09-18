@@ -13,7 +13,6 @@ from PySide6.QtGui import (
     QPainter,
     QSurfaceFormat,
     QVector3D,
-    QVector4D,
     QWheelEvent,
 )
 from PySide6.QtOpenGL import (
@@ -745,17 +744,21 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         point: tuple[float, float, float],
         view_projection: QMatrix4x4,
     ) -> QPointF | None:
-        clip = view_projection * QVector4D(
-            float(point[0]),
-            float(point[1]),
-            float(point[2]),
-            1.0,
+        # QMatrix4x4.map(QVector3D) applies the full point transform,
+        # including perspective division.  Use the explicit API rather than
+        # PySide's overloaded QMatrix4x4 * QVector4D operator: that operator
+        # currently raises a SyntaxError under Python 3.14 / PySide 6.11.
+        mapped = view_projection.map(
+            QVector3D(
+                float(point[0]),
+                float(point[1]),
+                float(point[2]),
+            )
         )
-        w = float(clip.w())
-        if w <= 1e-9:
+        ndc_x = float(mapped.x())
+        ndc_y = float(mapped.y())
+        if not np.isfinite(ndc_x) or not np.isfinite(ndc_y):
             return None
-        ndc_x = float(clip.x()) / w
-        ndc_y = float(clip.y()) / w
         return QPointF(
             (ndc_x + 1.0) * 0.5 * max(self.width(), 1),
             (1.0 - ndc_y) * 0.5 * max(self.height(), 1),
