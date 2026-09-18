@@ -745,7 +745,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             tooltip=(
                 "Select / Marquee (V)\n"
                 "Click selects one object. Ctrl-click toggles, Shift-click adds, "
-                "drag empty space box-selects, Alt-drag orbits."
+                "drag empty space box-selects, Ctrl+A selects all, Alt-drag orbits."
             ),
             checkable=True,
         )
@@ -2595,6 +2595,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 primary = current
         self._select_project_indices(selected, primary=primary)
 
+    def _select_all_design_items(self) -> None:
+        """Select every design object in the project."""
+
+        if not self.project.items:
+            self._select_project_indices([])
+            self.statusBar().showMessage("No design objects to select", 2000)
+            return
+        indices = list(range(len(self.project.items)))
+        self._select_project_indices(indices, primary=indices[-1])
+        self.statusBar().showMessage(
+            f"Selected all {len(indices)} design objects",
+            2000,
+        )
+
     def _viewport_select_item(self, index: int) -> None:
         """Compatibility adapter for single-object viewport selection."""
 
@@ -3795,6 +3809,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Cut", QKeySequence.StandardKey.Cut, self._cut_selected_items),
             ("Copy", QKeySequence.StandardKey.Copy, self._copy_selected_items),
             ("Paste", QKeySequence.StandardKey.Paste, self._paste_items),
+            ("Select All", QKeySequence.StandardKey.SelectAll, self._select_all_design_items),
             ("Delete", QKeySequence(Qt.Key.Key_Delete), self._delete_selected_item),
             ("Duplicate", "Ctrl+D", self._duplicate_selected_item),
             ("Layers", "Ctrl+Shift+L", self._show_layers_popup),
