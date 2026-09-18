@@ -88,6 +88,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._option_buttons: dict[str, object] = {}
         self._toolpath_output_buttons: list[object] = []
         self._model_selection_buttons: list[object] = []
+        self._selection_action_buttons: dict[str, object] = {}
         self._calculate_button = None
         self._toolpaths_stale_reason: str | None = None
         self._init_ribbon_action_state()
@@ -233,10 +234,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         edit = design.add_group("Edit")
         edit.add_button("Undo", self._undo)
         edit.add_button("Redo", self._redo)
-        edit.add_button("Cut", self._cut_selected_items)
-        edit.add_button("Copy", self._copy_selected_items)
-        edit.add_button("Paste", self._paste_items)
-        edit.add_button("Delete", self._delete_selected_item)
+        self._selection_action_buttons["cut"] = edit.add_button(
+            "Cut",
+            self._cut_selected_items,
+        )
+        self._selection_action_buttons["copy"] = edit.add_button(
+            "Copy",
+            self._copy_selected_items,
+        )
+        self._selection_action_buttons["paste"] = edit.add_button(
+            "Paste",
+            self._paste_items,
+        )
+        self._selection_action_buttons["delete"] = edit.add_button(
+            "Delete",
+            self._delete_selected_item,
+        )
 
         shapes = design.add_group("Draw")
         shape_actions = (
@@ -260,16 +273,37 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         vectors.add_button("Trace Image", self._trace_image)
 
         arrange = design.add_group("Arrange")
-        arrange.add_button("Align", self._align_selected_items)
-        arrange.add_button("Center", self._center_selected_items)
-        arrange.add_button("Group", self._group_selected_items)
-        arrange.add_button("Ungroup", self._ungroup_selected_items)
-        arrange.add_button("Duplicate", self._duplicate_selected_item)
+        self._selection_action_buttons["align"] = arrange.add_button(
+            "Align",
+            self._align_selected_items,
+        )
+        self._selection_action_buttons["center"] = arrange.add_button(
+            "Center",
+            self._center_selected_items,
+        )
+        self._selection_action_buttons["group"] = arrange.add_button(
+            "Group",
+            self._group_selected_items,
+        )
+        self._selection_action_buttons["ungroup"] = arrange.add_button(
+            "Ungroup",
+            self._ungroup_selected_items,
+        )
+        self._selection_action_buttons["duplicate"] = arrange.add_button(
+            "Duplicate",
+            self._duplicate_selected_item,
+        )
 
         objects = design.add_group("Objects")
         objects.add_button("Layers", self._show_layers_popup, primary=True)
-        objects.add_button("Move Up", lambda: self._move_selected_item(-1))
-        objects.add_button("Move Down", lambda: self._move_selected_item(1))
+        self._selection_action_buttons["move_up"] = objects.add_button(
+            "Move Up",
+            lambda: self._move_selected_item(-1),
+        )
+        self._selection_action_buttons["move_down"] = objects.add_button(
+            "Move Down",
+            lambda: self._move_selected_item(1),
+        )
 
         # MODEL: stock-relative placement and object transforms.
         model = self.ribbon.add_page("Model")
@@ -741,6 +775,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.properties_panel.body_layout.addStretch(1)
 
         self.project_list.currentRowChanged.connect(self._update_properties)
+        self.project_list.itemSelectionChanged.connect(
+            self._sync_selection_action_state
+        )
         self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
 
@@ -989,8 +1026,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.cam_status_label.style().polish(self.cam_status_label)
 
     def _sync_selection_action_state(self) -> None:
-        item = self._selected_item() if hasattr(self, "project_list") else None
+        if not hasattr(self, "project_list"):
+            return
+
+        item = self._selected_item()
         has_mesh = bool(item is not None and item.mesh is not None)
+        indices = self._selected_design_indices()
+        has_selection = bool(indices)
+        selection_count = len(indices)
+        has_grouped = any(
+            self.project.items[index].group_id is not None
+            for index in indices
+            if 0 <= index < len(self.project.items)
+        )
+        current_index = self._selected_item_index()
 
         if self._calculate_button is not None:
             self._calculate_button.setEnabled(has_mesh)
@@ -1002,6 +1051,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         for button in self._model_selection_buttons:
             button.setEnabled(has_mesh)
+
+        enabled_by_action = {
+            "cut": has_selection,
+            "copy": has_selection,
+            "paste": bool(self._clipboard_items),
+            "delete": has_selection,
+            "align": has_selection,
+            "center": has_selection,
+            "group": selection_count >= 2,
+            "ungroup": has_grouped,
+            "duplicate": has_selection,
+            "move_up": current_index is not None and current_index > 0,
+            "move_down": (
+                current_index is not None
+                and current_index < len(self.project.items) - 1
+            ),
+        }
+        for name, enabled in enabled_by_action.items():
+            button = self._selection_action_buttons.get(name)
+            if button is not None:
+                button.setEnabled(enabled)
 
     def _sync_toolpath_output_state(self) -> None:
         has_toolpaths = bool(self.project.toolpaths)
