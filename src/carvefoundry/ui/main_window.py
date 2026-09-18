@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QSettings, Qt, QThread
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -67,6 +67,8 @@ class MainWindow(QMainWindow):
         self._import_thread: QThread | None = None
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
+        self._settings = QSettings()
+        self._option_buttons: dict[str, object] = {}
         self.setWindowTitle("CarveFoundry")
         self.resize(1500, 900)
         self.setMinimumSize(1050, 650)
@@ -93,6 +95,9 @@ class MainWindow(QMainWindow):
         status.addPermanentWidget(self.import_progress)
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
+
+        self.viewport.viewSettingsChanged.connect(self._save_viewport_mode)
+        self._restore_options()
 
     def _build_brand_row(self) -> QWidget:
         row = QWidget()
@@ -202,12 +207,67 @@ class MainWindow(QMainWindow):
         simulation = view.add_group("Simulation")
         simulation.add_button("Simulate", primary=True)
 
+        options = self.ribbon.add_page("Options")
+        program = options.add_group("Program")
+        program.add_button("Reset UI", self._reset_interface_options)
+
+        interface = options.add_group("Interface")
+        project_panel = interface.add_button(
+            "Project Panel",
+            self._toggle_project_panel_option,
+        )
+        project_panel.setCheckable(True)
+        self._option_buttons["project_panel"] = project_panel
+        properties_panel = interface.add_button(
+            "Properties",
+            self._toggle_properties_panel_option,
+        )
+        properties_panel.setCheckable(True)
+        self._option_buttons["properties_panel"] = properties_panel
+        status_bar = interface.add_button("Status Bar", self._toggle_status_bar_option)
+        status_bar.setCheckable(True)
+        self._option_buttons["status_bar"] = status_bar
+        view_controls = interface.add_button(
+            "View Controls",
+            self._toggle_view_controls_option,
+        )
+        view_controls.setCheckable(True)
+        self._option_buttons["view_controls"] = view_controls
+
+        viewport_options = options.add_group("Viewport")
+        reverse_horizontal = viewport_options.add_button(
+            "Reverse Horizontal",
+            self._toggle_reverse_horizontal_option,
+        )
+        reverse_horizontal.setCheckable(True)
+        self._option_buttons["reverse_horizontal"] = reverse_horizontal
+        stock_option = viewport_options.add_button("Stock", self._toggle_stock)
+        stock_option.setCheckable(True)
+        self._option_buttons["stock"] = stock_option
+        grid_option = viewport_options.add_button("Grid", self._toggle_grid)
+        grid_option.setCheckable(True)
+        self._option_buttons["grid"] = grid_option
+        viewport_options.add_button("Fit View", self._fit_view)
+
+        projection = options.add_group("Projection")
+        projection.add_button("Perspective", self._set_perspective_option)
+        projection.add_button("Orthographic", self._set_orthographic_option)
+        projection.add_button("Isometric", self._set_isometric_option)
+
+        fixed_views = options.add_group("Fixed View")
+        for title in ("Top", "Bottom", "Front", "Back", "Left", "Right"):
+            fixed_views.add_button(
+                title,
+                lambda name=title: self._set_standard_view_option(name),
+            )
+
     def _build_workspace(self) -> QWidget:
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(8, 8, 8, 8)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(True)
+        self.workspace_splitter = splitter
 
         self.project_panel = Panel("Project / Layers")
         self.project_list = QListWidget()
