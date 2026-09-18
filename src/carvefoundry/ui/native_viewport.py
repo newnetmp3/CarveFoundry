@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
@@ -1411,7 +1412,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         def segments(points: list[tuple[float, float, float]]) -> np.ndarray:
             vertices: list[tuple[float, float, float]] = []
-            for first, second in zip(points, points[1:]):
+            for first, second in pairwise(points):
                 vertices.extend((first, second))
             return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
 
