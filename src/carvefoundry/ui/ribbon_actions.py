@@ -1569,6 +1569,15 @@ class RibbonActionsMixin:
             generated.source_item_id = item.item_id
             generated.source_item_name = item.name
 
+        if self._simulation_timer.isActive():
+            self._simulation_timer.stop()
+        if self._simulation_button is not None:
+            self._simulation_button.setChecked(False)
+        preview = self._toolpath_preview_window
+        if preview is not None:
+            preview.close()
+            self._toolpath_preview_window = None
+
         self._before_ribbon_mutation(f"calculate {operation}")
         self.project.toolpaths = generated_toolpaths
         self._toolpaths_stale_reason = None
