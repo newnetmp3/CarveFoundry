@@ -468,7 +468,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         frame_bounds = self._framing_bounds()
         clip_bounds = self._full_scene_bounds()
         center = frame_bounds.mean(axis=0)
-        right, up, view = self._camera_basis()
+        _right, up, view = self._camera_basis()
 
         pan = np.asarray(self.camera.pan_world, dtype=float)
         target = center + pan
