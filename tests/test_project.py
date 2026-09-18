@@ -24,7 +24,7 @@ def test_inch_source_units_are_converted_to_millimeters_before_transform() -> No
     assert np.allclose(transformed.extents, (25.4, 50.8, 12.7))
 
 
-def test_default_placement_respects_source_units() -> None:
+def test_default_placement_respects_source_units_and_upscales_tiny_mesh() -> None:
     asset = mesh_asset_from_geometry(trimesh.creation.box(extents=(1.0, 2.0, 0.5)))
     project = Project()
     transform = project.default_transform_for_mesh(asset, ModelUnits.INCHES)
@@ -40,7 +40,41 @@ def test_default_placement_respects_source_units() -> None:
 
     assert transformed is not None
     assert np.allclose(transformed.bounds.mean(axis=0)[:2], (150.0, 100.0))
-    assert transformed.bounds[1, 2] == 0.0
+    assert np.isclose(transformed.extents[1], 100.0)
+    assert np.isclose(transform.scale_xyz[0], transform.scale_xyz[1])
+    assert np.isclose(transform.scale_xyz[1], transform.scale_xyz[2])
+    assert np.isclose(transformed.bounds[1, 2], 0.0)
+
+
+def test_default_placement_does_not_shrink_large_mesh() -> None:
+    asset = mesh_asset_from_geometry(trimesh.creation.box(extents=(180.0, 120.0, 20.0)))
+    project = Project()
+
+    transform = project.default_transform_for_mesh(asset, ModelUnits.MILLIMETERS)
+
+    assert transform.scale_xyz == (1.0, 1.0, 1.0)
+
+
+def test_tiny_square_import_reaches_half_stock_coverage() -> None:
+    asset = mesh_asset_from_geometry(trimesh.creation.box(extents=(0.25, 0.25, 0.1)))
+    project = Project()
+
+    transform = project.default_transform_for_mesh(asset, ModelUnits.MILLIMETERS)
+    item = ProjectItem(
+        "tiny.stl",
+        kind="stl",
+        mesh=asset,
+        transform=transform,
+    )
+    transformed = item.transformed_mesh()
+
+    assert transformed is not None
+    coverage = max(
+        transformed.extents[0] / project.stock.width_mm,
+        transformed.extents[1] / project.stock.height_mm,
+    )
+    assert np.isclose(coverage, 0.5)
+    assert np.isclose(transformed.bounds[1, 2], 0.0)
 
 
 def test_duplicate_item_copies_transform_but_not_transform_object() -> None:
