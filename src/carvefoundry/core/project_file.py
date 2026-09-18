@@ -10,7 +10,7 @@ from typing import Any, BinaryIO
 import zstandard as zstd
 
 from .mesh import MeshImportError, load_stl
-from .project import Project, ProjectItem, Stock
+from .project import Project, ProjectItem, Stock, TextProperties
 from .transform import Transform3D
 from .units import ModelUnits
 
@@ -56,6 +56,85 @@ def _stock_to_dict(stock: Stock) -> dict[str, float]:
         "height_mm": stock.height_mm,
         "thickness_mm": stock.thickness_mm,
     }
+
+
+def _text_properties_to_dict(
+    properties: TextProperties | None,
+) -> dict[str, object] | None:
+    if properties is None:
+        return None
+    return {
+        "content": properties.content,
+        "font_family": properties.font_family,
+        "font_style": properties.font_style,
+        "size_pt": properties.size_pt,
+        "bold": properties.bold,
+        "italic": properties.italic,
+        "underline": properties.underline,
+        "strikeout": properties.strikeout,
+        "alignment": properties.alignment,
+        "character_spacing_mm": properties.character_spacing_mm,
+        "word_spacing_mm": properties.word_spacing_mm,
+        "kerning": properties.kerning,
+        "line_spacing_percent": properties.line_spacing_percent,
+        "horizontal_scale_percent": properties.horizontal_scale_percent,
+        "wrap_to_width": properties.wrap_to_width,
+        "box_width_mm": properties.box_width_mm,
+        "depth_mm": properties.depth_mm,
+        "geometry_mode": properties.geometry_mode,
+        "outline_width_mm": properties.outline_width_mm,
+        "case_mode": properties.case_mode,
+    }
+
+
+def _load_text_properties(
+    value: object,
+    *,
+    item_name: str,
+) -> TextProperties | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ProjectFileError(
+            f"Project item {item_name!r} has invalid text properties."
+        )
+    try:
+        properties = TextProperties(
+            content=str(value.get("content", "Text")),
+            font_family=str(value.get("font_family", "")),
+            font_style=str(value.get("font_style", "Regular")),
+            size_pt=float(value.get("size_pt", 36.0)),
+            bold=bool(value.get("bold", False)),
+            italic=bool(value.get("italic", False)),
+            underline=bool(value.get("underline", False)),
+            strikeout=bool(value.get("strikeout", False)),
+            alignment=str(value.get("alignment", "left")),
+            character_spacing_mm=float(
+                value.get("character_spacing_mm", 0.0)
+            ),
+            word_spacing_mm=float(value.get("word_spacing_mm", 0.0)),
+            kerning=bool(value.get("kerning", True)),
+            line_spacing_percent=float(
+                value.get("line_spacing_percent", 100.0)
+            ),
+            horizontal_scale_percent=float(
+                value.get("horizontal_scale_percent", 100.0)
+            ),
+            wrap_to_width=bool(value.get("wrap_to_width", False)),
+            box_width_mm=float(value.get("box_width_mm", 0.0)),
+            depth_mm=float(value.get("depth_mm", 1.0)),
+            geometry_mode=str(value.get("geometry_mode", "filled")),
+            outline_width_mm=float(
+                value.get("outline_width_mm", 0.8)
+            ),
+            case_mode=str(value.get("case_mode", "normal")),
+        )
+        properties.validate()
+    except (TypeError, ValueError) as exc:
+        raise ProjectFileError(
+            f"Project item {item_name!r} has invalid text properties: {exc}"
+        ) from exc
+    return properties
 
 
 def _safe_source_name(name: str, *, fallback: str) -> str:
@@ -157,6 +236,9 @@ def _build_container(
                 "visible": item.visible,
                 "source_units": item.source_units.value,
                 "group_id": item.group_id,
+                "text_properties": _text_properties_to_dict(
+                    item.text_properties
+                ),
                 "asset_id": asset_id,
                 "source_name": source_name,
                 "transform": _transform_to_dict(item.transform),
@@ -313,6 +395,10 @@ def _load_legacy_item(value: object, project_path: Path) -> ProjectItem:
     source_path = _legacy_source_path(value.get("source_path"), project_path)
     transform = _load_transform(value.get("transform"))
     source_units = _load_source_units(value.get("source_units"), item_name=name)
+    text_properties = _load_text_properties(
+        value.get("text_properties"),
+        item_name=name,
+    )
     group_value = value.get("group_id")
     group_id = group_value if isinstance(group_value, str) and group_value else None
     mesh = None
@@ -574,6 +660,7 @@ def _load_native_item(
         "transform": transform,
         "source_units": source_units,
         "group_id": group_id,
+        "text_properties": text_properties,
     }
     if item_id is not None:
         item_kwargs["item_id"] = item_id
