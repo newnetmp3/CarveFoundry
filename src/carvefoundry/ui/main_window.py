@@ -87,6 +87,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         layout.addWidget(self._build_brand_row())
         self.ribbon = Ribbon()
         self._populate_ribbon()
+        self.ribbon.currentChanged.connect(self._ribbon_tab_changed)
         layout.addWidget(self.ribbon)
         layout.addWidget(self._build_workspace(), 1)
 
@@ -541,8 +542,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         invert_vertical.setCheckable(True)
         self._option_buttons["invert_vertical"] = invert_vertical
 
-        # Design is the useful day-to-day starting page; File is still one click away.
-        self.ribbon.setCurrentWidget(design)
+        self._sync_cam_control_relevance()
+
+        preferred_tab = str(
+            self._settings.value("interface/ribbon_tab", "Design")
+        )
+        selected_index = self.ribbon.indexOf(design)
+        for index in range(self.ribbon.count()):
+            if self.ribbon.tabText(index) == preferred_tab:
+                selected_index = index
+                break
+        self.ribbon.setCurrentIndex(selected_index)
+
+    def _ribbon_tab_changed(self, index: int) -> None:
+        if not 0 <= index < self.ribbon.count():
+            return
+        self._settings.setValue(
+            "interface/ribbon_tab",
+            self.ribbon.tabText(index),
+        )
+        self._settings.sync()
 
     def _build_workspace(self) -> QWidget:
         wrapper = QWidget()
