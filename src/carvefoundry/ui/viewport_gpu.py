@@ -172,6 +172,7 @@ class MeshViewport(QOpenGLWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
         self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
 
@@ -215,6 +216,14 @@ class MeshViewport(QOpenGLWidget):
     def set_selected_item(self, index: int | None) -> None:
         self.selected_item_index = index
         self.update()
+
+    def _interactive_redraw(self) -> None:
+        """Synchronously repaint the complete OpenGL viewport during camera motion.
+
+        Deferred QWidget update coalescing can leave stale QOpenGLWidget backing
+        images visible under KDE/Wayland while wheel/orbit events arrive quickly.
+        """
+        self.repaint()
 
     def fit_view(self) -> None:
         self.yaw_deg = 45.0
@@ -893,13 +902,13 @@ class MeshViewport(QOpenGLWidget):
                 -85.0,
                 min(85.0, self.elevation_deg + delta.y() * 0.35),
             )
-            self.update(self.rect())
+            self._interactive_redraw()
         elif event.buttons() & (
             Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
         ):
             horizontal = -delta.x() if self.reverse_horizontal_drag else delta.x()
             self.pan_px += QPointF(horizontal, delta.y())
-            self.update(self.rect())
+            self._interactive_redraw()
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
