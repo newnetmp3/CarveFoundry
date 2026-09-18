@@ -40,6 +40,8 @@ from carvefoundry.cam.basic_ops import (
     finish_3d,
     waterline_3d,
 )
+from carvefoundry.cam.gcode import GrblPostSettings
+from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.cam.vector_ops import (
     geometry_drill,
     geometry_engrave,
@@ -47,8 +49,6 @@ from carvefoundry.cam.vector_ops import (
     geometry_profile,
     geometry_vcarve,
 )
-from carvefoundry.cam.gcode import GrblPostSettings
-from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.core.primitives import (
     bitmap_runs_mesh,
     ellipse_mesh,
