@@ -1187,7 +1187,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         index = self._selected_item_index()
         item = self._selected_item()
         if index is None or item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
 
         self._before_context_transform(index, label)
@@ -1203,7 +1203,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _focus_transform_section(self, section: str) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
 
         self._ensure_inspector_visible()
@@ -1682,7 +1682,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _center_selected_xy(self) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
 
         transformed = item.transformed_mesh()
@@ -1703,7 +1703,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _top_selected_to_surface(self) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
 
         transformed = item.transformed_mesh()
@@ -1719,7 +1719,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _reset_selected_transform(self) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
 
         item.transform = self.project.default_transform_for_mesh(
@@ -1764,7 +1764,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _focus_transform_controls(self) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select an STL mesh first", 3000)
+            self.statusBar().showMessage("Select a model or shape first", 3000)
             return
         self.position_spins[0].setFocus()
 
