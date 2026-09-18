@@ -201,7 +201,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.show_grid = True
         self.show_toolpaths = True
         self.show_rapids = False
+        self.show_toolpath_points = False
         self.simulation_fraction = 1.0
+        self.toolpath_marker_xyz: tuple[float, float, float] | None = None
         self.reverse_horizontal_drag = False
         self.invert_vertical_drag = False
 
@@ -313,6 +315,17 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.show_rapids = bool(visible)
         self.requestUpdate()
         self.viewChanged.emit()
+
+    def set_toolpath_points_visible(self, visible: bool) -> None:
+        self.show_toolpath_points = bool(visible)
+        self.requestUpdate()
+
+    def set_toolpath_marker(
+        self,
+        xyz: tuple[float, float, float] | None,
+    ) -> None:
+        self.toolpath_marker_xyz = xyz
+        self.requestUpdate()
 
     def set_simulation_fraction(self, fraction: float) -> None:
         self.simulation_fraction = max(0.0, min(1.0, float(fraction)))
@@ -533,6 +546,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             item_bounds = self._item_bounds_mm(item)
             minimum = np.minimum(minimum, item_bounds[0])
             maximum = np.maximum(maximum, item_bounds[1])
+
+        for toolpath in self.project.toolpaths:
+            toolpath_bounds = toolpath.bounds_xyz_mm
+            if toolpath_bounds is None:
+                continue
+            minimum = np.minimum(
+                minimum,
+                np.asarray(toolpath_bounds[0], dtype=float),
+            )
+            maximum = np.maximum(
+                maximum,
+                np.asarray(toolpath_bounds[1], dtype=float),
+            )
 
         return np.vstack((minimum, maximum))
 
@@ -1815,9 +1841,64 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         rapid = np.asarray(rapid_vertices, dtype=np.float32).reshape((-1, 3))
         return cut, rapid
 
+    def _toolpath_point_geometry(
+        self,
+        world_per_pixel: float,
+    ) -> np.ndarray:
+        if (
+            self.project is None
+            or not self.show_toolpath_points
+            or not self.project.toolpaths
+        ):
+            return np.empty((0, 3), dtype=np.float32)
+
+        points = [
+            move.xyz
+            for toolpath in self.project.toolpaths
+            for move in toolpath.moves
+        ]
+        if not points:
+            return np.empty((0, 3), dtype=np.float32)
+
+        # Keep the overlay responsive on very dense 3D finishing paths.
+        stride = max(1, len(points) // 1800)
+        size = max(float(world_per_pixel) * 2.5, 0.03)
+        vertices: list[tuple[float, float, float]] = []
+        for x, y, z in points[::stride]:
+            vertices.extend(
+                (
+                    (x - size, y, z),
+                    (x + size, y, z),
+                    (x, y - size, z),
+                    (x, y + size, z),
+                )
+            )
+        return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
+    def _toolpath_marker_geometry(
+        self,
+        world_per_pixel: float,
+    ) -> np.ndarray:
+        if self.toolpath_marker_xyz is None:
+            return np.empty((0, 3), dtype=np.float32)
+        x, y, z = self.toolpath_marker_xyz
+        size = max(float(world_per_pixel) * 8.0, 0.25)
+        return np.asarray(
+            (
+                (x - size, y, z),
+                (x + size, y, z),
+                (x, y - size, z),
+                (x, y + size, z),
+                (x, y, z - size),
+                (x, y, z + size),
+            ),
+            dtype=np.float32,
+        )
+
     def _draw_toolpath_preview(
         self,
         view_projection: QMatrix4x4,
+        world_per_pixel: float,
     ) -> None:
         if (
             self._functions is None
@@ -1843,6 +1924,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                     color=QVector4D(1.0, 0.62, 0.20, 0.90),
                     line_width=1.5,
                 )
+            if self.show_toolpath_points:
+                self._draw_lines(
+                    self._toolpath_point_geometry(world_per_pixel),
+                    view_projection=view_projection,
+                    color=QVector4D(0.70, 0.82, 1.0, 0.72),
+                    line_width=1.0,
+                )
+            self._draw_lines(
+                self._toolpath_marker_geometry(world_per_pixel),
+                view_projection=view_projection,
+                color=QVector4D(1.0, 0.86, 0.20, 1.0),
+                line_width=3.5,
+            )
         finally:
             self._functions.glEnable(GL_DEPTH_TEST)
 
@@ -1866,7 +1960,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             view_projection=view_projection,
             color=QVector4D(0.784, 1.0, 0.239, 0.95),
         )
-        self._draw_toolpath_preview(view_projection)
+        self._draw_toolpath_preview(view_projection, world_per_pixel)
         self._draw_shape_preview(view_projection)
         self._draw_translation_gizmo(
             view_projection,
@@ -2465,6 +2559,10 @@ class MeshViewport(QWidget):
         return self._renderer.simulation_fraction
 
     @property
+    def toolpath_points_visible(self) -> bool:
+        return self._renderer.show_toolpath_points
+
+    @property
     def shape_draw_mode(self) -> str | None:
         return self._renderer.shape_draw_mode
 
@@ -2530,6 +2628,15 @@ class MeshViewport(QWidget):
 
     def set_rapids_visible(self, visible: bool) -> None:
         self._renderer.set_rapids_visible(visible)
+
+    def set_toolpath_points_visible(self, visible: bool) -> None:
+        self._renderer.set_toolpath_points_visible(visible)
+
+    def set_toolpath_marker(
+        self,
+        xyz: tuple[float, float, float] | None,
+    ) -> None:
+        self._renderer.set_toolpath_marker(xyz)
 
     def set_simulation_fraction(self, fraction: float) -> None:
         self._renderer.set_simulation_fraction(fraction)
