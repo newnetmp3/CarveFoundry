@@ -914,7 +914,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_editor.textChanged.connect(self._text_control_changed)
         grid.addWidget(self.text_editor, 1, 0, 1, 4)
 
-        grid.addWidget(QLabel("Font"), 2, 0)
+        typography_heading = QLabel("Typography")
+        typography_heading.setObjectName("TextSubheading")
+        grid.addWidget(typography_heading, 2, 0, 1, 4)
+
+        grid.addWidget(QLabel("Font"), 3, 0)
         self.text_font_combo = QFontComboBox()
         self.text_font_combo.setFontFilters(
             QFontComboBox.FontFilter.ScalableFonts
@@ -926,14 +930,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_font_combo.currentFontChanged.connect(
             self._text_font_changed
         )
-        grid.addWidget(self.text_font_combo, 2, 1, 1, 3)
+        grid.addWidget(self.text_font_combo, 3, 1, 1, 3)
 
-        grid.addWidget(QLabel("Style"), 3, 0)
+        grid.addWidget(QLabel("Style"), 4, 0)
         self.text_font_style_combo = QComboBox()
         self.text_font_style_combo.currentTextChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(self.text_font_style_combo, 3, 1, 1, 2)
+        grid.addWidget(self.text_font_style_combo, 4, 1, 1, 2)
 
         self.text_size_spin = self._configured_spin(
             minimum=1.0,
@@ -946,7 +950,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Font point size, matching conventional word-processor sizing."
         )
         self.text_size_spin.valueChanged.connect(self._text_control_changed)
-        grid.addWidget(self.text_size_spin, 3, 3)
+        grid.addWidget(self.text_size_spin, 4, 3)
 
         format_bar = QWidget()
         format_layout = QHBoxLayout(format_bar)
@@ -968,10 +972,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             button.toggled.connect(self._text_control_changed)
             format_layout.addWidget(button)
         format_layout.addStretch(1)
-        grid.addWidget(QLabel("Effects"), 4, 0)
-        grid.addWidget(format_bar, 4, 1, 1, 3)
+        grid.addWidget(QLabel("Effects"), 5, 0)
+        grid.addWidget(format_bar, 5, 1, 1, 3)
 
-        grid.addWidget(QLabel("Align"), 5, 0)
+        grid.addWidget(QLabel("Align"), 6, 0)
         self.text_alignment_combo = QComboBox()
         for title, value in (
             ("Left", "left"),
@@ -983,9 +987,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_alignment_combo.currentIndexChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(self.text_alignment_combo, 5, 1)
+        grid.addWidget(self.text_alignment_combo, 6, 1)
 
-        grid.addWidget(QLabel("Case"), 5, 2)
+        grid.addWidget(QLabel("Case"), 6, 2)
         self.text_case_combo = QComboBox()
         for title, value in (
             ("Normal", "normal"),
@@ -997,7 +1001,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_case_combo.currentIndexChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(self.text_case_combo, 5, 3)
+        grid.addWidget(self.text_case_combo, 6, 3)
+
+        spacing_heading = QLabel("Spacing & layout")
+        spacing_heading.setObjectName("TextSubheading")
+        grid.addWidget(spacing_heading, 7, 0, 1, 4)
 
         self.text_kerning_check = QCheckBox("Pair kerning")
         self.text_kerning_check.setChecked(True)
@@ -1005,11 +1013,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Use the selected font's kerning pairs when positioning glyphs."
         )
         self.text_kerning_check.toggled.connect(self._text_control_changed)
-        grid.addWidget(self.text_kerning_check, 6, 0, 1, 2)
+        grid.addWidget(self.text_kerning_check, 8, 0, 1, 2)
 
         self.text_wrap_check = QCheckBox("Wrap to width")
         self.text_wrap_check.toggled.connect(self._text_layout_control_changed)
-        grid.addWidget(self.text_wrap_check, 6, 2, 1, 2)
+        grid.addWidget(self.text_wrap_check, 8, 2, 1, 2)
 
         self.text_character_spacing_spin = self._configured_spin(
             minimum=-25.0,
@@ -1021,8 +1029,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_character_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Character spacing"), 7, 0, 1, 2)
-        grid.addWidget(self.text_character_spacing_spin, 7, 2, 1, 2)
+        grid.addWidget(QLabel("Character spacing"), 9, 0, 1, 2)
+        grid.addWidget(self.text_character_spacing_spin, 9, 2, 1, 2)
 
         self.text_word_spacing_spin = self._configured_spin(
             minimum=-25.0,
@@ -1034,8 +1042,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_word_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Word spacing"), 8, 0, 1, 2)
-        grid.addWidget(self.text_word_spacing_spin, 8, 2, 1, 2)
+        grid.addWidget(QLabel("Word spacing"), 10, 0, 1, 2)
+        grid.addWidget(self.text_word_spacing_spin, 10, 2, 1, 2)
 
         self.text_line_spacing_spin = self._configured_spin(
             minimum=25.0,
@@ -1047,8 +1055,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_line_spacing_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Line spacing"), 9, 0, 1, 2)
-        grid.addWidget(self.text_line_spacing_spin, 9, 2, 1, 2)
+        grid.addWidget(QLabel("Line spacing"), 11, 0, 1, 2)
+        grid.addWidget(self.text_line_spacing_spin, 11, 2, 1, 2)
 
         self.text_horizontal_scale_spin = self._configured_spin(
             minimum=10.0,
@@ -1063,8 +1071,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_horizontal_scale_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Character width"), 10, 0, 1, 2)
-        grid.addWidget(self.text_horizontal_scale_spin, 10, 2, 1, 2)
+        grid.addWidget(QLabel("Character width"), 12, 0, 1, 2)
+        grid.addWidget(self.text_horizontal_scale_spin, 12, 2, 1, 2)
 
         self.text_box_width_spin = self._configured_spin(
             minimum=0.1,
@@ -1076,17 +1084,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_box_width_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Text box width"), 11, 0, 1, 2)
-        grid.addWidget(self.text_box_width_spin, 11, 2, 1, 2)
+        grid.addWidget(QLabel("Text box width"), 13, 0, 1, 2)
+        grid.addWidget(self.text_box_width_spin, 13, 2, 1, 2)
 
-        grid.addWidget(QLabel("Geometry"), 12, 0)
+        geometry_heading = QLabel("CNC geometry")
+        geometry_heading.setObjectName("TextSubheading")
+        grid.addWidget(geometry_heading, 14, 0, 1, 4)
+
+        grid.addWidget(QLabel("Geometry"), 15, 0)
         self.text_geometry_combo = QComboBox()
         self.text_geometry_combo.addItem("Filled", "filled")
         self.text_geometry_combo.addItem("Outline", "outline")
         self.text_geometry_combo.currentIndexChanged.connect(
             self._text_geometry_control_changed
         )
-        grid.addWidget(self.text_geometry_combo, 12, 1)
+        grid.addWidget(self.text_geometry_combo, 15, 1)
 
         self.text_outline_width_spin = self._configured_spin(
             minimum=0.05,
@@ -1098,8 +1110,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.text_outline_width_spin.valueChanged.connect(
             self._text_control_changed
         )
-        grid.addWidget(QLabel("Outline"), 12, 2)
-        grid.addWidget(self.text_outline_width_spin, 12, 3)
+        self.text_outline_label = QLabel("Outline")
+        grid.addWidget(self.text_outline_label, 15, 2)
+        grid.addWidget(self.text_outline_width_spin, 15, 3)
 
         self.text_depth_spin = self._configured_spin(
             minimum=0.05,
@@ -1112,8 +1125,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "Extruded text thickness. Text top remains at the object's Z level."
         )
         self.text_depth_spin.valueChanged.connect(self._text_control_changed)
-        grid.addWidget(QLabel("Depth"), 13, 0, 1, 2)
-        grid.addWidget(self.text_depth_spin, 13, 2, 1, 2)
+        grid.addWidget(QLabel("Depth"), 16, 0, 1, 2)
+        grid.addWidget(self.text_depth_spin, 16, 2, 1, 2)
 
         note = QLabel(
             "Font geometry comes from the installed system font. "
@@ -1121,18 +1134,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
-        grid.addWidget(note, 14, 0, 1, 4)
+        grid.addWidget(note, 17, 0, 1, 4)
 
         self.text_font_warning = QLabel()
         self.text_font_warning.setObjectName("TextFontWarning")
         self.text_font_warning.setWordWrap(True)
         self.text_font_warning.hide()
-        grid.addWidget(self.text_font_warning, 15, 0, 1, 4)
+        grid.addWidget(self.text_font_warning, 18, 0, 1, 4)
 
         self.text_cnc_hint = QLabel()
         self.text_cnc_hint.setObjectName("TextCncHint")
         self.text_cnc_hint.setWordWrap(True)
-        grid.addWidget(self.text_cnc_hint, 16, 0, 1, 4)
+        grid.addWidget(self.text_cnc_hint, 19, 0, 1, 4)
 
         widget.setVisible(False)
         return widget
@@ -2415,9 +2428,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         # Width also defines the alignment frame when wrapping is off, so it
         # remains editable at all times. Wrap only controls line breaking.
         self.text_box_width_spin.setEnabled(True)
-        self.text_outline_width_spin.setEnabled(
+        outline_enabled = (
             self.text_geometry_combo.currentData() == "outline"
         )
+        self.text_outline_width_spin.setVisible(outline_enabled)
+        self.text_outline_label.setVisible(outline_enabled)
+        self.text_outline_width_spin.setEnabled(outline_enabled)
         self._update_text_cnc_hint()
 
     def _update_text_cnc_hint(self) -> None:
