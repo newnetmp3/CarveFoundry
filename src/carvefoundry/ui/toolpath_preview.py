@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QSplitter,
+    QTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -301,6 +302,7 @@ class ToolpathPreviewWindow(QMainWindow):
         self._speed = QComboBox()
         self._speed.addItems(("0.25×", "0.5×", "1×", "2×", "5×", "10×"))
         self._speed.setCurrentText("1×")
+        self._speed.currentTextChanged.connect(self._update_playback_interval)
         controls.addWidget(self._speed)
 
         layout.addWidget(transport)
@@ -324,7 +326,7 @@ class ToolpathPreviewWindow(QMainWindow):
         cursor = QTextCursor(block)
         cursor.select(QTextCursor.SelectionType.LineUnderCursor)
 
-        selection = QPlainTextEdit.ExtraSelection()
+        selection = QTextEdit.ExtraSelection()
         selection.cursor = cursor
         selection.format.setBackground(QColor(52, 71, 45))
         selection.format.setForeground(QColor(236, 244, 224))
@@ -386,6 +388,10 @@ class ToolpathPreviewWindow(QMainWindow):
         except ValueError:
             return 1.0
 
+    def _update_playback_interval(self) -> None:
+        speed = max(self._speed_multiplier(), 0.01)
+        self._timer.setInterval(max(8, round(50.0 / speed)))
+
     def _toggle_play(self) -> None:
         if not self._moves:
             return
@@ -394,6 +400,7 @@ class ToolpathPreviewWindow(QMainWindow):
             if self._slider.value() >= len(self._moves) - 1:
                 self._slider.setValue(0)
             self._play_button.setText("Ⅱ")
+            self._update_playback_interval()
             self._timer.start()
         else:
             self._play_button.setText("▶")
@@ -404,8 +411,7 @@ class ToolpathPreviewWindow(QMainWindow):
             self._toggle_play()
             return
 
-        step = max(1, round(self._speed_multiplier()))
-        next_index = self._slider.value() + step
+        next_index = self._slider.value() + 1
         if next_index >= len(self._moves):
             self._slider.setValue(len(self._moves) - 1)
             self._playing = False
