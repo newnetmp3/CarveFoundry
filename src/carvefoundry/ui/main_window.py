@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-from PySide6.QtCore import QSettings, Qt, QThread, QTimer
+from PySide6.QtCore import QItemSelectionModel, QSettings, Qt, QThread, QTimer
 from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -192,7 +192,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._install_shortcuts()
 
         self.viewport.viewSettingsChanged.connect(self._save_viewport_mode)
-        self.viewport.itemSelectionRequested.connect(self._viewport_select_item)
+        self.viewport.selectionRequested.connect(
+            self._viewport_selection_requested
+        )
         self.viewport.itemContextMenuRequested.connect(
             self._show_viewport_item_context_menu
         )
@@ -976,7 +978,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.project_list.currentRowChanged.connect(self._update_properties)
         self.project_list.itemSelectionChanged.connect(
-            self._sync_selection_action_state
+            self._project_selection_changed
         )
         self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
@@ -1791,10 +1793,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
 
         item = self._selected_item()
-        has_mesh = bool(item is not None and item.mesh is not None)
         indices = self._selected_design_indices()
         has_selection = bool(indices)
         selection_count = len(indices)
+        has_mesh = bool(
+            selection_count == 1
+            and item is not None
+            and item.mesh is not None
+        )
         has_grouped = any(
             self.project.items[index].group_id is not None
             for index in indices
@@ -2170,14 +2176,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if self._updating_object_selector:
             return
         row = max(0, min(int(row), self.project_list.count() - 1))
-        row_changed = self.project_list.currentRow() != row
-        self.project_list.clearSelection()
-        self.project_list.setCurrentRow(row)
-        item = self.project_list.item(row)
-        if item is not None:
-            item.setSelected(True)
-        if not row_changed:
-            self._update_properties(row)
+        if row <= 0:
+            self._select_project_indices([])
+        else:
+            self._select_project_indices([row - 1], primary=row - 1)
 
     def _show_layers_popup(self) -> None:
         if not hasattr(self, "layers_popup"):
@@ -2339,18 +2341,95 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         self.viewport.update()
 
-    def _viewport_select_item(self, index: int) -> None:
-        """Synchronize a viewport click with the Project/Layers selection."""
+    def _select_project_indices(
+        self,
+        indices: list[int] | tuple[int, ...] | set[int],
+        *,
+        primary: int | None = None,
+    ) -> None:
+        """Synchronize a design-object selection across Layers and viewport."""
 
-        row = index + 1 if 0 <= index < len(self.project.items) else 0
-        row_changed = self.project_list.currentRow() != row
-        self.project_list.clearSelection()
-        self.project_list.setCurrentRow(row)
-        item = self.project_list.item(row)
-        if item is not None:
-            item.setSelected(True)
-        if not row_changed:
-            self._update_properties(row)
+        valid = sorted(
+            {
+                int(index)
+                for index in indices
+                if 0 <= int(index) < len(self.project.items)
+            }
+        )
+        self.project_list.blockSignals(True)
+        try:
+            self.project_list.clearSelection()
+            for index in valid:
+                item = self.project_list.item(index + 1)
+                if item is not None:
+                    item.setSelected(True)
+
+            if primary not in valid:
+                primary = valid[-1] if valid else None
+            row = primary + 1 if primary is not None else 0
+            self.project_list.setCurrentRow(
+                row,
+                QItemSelectionModel.SelectionFlag.NoUpdate,
+            )
+        finally:
+            self.project_list.blockSignals(False)
+
+        self._project_selection_changed()
+
+    def _viewport_selection_requested(
+        self,
+        indices: object,
+        mode: str,
+    ) -> None:
+        """Apply replace/add/toggle selection requests from the viewport."""
+
+        requested = [
+            int(index)
+            for index in (indices if isinstance(indices, (list, tuple, set)) else [])
+            if 0 <= int(index) < len(self.project.items)
+        ]
+        selected = set(self._selected_design_indices())
+        incoming = set(requested)
+        if mode == "add":
+            selected |= incoming
+        elif mode == "toggle":
+            selected ^= incoming
+        else:
+            selected = incoming
+
+        primary = None
+        for index in reversed(requested):
+            if index in selected:
+                primary = index
+                break
+        if primary is None:
+            current = self._selected_item_index()
+            if current in selected:
+                primary = current
+        self._select_project_indices(selected, primary=primary)
+
+    def _viewport_select_item(self, index: int) -> None:
+        """Compatibility adapter for single-object viewport selection."""
+
+        if 0 <= index < len(self.project.items):
+            self._select_project_indices([index], primary=index)
+        else:
+            self._select_project_indices([])
+
+    def _project_selection_changed(self) -> None:
+        """Keep Inspector, viewport highlights, and action state synchronized."""
+
+        if self._updating_project_list:
+            return
+        indices = self._selected_design_indices()
+        if indices:
+            current = self._selected_item_index()
+            primary = current if current in indices else indices[-1]
+            row = primary + 1
+        else:
+            primary = None
+            row = 0
+        self._update_properties(row)
 
     def _viewport_transform_started(self, _index: int) -> None:
         """Lifecycle hook overridden by the project-history window."""
@@ -2723,6 +2802,37 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 finally:
                     self.object_selector.blockSignals(False)
                     self._updating_object_selector = False
+
+        selected_indices = self._selected_design_indices()
+        if len(selected_indices) > 1:
+            primary = (
+                row - 1
+                if row > 0 and row - 1 in selected_indices
+                else selected_indices[-1]
+            )
+            selected_names = [
+                self.project.items[index].name
+                for index in selected_indices
+            ]
+            preview = ", ".join(selected_names[:5])
+            if len(selected_names) > 5:
+                preview += f", +{len(selected_names) - 5} more"
+            self.selection_info.setText(
+                f"{len(selected_indices)} objects selected\n{preview}\n\n"
+                "Use Align, Group, Duplicate, Delete, or the Layers panel "
+                "to operate on the complete selection."
+            )
+            self.stock_widget.setVisible(False)
+            self.text_widget.setVisible(False)
+            self.transform_widget.setVisible(False)
+            self.viewport.set_selected_items(
+                selected_indices,
+                primary=primary,
+            )
+            self._refresh_cam_detail_readouts()
+            self._sync_selection_action_state()
+            self._sync_toolpath_output_state()
+            return
 
         if row <= 0:
             stock = self.project.stock
