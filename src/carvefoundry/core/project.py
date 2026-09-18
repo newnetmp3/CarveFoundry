@@ -15,6 +15,9 @@ from .transform import Transform3D
 from .units import ModelUnits
 
 
+MIN_IMPORTED_STOCK_COVERAGE = 0.5
+
+
 @dataclass(slots=True)
 class Stock:
     width_mm: float = 300.0
@@ -98,12 +101,28 @@ class Project:
         bounds = np.asarray(mesh.bounds, dtype=float)
         bounds *= float(units.millimeters_per_unit)
         center = bounds.mean(axis=0)
+        dimensions = bounds[1] - bounds[0]
+
+        stock_width = max(float(self.stock.width_mm), 1e-9)
+        stock_height = max(float(self.stock.height_mm), 1e-9)
+        coverage = max(
+            float(dimensions[0]) / stock_width,
+            float(dimensions[1]) / stock_height,
+        )
+        uniform_scale = (
+            max(1.0, MIN_IMPORTED_STOCK_COVERAGE / coverage)
+            if coverage > 1e-12
+            else 1.0
+        )
+
+        scaled_top = center[2] + uniform_scale * (bounds[1, 2] - center[2])
         return Transform3D(
             translation_mm=(
                 float(self.stock.width_mm / 2.0 - center[0]),
                 float(self.stock.height_mm / 2.0 - center[1]),
-                float(-bounds[1, 2]),
-            )
+                float(-scaled_top),
+            ),
+            scale_xyz=(uniform_scale, uniform_scale, uniform_scale),
         )
 
     def remove_item(self, index: int) -> ProjectItem:
