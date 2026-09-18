@@ -1272,20 +1272,41 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         self._settings.sync()
 
+    def _add_menu_widget(
+        self,
+        menu: QMenu,
+        title: str,
+        widget: QWidget,
+    ) -> QWidgetAction:
+        container = QWidget()
+        container.setObjectName("ToolRailMenuWidget")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+        label = QLabel(title)
+        label.setObjectName("ToolRailMenuLabel")
+        layout.addWidget(label)
+        widget.setMinimumWidth(max(170, widget.minimumWidth()))
+        layout.addWidget(widget)
+
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(container)
+        menu.addAction(action)
+        return action
+
     def _build_tool_rail(self) -> ToolRail:
-        """Build the compact, icon-first tool rail used beside the canvas."""
+        """Build the complete Photopea-style vertical command/tool rail."""
 
         rail = ToolRail(self)
-        rail.add_tool(
+
+        rail.add_action_tool(
             "select",
-            "Select",
-            self._activate_navigation_tool,
+            self._ui_actions["select"],
             tooltip=(
                 "Select / Marquee (V)\n"
                 "Click selects one object. Ctrl-click toggles, Shift-click adds, "
                 "drag empty space box-selects, Ctrl+A selects all, Alt-drag orbits."
             ),
-            checkable=True,
         )
 
         rail.add_flyout(
@@ -1314,133 +1335,265 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             tooltip="Shape tools — click arrow to choose Rectangle, Ellipse, or Polygon.",
             checkable=True,
         )
-        rail.add_tool(
+        rail.add_action_tool(
             "line",
-            "Line",
-            self._create_line,
+            self._ui_actions["line"],
             tooltip="Line tool — drag to draw. Shift constrains to 45° increments.",
-            checkable=True,
         )
-        rail.add_tool(
+        rail.add_action_tool(
             "text",
-            "Text",
-            self._create_text,
+            self._ui_actions["text"],
             tooltip="Text tool — drag a text box; typography appears in Inspector.",
-            checkable=True,
         )
-        rail.add_tool(
-            "pen",
+
+        vector_menu = QMenu(rail)
+        self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        rail.add_menu(
+            "vector",
             "Pen",
-            self._create_pen_path,
-            tooltip="Pen / freehand vector tool.",
+            vector_menu,
+            tooltip="Vector tools — Pen and Trace Image.",
+            primary_callback=self._create_pen_path,
         )
 
         rail.add_separator()
-        rail.add_flyout(
+
+        file_menu = QMenu(rail)
+        self._add_menu_actions(file_menu, ("new", "open", "save", "save_as"))
+        file_menu.addSeparator()
+        import_menu = file_menu.addMenu("Import")
+        self._add_menu_actions(
+            import_menu,
+            (
+                "import",
+                "import_stl",
+                "import_svg",
+                "import_dxf",
+                "import_image",
+                "import_gcode",
+            ),
+        )
+        file_menu.addSeparator()
+        file_menu.addAction(self._ui_actions["export_gcode"])
+        rail.add_menu(
+            "file",
+            "Open",
+            file_menu,
+            tooltip="Project, import, save, and G-code output commands.",
+            primary_callback=self._open_project,
+        )
+
+        edit_menu = QMenu(rail)
+        self._add_menu_actions(
+            edit_menu,
+            (
+                "undo",
+                "redo",
+                "cut",
+                "copy",
+                "paste",
+                "duplicate",
+                "delete",
+                "select_all",
+            ),
+        )
+        rail.add_menu(
+            "edit",
+            "Cut",
+            edit_menu,
+            tooltip="Edit commands — undo/redo, clipboard, duplicate, delete, select all.",
+        )
+
+        arrange_menu = QMenu(rail)
+        self._add_menu_actions(
+            arrange_menu,
+            (
+                "align",
+                "center",
+                "group",
+                "ungroup",
+                "duplicate",
+                "move_up",
+                "move_down",
+                "layers",
+            ),
+        )
+        rail.add_menu(
             "arrange",
             "Align",
-            (
-                (
-                    "align",
-                    "Align",
-                    self._align_selected_items,
-                    "Align the selected objects.",
-                ),
-                (
-                    "center",
-                    "Center",
-                    self._center_selected_items,
-                    "Center the complete selection on the stock.",
-                ),
-                (
-                    "group",
-                    "Group",
-                    self._group_selected_items,
-                    "Group two or more selected objects.",
-                ),
-                (
-                    "ungroup",
-                    "Ungroup",
-                    self._ungroup_selected_items,
-                    "Ungroup the selected grouped objects.",
-                ),
-            ),
-            tooltip="Arrange tools — align, center, group, or ungroup.",
+            arrange_menu,
+            tooltip="Arrange, group, order, and Layers commands.",
         )
-        rail.add_flyout(
+
+        model_menu = QMenu(rail)
+        self._add_menu_actions(model_menu, ("stock_setup", "fit_view"))
+        transform_menu = model_menu.addMenu("Transform")
+        self._add_menu_actions(
+            transform_menu,
+            ("position", "rotate", "size", "scale"),
+        )
+        placement_menu = model_menu.addMenu("Placement")
+        self._add_menu_actions(
+            placement_menu,
+            ("center_xy", "top_z0", "fit_stock", "reset_transform"),
+        )
+        rail.add_menu(
+            "model",
+            "Position",
+            model_menu,
+            tooltip="Stock, transform, size, placement, and reset commands.",
+        )
+
+        cam_menu = QMenu(rail)
+        ops_2d = cam_menu.addMenu("2D / 2.5D")
+        self._add_menu_actions(
+            ops_2d,
+            (
+                "cam_profile",
+                "cam_pocket",
+                "cam_vcarve",
+                "cam_engrave",
+                "cam_drill",
+                "tabs",
+            ),
+        )
+        ops_3d = cam_menu.addMenu("3D")
+        self._add_menu_actions(
+            ops_3d,
+            ("cam_rough", "cam_finish", "cam_rest", "cam_waterline"),
+        )
+        cam_menu.addSeparator()
+
+        for title, key in (
+            ("Cut Type", "cut_type"),
+            ("3D Style", "3d_cut_style"),
+            ("Direction", "direction"),
+        ):
+            widgets = self._cam_selector_widgets.get(key, [])
+            if widgets:
+                self._add_menu_widget(cam_menu, title, widgets[0])
+
+        if self._cam_detail_widgets:
+            self._add_menu_widget(
+                cam_menu,
+                "Detail",
+                self._cam_detail_widgets[0],
+            )
+
+        motion_menu = cam_menu.addMenu("Motion")
+        for title, key in (
+            ("Entry", "entry"),
+            ("Milling", "milling"),
+            ("Linking", "linking"),
+        ):
+            widgets = self._cam_selector_widgets.get(key, [])
+            if widgets:
+                self._add_menu_widget(motion_menu, title, widgets[0])
+
+        cam_menu.addSeparator()
+        self._add_menu_actions(
+            cam_menu,
+            ("advanced_cam", "calculate", "preview", "simulate", "export_toolpath"),
+        )
+        rail.add_menu(
             "cam",
             "V-Carve",
-            (
-                (
-                    "cam_profile",
-                    "Profile",
-                    lambda: self._select_cam_operation("profile"),
-                    "Select Profile CAM operation.",
-                ),
-                (
-                    "cam_pocket",
-                    "Pocket",
-                    lambda: self._select_cam_operation("pocket"),
-                    "Select Pocket CAM operation.",
-                ),
-                (
-                    "cam_vcarve",
-                    "V-Carve",
-                    lambda: self._select_cam_operation("vcarve"),
-                    "Select cutter-aware V-Carve operation.",
-                ),
-                (
-                    "cam_engrave",
-                    "Engrave",
-                    lambda: self._select_cam_operation("engrave"),
-                    "Select Engrave operation.",
-                ),
-                (
-                    "cam_drill",
-                    "Drill",
-                    lambda: self._select_cam_operation("drill"),
-                    "Select Drill operation.",
-                ),
-                (
-                    "cam_rough",
-                    "Rough",
-                    lambda: self._select_cam_operation("rough"),
-                    "Select 3D Rough operation.",
-                ),
-                (
-                    "cam_finish",
-                    "Finish",
-                    lambda: self._select_cam_operation("finish"),
-                    "Select 3D Finish operation.",
-                ),
+            cam_menu,
+            tooltip="All CAM operations, path design, motion, Detail, and generation.",
+            primary_callback=lambda: self._select_cam_operation(
+                self._active_cam_operation
             ),
-            tooltip="CAM operations — choose a toolpath strategy from the flyout.",
+        )
+
+        cutter_menu = QMenu(rail)
+        self._add_menu_widget(
+            cutter_menu,
+            "Selected Cutter",
+            self.tool_combo,
+        )
+        cutter_menu.addSeparator()
+        self._add_menu_actions(
+            cutter_menu,
+            ("tool_library", "new_tool", "custom_profile", "calculator"),
+        )
+        rail.add_menu(
+            "cutter",
+            "Library",
+            cutter_menu,
+            tooltip="Cutter selector, tool library, custom tools, and feeds/speeds.",
+        )
+
+        machine_menu = QMenu(rail)
+        self._add_menu_actions(
+            machine_menu,
+            ("machine_profile", "work_area", "origin", "postprocessor"),
+        )
+        machine_menu.addSeparator()
+        self._add_menu_actions(
+            machine_menu,
+            ("machine_connect", "probe", "jog"),
+        )
+        rail.add_menu(
+            "machine",
+            "Machine Profile",
+            machine_menu,
+            tooltip="Machine setup, connection, probe, and jog controls.",
+        )
+
+        view_menu = QMenu(rail)
+        display_menu = view_menu.addMenu("Display")
+        self._add_menu_actions(
+            display_menu,
+            ("stock", "grid", "rulers", "toolpaths", "rapids"),
+        )
+        camera_menu = view_menu.addMenu("Camera")
+        self._add_menu_actions(
+            camera_menu,
+            ("view_fit", "view_2d", "perspective", "orthographic", "isometric"),
+        )
+        fixed_menu = view_menu.addMenu("Fixed View")
+        self._add_menu_actions(
+            fixed_menu,
+            (
+                "view_top",
+                "view_bottom",
+                "view_front",
+                "view_back",
+                "view_left",
+                "view_right",
+            ),
+        )
+        workspace_menu = view_menu.addMenu("Workspace")
+        self._add_menu_actions(
+            workspace_menu,
+            ("layers", "inspector", "status_bar", "view_controls", "reset_ui"),
+        )
+        navigation_menu = view_menu.addMenu("Navigation")
+        self._add_menu_actions(
+            navigation_menu,
+            ("reverse_horizontal", "invert_vertical"),
+        )
+        rail.add_menu(
+            "view",
+            "Perspective",
+            view_menu,
+            tooltip="Display, camera, fixed views, workspace, and navigation options.",
         )
 
         rail.add_stretch()
-        rail.add_tool(
-            "import",
-            "Import",
-            self._import_file,
-            tooltip="Import STL, SVG, DXF, image, or G-code.",
-        )
-        rail.add_tool(
+        rail.add_action_tool(
             "layers",
-            "Layers",
-            self._show_layers_popup,
+            self._ui_actions["layers"],
             tooltip="Objects & Layers (Ctrl+Shift+L).",
         )
-        rail.add_tool(
+        rail.add_action_tool(
             "inspector",
-            "Inspector",
-            self._toggle_properties_panel_option,
+            self._ui_actions["inspector"],
             tooltip="Show or hide Inspector (Ctrl+Shift+I).",
-            checkable=True,
         )
-        rail.add_tool(
+        rail.add_action_tool(
             "fit",
-            "Fit View",
-            self._fit_view,
+            self._ui_actions["fit_view"],
             tooltip="Fit the complete job to the viewport (Ctrl+0).",
         )
         rail.set_active_draw_tool(None)
