@@ -13,6 +13,7 @@ from PySide6.QtGui import (
     QPainter,
     QSurfaceFormat,
     QVector3D,
+    QVector4D,
     QWheelEvent,
 )
 from PySide6.QtOpenGL import (
