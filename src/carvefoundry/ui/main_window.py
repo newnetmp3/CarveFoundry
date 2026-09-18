@@ -269,6 +269,535 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         line.addWidget(mode)
         return row
 
+    def _new_ui_action(
+        self,
+        key: str,
+        text: str,
+        callback,
+        *,
+        checkable: bool = False,
+        checked: bool = False,
+        tooltip: str = "",
+    ) -> QAction:
+        action = QAction(text, self)
+        action.setCheckable(checkable)
+        action.setChecked(bool(checked))
+        if tooltip:
+            action.setToolTip(tooltip)
+            action.setStatusTip(tooltip)
+        action.triggered.connect(
+            lambda _checked=False, fn=callback: fn()
+        )
+        self._ui_actions[key] = action
+        return action
+
+    def _build_command_actions(self) -> None:
+        """Create one shared QAction set for menus and vertical tool rail."""
+
+        self._ui_actions: dict[str, QAction] = {}
+
+        specs = (
+            ("new", "New", self._new_project),
+            ("open", "Open", self._open_project),
+            ("save", "Save", self._save_project),
+            ("save_as", "Save As", self._save_project_as),
+            ("import", "Import…", self._import_file),
+            ("import_stl", "STL", lambda: self._import_file("STL")),
+            ("import_svg", "SVG", lambda: self._import_file("SVG")),
+            ("import_dxf", "DXF", lambda: self._import_file("DXF")),
+            ("import_image", "Image", lambda: self._import_file("Image")),
+            ("import_gcode", "G-code", lambda: self._import_file("G-code")),
+            ("export_gcode", "Export G-code", self._export_gcode),
+            ("undo", "Undo", self._undo),
+            ("redo", "Redo", self._redo),
+            ("cut", "Cut", self._cut_selected_items),
+            ("copy", "Copy", self._copy_selected_items),
+            ("paste", "Paste", self._paste_items),
+            ("delete", "Delete", self._delete_selected_item),
+            ("duplicate", "Duplicate", self._duplicate_selected_item),
+            ("select_all", "Select All", self._select_all_design_items),
+            ("select", "Select / Marquee", self._activate_navigation_tool),
+            ("rectangle", "Rectangle", self._create_rectangle),
+            ("ellipse", "Ellipse", self._create_ellipse),
+            ("polygon", "Polygon", self._create_polygon),
+            ("line", "Line", self._create_line),
+            ("text", "Text", self._create_text),
+            ("pen", "Pen", self._create_pen_path),
+            ("trace_image", "Trace Image", self._trace_image),
+            ("align", "Align", self._align_selected_items),
+            ("center", "Center", self._center_selected_items),
+            ("group", "Group", self._group_selected_items),
+            ("ungroup", "Ungroup", self._ungroup_selected_items),
+            ("layers", "Layers", self._show_layers_popup),
+            ("move_up", "Move Up", lambda: self._move_selected_item(-1)),
+            ("move_down", "Move Down", lambda: self._move_selected_item(1)),
+            ("stock_setup", "Stock Setup", self._focus_stock_section),
+            ("fit_view", "Fit View", self._fit_view),
+            ("position", "Position", lambda: self._focus_transform_section("position")),
+            ("rotate", "Rotate", lambda: self._focus_transform_section("rotation")),
+            ("size", "Size", lambda: self._focus_transform_section("size")),
+            ("scale", "Scale", lambda: self._focus_transform_section("scale")),
+            ("center_xy", "Center XY", self._center_selected_xy),
+            ("top_z0", "Top to Z0", self._top_selected_to_surface),
+            ("fit_stock", "Fit Stock", self._fit_selected_inside_stock),
+            ("reset_transform", "Reset Transform", self._reset_selected_transform),
+            ("tool_library", "Tool Library", self._show_tool_library),
+            ("new_tool", "New Tool", self._new_tool),
+            ("custom_profile", "Custom Profile", self._new_custom_profile_tool),
+            ("calculator", "Feeds && Speeds Calculator", self._feeds_speeds_calculator),
+            ("advanced_cam", "Advanced CAM…", self._toolpath_design_advanced),
+            ("calculate", "Calculate", self._calculate_toolpath),
+            ("preview", "Preview", self._preview_toolpaths),
+            ("export_toolpath", "Export G-code", self._export_gcode),
+            ("machine_profile", "Machine Profile", self._machine_profile),
+            ("work_area", "Work Area", self._machine_work_area),
+            ("origin", "Origin", self._machine_origin),
+            ("postprocessor", "Postprocessor", self._postprocessor_settings_dialog),
+            ("probe", "Probe", self._probe_machine),
+            ("jog", "Jog", self._show_jog_controls),
+            ("view_fit", "Fit View", self._fit_view),
+            ("view_2d", "2D Top", self._set_2d_view),
+            ("perspective", "Perspective", self._set_perspective_option),
+            ("orthographic", "Orthographic", self._set_orthographic_option),
+            ("isometric", "Isometric", self._set_isometric_option),
+            ("view_top", "Top", lambda: self._set_standard_view_option("Top")),
+            ("view_bottom", "Bottom", lambda: self._set_standard_view_option("Bottom")),
+            ("view_front", "Front", lambda: self._set_standard_view_option("Front")),
+            ("view_back", "Back", lambda: self._set_standard_view_option("Back")),
+            ("view_left", "Left", lambda: self._set_standard_view_option("Left")),
+            ("view_right", "Right", lambda: self._set_standard_view_option("Right")),
+            ("reset_ui", "Reset UI", self._reset_interface_options),
+        )
+        for key, text, callback in specs:
+            self._new_ui_action(key, text, callback)
+
+        for operation, title in (
+            ("profile", "Profile"),
+            ("pocket", "Pocket"),
+            ("vcarve", "V-Carve"),
+            ("engrave", "Engrave"),
+            ("drill", "Drill"),
+            ("rough", "Rough"),
+            ("finish", "Finish"),
+            ("rest", "Rest"),
+            ("waterline", "Waterline"),
+        ):
+            self._new_ui_action(
+                f"cam_{operation}",
+                title,
+                lambda op=operation: self._select_cam_operation(op),
+                checkable=True,
+                checked=operation == self._active_cam_operation,
+            )
+
+        self._new_ui_action(
+            "tabs",
+            "Tabs",
+            self._toggle_tabs_operation,
+            checkable=True,
+            checked=self._tabs_enabled,
+        )
+        self._new_ui_action(
+            "simulate",
+            "Simulate",
+            self._simulate_toolpaths,
+            checkable=True,
+        )
+        self._new_ui_action(
+            "machine_connect",
+            "Connect",
+            self._connect_machine,
+            checkable=True,
+        )
+        for key, text, callback, checked in (
+            ("stock", "Stock", self._toggle_stock, True),
+            ("grid", "Grid", self._toggle_grid, True),
+            ("rulers", "Rulers", self._toggle_rulers, True),
+            ("toolpaths", "Toolpaths", self._toggle_toolpaths_view, True),
+            ("rapids", "Rapids", self._toggle_rapids_view, False),
+            (
+                "inspector",
+                "Inspector",
+                self._toggle_properties_panel_option,
+                True,
+            ),
+            (
+                "status_bar",
+                "Status Bar",
+                self._toggle_status_bar_option,
+                True,
+            ),
+            (
+                "view_controls",
+                "View Controls",
+                self._toggle_view_controls_option,
+                True,
+            ),
+            (
+                "reverse_horizontal",
+                "Reverse Horizontal",
+                self._toggle_reverse_horizontal_option,
+                False,
+            ),
+            (
+                "invert_vertical",
+                "Invert Vertical",
+                self._toggle_invert_vertical_option,
+                False,
+            ),
+        ):
+            self._new_ui_action(
+                key,
+                text,
+                callback,
+                checkable=True,
+                checked=checked,
+            )
+
+        # Replace the hidden-ribbon state handles with the user-visible actions.
+        self._navigation_tool_button = self._ui_actions["select"]
+        self._navigation_tool_button.setCheckable(True)
+        self._navigation_tool_button.setChecked(True)
+        self._shape_tool_buttons = {
+            name: self._ui_actions[name]
+            for name in ("rectangle", "ellipse", "polygon", "line", "text")
+        }
+        for action in self._shape_tool_buttons.values():
+            action.setCheckable(True)
+
+        self._cam_operation_buttons = {
+            operation: self._ui_actions[f"cam_{operation}"]
+            for operation in (
+                "profile",
+                "pocket",
+                "vcarve",
+                "engrave",
+                "drill",
+                "rough",
+                "finish",
+                "rest",
+                "waterline",
+            )
+        }
+        self._tabs_button = self._ui_actions["tabs"]
+        self._simulation_button = self._ui_actions["simulate"]
+        self._machine_connect_button = self._ui_actions["machine_connect"]
+        self._toolpaths_view_button = self._ui_actions["toolpaths"]
+        self._rapids_view_button = self._ui_actions["rapids"]
+        self._calculate_button = self._ui_actions["calculate"]
+
+        self._history_action_buttons["undo"].append(self._ui_actions["undo"])
+        self._history_action_buttons["redo"].append(self._ui_actions["redo"])
+        for name in (
+            "cut",
+            "copy",
+            "paste",
+            "delete",
+            "align",
+            "center",
+            "group",
+            "ungroup",
+            "duplicate",
+            "move_up",
+            "move_down",
+        ):
+            self._selection_action_buttons[name] = self._ui_actions[name]
+
+        self._model_selection_buttons.extend(
+            self._ui_actions[name]
+            for name in (
+                "position",
+                "rotate",
+                "size",
+                "scale",
+                "center_xy",
+                "top_z0",
+                "fit_stock",
+                "reset_transform",
+            )
+        )
+        self._toolpath_output_buttons.extend(
+            self._ui_actions[name]
+            for name in (
+                "preview",
+                "simulate",
+                "export_toolpath",
+                "toolpaths",
+                "rapids",
+            )
+        )
+        self._option_buttons.update(
+            {
+                name: self._ui_actions[name]
+                for name in (
+                    "stock",
+                    "grid",
+                    "rulers",
+                    "inspector",
+                    "status_bar",
+                    "view_controls",
+                    "reverse_horizontal",
+                    "invert_vertical",
+                )
+            }
+        )
+        self._option_buttons["properties_panel"] = self._ui_actions["inspector"]
+
+    def _add_menu_actions(
+        self,
+        menu: QMenu,
+        keys: tuple[str, ...],
+    ) -> None:
+        for key in keys:
+            menu.addAction(self._ui_actions[key])
+
+    def _add_cam_choice_menu(
+        self,
+        parent: QMenu,
+        title: str,
+        key: str,
+        values: tuple[str, ...],
+        current: str,
+    ) -> QMenu:
+        submenu = parent.addMenu(title)
+        self._cam_menu_choice_actions.setdefault(key, [])
+        for value in values:
+            action = QAction(value, submenu)
+            action.setCheckable(True)
+            action.setChecked(value == current)
+            action.triggered.connect(
+                lambda _checked=False, setting=key, choice=value: (
+                    self._set_cam_design_option(setting, choice)
+                )
+            )
+            submenu.addAction(action)
+            self._cam_menu_choice_actions[key].append(action)
+        return submenu
+
+    def _build_main_menu_bar(self) -> QMenuBar:
+        """Build the normal Photopea-style dropdown command bar."""
+
+        bar = QMenuBar()
+        bar.setObjectName("MainMenuBar")
+        self._cam_menu_choice_actions: dict[str, list[QAction]] = {}
+        self._cutter_menu_actions: list[QAction] = []
+
+        file_menu = bar.addMenu("File")
+        self._add_menu_actions(file_menu, ("new", "open", "save", "save_as"))
+        file_menu.addSeparator()
+        import_menu = file_menu.addMenu("Import")
+        self._add_menu_actions(
+            import_menu,
+            (
+                "import",
+                "import_stl",
+                "import_svg",
+                "import_dxf",
+                "import_image",
+                "import_gcode",
+            ),
+        )
+        file_menu.addSeparator()
+        file_menu.addAction(self._ui_actions["export_gcode"])
+
+        edit_menu = bar.addMenu("Edit")
+        self._add_menu_actions(edit_menu, ("undo", "redo"))
+        edit_menu.addSeparator()
+        self._add_menu_actions(
+            edit_menu,
+            (
+                "cut",
+                "copy",
+                "paste",
+                "duplicate",
+                "delete",
+                "select_all",
+            ),
+        )
+
+        design_menu = bar.addMenu("Design")
+        draw_menu = design_menu.addMenu("Draw")
+        self._add_menu_actions(
+            draw_menu,
+            ("select", "rectangle", "ellipse", "polygon", "line", "text"),
+        )
+        vector_menu = design_menu.addMenu("Vector")
+        self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        arrange_menu = design_menu.addMenu("Arrange")
+        self._add_menu_actions(
+            arrange_menu,
+            ("align", "center", "group", "ungroup", "duplicate"),
+        )
+        design_menu.addSeparator()
+        self._add_menu_actions(design_menu, ("layers", "move_up", "move_down"))
+
+        model_menu = bar.addMenu("Model")
+        self._add_menu_actions(model_menu, ("stock_setup", "fit_view"))
+        transform_menu = model_menu.addMenu("Transform")
+        self._add_menu_actions(
+            transform_menu,
+            ("position", "rotate", "size", "scale"),
+        )
+        placement_menu = model_menu.addMenu("Placement")
+        self._add_menu_actions(
+            placement_menu,
+            ("center_xy", "top_z0", "fit_stock", "reset_transform"),
+        )
+
+        toolpaths_menu = bar.addMenu("Toolpaths")
+        ops_2d = toolpaths_menu.addMenu("2D / 2.5D")
+        self._add_menu_actions(
+            ops_2d,
+            (
+                "cam_profile",
+                "cam_pocket",
+                "cam_vcarve",
+                "cam_engrave",
+                "cam_drill",
+                "tabs",
+            ),
+        )
+        ops_3d = toolpaths_menu.addMenu("3D")
+        self._add_menu_actions(
+            ops_3d,
+            ("cam_rough", "cam_finish", "cam_rest", "cam_waterline"),
+        )
+
+        cutter_menu = toolpaths_menu.addMenu("Cutter")
+        for index in range(self.tool_combo.count()):
+            cutter = self.tool_combo.itemData(index)
+            label = getattr(cutter, "name", self.tool_combo.itemText(index))
+            action = QAction(str(label), cutter_menu)
+            action.setCheckable(True)
+            action.setChecked(index == self.tool_combo.currentIndex())
+            action.triggered.connect(
+                lambda _checked=False, idx=index: self.tool_combo.setCurrentIndex(idx)
+            )
+            cutter_menu.addAction(action)
+            self._cutter_menu_actions.append(action)
+        cutter_menu.addSeparator()
+        self._add_menu_actions(
+            cutter_menu,
+            ("tool_library", "new_tool", "custom_profile", "calculator"),
+        )
+
+        path_design = toolpaths_menu.addMenu("Path Design")
+        self._add_cam_choice_menu(
+            path_design,
+            "Cut Type",
+            "cut_type",
+            ("Auto", "Pocket", "On Path", "Outside", "Inside"),
+            self._cam_cut_type,
+        )
+        self._add_cam_choice_menu(
+            path_design,
+            "3D Style",
+            "3d_cut_style",
+            (
+                "Model Boundary Relief",
+                "Rectangle Relief",
+                "Full Depth Cutout",
+            ),
+            self._cam_3d_cut_style,
+        )
+        self._add_cam_choice_menu(
+            path_design,
+            "Direction",
+            "direction",
+            (
+                "Smart Serpentine",
+                "Offset",
+                "Raster X",
+                "Raster Y",
+                "Raster 45°",
+                "Raster 135°",
+            ),
+            self._cam_direction,
+        )
+        detail_menu = path_design.addMenu("Detail")
+        for detail in (0, 25, 50, 75, 100):
+            action = QAction(f"{detail}%", detail_menu)
+            action.triggered.connect(
+                lambda _checked=False, value=detail: self._set_cam_detail(value)
+            )
+            detail_menu.addAction(action)
+        path_design.addAction(self._ui_actions["advanced_cam"])
+
+        motion = toolpaths_menu.addMenu("Motion")
+        self._add_cam_choice_menu(
+            motion,
+            "Entry",
+            "entry",
+            ("Plunge", "Ramp 5°", "Ramp 20°", "Custom Ramp"),
+            self._cam_entry,
+        )
+        self._add_cam_choice_menu(
+            motion,
+            "Milling",
+            "milling",
+            ("Default", "Climb (CCW)", "Conventional (CW)"),
+            self._cam_milling,
+        )
+        self._add_cam_choice_menu(
+            motion,
+            "Linking",
+            "linking",
+            ("Smart Min-Lift", "Local Lift", "Full Retract"),
+            self._cam_linking,
+        )
+
+        toolpaths_menu.addSeparator()
+        self._add_menu_actions(
+            toolpaths_menu,
+            ("calculate", "preview", "simulate", "export_toolpath"),
+        )
+
+        machine_menu = bar.addMenu("Machine")
+        self._add_menu_actions(
+            machine_menu,
+            ("machine_profile", "work_area", "origin", "postprocessor"),
+        )
+        machine_menu.addSeparator()
+        self._add_menu_actions(
+            machine_menu,
+            ("machine_connect", "probe", "jog"),
+        )
+
+        view_menu = bar.addMenu("View")
+        display_menu = view_menu.addMenu("Display")
+        self._add_menu_actions(
+            display_menu,
+            ("stock", "grid", "rulers", "toolpaths", "rapids"),
+        )
+        camera_menu = view_menu.addMenu("Camera")
+        self._add_menu_actions(
+            camera_menu,
+            ("view_fit", "view_2d", "perspective", "orthographic", "isometric"),
+        )
+        fixed_menu = view_menu.addMenu("Fixed View")
+        self._add_menu_actions(
+            fixed_menu,
+            (
+                "view_top",
+                "view_bottom",
+                "view_front",
+                "view_back",
+                "view_left",
+                "view_right",
+            ),
+        )
+        workspace_menu = view_menu.addMenu("Workspace")
+        self._add_menu_actions(
+            workspace_menu,
+            ("layers", "inspector", "status_bar", "view_controls", "reset_ui"),
+        )
+        navigation_menu = view_menu.addMenu("Navigation")
+        self._add_menu_actions(
+            navigation_menu,
+            ("reverse_horizontal", "invert_vertical"),
+        )
+        return bar
+
     def _populate_ribbon(self) -> None:
         def add_cam_selector(
             group,
