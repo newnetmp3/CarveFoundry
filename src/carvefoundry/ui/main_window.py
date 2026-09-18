@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import numpy as np
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer
-from PySide6.QtGui import QAction, QFont, QFontDatabase, QKeySequence
+from PySide6.QtGui import QAction, QFont, QFontDatabase, QFontInfo, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -2255,7 +2255,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         content = item.name.strip() or "Text"
         return TextProperties(
             content=content,
-            font_family=QFont().family(),
+            font_family=QFontInfo(QFont()).family(),
             size_pt=max(6.0, float(dimensions[1]) * 72.0 / 25.4),
             box_width_mm=max(0.1, float(dimensions[0])),
             depth_mm=max(0.05, float(dimensions[2])),
@@ -2405,9 +2405,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _update_text_control_enablement(self) -> None:
         if not hasattr(self, "text_wrap_check"):
             return
-        self.text_box_width_spin.setEnabled(
-            self.text_wrap_check.isChecked()
-        )
+        # Width also defines the alignment frame when wrapping is off, so it
+        # remains editable at all times. Wrap only controls line breaking.
+        self.text_box_width_spin.setEnabled(True)
         self.text_outline_width_spin.setEnabled(
             self.text_geometry_combo.currentData() == "outline"
         )
