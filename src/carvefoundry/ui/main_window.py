@@ -1303,6 +1303,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.project.stock.width_mm = width
         self.project.stock.height_mm = height
         self.project.stock.thickness_mm = thickness
+        self._invalidate_toolpaths("Stock dimensions")
         if self.project_list.count():
             self.project_list.item(0).setText(self._stock_list_text())
         self.selection_info.setText(
@@ -1343,6 +1344,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _viewport_transform_finished(self, index: int) -> None:
         self._viewport_transform_changed(index)
         if 0 <= index < len(self.project.items):
+            self._invalidate_toolpaths("Model position")
             item = self.project.items[index]
             x, y, z = item.transform.translation_mm
             self.statusBar().showMessage(
@@ -1373,6 +1375,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
         self.viewport.set_selected_item(index)
+        self._invalidate_toolpaths("Model transform")
         self.viewport.update()
         self._after_context_transform(index, label)
         self.statusBar().showMessage(f"{label}: {item.name}", 3000)
@@ -1772,6 +1775,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
         item.source_units = units
         item.transform = self.project.default_transform_for_mesh(item.mesh, units)
+        self._invalidate_toolpaths("Model units")
         self._refresh_project_list(self.project_list.currentRow())
         self.viewport.fit_view()
         self.statusBar().showMessage(
@@ -1857,6 +1861,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         item.transform.scale_xyz = tuple(float(value) for value in new_scale)
         item.transform.validate()
+        self._invalidate_toolpaths("Model transform")
 
         self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
@@ -1879,6 +1884,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             tz,
         )
         self._sync_transform_controls(item)
+        self._invalidate_toolpaths("Model position")
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Centered selected mesh on stock", 3000)
@@ -1895,6 +1901,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         tx, ty, tz = item.transform.translation_mm
         item.transform.translation_mm = (tx, ty, tz - bounds[1, 2])
         self._sync_transform_controls(item)
+        self._invalidate_toolpaths("Model position")
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Placed selected mesh top at stock Z0", 3000)
@@ -1910,6 +1917,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             item.source_units,
         )
         self._sync_transform_controls(item)
+        self._invalidate_toolpaths("Model transform")
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Reset selected mesh transform", 3000)
@@ -1944,6 +1952,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
 
         self.project.items.extend(duplicates)
+        self._invalidate_toolpaths("Project geometry")
         self._refresh_project_list(len(self.project.items))
         self.viewport.update()
 
@@ -1966,6 +1975,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         for index in reversed(indices):
             self.project.remove_item(index)
 
+        self._invalidate_toolpaths("Project geometry")
         next_row = min(indices[0] + 1, len(self.project.items))
         self._refresh_project_list(next_row)
         self.viewport.update()
@@ -2313,9 +2323,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     ) -> None:
         self.project = project
         self.project_path = project_path
+        self._toolpaths_stale_reason = None
         self.project_title_label.setText(f"  •  {project.name} Project")
         self.viewport.set_project(project)
         self._refresh_project_list(selected_row)
+        self._sync_toolpath_state_from_project()
 
     def _undo(self) -> None:
         self.statusBar().showMessage("Nothing to undo", 3000)
@@ -2552,6 +2564,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             imported.append(item)
 
         if imported:
+            self._invalidate_toolpaths("Project geometry")
             self._refresh_project_list(len(self.project.items))
             if any(item.mesh is not None for item in imported):
                 self.viewport.fit_view()
