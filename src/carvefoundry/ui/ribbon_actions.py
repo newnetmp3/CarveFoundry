@@ -1324,10 +1324,32 @@ class RibbonActionsMixin:
             f"Cutter: {cutter_name}\n"
             "Adjust Path Design or Motion as needed, then press Calculate."
         )
+        self._sync_cam_control_relevance()
         self.statusBar().showMessage(
             f"Toolpath operation: {labels.get(operation, operation)}",
             3000,
         )
+
+    def _sync_cam_control_relevance(self) -> None:
+        operation = self._active_cam_operation
+        is_3d = operation in {"rough", "finish", "rest", "waterline"}
+
+        for combo in self._cam_selector_widgets.get("cut_type", []):
+            combo.setEnabled(not is_3d)
+        for combo in self._cam_selector_widgets.get("3d_cut_style", []):
+            combo.setEnabled(is_3d)
+        for combo in self._cam_selector_widgets.get("entry", []):
+            combo.setEnabled(not is_3d)
+        for combo in self._cam_selector_widgets.get("milling", []):
+            combo.setEnabled(not is_3d)
+        for combo in self._cam_selector_widgets.get("linking", []):
+            combo.setEnabled(is_3d)
+
+        for widget in self._cam_detail_widgets:
+            widget.setEnabled(is_3d)
+
+        if self._tabs_button is not None:
+            self._tabs_button.setEnabled(operation == "profile")
 
     def _toggle_tabs_operation(self) -> None:
         self._tabs_enabled = not self._tabs_enabled
