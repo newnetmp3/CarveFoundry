@@ -798,6 +798,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 f"Rotate around the {axis} axis; motion occurs in the {plane} plane."
             )
             spin.setAccessibleName(f"Rotation around {axis} axis")
+        self.size_spins = tuple(
+            self._configured_spin(
+                minimum=0.001,
+                maximum=100000.0,
+                decimals=3,
+                step=1.0,
+                suffix=" mm",
+            )
+            for _ in range(3)
+        )
+        for spin, axis in zip(
+            self.size_spins,
+            ("X", "Y", "Z"),
+            strict=True,
+        ):
+            spin.setToolTip(
+                f"Set model Size {axis} directly in millimeters. "
+                "Size is measured before rotation."
+            )
+
         self.scale_spins = tuple(
             self._configured_spin(
                 minimum=0.001,
@@ -812,6 +832,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             (
                 ("Position", self.position_spins),
                 ("Rotate about", self.rotation_spins),
+                ("Size", self.size_spins),
                 ("Scale", self.scale_spins),
             ),
             start=3,
@@ -829,23 +850,31 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         rotation_note.setToolTip(
             "X/Y/Z name the axis being rotated around, not the plane being rotated."
         )
-        grid.addWidget(rotation_note, 6, 0, 1, 4)
+        grid.addWidget(rotation_note, 7, 0, 1, 4)
 
-        self.lock_scale = QCheckBox("Lock XYZ scale")
-        self.lock_scale.setChecked(True)
-        grid.addWidget(self.lock_scale, 7, 0, 1, 4)
+        grid.addWidget(QLabel("Lock axes"), 8, 0)
+        self.lock_axis_checks = tuple(
+            QCheckBox(axis)
+            for axis in ("X", "Y", "Z")
+        )
+        for column, checkbox in enumerate(self.lock_axis_checks, start=1):
+            checkbox.setChecked(True)
+            checkbox.setToolTip(
+                "Locked axes resize proportionally together when Size or Scale changes."
+            )
+            grid.addWidget(checkbox, 8, column)
 
         center_button = QPushButton("Center XY")
         center_button.clicked.connect(self._center_selected_xy)
-        grid.addWidget(center_button, 8, 0, 1, 2)
+        grid.addWidget(center_button, 9, 0, 1, 2)
 
         top_button = QPushButton("Top to Z0")
         top_button.clicked.connect(self._top_selected_to_surface)
-        grid.addWidget(top_button, 8, 2, 1, 2)
+        grid.addWidget(top_button, 9, 2, 1, 2)
 
         reset_button = QPushButton("Reset Transform")
         reset_button.clicked.connect(self._reset_selected_transform)
-        grid.addWidget(reset_button, 9, 0, 1, 4)
+        grid.addWidget(reset_button, 10, 0, 1, 4)
 
         widget.setVisible(False)
         return widget
@@ -1066,11 +1095,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         controls = {
             "position": self.position_spins,
             "rotation": self.rotation_spins,
+            "size": self.size_spins,
             "scale": self.scale_spins,
         }
         labels = {
             "position": "Position",
             "rotation": "Rotation",
+            "size": "Size",
             "scale": "Scale",
         }
         target = controls.get(section, self.position_spins)
@@ -1227,6 +1258,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             edit_menu,
             "Rotate…",
             lambda: self._focus_transform_section("rotation"),
+        )
+        self._add_context_action(
+            edit_menu,
+            "Size…",
+            lambda: self._focus_transform_section("size"),
         )
         self._add_context_action(
             edit_menu,
@@ -1392,6 +1428,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 strict=True,
             ):
                 spin.setValue(value)
+            local_size = item.local_size_mm()
+            if local_size is not None:
+                for spin, value in zip(
+                    self.size_spins,
+                    local_size,
+                    strict=True,
+                ):
+                    spin.setValue(float(value))
             for spin, value in zip(
                 self.scale_spins,
                 item.transform.scale_xyz,
@@ -1419,6 +1463,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             5000,
         )
 
+    def _locked_transform_axes(self) -> tuple[bool, bool, bool]:
+        return tuple(
+            checkbox.isChecked()
+            for checkbox in self.lock_axis_checks
+        )
+
     def _transform_control_changed(self, value: float) -> None:
         if self._updating_transform_controls:
             return
@@ -1428,19 +1478,71 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
 
         sender = self.sender()
-        if self.lock_scale.isChecked() and sender in self.scale_spins:
-            self._updating_transform_controls = True
-            try:
-                for spin in self.scale_spins:
-                    if spin is not sender:
-                        spin.setValue(value)
-            finally:
-                self._updating_transform_controls = False
+        current_scale = np.asarray(item.transform.scale_xyz, dtype=float)
+        new_scale = current_scale.copy()
+        locked_axes = self._locked_transform_axes()
 
-        item.transform.translation_mm = tuple(spin.value() for spin in self.position_spins)
-        item.transform.rotation_deg = tuple(spin.value() for spin in self.rotation_spins)
-        item.transform.scale_xyz = tuple(spin.value() for spin in self.scale_spins)
+        if sender in self.size_spins:
+            axis = self.size_spins.index(sender)
+            current_size = item.local_size_mm()
+            if current_size is None:
+                return
+            axis_size = float(current_size[axis])
+            if axis_size <= 1e-12:
+                self.statusBar().showMessage(
+                    f"Cannot resize zero-length {'XYZ'[axis]} dimension",
+                    3500,
+                )
+                self._sync_transform_controls(item)
+                return
+
+            factor = float(value) / axis_size
+            affected = (
+                [
+                    index
+                    for index, locked in enumerate(locked_axes)
+                    if locked
+                ]
+                if locked_axes[axis]
+                else [axis]
+            )
+            if axis not in affected:
+                affected.append(axis)
+            for index in affected:
+                new_scale[index] = current_scale[index] * factor
+
+        elif sender in self.scale_spins:
+            axis = self.scale_spins.index(sender)
+            requested_scale = float(value)
+            current_axis_scale = float(current_scale[axis])
+            if current_axis_scale <= 1e-12:
+                return
+
+            factor = requested_scale / current_axis_scale
+            affected = (
+                [
+                    index
+                    for index, locked in enumerate(locked_axes)
+                    if locked
+                ]
+                if locked_axes[axis]
+                else [axis]
+            )
+            if axis not in affected:
+                affected.append(axis)
+            for index in affected:
+                new_scale[index] = current_scale[index] * factor
+
+        item.transform.translation_mm = tuple(
+            spin.value() for spin in self.position_spins
+        )
+        item.transform.rotation_deg = tuple(
+            spin.value() for spin in self.rotation_spins
+        )
+        item.transform.scale_xyz = tuple(float(value) for value in new_scale)
         item.transform.validate()
+
+        self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
         self.viewport.update()
 
