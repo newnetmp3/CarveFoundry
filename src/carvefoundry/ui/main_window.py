@@ -922,12 +922,24 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             f"{group}"
         )
 
+    @staticmethod
+    def _object_selector_text(item: ProjectItem) -> str:
+        group = " • Grouped" if item.group_id else ""
+        kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
+        return f"{item.name}  [{kind}]{group}"
+
     def _refresh_project_list(self, selected_row: int = 0) -> None:
         self._updating_project_list = True
+        self._updating_object_selector = True
         self.project_list.blockSignals(True)
+        self.object_selector.blockSignals(True)
         try:
             self.project_list.clear()
+            self.object_selector.clear()
+
             self.project_list.addItem(self._stock_list_text())
+            self.object_selector.addItem("Stock")
+
             for project_item in self.project.items:
                 list_item = QListWidgetItem(self._item_list_text(project_item))
                 list_item.setFlags(
@@ -939,12 +951,47 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                     else Qt.CheckState.Unchecked
                 )
                 self.project_list.addItem(list_item)
-            selected_row = max(0, min(selected_row, self.project_list.count() - 1))
+                self.object_selector.addItem(
+                    self._object_selector_text(project_item)
+                )
+
+            selected_row = max(
+                0,
+                min(selected_row, self.project_list.count() - 1),
+            )
             self.project_list.setCurrentRow(selected_row)
+            self.object_selector.setCurrentIndex(selected_row)
+            self.layers_popup.set_object_count(len(self.project.items))
         finally:
             self.project_list.blockSignals(False)
+            self.object_selector.blockSignals(False)
             self._updating_project_list = False
+            self._updating_object_selector = False
         self._update_properties(selected_row)
+
+    def _object_selector_changed(self, row: int) -> None:
+        if self._updating_object_selector:
+            return
+        row = max(0, min(int(row), self.project_list.count() - 1))
+        if self.project_list.currentRow() != row:
+            self.project_list.setCurrentRow(row)
+        else:
+            self._update_properties(row)
+
+    def _show_layers_popup(self) -> None:
+        if not hasattr(self, "layers_popup"):
+            return
+        self.layers_popup.show_below(self.layers_button)
+
+    def _focus_stock_section(self) -> None:
+        self.properties_panel.show()
+        self.inspector_button.setChecked(True)
+        self._set_option_checked("properties_panel", True)
+        if self.project_list.currentRow() != 0:
+            self.project_list.setCurrentRow(0)
+        self.stock_spins[0].setFocus(Qt.FocusReason.OtherFocusReason)
+        self.stock_spins[0].selectAll()
+        self.statusBar().showMessage("Stock setup ready", 2500)
 
     def _project_item_changed(self, list_item: QListWidgetItem) -> None:
         if self._updating_project_list:
