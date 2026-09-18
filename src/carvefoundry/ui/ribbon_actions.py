@@ -201,6 +201,7 @@ class RibbonActionsMixin:
         self._tabs_enabled = False
         self._active_shape_tool: str | None = None
         self._shape_tool_buttons: dict[str, object] = {}
+        self._navigation_tool_button = None
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
         self._cam_detail_widgets: list[object] = []
 
@@ -641,15 +642,30 @@ class RibbonActionsMixin:
         self._after_ribbon_mutation(f"create {kind}", True)
         self.statusBar().showMessage(f"Created {item.name}", 3000)
 
+    def _activate_navigation_tool(self) -> None:
+        """Return the viewport to normal selection and camera navigation."""
+
+        self.viewport.set_shape_draw_mode(None)
+        self.statusBar().showMessage(
+            "Select tool — click objects to select • drag to orbit • "
+            "middle/right-drag to pan",
+            3500,
+        )
+
+    def _cancel_active_tool(self) -> None:
+        """Exit the current transient drawing tool, if any."""
+
+        if self._active_shape_tool is None:
+            return
+        self._activate_navigation_tool()
+
     def _set_shape_tool(self, tool: str) -> None:
         """Activate one paint-style shape tool in the viewport."""
 
         button = self._shape_tool_buttons.get(tool)
         wants_active = bool(button is None or button.isChecked())
         if self._active_shape_tool == tool and not wants_active:
-            self._active_shape_tool = None
-            self.viewport.set_shape_draw_mode(None)
-            self.statusBar().showMessage("Shape drawing tool off", 2000)
+            self._activate_navigation_tool()
             return
 
         self._active_shape_tool = tool
@@ -660,10 +676,18 @@ class RibbonActionsMixin:
             finally:
                 shape_button.blockSignals(False)
 
+        if self._navigation_tool_button is not None:
+            self._navigation_tool_button.blockSignals(True)
+            try:
+                self._navigation_tool_button.setChecked(False)
+            finally:
+                self._navigation_tool_button.blockSignals(False)
+
         self.viewport.set_shape_draw_mode(tool)
         label = tool.title()
         self.statusBar().showMessage(
-            f"{label} tool — drag on the stock to draw • Shift constrains • Esc exits"
+            f"{label} tool — drag on the stock to draw • Shift constrains • "
+            "Alt+drag orbits • Esc returns to Select"
         )
 
     def _shape_draw_mode_changed(self, mode: str) -> None:
@@ -674,6 +698,12 @@ class RibbonActionsMixin:
                 button.setChecked(name == mode)
             finally:
                 button.blockSignals(False)
+        if self._navigation_tool_button is not None:
+            self._navigation_tool_button.blockSignals(True)
+            try:
+                self._navigation_tool_button.setChecked(not bool(mode))
+            finally:
+                self._navigation_tool_button.blockSignals(False)
 
     def _add_drawn_item(
         self,
