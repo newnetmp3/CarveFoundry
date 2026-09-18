@@ -37,6 +37,41 @@ class ReliefStyle(StrEnum):
     FULL_DEPTH = "full_depth"
 
 
+DETAIL_FAST_STEPOVER_FRACTION = 0.20
+DETAIL_FINE_STEPOVER_FRACTION = 0.04
+
+
+def detail_stepover_fraction(detail: int | float) -> float:
+    """Map a 0-100 detail control to cutter-relative raster stepover.
+
+    Zero favors speed at 20% of cutter diameter. One hundred favors detail at
+    4%. Increasing Detail therefore always adds raster lines for a fixed tool
+    and work area.
+    """
+
+    value = float(detail)
+    if not isfinite(value) or not 0.0 <= value <= 100.0:
+        raise ValueError("detail must be between 0 and 100.")
+    span = DETAIL_FAST_STEPOVER_FRACTION - DETAIL_FINE_STEPOVER_FRACTION
+    return DETAIL_FAST_STEPOVER_FRACTION - span * (value / 100.0)
+
+
+def detail_for_stepover_fraction(fraction: float) -> int:
+    """Return the nearest slider value for a supported stepover fraction."""
+
+    value = float(fraction)
+    if not isfinite(value):
+        raise ValueError("stepover fraction must be finite.")
+    value = max(
+        DETAIL_FINE_STEPOVER_FRACTION,
+        min(DETAIL_FAST_STEPOVER_FRACTION, value),
+    )
+    span = DETAIL_FAST_STEPOVER_FRACTION - DETAIL_FINE_STEPOVER_FRACTION
+    return round(
+        100.0 * (DETAIL_FAST_STEPOVER_FRACTION - value) / span
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class BasicCamSettings:
     safe_z_mm: float = 1.5
@@ -636,16 +671,22 @@ def _finish_settings(
 ) -> Finish3DSettings:
     bounds = np.asarray(mesh.bounds, dtype=float)
     xy_span = np.maximum(bounds[1, :2] - bounds[0, :2], 1e-6)
+    detail_fraction = settings.finish_stepover_fraction
     if quality == "rough":
-        stepover = max(cutter.diameter_mm * 0.48, 0.05)
+        # Roughing stays substantially coarser than finishing, but the same
+        # Detail control still raises/lowers row density predictably.
+        rough_fraction = min(0.65, max(0.18, detail_fraction * 4.0))
+        stepover = max(cutter.diameter_mm * rough_fraction, 0.05)
         spacing = min(
             stepover,
-            max(cutter.diameter_mm * 0.24, float(np.max(xy_span)) / 300.0),
+            max(stepover * 0.55, float(np.max(xy_span)) / 300.0),
         )
     else:
-        fraction = settings.finish_stepover_fraction
-        if quality == "rest":
-            fraction = min(fraction, 0.08)
+        fraction = (
+            max(0.03, detail_fraction * 0.8)
+            if quality == "rest"
+            else detail_fraction
+        )
         stepover = max(cutter.diameter_mm * fraction, 0.03)
         spacing = min(
             stepover,
