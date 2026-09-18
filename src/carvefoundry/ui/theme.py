@@ -73,6 +73,38 @@ QComboBox#RibbonCombo::drop-down {
     border: 0;
     width: 18px;
 }
+#RibbonSlider {
+    background: transparent;
+}
+#RibbonSliderEnd {
+    color: #7f8aa0;
+    font-size: 9px;
+}
+#RibbonSliderReadout {
+    color: #d7dfeb;
+    font-size: 9px;
+}
+QSlider#RibbonDetailSlider::groove:horizontal {
+    height: 4px;
+    background: #2b354b;
+    border-radius: 2px;
+}
+QSlider#RibbonDetailSlider::sub-page:horizontal {
+    background: #c8ff3d;
+    border-radius: 2px;
+}
+QSlider#RibbonDetailSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+    background: #edf1f7;
+    border: 1px solid #68748b;
+}
+QSlider#RibbonDetailSlider::handle:horizontal:hover {
+    background: #c8ff3d;
+    border-color: #c8ff3d;
+}
 QToolButton#RibbonButton, QToolButton#RibbonPrimary {
     background: transparent;
     color: #edf1f7;
