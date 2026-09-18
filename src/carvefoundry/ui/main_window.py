@@ -138,6 +138,20 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.project_title_label.setObjectName("Muted")
         line.addWidget(self.project_title_label)
         line.addStretch(1)
+
+        for title, callback, tooltip in (
+            ("Save", self._save_project, "Save project • Ctrl+S"),
+            ("Undo", self._undo, "Undo • Ctrl+Z"),
+            ("Redo", self._redo, "Redo • Ctrl+Y"),
+        ):
+            button = QPushButton(title)
+            button.setObjectName("TitleQuickButton")
+            button.setToolTip(tooltip)
+            button.clicked.connect(
+                lambda _checked=False, fn=callback: fn()
+            )
+            line.addWidget(button)
+
         mode = QLabel("DESIGN + CAM")
         mode.setObjectName("AccentText")
         line.addWidget(mode)
