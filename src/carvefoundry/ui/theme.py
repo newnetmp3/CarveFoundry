@@ -7,15 +7,15 @@ QWidget {
     background: #0b1020;
     color: #edf1f7;
     font-family: Inter, "Noto Sans", "DejaVu Sans", sans-serif;
-    font-size: 13px;
+    font-size: 12px;
 }
 QMainWindow, #AppRoot { background: #0b1020; }
 #TitleBar, #RibbonTabBar {
     background: #0e1425;
     border-bottom: 1px solid #232b3e;
 }
-#AppName { color: #ffffff; font-size: 18px; font-weight: 700; }
-#AppAccent { color: #c8ff3d; font-size: 18px; font-weight: 800; }
+#AppName { color: #ffffff; font-size: 16px; font-weight: 700; }
+#AppAccent { color: #c8ff3d; font-size: 16px; font-weight: 800; }
 #MachineStatus {
     background: #151b2a;
     color: #8f9aae;
@@ -53,8 +53,8 @@ QTabWidget#Ribbon QTabBar::tab {
     background: transparent;
     color: #9aa4b8;
     border: 0;
-    padding: 8px 16px;
-    min-width: 56px;
+    padding: 6px 12px;
+    min-width: 48px;
     font-weight: 600;
 }
 QTabWidget#Ribbon QTabBar::tab:hover { color: #ffffff; background: #171e31; }
@@ -88,7 +88,7 @@ QScrollArea#RibbonScrollArea QScrollBar::sub-line:horizontal {
 #RibbonGroup {
     background: #12192a;
     border: 1px solid #242e44;
-    border-radius: 10px;
+    border-radius: 6px;
 }
 #RibbonGroupTitle {
     color: #c8ff3d;
@@ -180,9 +180,9 @@ QToolButton#RibbonButton, QToolButton#RibbonPrimary {
     background: transparent;
     color: #edf1f7;
     border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 6px 9px;
-    min-width: 54px;
+    border-radius: 5px;
+    padding: 4px 6px;
+    min-width: 40px;
 }
 QToolButton#RibbonPrimary { font-weight: 800; }
 QToolButton#RibbonButton:checked, QToolButton#RibbonPrimary:checked {
@@ -205,10 +205,65 @@ QToolButton#RibbonButton:disabled, QToolButton#RibbonPrimary:disabled {
     color: #586276;
     border-color: transparent;
 }
+#ToolRail {
+    background: #0e1425;
+    border: 1px solid #232b3e;
+    border-radius: 5px;
+}
+QToolButton#ToolRailButton {
+    background: transparent;
+    color: #dbe3ef;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+}
+QToolButton#ToolRailButton:hover {
+    background: #202a40;
+    color: #c8ff3d;
+    border-color: #35415a;
+}
+QToolButton#ToolRailButton:checked {
+    background: #27324a;
+    color: #c8ff3d;
+    border-color: #c8ff3d;
+}
+QToolButton#ToolRailButton:pressed {
+    background: #c8ff3d;
+    color: #0b1020;
+    border-color: #c8ff3d;
+}
+QToolButton#ToolRailButton::menu-indicator {
+    image: none;
+    width: 7px;
+    height: 7px;
+    subcontrol-origin: padding;
+    subcontrol-position: bottom right;
+    border-right: 1px solid #8f9aae;
+    border-bottom: 1px solid #8f9aae;
+}
+#ToolRailSeparator {
+    color: #273149;
+    background: transparent;
+    margin: 2px 4px;
+}
+QMenu#ToolRailMenu {
+    background: #111827;
+    color: #edf1f7;
+    border: 1px solid #35415a;
+    padding: 4px;
+}
+QMenu#ToolRailMenu::item {
+    padding: 6px 24px 6px 8px;
+    border-radius: 4px;
+}
+QMenu#ToolRailMenu::item:selected {
+    background: #c8ff3d;
+    color: #0b1020;
+}
 #WorkspacePanel, #InspectorPanel {
     background: #0e1425;
     border: 1px solid #232b3e;
-    border-radius: 12px;
+    border-radius: 6px;
 }
 #InspectorSummary {
     background: #0f1626;
