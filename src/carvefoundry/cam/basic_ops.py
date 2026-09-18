@@ -47,7 +47,10 @@ class BasicCamSettings:
     finish_stepover_fraction: float = 0.10
     overall_depth_mm: float | None = None
     padding_mm: float = 0.0
+    usable_bit_length_mm: float | None = None
     tab_height_mm: float = 2.0
+    tab_width_mm: float = 6.0
+    tab_count: int = 4
     tabs_enabled: bool = False
     milling_direction: MillingDirection = MillingDirection.DEFAULT
     pocket_strategy: PocketStrategy = PocketStrategy.RASTER_X
@@ -66,6 +69,7 @@ class BasicCamSettings:
             self.stepover_fraction,
             self.finish_stepover_fraction,
             self.tab_height_mm,
+            self.tab_width_mm,
             self.local_link_clearance_mm,
         )
         if not all(isfinite(value) and value > 0 for value in positive):
@@ -78,6 +82,15 @@ class BasicCamSettings:
             raise ValueError("overall_depth_mm must be greater than zero when set.")
         if not isfinite(self.padding_mm) or self.padding_mm < 0:
             raise ValueError("padding_mm must be finite and non-negative.")
+        if self.usable_bit_length_mm is not None and (
+            not isfinite(self.usable_bit_length_mm)
+            or self.usable_bit_length_mm <= 0
+        ):
+            raise ValueError(
+                "usable_bit_length_mm must be greater than zero when set."
+            )
+        if not 1 <= self.tab_count <= 32:
+            raise ValueError("tab_count must be between 1 and 32.")
         if self.stepover_fraction > 1.0 or self.finish_stepover_fraction > 1.0:
             raise ValueError("Stepover fractions cannot exceed 1.0.")
         if (
@@ -101,11 +114,20 @@ def _target_depth(
     fallback_mm: float = -1.0,
 ) -> float:
     if settings.overall_depth_mm is not None:
-        return -abs(float(settings.overall_depth_mm))
-    minimum_z = float(bounds[0, 2])
-    if minimum_z < -1e-6:
-        return minimum_z
-    return float(fallback_mm)
+        target = -abs(float(settings.overall_depth_mm))
+    else:
+        minimum_z = float(bounds[0, 2])
+        target = minimum_z if minimum_z < -1e-6 else float(fallback_mm)
+
+    if (
+        settings.usable_bit_length_mm is not None
+        and abs(target) > settings.usable_bit_length_mm + 1e-9
+    ):
+        raise ValueError(
+            f"Requested cut depth {abs(target):.3f} mm exceeds the usable "
+            f"bit length {settings.usable_bit_length_mm:.3f} mm."
+        )
+    return target
 
 
 def _depth_passes(target_z: float, max_stepdown_mm: float) -> list[float]:
@@ -207,6 +229,93 @@ def _padded_xy_bounds(
     )
 
 
+def _profile_with_tabs(
+    moves: list[ToolpathMove],
+    corners: list[tuple[float, float]],
+    depth: float,
+    tab_z: float,
+    settings: BasicCamSettings,
+) -> None:
+    segment_lengths = [
+        hypot(end[0] - start[0], end[1] - start[1])
+        for start, end in pairwise(corners)
+    ]
+    perimeter = sum(segment_lengths)
+    if perimeter <= 1e-9:
+        return
+
+    half_width = settings.tab_width_mm / 2.0
+    centers = [
+        perimeter * (index + 0.5) / settings.tab_count
+        for index in range(settings.tab_count)
+    ]
+    intervals = [
+        (max(0.0, center - half_width), min(perimeter, center + half_width))
+        for center in centers
+    ]
+
+    cumulative = 0.0
+    for (start, end), segment_length in zip(
+        pairwise(corners),
+        segment_lengths,
+        strict=True,
+    ):
+        segment_start = cumulative
+        segment_end = cumulative + segment_length
+        breakpoints = {segment_start, segment_end}
+        for interval_start, interval_end in intervals:
+            if segment_start < interval_start < segment_end:
+                breakpoints.add(interval_start)
+            if segment_start < interval_end < segment_end:
+                breakpoints.add(interval_end)
+        ordered = sorted(breakpoints)
+
+        for range_start, range_end in pairwise(ordered):
+            midpoint = (range_start + range_end) / 2.0
+            desired_z = (
+                tab_z
+                if any(
+                    interval_start <= midpoint <= interval_end
+                    for interval_start, interval_end in intervals
+                )
+                else depth
+            )
+            local_start = (
+                (range_start - segment_start) / segment_length
+                if segment_length > 1e-12
+                else 0.0
+            )
+            local_end = (
+                (range_end - segment_start) / segment_length
+                if segment_length > 1e-12
+                else 1.0
+            )
+            start_point = (
+                start[0] + (end[0] - start[0]) * local_start,
+                start[1] + (end[1] - start[1]) * local_start,
+            )
+            end_point = (
+                start[0] + (end[0] - start[0]) * local_end,
+                start[1] + (end[1] - start[1]) * local_end,
+            )
+            if abs(moves[-1].z_mm - desired_z) > 1e-9:
+                _cut(
+                    moves,
+                    start_point[0],
+                    start_point[1],
+                    desired_z,
+                    settings,
+                )
+            _cut(
+                moves,
+                end_point[0],
+                end_point[1],
+                desired_z,
+                settings,
+            )
+        cumulative = segment_end
+
+
 def rectangular_profile(
     bounds: np.ndarray,
     cutter: Cutter,
@@ -273,16 +382,13 @@ def rectangular_profile(
 
         if final_tab_pass:
             tab_z = min(0.0, depth + settings.tab_height_mm)
-            for start, end in pairwise(corners):
-                x0, y0 = start
-                x1, y1 = end
-                first = (x0 + (x1 - x0) * 0.40, y0 + (y1 - y0) * 0.40)
-                second = (x0 + (x1 - x0) * 0.60, y0 + (y1 - y0) * 0.60)
-                _cut(moves, first[0], first[1], depth, settings)
-                _cut(moves, first[0], first[1], tab_z, settings)
-                _cut(moves, second[0], second[1], tab_z, settings)
-                _cut(moves, second[0], second[1], depth, settings)
-                _cut(moves, x1, y1, depth, settings)
+            _profile_with_tabs(
+                moves,
+                corners,
+                depth,
+                tab_z,
+                settings,
+            )
         else:
             start_index = 1
             if settings.ramp_angle_deg is not None:
@@ -582,6 +688,17 @@ def finish_3d(
 ) -> Toolpath:
     if strategy not in {"rough", "finish", "rest"}:
         raise ValueError(f"Unsupported raster 3D strategy: {strategy}")
+    bounds = np.asarray(mesh.bounds, dtype=float)
+    required_depth = max(0.0, float(bounds[1, 2] - bounds[0, 2]))
+    if (
+        settings.usable_bit_length_mm is not None
+        and required_depth > settings.usable_bit_length_mm + 1e-9
+    ):
+        raise ValueError(
+            f"Model depth {required_depth:.3f} mm exceeds the usable bit "
+            f"length {settings.usable_bit_length_mm:.3f} mm."
+        )
+
     result = calculate_3d_finish(
         mesh,
         cutter,
