@@ -12,6 +12,8 @@ class Transform3D:
     """Mutable model transform used by both the viewport and future CAM calculations."""
 
     translation_mm: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    # Euler angles about X, Y and Z respectively.  Each axis name identifies
+    # the axis being rotated around: X acts in the YZ plane, Y in XZ, Z in XY.
     rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0)
     scale_xyz: tuple[float, float, float] = (1.0, 1.0, 1.0)
 
@@ -23,7 +25,12 @@ class Transform3D:
             raise ValueError("Transform scale values must be greater than zero.")
 
     def matrix(self, pivot: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> np.ndarray:
-        """Build a 4x4 transform matrix around *pivot* in model coordinates."""
+        """Build the XYZ Euler transform around *pivot* in model coordinates.
+
+        Rotations are composed as X, then Y, then Z (matrix Rz @ Ry @ Rx).
+        Consequently an X rotation moves geometry through the YZ plane, a Y
+        rotation through XZ, and a Z rotation through XY.
+        """
 
         self.validate()
         tx, ty, tz = self.translation_mm
