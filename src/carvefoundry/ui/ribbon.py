@@ -376,6 +376,9 @@ class RibbonPage(QtWidgets.QWidget):
         self.layout_.setContentsMargins(8, 6, 8, 4)
         self.layout_.setSpacing(6)
         self.layout_.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.layout_.setSizeConstraint(
+            QtWidgets.QLayout.SizeConstraint.SetMinAndMaxSize
+        )
 
         self.scroll_area.setWidget(self.content)
         outer.addWidget(self.scroll_area)
