@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import trimesh
 
-if TYPE_CHECKING:
-    from carvefoundry.cam.toolpath import Toolpath
-
 from .mesh import MeshAsset
 from .transform import Transform3D
 from .units import ModelUnits
+
+if TYPE_CHECKING:
+    from carvefoundry.cam.toolpath import Toolpath
 
 
 MIN_IMPORTED_STOCK_COVERAGE = 0.5
