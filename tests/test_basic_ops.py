@@ -1,11 +1,15 @@
 import numpy as np
 import pytest
+import trimesh
 
 from carvefoundry.cam.basic_ops import (
     BasicCamSettings,
     MillingDirection,
     PocketStrategy,
     center_drill,
+    detail_for_stepover_fraction,
+    detail_stepover_fraction,
+    finish_3d,
     rectangular_pocket,
     rectangular_profile,
 )
@@ -211,3 +215,48 @@ def test_configurable_tab_count_creates_requested_tab_zones() -> None:
         if move.kind is MoveKind.CUT and move.z_mm == pytest.approx(-2.5)
     ]
     assert len(tab_moves) >= 6
+
+
+def test_detail_slider_maps_to_smaller_stepover_as_detail_increases() -> None:
+    fast = detail_stepover_fraction(0)
+    balanced = detail_stepover_fraction(62)
+    fine = detail_stepover_fraction(100)
+
+    assert fast == pytest.approx(0.20)
+    assert fine == pytest.approx(0.04)
+    assert fast > balanced > fine
+    assert detail_for_stepover_fraction(0.10) == pytest.approx(62, abs=1)
+
+
+def test_more_detail_generates_more_raster_cut_moves_for_same_tool() -> None:
+    mesh = trimesh.creation.box(extents=(12.0, 8.0, 2.0))
+    mesh.apply_translation((0.0, 0.0, -1.0))
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+
+    fast_path = finish_3d(
+        mesh,
+        cutter,
+        BasicCamSettings(
+            safe_z_mm=1.5,
+            finish_stepover_fraction=detail_stepover_fraction(0),
+        ),
+    )
+    detail_path = finish_3d(
+        mesh,
+        cutter,
+        BasicCamSettings(
+            safe_z_mm=1.5,
+            finish_stepover_fraction=detail_stepover_fraction(100),
+        ),
+    )
+
+    fast_cuts = sum(
+        move.kind is MoveKind.CUT
+        for move in fast_path.moves
+    )
+    detail_cuts = sum(
+        move.kind is MoveKind.CUT
+        for move in detail_path.moves
+    )
+
+    assert detail_cuts > fast_cuts
