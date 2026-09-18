@@ -59,6 +59,11 @@ QToolButton#RibbonButton, QToolButton#RibbonPrimary {
     min-width: 54px;
 }
 QToolButton#RibbonPrimary { font-weight: 800; }
+QToolButton#RibbonButton:checked, QToolButton#RibbonPrimary:checked {
+    background: #202a40;
+    color: #edf1f7;
+    border-color: #3a465f;
+}
 QToolButton#RibbonButton:hover, QToolButton#RibbonPrimary:hover {
     background: #c8ff3d;
     color: #0b1020;
