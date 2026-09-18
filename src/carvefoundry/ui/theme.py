@@ -50,6 +50,29 @@ QTabWidget#Ribbon QTabBar::tab:selected {
 #RibbonGroupTitle:hover {
     background: #171e31;
 }
+#RibbonSelector {
+    background: transparent;
+}
+#RibbonSelectorTitle {
+    color: #aeb8ca;
+    font-size: 10px;
+    font-weight: 700;
+}
+QComboBox#RibbonCombo {
+    background: #0f1626;
+    color: #edf1f7;
+    border: 1px solid #35415a;
+    border-radius: 5px;
+    padding: 4px 7px;
+    min-height: 24px;
+}
+QComboBox#RibbonCombo:hover {
+    border-color: #c8ff3d;
+}
+QComboBox#RibbonCombo::drop-down {
+    border: 0;
+    width: 18px;
+}
 QToolButton#RibbonButton, QToolButton#RibbonPrimary {
     background: transparent;
     color: #edf1f7;
