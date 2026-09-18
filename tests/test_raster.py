@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 import numpy as np
 import pytest
 
@@ -142,7 +144,7 @@ def test_diagonal_rasters_move_in_both_xy_axes(axis: RasterAxis) -> None:
             current.x_mm - previous.x_mm,
             current.y_mm - previous.y_mm,
         )
-        for previous, current in zip(cut_moves, cut_moves[1:])
+        for previous, current in pairwise(cut_moves)
     ]
     assert any(abs(dx) > 0.0 and abs(dy) > 0.0 for dx, dy in deltas)
 
