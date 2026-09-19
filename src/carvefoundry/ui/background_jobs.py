@@ -71,7 +71,7 @@ class BackgroundWorker(QObject):
                 [
                     sys.executable,
                     "-m",
-                    "carvefoundry.cam.job_process",
+                    "carvefoundry.cam.job_worker_cli",
                     str(request_path),
                     str(result_path),
                 ],
