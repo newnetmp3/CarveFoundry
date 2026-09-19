@@ -2381,7 +2381,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 (
                     "fc-list",
                     "-f",
-                    "%{family[0]}\\t%{style[0]}\\t%{fullname[0]}\\n",
+                    "%{family[0]}\\t%{style[0]}\\t%{fullname[0]}\n",
                 ),
                 check=False,
                 capture_output=True,
@@ -6022,12 +6022,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         def done(result):
             output_files = [Path(name) for name in result["files"]]
             self._set_activity_info(
-                f"G-code exported\\nFiles: {len(output_files)}\\n"
-                + "\\n".join(str(file) for file in output_files)
-                + f"\\n\\nOperations: {result['summary']}\\n"
-                + f"Moves: {result['moves']:,}\\n"
+                f"G-code exported\nFiles: {len(output_files)}\n"
+                + "\n".join(str(file) for file in output_files)
+                + f"\n\nOperations: {result['summary']}\n"
+                + f"Moves: {result['moves']:,}\n"
                 + f"Estimated cutting: {result['minutes']:.1f} min "
-                "(rapids excluded)\\n"
+                "(rapids excluded)\n"
                 + (
                     "One program per cutter stage. Stop, change and "
                     "re-probe the cutter before running the next file."
@@ -6039,7 +6039,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
 
         def failed(message: str) -> None:
-            self._set_activity_info(f"G-code export blocked/failed\\n{message}")
+            self._set_activity_info(f"G-code export blocked/failed\n{message}")
             QMessageBox.warning(
                 self, "G-code export blocked by preflight", message
             )
