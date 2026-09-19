@@ -2787,13 +2787,14 @@ class RibbonActionsMixin:
             object_count = 0
         operation_names = sorted({path.name for path in generated_toolpaths})
         operation_summary = " + ".join(operation_names)
+        source_summary = (
+            "Source: Stock\n"
+            if operation == "surface"
+            else f"Objects: {object_count}\n"
+        )
         self._set_activity_info(
             f"Toolpaths ready\n{operation_summary}\n\n"
-            (
-                "Source: Stock\n"
-                if operation == "surface"
-                else f"Objects: {object_count}\n"
-            )
+            f"{source_summary}"
             f"Cutter: {cutter.name}\n"
             f"Paths: {len(generated_toolpaths):,}\n"
             f"Moves: {total_moves:,}\n"
