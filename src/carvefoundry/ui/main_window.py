@@ -196,6 +196,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.generate_toolpaths_button: QPushButton | None = None
         self._toolpaths_stale_reason: str | None = None
         self._prepared_toolpath_geometry: dict[str, object] | None = None
+        self._prepared_toolpath_stats: dict[str, object] | None = None
         self._text_update_timer = QTimer(self)
         self._text_update_timer.setSingleShot(True)
         self._text_update_timer.setInterval(275)
@@ -3431,6 +3432,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         self.project.toolpaths.clear()
         self._prepared_toolpath_geometry = None
+        self._prepared_toolpath_stats = None
         self._toolpaths_stale_reason = reason
 
         if self._simulation_timer.isActive():
@@ -5708,6 +5710,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.project_path = project_path
         self._toolpaths_stale_reason = None
         self._prepared_toolpath_geometry = None
+        self._prepared_toolpath_stats = None
         self.project_title_label.setText(f"  •  {project.name} Project")
         self.viewport.set_project(project)
         self._refresh_project_list(selected_row)
