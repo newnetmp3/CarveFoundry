@@ -929,6 +929,10 @@ class RibbonActionsMixin:
 
         button = self._shape_tool_buttons.get(tool)
         wants_active = bool(button is None or button.isChecked())
+        if tool == "fixture" and hasattr(self, "tool_rail"):
+            rail_button = self.tool_rail.buttons.get("fixture")
+            if rail_button is not None:
+                wants_active = rail_button.isChecked()
         if self._active_shape_tool == tool and not wants_active:
             self._activate_navigation_tool()
             return
