@@ -255,6 +255,10 @@ QMenuBar#MainMenuBar QMenu::separator {
     border: 1px solid #232b3e;
     border-radius: 5px;
 }
+QScrollArea#ToolRailScroll, QWidget#ToolRailContent {
+    background: #0e1425;
+    border: 0;
+}
 QToolButton#ToolRailButton {
     background: transparent;
     color: #dbe3ef;
@@ -429,6 +433,13 @@ QComboBox#ObjectSelector:hover {
     color: #c8ff3d;
     font-weight: 800;
     padding-right: 8px;
+}
+#ToolMeasureResult {
+    color: #c8ff3d;
+    font-weight: 700;
+}
+#ToolFixtureSize {
+    color: #c9d4e4;
 }
 #ToolOptionsValue {
     color: #dce4f0;
