@@ -11,7 +11,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .project import Project
@@ -82,7 +82,7 @@ def save_recovery(
         mtime = source.stat().st_mtime_ns if source is not None else None
     except OSError:
         mtime = None
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     _atomic_json(metadata, {
         "version": 1,
         "key": key,
