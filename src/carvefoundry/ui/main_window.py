@@ -669,6 +669,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             for name in (
                 "preview",
                 "simulate",
+                "preflight",
                 "export_toolpath",
                 "toolpaths",
                 "rapids",
