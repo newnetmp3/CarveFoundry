@@ -7,8 +7,8 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
     QMenu,
-    QSizePolicy,
     QScrollArea,
+    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
