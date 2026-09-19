@@ -227,6 +227,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
@@ -288,6 +289,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._shape_drag_start_world: np.ndarray | None = None
         self._shape_drag_current_world: np.ndarray | None = None
         self._freehand_points_world: list[np.ndarray] = []
+        self._measurement_xy: tuple[tuple[float, float], tuple[float, float]] | None = None
         self._pen_sample_spacing_mm = 0.35
         self._selection_drag_start_screen: QPointF | None = None
         self._selection_drag_current_screen: QPointF | None = None
@@ -362,6 +364,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.selected_item_indices.clear()
         self._selection_drag_start_screen = None
         self._selection_drag_current_screen = None
+        self._measurement_xy = None
         self._active_resize_handle = None
         self._resize_initial_scale = None
         self._resize_initial_translation = None
@@ -747,7 +750,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def set_shape_draw_mode(self, mode: str | None) -> None:
         normalized = mode.lower() if mode else None
-        allowed = {"rectangle", "ellipse", "polygon", "line", "text", "pen"}
+        allowed = {"rectangle", "ellipse", "polygon", "line", "text", "pen", "measure", "fixture"}
         if normalized is not None and normalized not in allowed:
             raise ValueError(f"Unsupported shape draw mode: {mode}")
 
@@ -1743,6 +1746,26 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 vertices.extend((corners[a], corners[b]))
         return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
 
+    def set_measurement(
+        self, start_xy: tuple[float, float] | None,
+        end_xy: tuple[float, float] | None = None,
+    ) -> None:
+        self._measurement_xy = (
+            (tuple(map(float, start_xy)), tuple(map(float, end_xy)))
+            if start_xy is not None and end_xy is not None else None
+        )
+        self.requestUpdate()
+
+    def _measurement_geometry(self) -> np.ndarray:
+        points = self._measurement_xy
+        if points is None:
+            return np.empty((0, 3), dtype=np.float32)
+        (x0, y0), (x1, y1) = points
+        return np.array(
+            ((x0, y0, 0.05), (x1, y1, 0.05)),
+            dtype=np.float32,
+        )
+
     def _draw_meshes(self, view_projection: QMatrix4x4) -> None:
         if (
             self.project is None
@@ -1928,7 +1951,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             size = max(abs(dx), abs(dy))
             result[0] = start[0] + (size if dx >= 0.0 else -size)
             result[1] = start[1] + (size if dy >= 0.0 else -size)
-        elif self._shape_draw_mode == "line":
+        elif self._shape_draw_mode in {"line", "measure"}:
             length = float(np.hypot(dx, dy))
             if length > 1e-9:
                 angle = np.arctan2(dy, dx)
@@ -1978,7 +2001,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 vertices.extend((first, second))
             return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
 
-        if mode in {"rectangle", "text"}:
+        if mode in {"rectangle", "text", "fixture"}:
             points = [
                 (x0, y0, z),
                 (x1, y0, z),
@@ -1998,7 +2021,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 )
             return segments(points)
 
-        if mode == "line":
+        if mode in {"line", "measure"}:
             return np.asarray(
                 ((x0, y0, z), (x1, y1, z)),
                 dtype=np.float32,
@@ -2917,6 +2940,12 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         )
         self._draw_toolpath_preview(view_projection, world_per_pixel)
         self._draw_shape_preview(view_projection)
+        self._draw_lines(
+            self._measurement_geometry(),
+            view_projection=view_projection,
+            color=QVector4D(0.95, 0.94, 0.26, 1.0),
+            line_width=2.5,
+        )
         self._draw_selection_marquee()
         self._draw_resize_handles(
             view_projection,
@@ -2968,6 +2997,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and not self._camera_control_mode
+            and self._shape_draw_mode not in {"measure", "fixture"}
             and not (
                 event.modifiers() & Qt.KeyboardModifier.AltModifier
             )
@@ -3096,6 +3126,17 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                         self._shape_drag_start_world,
                         current,
                         event.modifiers(),
+                    )
+                if (
+                    self._shape_draw_mode in {"measure", "fixture"}
+                    and self._shape_drag_current_world is not None
+                ):
+                    start = self._shape_drag_start_world
+                    end = self._shape_drag_current_world
+                    self.shapeDragUpdated.emit(
+                        self._shape_draw_mode,
+                        float(start[0]), float(start[1]),
+                        float(end[0]), float(end[1]),
                     )
                 self.requestUpdate()
             event.accept()
@@ -3575,6 +3616,7 @@ class MeshViewport(QWidget):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
@@ -3610,6 +3652,9 @@ class MeshViewport(QWidget):
         )
         self._renderer.shapeDrawRequested.connect(
             self.shapeDrawRequested.emit
+        )
+        self._renderer.shapeDragUpdated.connect(
+            self.shapeDragUpdated.emit
         )
         self._renderer.freehandStrokeRequested.connect(
             self.freehandStrokeRequested.emit
@@ -3791,6 +3836,12 @@ class MeshViewport(QWidget):
 
     def set_pen_sample_spacing(self, spacing_mm: float) -> None:
         self._renderer.set_pen_sample_spacing(spacing_mm)
+
+    def set_measurement(
+        self, start_xy: tuple[float, float] | None,
+        end_xy: tuple[float, float] | None = None,
+    ) -> None:
+        self._renderer.set_measurement(start_xy, end_xy)
 
     @property
     def reverse_horizontal_drag(self) -> bool:

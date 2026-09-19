@@ -3,8 +3,8 @@ from time import monotonic, sleep
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QFont, QKeySequence
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QFont, QKeySequence, QMouseEvent
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.gcode import GrblPostSettings
@@ -58,14 +58,16 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             "line",
             "text",
             "vector",
-            "file",
-            "edit",
-            "arrange",
+            "measure",
+            "fixture",
             "model",
             "cam",
             "cutter",
             "machine",
-            "view",
+            "generate",
+            "preview",
+            "preflight",
+            "export",
         }.issubset(window.tool_rail.buttons)
         assert (
             window.tool_rail._layout.itemAt(0).widget()
@@ -1838,5 +1840,150 @@ def test_fixture_editor_and_preflight_are_real_commands_with_viewport_keepouts()
         assert edges[:, 0].min() == -23
         assert edges[:, 2].max() == pytest.approx(3.6)
         assert not window._ui_actions["preflight"].isEnabled()
+    finally:
+        window.close()
+
+
+def test_measure_tool_reads_exact_stock_xy_without_making_mesh() -> None:
+    window = MainWindow()
+    try:
+        before = len(window.project.items)
+        window._ui_actions["measure"].trigger()
+        assert window.viewport.shape_draw_mode == "measure"
+        assert window.tool_rail.buttons["measure"].isChecked()
+        assert not window.tool_options_bar.isHidden()
+        assert window.tool_options_depth_spin.isHidden()
+        assert not window.tool_options_measure_label.isHidden()
+        window.viewport._renderer.shapeDragUpdated.emit(
+            "measure", 10, 20, 40, 60
+        )
+        assert "50.000 mm" in window.tool_options_measure_label.text()
+        assert window._measurement is None
+
+        window._shape_drawn("measure", 10, 20, 40, 60)
+        assert len(window.project.items) == before
+        assert window._measurement.distance_mm == pytest.approx(50.0)
+        assert window._measurement.delta_x_mm == pytest.approx(30.0)
+        assert window._measurement.delta_y_mm == pytest.approx(40.0)
+        assert window._measurement.angle_deg == pytest.approx(53.130102)
+        assert "50.000 mm" in window.tool_options_measure_label.text()
+        assert window.viewport._renderer._measurement_geometry().shape == (2, 3)
+
+        window.tool_options_measure_clear.click()
+        assert window._measurement is None
+        assert window.viewport._renderer._measurement_geometry().shape == (0, 3)
+    finally:
+        window.close()
+
+
+def test_fixture_draw_ui_writes_real_keepout_with_undo_and_cf3d(
+    tmp_path: Path,
+) -> None:
+    from carvefoundry.core.project_file import load_project, save_project
+
+    window = ProjectMainWindow()
+    try:
+        window._ui_actions["fixture_draw"].trigger()
+        assert window.viewport.shape_draw_mode == "fixture"
+        assert window.tool_rail.buttons["fixture"].isChecked()
+        assert window.tool_options_depth_spin.isHidden()
+        assert not window.tool_options_fixture_top_spin.isHidden()
+        assert not window.tool_options_fixture_clearance_spin.isHidden()
+        window.tool_options_fixture_top_spin.setValue(3.6)
+        window.tool_options_fixture_clearance_spin.setValue(2.5)
+        window.viewport._renderer.shapeDragUpdated.emit(
+            "fixture", 10, 30, 40, 50
+        )
+        assert "30.000 × 20.000 mm" in (
+            window.tool_options_fixture_size_label.text()
+        )
+        assert not window.project.fixtures
+
+        window._shape_drawn("fixture", 10, 30, 40, 50)
+        assert len(window.project.fixtures) == 1
+        fixture = window.project.fixtures[0]
+        assert fixture.name == "Fixture 1"
+        assert fixture.x_min_mm == 10
+        assert fixture.y_min_mm == 30
+        assert fixture.x_max_mm == 40
+        assert fixture.y_max_mm == 50
+        assert fixture.top_z_mm == pytest.approx(3.6)
+        assert fixture.clearance_mm == pytest.approx(2.5)
+        assert window.viewport._renderer._fixture_outline_geometry().shape == (24, 3)
+        assert window._undo_stack[-1].label == "draw fixture"
+
+        saved = save_project(window.project, tmp_path / "fixture-draw.cf3d")
+        assert load_project(saved).fixtures == [fixture]
+        window._undo()
+        assert not window.project.fixtures
+        window._redo()
+        assert window.project.fixtures == [fixture]
+    finally:
+        window.close()
+
+
+def test_tool_rail_scrolls_without_hiding_tools_on_short_windows() -> None:
+    window = MainWindow()
+    try:
+        rail = window.tool_rail
+        assert rail.width() == 46
+        assert rail._scroll.verticalScrollBarPolicy() == (
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        assert "file" not in rail.buttons
+        assert "edit" not in rail.buttons
+        assert "view" not in rail.buttons
+        assert "File" in [a.text() for a in window.main_menu_bar.actions()]
+        assert rail.buttons["preflight"].defaultAction() is (
+            window._ui_actions["preflight"]
+        )
+        assert rail.buttons["generate"].defaultAction() is (
+            window._ui_actions["calculate"]
+        )
+        assert not rail.buttons["preflight"].isEnabled()
+    finally:
+        window.close()
+
+
+def test_measure_and_fixture_actual_mouse_drag_flow(monkeypatch) -> None:
+    window = MainWindow()
+    renderer = window.viewport._renderer
+    monkeypatch.setattr(
+        renderer, "_stock_plane_point",
+        lambda point: np.array((point.x(), point.y(), 0.0)),
+    )
+
+    def drag(start: tuple[float, float], end: tuple[float, float]) -> None:
+        origin = QPointF(*start)
+        destination = QPointF(*end)
+        renderer.mousePressEvent(QMouseEvent(
+            QEvent.Type.MouseButtonPress, origin,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        renderer.mouseMoveEvent(QMouseEvent(
+            QEvent.Type.MouseMove, destination,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        renderer.mouseReleaseEvent(QMouseEvent(
+            QEvent.Type.MouseButtonRelease, destination,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+
+    try:
+        window._activate_measure_tool()
+        drag((10, 20), (40, 60))
+        assert window._measurement.distance_mm == pytest.approx(50.0)
+        assert len(window.project.items) == 0
+
+        window._activate_fixture_tool()
+        window.tool_options_fixture_top_spin.setValue(3.6)
+        drag((10, 20), (40, 60))
+        assert len(window.project.fixtures) == 1
+        assert window.project.fixtures[0].top_z_mm == pytest.approx(3.6)
+        assert window.project.fixtures[0].x_max_mm == pytest.approx(40)
+        assert window.project.fixtures[0].y_max_mm == pytest.approx(60)
     finally:
         window.close()

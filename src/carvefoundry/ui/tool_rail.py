@@ -7,6 +7,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
     QMenu,
+    QScrollArea,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -28,9 +29,29 @@ class ToolRail(QFrame):
             QSizePolicy.Policy.Expanding,
         )
 
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(4, 5, 4, 5)
+        # Keep the rail compact on laptop-sized windows. All real tools
+        # remain reachable by scrolling, with no vertical scrollbar covering
+        # the 38-pixel icons.
+        wrapper = QVBoxLayout(self)
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper.setSpacing(0)
+        self._scroll = QScrollArea(self)
+        self._scroll.setObjectName("ToolRailScroll")
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._content = QWidget()
+        self._content.setObjectName("ToolRailContent")
+        self._layout = QVBoxLayout(self._content)
+        self._layout.setContentsMargins(3, 5, 3, 5)
         self._layout.setSpacing(2)
+        self._scroll.setWidget(self._content)
+        wrapper.addWidget(self._scroll)
         self.buttons: dict[str, QToolButton] = {}
         self.actions: dict[str, QAction] = {}
         self._flyout_callbacks: dict[str, Callable[[], None]] = {}
@@ -42,6 +63,8 @@ class ToolRail(QFrame):
             "line": "line",
             "text": "text",
             "pen": "vector",
+            "measure": "measure",
+            "fixture": "fixture",
         }
 
     @staticmethod
@@ -261,7 +284,7 @@ class ToolRail(QFrame):
             select.setChecked(tool == "select")
 
         active_key = self._draw_button_keys.get(tool)
-        for key in ("shapes", "line", "text", "vector"):
+        for key in ("shapes", "line", "text", "vector", "measure", "fixture"):
             button = self.buttons.get(key)
             if button is not None:
                 button.setChecked(key == active_key)
