@@ -13,6 +13,7 @@ from .project import Project, ProjectItem, Stock, TextProperties
 from .smart_values import SmartValues
 from .transform import Transform3D
 from .units import ModelUnits
+from .vector_path import VectorPath
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,7 @@ class ProjectItemSnapshot:
     item_id: str
     text_properties: TextProperties | None
     smart_bindings: tuple[tuple[str, str], ...]
+    vector_path: VectorPath | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,7 @@ def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
         item_id=item.item_id,
         text_properties=item.text_properties,
         smart_bindings=tuple(item.smart_bindings.items()),
+        vector_path=item.vector_path,
     )
 
 
@@ -95,6 +98,7 @@ def _restore_item(snapshot: ProjectItemSnapshot) -> ProjectItem:
         item_id=snapshot.item_id,
         text_properties=snapshot.text_properties,
         smart_bindings=dict(snapshot.smart_bindings),
+        vector_path=snapshot.vector_path,
     )
 
 
