@@ -307,7 +307,7 @@ class MainWindow(_BaseMainWindow):
                 self.project_path = old_path
                 self._update_project_title()
             self._after_save_action = None
-            self._set_activity_info(f"Project save failed\\n{message}")
+            self._set_activity_info(f"Project save failed\n{message}")
             self.statusBar().showMessage(
                 f"Could not save project: {message}", 8000
             )
@@ -420,7 +420,7 @@ class MainWindow(_BaseMainWindow):
             self.statusBar().showMessage(f"Opened {target.name}", 5000)
 
         def failed(message: str) -> None:
-            self._set_activity_info(f"Project open failed\\n{message}")
+            self._set_activity_info(f"Project open failed\n{message}")
             self.statusBar().showMessage(
                 f"Could not open project: {message}", 8000
             )
