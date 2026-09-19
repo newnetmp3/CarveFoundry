@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 from ..cam.job_process import GcodeRequest
 from ..core.font_handler import describe_qt_font_face
 from ..core.mesh import mesh_asset_from_geometry
+from ..core.planar_operations import PLANAR_KINDS
 from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
@@ -50,7 +51,6 @@ from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
-from ..core.planar_operations import PLANAR_KINDS
 from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon, _ribbon_icon
 from .ribbon_actions import RibbonActionsMixin
