@@ -237,6 +237,7 @@ class MainWindow(
             self._freehand_pen_drawn
         )
         self.viewport.nodeMoveRequested.connect(self._node_drag_finished)
+        self.viewport.nodeEditModeChanged.connect(self._node_edit_mode_changed)
         self.viewport.shapeDrawModeChanged.connect(
             self._shape_draw_mode_changed
         )
