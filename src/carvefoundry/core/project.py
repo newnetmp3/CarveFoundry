@@ -17,6 +17,8 @@ from .units import ModelUnits
 if TYPE_CHECKING:
     from carvefoundry.cam.toolpath import Toolpath
 
+    from .vector_path import VectorPath
+
 
 MIN_IMPORTED_STOCK_COVERAGE = 0.5
 
@@ -103,6 +105,7 @@ class ProjectItem:
     item_id: str = field(default_factory=lambda: uuid4().hex)
     text_properties: TextProperties | None = None
     smart_bindings: dict[str, str] = field(default_factory=dict)
+    vector_path: VectorPath | None = None
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
@@ -241,6 +244,7 @@ class Project:
             group_id=None,
             text_properties=source.text_properties,
             smart_bindings=dict(source.smart_bindings),
+            vector_path=source.vector_path,
         )
         new_index = index + 1
         self.items.insert(new_index, duplicate)
