@@ -47,6 +47,7 @@ from ..core.project_file import (
 )
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
+from .background_jobs import BackgroundWorker, JobState
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
 from .ribbon import Ribbon, _ribbon_icon
@@ -175,6 +176,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_thread: QThread | None = None
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
+        self._background_job: JobState | None = None
+        self._job_target_project: Project | None = None
+        self._job_action_states: dict[str, bool] = {}
+        self._job_sequence = 0
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
         self._history_action_buttons: dict[str, list[object]] = {
@@ -236,6 +241,19 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.toolpath_progress.setFormat("Toolpath generation · %p%")
         self.toolpath_progress.hide()
         status.addPermanentWidget(self.toolpath_progress)
+
+        self.job_progress = QProgressBar()
+        self.job_progress.setObjectName("BackgroundJobProgress")
+        self.job_progress.setFixedWidth(320)
+        self.job_progress.setTextVisible(True)
+        self.job_progress.hide()
+        status.addPermanentWidget(self.job_progress)
+
+        self.cancel_job_button = QPushButton("Cancel")
+        self.cancel_job_button.setObjectName("CancelBackgroundJob")
+        self.cancel_job_button.clicked.connect(self._cancel_background_job)
+        self.cancel_job_button.hide()
+        status.addPermanentWidget(self.cancel_job_button)
 
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
@@ -5689,6 +5707,140 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._refresh_project_list(selected_row)
         self._sync_toolpath_state_from_project()
 
+    def _start_background_job(
+        self,
+        title: str,
+        *,
+        task=None,
+        request=None,
+        on_done=None,
+        on_failed=None,
+        cam_progress: bool = False,
+    ) -> bool:
+        """Run one costly operation off the GUI thread with reusable progress UI."""
+
+        if self._background_job is not None or (
+            self._import_thread is not None and self._import_thread.isRunning()
+        ):
+            self.statusBar().showMessage("Another operation is already running", 4000)
+            return False
+        worker = BackgroundWorker(task, process_request=request)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        state = JobState(worker, thread)
+        self._background_job = state
+        self._job_target_project = self.project
+        self._job_sequence += 1
+        job_id = self._job_sequence
+        self._job_action_states = {
+            key: action.isEnabled()
+            for key, action in self._ui_actions.items()
+        }
+        # Camera, view and selection remain usable. Design and machine commands
+        # are disabled to keep the snapshot stable until the worker completes.
+        safe_actions = {
+            "camera", "select", "view_fit", "frame_selected", "view_2d",
+            "perspective", "orthographic", "isometric", "view_top",
+            "view_bottom", "view_front", "view_back", "view_left",
+            "view_right", "stock", "grid", "rulers", "toolpaths",
+            "rapids", "layers", "inspector", "status_bar",
+            "view_controls", "reverse_horizontal", "invert_vertical",
+        }
+        for key, action in self._ui_actions.items():
+            if key not in safe_actions:
+                action.setEnabled(False)
+        if self.generate_toolpaths_button is not None:
+            self.generate_toolpaths_button.setEnabled(False)
+        self.job_progress.setRange(0, 100)
+        self.job_progress.setValue(0)
+        self.job_progress.setFormat(f"{title} · %p%")
+        self.job_progress.show()
+        self.cancel_job_button.show()
+        self.statusBar().showMessage(f"{title}…")
+
+        def progress(fraction: float, status: str) -> None:
+            if job_id != self._job_sequence:
+                return
+            value = max(0, min(100, round(fraction * 100)))
+            self.job_progress.setValue(value)
+            self.job_progress.setFormat(f"{status} · %p%")
+            self.statusBar().showMessage(f"{title}: {status} — {value}%")
+            if cam_progress:
+                self._update_toolpath_progress(fraction, status)
+
+        def completed(result: object) -> None:
+            if self.project is not self._job_target_project:
+                self.statusBar().showMessage(
+                    f"{title}: project changed; result discarded", 7000
+                )
+                return
+            try:
+                if on_done is not None:
+                    on_done(result)
+                self.job_progress.setValue(100)
+                self.job_progress.setFormat(f"{title} complete · %p%")
+            except Exception as exc:
+                failed(f"{type(exc).__name__}: {exc}")
+
+        def failed(message: str) -> None:
+            if on_failed is not None:
+                on_failed(message)
+            else:
+                self._set_activity_info(f"{title} failed\\n{message}")
+                self.statusBar().showMessage(f"{title} failed: {message}", 9000)
+            self.job_progress.setFormat(f"{title} failed")
+
+        def cancelled() -> None:
+            self.job_progress.setFormat(f"{title} canceled")
+            self.statusBar().showMessage(f"{title} canceled", 5000)
+            if cam_progress:
+                self._finish_toolpath_progress(
+                    success=False, message="Generation canceled"
+                )
+
+        def cleaned_up() -> None:
+            if job_id != self._job_sequence:
+                return
+            self._background_job = None
+            self._job_target_project = None
+            self.cancel_job_button.hide()
+            for key, was_enabled in self._job_action_states.items():
+                action = self._ui_actions.get(key)
+                if action is not None:
+                    action.setEnabled(was_enabled)
+            self._job_action_states = {}
+            self._sync_toolpath_output_state()
+            self._sync_selection_action_state()
+            if self.generate_toolpaths_button is not None:
+                self.generate_toolpaths_button.setEnabled(True)
+            QTimer.singleShot(
+                1800,
+                lambda bar=self.job_progress: (
+                    bar.hide() if self._background_job is None else None
+                ),
+            )
+
+        thread.started.connect(worker.run)
+        worker.progress.connect(progress)
+        worker.completed.connect(completed)
+        worker.failed.connect(failed)
+        worker.cancelled.connect(cancelled)
+        for signal in (worker.completed, worker.failed, worker.cancelled):
+            signal.connect(thread.quit)
+            signal.connect(worker.deleteLater)
+        thread.finished.connect(cleaned_up)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+        return True
+
+    def _cancel_background_job(self) -> None:
+        state = self._background_job
+        if state is None:
+            return
+        self.cancel_job_button.setEnabled(False)
+        self.statusBar().showMessage("Cancelling operation…")
+        state.worker.cancel()
+
     def _undo(self) -> None:
         self.statusBar().showMessage("Nothing to undo", 3000)
 
@@ -5977,9 +6129,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_target_project = None
 
     def closeEvent(self, event) -> None:
-        if self._import_thread is not None and self._import_thread.isRunning():
+        if (
+            self._background_job is not None
+            or (self._import_thread is not None and self._import_thread.isRunning())
+        ):
             self.statusBar().showMessage(
-                "Please wait for the current import to finish before closing",
+                "Finish or cancel the current operation before closing",
                 5000,
             )
             event.ignore()
