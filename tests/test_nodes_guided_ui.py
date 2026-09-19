@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import pytest
+import numpy as np
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
@@ -145,5 +148,46 @@ def test_guided_workflow_buttons_are_real_and_reflect_live_project_state():
         assert not window._guided_stage_status()[6][2]
         assert not window._guided_stage_status()[7][3]
         window._guided_workflow_dialog.close()
+    finally:
+        window.close()
+
+
+def test_real_native_mouse_drag_edits_node_and_regenerates_mesh(monkeypatch):
+    window = _window()
+    try:
+        window._freehand_pen_drawn([(10, 10), (15, 15), (20, 10)])
+        window._select_project_indices([0])
+        window._activate_direct_selection()
+        renderer = window.viewport._renderer
+        monkeypatch.setattr(renderer, "_pick_vector_node", lambda _point: 1)
+        monkeypatch.setattr(
+            renderer, "_stock_plane_point",
+            lambda point: np.array((point.x(), point.y(), 0.0)),
+        )
+        initial = window.project.items[0].mesh.mesh.bounds.copy()
+        origin = QPointF(15, 15)
+        destination = QPointF(19, 24)
+        renderer.mousePressEvent(QMouseEvent(
+            QEvent.Type.MouseButtonPress, origin,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        assert renderer._interaction_mode == "node-drag"
+        renderer.mouseMoveEvent(QMouseEvent(
+            QEvent.Type.MouseMove, destination,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        renderer.mouseReleaseEvent(QMouseEvent(
+            QEvent.Type.MouseButtonRelease, destination,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        moved = window.project.items[0]
+        assert node_world_points(moved)[1][:2] == pytest.approx((19, 24))
+        assert moved.mesh.mesh.bounds[1, 1] > initial[1, 1]
+        assert renderer._interaction_mode is None
+        window._undo()
+        assert window.project.items[0].vector_path.points_xy[1] == (15, 15)
     finally:
         window.close()
