@@ -3496,6 +3496,7 @@ class RibbonActionsMixin:
             self.project.toolpaths = paths
             self._toolpaths_stale_reason = None
             self._prepared_toolpath_geometry = payload["render_geometry"]
+            self._prepared_toolpath_stats = payload
             self.viewport.prepare_toolpath_render_cache(
                 paths, self._prepared_toolpath_geometry
             )
@@ -3556,6 +3557,11 @@ class RibbonActionsMixin:
             post_settings=self._grbl_post_settings(),
             source_names=self._toolpath_source_names(self.project.toolpaths),
             render_geometry_data=self._prepared_toolpath_geometry,
+            estimated_minutes=(
+                float(self._prepared_toolpath_stats["minutes"])
+                if self._prepared_toolpath_stats is not None
+                else None
+            ),
             parent=self,
         )
         window.destroyed.connect(
