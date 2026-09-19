@@ -358,7 +358,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         normalized = label.strip().lower()
         if normalized in {"group", "ungroup"}:
             return
-        if normalized.startswith("calculate "):
+        if normalized.startswith("calculate ") or normalized == "reorder machining job":
             return
         self._invalidate_toolpaths("Project geometry")
 
