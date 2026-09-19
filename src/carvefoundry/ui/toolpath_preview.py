@@ -531,7 +531,7 @@ class ToolpathPreviewWindow(QMainWindow):
         start = self._code_offset
         end = min(total, start + self.CODE_APPEND_CHUNK)
         if end > start:
-            numbered = "\\n".join(
+            numbered = "\n".join(
                 f"{index + 1:>6}  {self._code_lines[index]}"
                 for index in range(start, end)
             )
