@@ -10,7 +10,6 @@ from carvefoundry.core.history import WorkspaceSnapshot, capture_workspace, rest
 from carvefoundry.core.project import Project, ProjectItem
 from carvefoundry.core.project_file import (
     PROJECT_SUFFIX,
-    ProjectFileError,
     load_project,
     save_project,
 )
