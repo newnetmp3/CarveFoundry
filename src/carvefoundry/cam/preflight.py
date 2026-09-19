@@ -7,9 +7,8 @@ cannot certify holders, machine home/work-offset setup or spindle condition.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from math import isfinite
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.toolpath import MoveKind, Toolpath
