@@ -156,6 +156,34 @@ use mandatory CNC preflight for every cutter in the finished multi-tool job.
 X/Y Smart Value bindings must be removed from template objects so they cannot
 overwrite calculated batch positions.
 
+## Compact workspace and guided CAM form
+
+The viewport's **Import / Fit / Inspector** shortcuts now move into the
+always-visible **⋯** menu automatically when the canvas is narrow. The object
+selector, CAM status and toolpath-generation command remain visible; no
+feature is lost when you resize the window or expand the Inspector. The menu
+also opens Layers and the Guided CNC Job.
+
+The Inspector's **Position, Rotation, Size, Scale**, and Object/Gizmo
+settings are compact expandable sections. Position and Size open by default;
+Rotation, Scale, and advanced setup can remain collapsed. Your expand/collapse
+choices persist across launches. Choosing **Model → Transform → Rotate/Size/
+Scale/Position** reopens the correct section and takes the cursor to its
+numerical field, so hidden controls do not interfere with menu workflows.
+
+**Generate Toolpaths** has a side rail linking directly to Source, Cutter,
+Strategy, Depth, Motion/Safety, Tabs, Stock-Aware Rest, and Readiness. Hide the
+rail with **Hide steps** on smaller displays; the full form and all option
+help remain available. A fixed context strip displays the chosen operation,
+cutter, number of visible models and actual stock dimensions as you edit.
+The existing live validation, cancellation, worker process and mandatory
+export preflight are unchanged.
+
+**Guided CNC Job** shows a progress indicator for *project readiness checks*
+and a **Go to next action** shortcut. It avoids repainting unchanged checks
+while open. Readiness is not physical proof of machine setup or confirmation
+that the named steps were manually performed.
+
 ## Stock-aware rest machining
 
 After generating a 3D Rough or Finish operation, reopen **Generate

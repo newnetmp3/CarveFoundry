@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -60,9 +61,10 @@ class GuidedWorkflowMixin:
             for item in self.project.items
         )
         has_paths = bool(self.project.toolpaths)
-        verified = (
-            has_paths and getattr(self, "_guided_preflight_pass", None)
-            == self._guided_job_fingerprint()
+        previous_pass = getattr(self, "_guided_preflight_pass", None)
+        verified = bool(
+            has_paths and previous_pass is not None
+            and previous_pass == self._guided_job_fingerprint()
         )
         return (
             (
@@ -161,6 +163,26 @@ class GuidedWorkflowMixin:
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
+        progress = QProgressBar(dialog)
+        progress.setObjectName("GuidedWorkflowProgress")
+        progress.setRange(0, 8)
+        progress.setTextVisible(True)
+        progress.setFormat("%v / %m current readiness checks")
+        progress.setToolTip(
+            "Checks indicate whether project inputs are ready, NOT physical "
+            "machine readiness or whether steps were manually completed."
+        )
+        layout.addWidget(progress)
+        next_row = QHBoxLayout()
+        next_hint = QLabel(dialog)
+        next_hint.setObjectName("GuidedWorkflowNext")
+        next_hint.setWordWrap(True)
+        next_row.addWidget(next_hint, 1)
+        next_button = QPushButton("Go to next action", dialog)
+        next_button.setObjectName("GuidedNextAction")
+        next_row.addWidget(next_button)
+        layout.addLayout(next_row)
+
         scroll = QScrollArea(dialog)
         scroll.setWidgetResizable(True)
         body = QWidget(scroll)
@@ -228,18 +250,38 @@ class GuidedWorkflowMixin:
         close_button.clicked.connect(dialog.close)
         layout.addWidget(close_button)
         refresh_timer = QTimer(dialog)
-        refresh_timer.setInterval(600)
+        refresh_timer.setInterval(1100)
         refresh_timer.timeout.connect(self._refresh_guided_workflow)
         dialog.destroyed.connect(
             lambda _object=None: self._guided_workflow_closed(dialog)
         )
         self._guided_workflow_dialog = dialog
+        self._guided_workflow_cache = None
+        self._guided_workflow_progress = progress
+        self._guided_workflow_next_hint = next_hint
+        self._guided_workflow_next_button = next_button
+        next_button.clicked.connect(self._guided_workflow_next_action)
         self._guided_workflow_rows = rows
         self._guided_workflow_extras = extra_buttons
         self._guided_workflow_timer = refresh_timer
         self._refresh_guided_workflow()
         refresh_timer.start()
         dialog.show()
+
+    def _guided_workflow_next_action(self) -> None:
+        steps = self._guided_stage_status()
+        rows = getattr(self, "_guided_workflow_rows", None)
+        if not rows:
+            return
+        first = next(
+            (
+                index for index, (_name, _desc, ready, allowed)
+                in enumerate(steps) if not ready and allowed
+            ),
+            None,
+        )
+        if first is not None:
+            rows[first][2].click()
 
     def _refresh_guided_workflow(self) -> None:
         rows = getattr(self, "_guided_workflow_rows", None)
@@ -248,8 +290,37 @@ class GuidedWorkflowMixin:
         busy = self._background_job is not None or (
             self._import_thread is not None and self._import_thread.isRunning()
         )
+        steps = self._guided_stage_status()
+        snapshot = (steps, busy)
+        if snapshot == getattr(self, "_guided_workflow_cache", None):
+            return
+        self._guided_workflow_cache = snapshot
+        count = sum(ready for _name, _desc, ready, _allowed in steps)
+        self._guided_workflow_progress.setValue(count)
+        first = next(
+            (
+                (name, allowed)
+                for name, _description, ready, allowed in steps
+                if not ready
+            ),
+            None,
+        )
+        if first is None:
+            self._guided_workflow_next_hint.setText(
+                "All project readiness checks passed. Verify your actual "
+                "machine, fence clearance, cutter and stock-top Z0."
+            )
+            self._guided_workflow_next_button.setEnabled(False)
+        else:
+            self._guided_workflow_next_hint.setText(
+                f"Next: {first[0]}"
+            )
+            self._guided_workflow_next_button.setEnabled(
+                first[1] and not busy
+            )
+
         for (title, detail, button), (name, description, ready, allowed) in zip(
-            rows, self._guided_stage_status(), strict=True,
+            rows, steps, strict=True,
         ):
             title.setText(("✓  " if ready else "●  ") + name)
             title.setStyleSheet(
@@ -270,5 +341,9 @@ class GuidedWorkflowMixin:
         if getattr(self, "_guided_workflow_dialog", None) is dialog:
             self._guided_workflow_dialog = None
             self._guided_workflow_rows = None
+            self._guided_workflow_cache = None
+            self._guided_workflow_progress = None
+            self._guided_workflow_next_hint = None
+            self._guided_workflow_next_button = None
             self._guided_workflow_extras = None
             self._guided_workflow_timer = None

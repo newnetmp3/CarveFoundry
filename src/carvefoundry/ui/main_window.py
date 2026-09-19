@@ -4,14 +4,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-from PySide6.QtCore import QItemSelectionModel, QSettings, Qt, QThread, QTimer
+from PySide6.QtCore import QEvent, QItemSelectionModel, QSettings, Qt, QThread, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
-    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -27,6 +26,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -47,6 +47,7 @@ from .batch_layout import BatchLayoutMixin
 from .direct_selection import DirectSelectionMixin
 from .guided_workflow import GuidedWorkflowMixin
 from .import_worker import ImportWorker
+from .inspector_controls import InspectorControlsMixin
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPopup
@@ -102,6 +103,7 @@ class MainWindow(
     WorkspaceCommandsMixin,
     DirectSelectionMixin,
     GuidedWorkflowMixin,
+    InspectorControlsMixin,
     BatchLayoutMixin,
     StockSimulationMixin,
     ProjectRecoveryMixin,
@@ -330,6 +332,8 @@ class MainWindow(
 
         canvas_bar = QWidget()
         canvas_bar.setObjectName("ViewportBar")
+        self._viewport_action_bar = canvas_bar
+        canvas_bar.installEventFilter(self)
         canvas_bar_layout = QHBoxLayout(canvas_bar)
         canvas_bar_layout.setContentsMargins(7, 4, 7, 4)
         canvas_bar_layout.setSpacing(5)
@@ -337,8 +341,8 @@ class MainWindow(
         canvas_bar_layout.addWidget(QLabel("Object"))
         self.object_selector = QComboBox()
         self.object_selector.setObjectName("ObjectSelector")
-        self.object_selector.setMinimumWidth(190)
-        self.object_selector.setMaximumWidth(360)
+        self.object_selector.setMinimumWidth(130)
+        self.object_selector.setMaximumWidth(275)
         self.object_selector.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
@@ -381,6 +385,7 @@ class MainWindow(
         fit_button = QPushButton("Fit")
         fit_button.setToolTip("Fit the entire job to the viewport")
         fit_button.clicked.connect(self._fit_view)
+        self._viewport_fit_button = fit_button
         canvas_bar_layout.addWidget(fit_button)
 
         self.inspector_button = QPushButton("Inspector")
@@ -400,7 +405,33 @@ class MainWindow(
         import_button.clicked.connect(
             lambda _checked=False: self._import_file()
         )
+        self._viewport_import_button = import_button
         canvas_bar_layout.addWidget(import_button)
+
+        overflow = QToolButton(canvas_bar)
+        overflow.setObjectName("ViewportOverflowButton")
+        overflow.setText("⋯")
+        overflow.setToolTip(
+            "Workspace actions: Import, Fit, Inspector, Layers and CNC guide"
+        )
+        overflow.setAccessibleName("More viewport actions")
+        overflow.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(overflow)
+        menu.addAction(self._ui_actions["import"])
+        menu.addAction(self._ui_actions["fit_view"])
+        menu.addAction(self._ui_actions["layers"])
+        menu.addSeparator()
+        toggle_inspector = menu.addAction("Show / Hide Inspector")
+        toggle_inspector.triggered.connect(
+            self._toggle_properties_panel_option
+        )
+        menu.addAction(self._ui_actions["guided_workflow"])
+        overflow.setMenu(menu)
+        self._viewport_overflow_button = overflow
+        canvas_bar_layout.addWidget(overflow)
+        self._viewport_quick_controls = (
+            import_button, fit_button, self.inspector_button,
+        )
         canvas_layout.addWidget(canvas_bar)
 
         self.tool_options_bar = QWidget()
@@ -711,6 +742,33 @@ class MainWindow(
         layout.addWidget(splitter, 1)
         return wrapper
 
+    def _update_viewport_action_density(self, available_width: int) -> None:
+        """Keep essential object/CAM controls visible without clipping.
+
+        Less frequent actions remain accessible through the always-visible
+        overflow menu, even on narrower splitters or a 1050px app window.
+        """
+        if not hasattr(self, "_viewport_quick_controls"):
+            return
+        import_button, fit_button, inspector_button = (
+            self._viewport_quick_controls
+        )
+        import_button.setVisible(available_width >= 1030)
+        fit_button.setVisible(available_width >= 900)
+        inspector_button.setVisible(available_width >= 790)
+        self.generate_toolpaths_button.setText(
+            "Toolpaths…" if available_width < 770
+            else "Generate Toolpaths"
+        )
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            watched is getattr(self, "_viewport_action_bar", None)
+            and event.type() == QEvent.Type.Resize
+        ):
+            self._update_viewport_action_density(event.size().width())
+        return super().eventFilter(watched, event)
+
     def _properties_panel_default_width(self) -> int:
         """Return a useful contextual-inspector width without stealing canvas."""
 
@@ -745,330 +803,6 @@ class MainWindow(
         inspector_width = self._properties_panel_default_width()
         canvas_width = max(520, total_width - inspector_width)
         return [canvas_width, inspector_width]
-
-    @staticmethod
-    def _configured_spin(
-        *,
-        minimum: float,
-        maximum: float,
-        decimals: int,
-        step: float,
-        suffix: str = "",
-    ) -> QDoubleSpinBox:
-        spin = QDoubleSpinBox()
-        spin.setRange(minimum, maximum)
-        spin.setDecimals(decimals)
-        spin.setSingleStep(step)
-        spin.setSuffix(suffix)
-        spin.setKeyboardTracking(False)
-        spin.setMinimumWidth(0)
-        spin.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
-        )
-        return spin
-
-    @staticmethod
-    def _configure_inspector_form(form: QFormLayout) -> None:
-        """Make a form reflow instead of clipping in a narrow inspector."""
-
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(6)
-        form.setFieldGrowthPolicy(
-            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
-        )
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        form.setLabelAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-
-    @staticmethod
-    def _configure_inspector_field(widget: QWidget) -> None:
-        widget.setMinimumWidth(0)
-        policy = widget.sizePolicy()
-        policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
-        widget.setSizePolicy(policy)
-
-    def _build_stock_controls(self) -> QWidget:
-        widget = QWidget()
-        widget.setObjectName("StockControls")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 6, 0, 10)
-        layout.setSpacing(6)
-
-        heading = QLabel("Stock dimensions")
-        heading.setObjectName("SectionHeading")
-        layout.addWidget(heading)
-
-        form = QFormLayout()
-        self._configure_inspector_form(form)
-        layout.addLayout(form)
-
-        self.stock_spins = tuple(
-            self._configured_spin(
-                minimum=0.1,
-                maximum=100000.0,
-                decimals=3,
-                step=1.0,
-                suffix=" mm",
-            )
-            for _ in range(3)
-        )
-        for title, spin in zip(
-            ("Width", "Height", "Thickness"),
-            self.stock_spins,
-            strict=True,
-        ):
-            form.addRow(title, spin)
-            spin.valueChanged.connect(self._stock_control_changed)
-
-        return widget
-
-    def _build_transform_controls(self) -> QWidget:
-        widget = QWidget()
-        widget.setObjectName("TransformControls")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 6, 0, 10)
-        layout.setSpacing(6)
-
-        heading = QLabel("Model transform")
-        heading.setObjectName("SectionHeading")
-        layout.addWidget(heading)
-
-        resize_hint = QLabel(
-            "Drag a corner handle around the selected object in the viewport "
-            "to resize its XY footprint live. Z/depth stays unchanged."
-        )
-        resize_hint.setObjectName("Muted")
-        resize_hint.setWordWrap(True)
-        layout.addWidget(resize_hint)
-
-        units_form = QFormLayout()
-        self._configure_inspector_form(units_form)
-        layout.addLayout(units_form)
-
-        self.source_units_combo = QComboBox()
-        for units in ModelUnits:
-            self.source_units_combo.addItem(units.display_name, units)
-        self._configure_inspector_field(self.source_units_combo)
-        self.source_units_combo.currentIndexChanged.connect(
-            self._source_units_changed
-        )
-        units_form.addRow("Model units", self.source_units_combo)
-
-        self.transform_orientation_combo = QComboBox()
-        self.transform_orientation_combo.addItem("Global", "global")
-        self.transform_orientation_combo.addItem("Local", "local")
-        self.transform_orientation_combo.setToolTip(
-            "Global uses stock/world XYZ axes. Local rotates the move gizmo "
-            "with the selected object."
-        )
-        self._configure_inspector_field(self.transform_orientation_combo)
-        self.transform_orientation_combo.currentIndexChanged.connect(
-            self._transform_orientation_changed
-        )
-        units_form.addRow("Gizmo orientation", self.transform_orientation_combo)
-
-        self.transform_snap_check = QCheckBox("Snap translation")
-        self.transform_snap_check.setToolTip(
-            "Snap gizmo moves to a fixed increment. Ctrl temporarily enables "
-            "snapping during a drag."
-        )
-        self.transform_snap_check.toggled.connect(
-            self._transform_snap_changed
-        )
-        units_form.addRow("Precision", self.transform_snap_check)
-
-        self.transform_snap_step_spin = QDoubleSpinBox()
-        self.transform_snap_step_spin.setRange(0.001, 1000.0)
-        self.transform_snap_step_spin.setDecimals(3)
-        self.transform_snap_step_spin.setSingleStep(0.5)
-        self.transform_snap_step_spin.setSuffix(" mm")
-        self.transform_snap_step_spin.setValue(1.0)
-        self.transform_snap_step_spin.setToolTip(
-            "Translation snapping increment in millimeters."
-        )
-        self._configure_inspector_field(self.transform_snap_step_spin)
-        self.transform_snap_step_spin.valueChanged.connect(
-            self._transform_snap_changed
-        )
-        units_form.addRow("Snap step", self.transform_snap_step_spin)
-
-        self.position_spins = tuple(
-            self._configured_spin(
-                minimum=-100000.0,
-                maximum=100000.0,
-                decimals=3,
-                step=1.0,
-                suffix=" mm",
-            )
-            for _ in range(3)
-        )
-        self.rotation_spins = tuple(
-            self._configured_spin(
-                minimum=-3600.0,
-                maximum=3600.0,
-                decimals=1,
-                step=5.0,
-                suffix="°",
-            )
-            for _ in range(3)
-        )
-        rotation_planes = (
-            ("X", "YZ"),
-            ("Y", "XZ"),
-            ("Z", "XY"),
-        )
-        for spin, (axis, plane) in zip(
-            self.rotation_spins,
-            rotation_planes,
-            strict=True,
-        ):
-            spin.setToolTip(
-                f"Rotate around the {axis} axis; motion occurs in the {plane} plane."
-            )
-            spin.setAccessibleName(f"Rotation around {axis} axis")
-
-        self.size_spins = tuple(
-            self._configured_spin(
-                minimum=0.001,
-                maximum=100000.0,
-                decimals=3,
-                step=1.0,
-                suffix=" mm",
-            )
-            for _ in range(3)
-        )
-        for spin, axis in zip(
-            self.size_spins,
-            ("X", "Y", "Z"),
-            strict=True,
-        ):
-            spin.setToolTip(
-                f"Set model Size {axis} directly in millimeters. "
-                "Size is measured before rotation."
-            )
-
-        self.scale_spins = tuple(
-            self._configured_spin(
-                minimum=0.001,
-                maximum=1000.0,
-                decimals=4,
-                step=0.05,
-            )
-            for _ in range(3)
-        )
-
-        def add_axis_group(
-            title: str,
-            spins: tuple[QDoubleSpinBox, ...],
-        ) -> None:
-            title_label = QLabel(title)
-            title_label.setObjectName("InspectorFieldHeading")
-            layout.addWidget(title_label)
-
-            axis_form = QFormLayout()
-            self._configure_inspector_form(axis_form)
-            for axis, spin in zip(("X", "Y", "Z"), spins, strict=True):
-                axis_form.addRow(axis, spin)
-                spin.valueChanged.connect(self._transform_control_changed)
-            layout.addLayout(axis_form)
-
-        add_axis_group("Position", self.position_spins)
-        add_axis_group("Rotate about", self.rotation_spins)
-
-        rotation_note = QLabel(
-            "Rotation axes: X → YZ plane   Y → XZ plane   Z → XY plane"
-        )
-        rotation_note.setObjectName("Muted")
-        rotation_note.setWordWrap(True)
-        rotation_note.setToolTip(
-            "X/Y/Z name the axis being rotated around, not the plane being rotated."
-        )
-        layout.addWidget(rotation_note)
-
-        add_axis_group("Size", self.size_spins)
-        add_axis_group("Scale", self.scale_spins)
-
-        lock_bar = QWidget()
-        lock_bar.setMinimumWidth(0)
-        lock_layout = QHBoxLayout(lock_bar)
-        lock_layout.setContentsMargins(0, 0, 0, 0)
-        lock_layout.setSpacing(8)
-        lock_layout.addWidget(QLabel("Lock axes"))
-        self.lock_axis_checks = tuple(
-            QCheckBox(axis)
-            for axis in ("X", "Y", "Z")
-        )
-        for checkbox in self.lock_axis_checks:
-            checkbox.setChecked(True)
-            checkbox.setToolTip(
-                "Locked axes resize proportionally together when Size or Scale changes."
-            )
-            lock_layout.addWidget(checkbox)
-        lock_layout.addStretch(1)
-        layout.addWidget(lock_bar)
-
-        action_bar = QWidget()
-        action_bar.setMinimumWidth(0)
-        action_layout = QHBoxLayout(action_bar)
-        action_layout.setContentsMargins(0, 0, 0, 0)
-        action_layout.setSpacing(6)
-
-        center_button = QPushButton("Center XY")
-        center_button.setMinimumWidth(0)
-        center_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
-        )
-        center_button.clicked.connect(self._center_selected_xy)
-        action_layout.addWidget(center_button)
-
-        top_button = QPushButton("Top to Z0")
-        top_button.setMinimumWidth(0)
-        top_button.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
-        )
-        top_button.clicked.connect(self._top_selected_to_surface)
-        action_layout.addWidget(top_button)
-        layout.addWidget(action_bar)
-
-        apply_bar = QWidget()
-        apply_bar.setMinimumWidth(0)
-        apply_layout = QHBoxLayout(apply_bar)
-        apply_layout.setContentsMargins(0, 0, 0, 0)
-        apply_layout.setSpacing(6)
-
-        apply_scale_button = QPushButton("Apply Scale")
-        apply_scale_button.setMinimumWidth(0)
-        apply_scale_button.setToolTip(
-            "Bake the selected object's current scale into its mesh and reset "
-            "Scale to 1,1,1. Useful before CAM/export."
-        )
-        apply_scale_button.clicked.connect(self._apply_selected_scale)
-        apply_layout.addWidget(apply_scale_button)
-
-        apply_rotation_scale_button = QPushButton("Apply R+S")
-        apply_rotation_scale_button.setMinimumWidth(0)
-        apply_rotation_scale_button.setToolTip(
-            "Bake rotation and scale into the selected mesh while preserving "
-            "its placed position."
-        )
-        apply_rotation_scale_button.clicked.connect(
-            self._apply_selected_rotation_scale
-        )
-        apply_layout.addWidget(apply_rotation_scale_button)
-        layout.addWidget(apply_bar)
-
-        reset_button = QPushButton("Reset Transform")
-        reset_button.setMinimumWidth(0)
-        reset_button.clicked.connect(self._reset_selected_transform)
-        layout.addWidget(reset_button)
-
-        widget.setVisible(False)
-        return widget
 
     def _set_activity_info(self, text: str) -> None:
         if hasattr(self, "activity_info"):
@@ -1888,6 +1622,12 @@ class MainWindow(
             "scale": "Scale",
         }
         target = controls.get(section, self.position_spins)
+        accordion = getattr(self, "_transform_sections", {}).get(section)
+        if accordion is not None:
+            accordion.setExpanded(True)
+        self.properties_panel.scroll_area.ensureWidgetVisible(
+            target[0], 12, 45,
+        )
         target[0].setFocus(Qt.FocusReason.OtherFocusReason)
         target[0].selectAll()
         self.statusBar().showMessage(
@@ -2170,6 +1910,12 @@ class MainWindow(
             return None
         return index
 
+    def _refresh_inspector_context(self) -> None:
+        """Refresh contextual UI exactly once after a selection change."""
+        self._refresh_cam_detail_readouts()
+        self._sync_selection_action_state()
+        self._sync_toolpath_output_state()
+
     def _update_properties(self, row: int) -> None:
         if hasattr(self, "object_selector"):
             desired = max(
@@ -2211,9 +1957,7 @@ class MainWindow(
                 selected_indices,
                 primary=primary,
             )
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         if row <= 0:
@@ -2228,9 +1972,7 @@ class MainWindow(
             self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         item_index = row - 1
@@ -2240,9 +1982,7 @@ class MainWindow(
             self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         item = self.project.items[item_index]
@@ -2257,9 +1997,7 @@ class MainWindow(
             self._sync_text_controls(item)
         if has_mesh:
             self._sync_transform_controls(item)
-        self._refresh_cam_detail_readouts()
-        self._sync_selection_action_state()
-        self._sync_toolpath_output_state()
+        self._refresh_inspector_context()
 
     def _sync_transform_controls(self, item: ProjectItem) -> None:
         self._updating_transform_controls = True

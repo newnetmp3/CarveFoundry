@@ -23,11 +23,13 @@ background-job lifecycle. It **composes** the following functional mixins:
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
 | `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves; immutable knot data, fresh mesh regeneration, history and CF3D persistence. |
 | `ui/guided_workflow.py` | Modeless guided design-to-CAM workflow; derived live statuses and preflight fingerprint, not a second independent CAM state. |
+| `ui/inspector_controls.py` / `ui/layout_widgets.py` | Stock and model transform control construction, persistent compact Inspector accordions and CAM section navigation; avoid putting form construction back in the main window. |
+| `ui/cam_dialog_help.py` | Pure text catalog for one shared contextual CAM explanation per setting. |
 | `ui/text_editor.py` | Editable text Inspector, installed-font grouping, font-face validation, typography-to-mesh updates. |
 | `ui/interface_settings.py` | Load/save/migrate persistent layout and viewport preferences, display toggles, navigation defaults. |
 | `ui/planar_operations_actions.py` | Background task orchestration and commit of selected vector-outline Boolean/Offset results. |
 | `ui/ribbon_actions.py` | Drawing, CAM control state, cutter/machine commands, Smart Values, fixtures and export actions; it inherits `CamGenerationDialogMixin`. |
-| `ui/cam_generation_dialog.py` | Full CAM requirements/strategy dialog and its validation/readiness controls. |
+| `ui/cam_generation_dialog.py` | CAM form layout, fixed context strip, section rail and live validation/readiness controls; reuse pure help catalog and existing CAM worker. |
 | `ui/native_viewport.py` / `ui/viewport_gpu.py` | Native OpenGL interaction, scene overlays and GPU data/cache operations. |
 
 All mixin methods operate on the **same MainWindow instance** and existing Qt

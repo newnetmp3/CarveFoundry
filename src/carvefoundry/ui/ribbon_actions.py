@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import replace
 from math import atan2, ceil, degrees, hypot, pi, sqrt
 from pathlib import Path
@@ -40,8 +39,6 @@ from carvefoundry.cam.basic_ops import (
     ReliefStyle,
     detail_for_stepover_fraction,
     detail_stepover_fraction,
-    finish_3d,
-    waterline_3d,
 )
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.job_process import CamRequest, GcodeRequest
@@ -51,14 +48,6 @@ from carvefoundry.cam.job_workflows import (
     plan_tiles,
 )
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
-from carvefoundry.cam.vector_ops import (
-    geometry_center_drill,
-    geometry_drill,
-    geometry_engrave,
-    geometry_pocket,
-    geometry_profile,
-    geometry_vcarve,
-)
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.machine_profiles import (
     MachineProfile,
@@ -2062,165 +2051,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Compatibility entry point: calculation now begins with review."""
 
         self._show_toolpath_generation_dialog()
-
-    def _generate_toolpaths_for_item(
-        self,
-        item: ProjectItem,
-        cutter: Cutter,
-        operation: str,
-        *,
-        progress: Callable[[float, str], None] | None = None,
-    ) -> list:
-        """Generate the selected CAM operation for one project object."""
-
-        bounds = item.transformed_bounds_mm()
-        mesh = item.transformed_mesh()
-        if bounds is None or mesh is None:
-            return []
-
-        settings = self._cam_settings(bounds, mesh)
-        cut_type = self._cam_cut_type
-        needs_cutout = (
-            operation == "finish"
-            and self._relief_style() is ReliefStyle.FULL_DEPTH
-        )
-        main_end = 0.85 if needs_cutout else 0.95
-
-        def report_main(fraction: float, status: str) -> None:
-            if progress is not None:
-                mapped = 0.05 + (main_end - 0.05) * max(
-                    0.0,
-                    min(1.0, float(fraction)),
-                )
-                progress(mapped, status)
-
-        if progress is not None:
-            progress(0.02, "Preparing model geometry")
-        if operation == "vcarve":
-            toolpath = geometry_vcarve(mesh, cutter, settings)
-        elif operation == "drill":
-            toolpath = geometry_drill(mesh, cutter, settings)
-        elif operation == "center_drill":
-            toolpath = geometry_center_drill(mesh, cutter, settings)
-        elif (
-            cut_type == "Pocket"
-            and operation in {"profile", "pocket", "engrave"}
-        ):
-            toolpath = geometry_pocket(mesh, cutter, settings)
-        elif (
-            cut_type in {"On Path", "Outside", "Inside"}
-            and operation in {"profile", "pocket", "engrave"}
-        ):
-            if operation == "engrave" and cut_type == "On Path":
-                toolpath = geometry_engrave(mesh, cutter, settings)
-            else:
-                offset_mode = {
-                    "On Path": "on",
-                    "Outside": "outside",
-                    "Inside": "inside",
-                }[cut_type]
-                toolpath = geometry_profile(
-                    mesh,
-                    cutter,
-                    settings,
-                    offset_mode=offset_mode,
-                )
-                if operation == "engrave":
-                    toolpath.name = "Engrave"
-                    toolpath.operation = "engrave"
-        elif operation == "profile":
-            toolpath = geometry_profile(mesh, cutter, settings)
-        elif operation == "pocket":
-            toolpath = geometry_pocket(mesh, cutter, settings)
-        elif operation == "engrave":
-            toolpath = geometry_engrave(mesh, cutter, settings)
-        elif operation == "rest":
-            raise ValueError(
-                "Stock-aware rest needs previous job stages: use Generate "
-                "Toolpaths, then Append to existing machining job."
-            )
-        elif operation in {"rough", "finish"}:
-            toolpath = finish_3d(
-                mesh,
-                cutter,
-                settings,
-                strategy=operation,
-                progress=report_main,
-            )
-        elif operation == "height_map":
-            toolpath = finish_3d(
-                mesh,
-                cutter,
-                settings,
-                strategy="finish",
-                progress=report_main,
-            )
-            toolpath.name = "Height Map"
-            toolpath.operation = "height_map"
-        elif operation == "waterline":
-            toolpath = waterline_3d(
-                mesh,
-                cutter,
-                settings,
-                progress=report_main,
-            )
-        else:
-            raise ValueError(f"Unknown CAM operation: {operation}")
-
-        if progress is not None and operation not in {
-            "rough",
-            "finish",
-            "height_map",
-            "rest",
-            "waterline",
-        }:
-            progress(main_end, f"{self._cam_operation_title(operation)} path ready")
-
-        generated_toolpaths = [toolpath]
-        if needs_cutout:
-            if progress is not None:
-                progress(0.88, "Generating full-depth cutout")
-            cutout_settings = BasicCamSettings(
-                safe_z_mm=settings.safe_z_mm,
-                feed_mm_min=settings.feed_mm_min,
-                plunge_feed_mm_min=settings.plunge_feed_mm_min,
-                max_stepdown_mm=settings.max_stepdown_mm,
-                stepover_fraction=settings.stepover_fraction,
-                finish_stepover_fraction=settings.finish_stepover_fraction,
-                overall_depth_mm=self.project.stock.thickness_mm,
-                padding_mm=settings.padding_mm,
-                usable_bit_length_mm=settings.usable_bit_length_mm,
-                tab_height_mm=settings.tab_height_mm,
-                tab_width_mm=settings.tab_width_mm,
-                tab_count=settings.tab_count,
-                tabs_enabled=self._tabs_enabled,
-                milling_direction=settings.milling_direction,
-                pocket_strategy=settings.pocket_strategy,
-                relief_style=ReliefStyle.FULL_DEPTH,
-                raster_axis=settings.raster_axis,
-                raster_link_mode=settings.raster_link_mode,
-                local_link_clearance_mm=settings.local_link_clearance_mm,
-                direct_link_tolerance_mm=settings.direct_link_tolerance_mm,
-                ramp_angle_deg=settings.ramp_angle_deg,
-            )
-            generated_toolpaths.append(
-                geometry_profile(
-                    mesh,
-                    cutter,
-                    cutout_settings,
-                    name="Full Depth Cutout",
-                    offset_mode="outside",
-                )
-            )
-            if progress is not None:
-                progress(0.98, "Full-depth cutout ready")
-
-        if progress is not None:
-            progress(1.0, "Object toolpath ready")
-        for generated in generated_toolpaths:
-            generated.source_item_id = item.item_id
-            generated.source_item_name = item.name
-        return generated_toolpaths
 
     def _calculate_toolpath_now(self) -> bool:
         """Submit CAM to a separate Python process; never block the Qt loop."""
