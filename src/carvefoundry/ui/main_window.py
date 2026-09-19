@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 from ..cam.job_process import GcodeRequest
 from ..core.font_handler import describe_qt_font_face
 from ..core.mesh import mesh_asset_from_geometry
+from ..core.planar_operations import PLANAR_KINDS
 from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
@@ -50,6 +51,7 @@ from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
+from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon, _ribbon_icon
 from .ribbon_actions import RibbonActionsMixin
 from .tool_rail import ToolRail
@@ -163,7 +165,7 @@ class Panel(QFrame):
         layout.addWidget(self.scroll_area, 1)
 
 
-class MainWindow(RibbonActionsMixin, QMainWindow):
+class MainWindow(PlanarOperationsMixin, RibbonActionsMixin, QMainWindow):
     def __init__(self):
         super().__init__()
         self.project = Project()
@@ -402,6 +404,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("measure", "Measure XY", self._activate_measure_tool),
             ("fixture_draw", "Draw Fixture", self._activate_fixture_tool),
             ("trace_image", "Trace Image", self._trace_image),
+            ("vector_union", "Union Silhouettes", lambda: self._run_planar_operation("union")),
+            ("vector_subtract", "Subtract Silhouettes",
+             lambda: self._run_planar_operation("subtract")),
+            ("vector_intersect", "Intersect Silhouettes",
+             lambda: self._run_planar_operation("intersect")),
+            ("vector_offset", "Offset Silhouette…", lambda: self._run_planar_operation("offset")),
             ("align", "Align", self._align_selected_items),
             ("center", "Center", self._center_selected_items),
             ("group", "Group", self._group_selected_items),
@@ -783,6 +791,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         vector_menu = design_menu.addMenu("Vector")
         self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        vector_menu.addSeparator()
+        self._add_menu_actions(
+            vector_menu,
+            ("vector_union", "vector_subtract", "vector_intersect", "vector_offset"),
+        )
         workshop_menu = design_menu.addMenu("Workshop")
         self._add_menu_actions(
             workshop_menu, ("measure", "fixture_draw", "fixtures")
@@ -1588,6 +1601,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         vector_menu = QMenu(rail)
         self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        vector_menu.addSeparator()
+        self._add_menu_actions(
+            vector_menu,
+            ("vector_union", "vector_subtract", "vector_intersect", "vector_offset"),
+        )
         rail.add_menu(
             "vector",
             "Pen",
@@ -3300,6 +3318,19 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 popup_button = self.layers_popup.action_buttons.get(name)
                 if popup_button is not None:
                     popup_button.setEnabled(enabled)
+
+        planar_selection = bool(indices) and all(
+            self.project.items[index].mesh is not None
+            and self.project.items[index].kind.lower() in PLANAR_KINDS
+            for index in indices
+        )
+        for key, enabled in (
+            ("vector_union", planar_selection and selection_count >= 2),
+            ("vector_subtract", planar_selection and selection_count >= 2),
+            ("vector_intersect", planar_selection and selection_count >= 2),
+            ("vector_offset", planar_selection and selection_count == 1),
+        ):
+            self._ui_actions[key].setEnabled(enabled)
 
         if hasattr(self, "tool_rail"):
             self.tool_rail.set_tool_enabled("arrange", has_selection)
