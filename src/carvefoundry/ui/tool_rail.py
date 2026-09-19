@@ -41,6 +41,7 @@ class ToolRail(QFrame):
             "polygon": "shapes",
             "line": "line",
             "text": "text",
+            "pen": "vector",
         }
 
     @staticmethod
@@ -260,7 +261,7 @@ class ToolRail(QFrame):
             select.setChecked(tool == "select")
 
         active_key = self._draw_button_keys.get(tool)
-        for key in ("shapes", "line", "text"):
+        for key in ("shapes", "line", "text", "vector"):
             button = self.buttons.get(key)
             if button is not None:
                 button.setChecked(key == active_key)
