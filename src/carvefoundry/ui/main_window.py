@@ -178,6 +178,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._background_job: JobState | None = None
         self._job_target_project: Project | None = None
         self._job_action_states: dict[str, bool] = {}
+        self._job_rail_states: dict[str, bool] = {}
+        self._job_camera_was_active = True
+        self._job_draw_mode: str | None = None
         self._job_sequence = 0
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
@@ -5739,7 +5742,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         # Camera, view and selection remain usable. Design and machine commands
         # are disabled to keep the snapshot stable until the worker completes.
         safe_actions = {
-            "camera", "select", "view_fit", "frame_selected", "view_2d",
+            "camera", "view_fit", "frame_selected", "view_2d",
             "perspective", "orthographic", "isometric", "view_top",
             "view_bottom", "view_front", "view_back", "view_left",
             "view_right", "stock", "grid", "rulers", "toolpaths",
@@ -5751,11 +5754,27 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 action.setEnabled(False)
         if self.generate_toolpaths_button is not None:
             self.generate_toolpaths_button.setEnabled(False)
+        # Protect the job snapshot without blocking navigation or repaints.
+        self._job_camera_was_active = self.viewport.camera_control_mode
+        self._job_draw_mode = self.viewport.shape_draw_mode
+        self.viewport.set_shape_draw_mode(None)
+        self.viewport.set_camera_control_mode(True)
+        self.tool_rail.set_active_tool("camera")
+        self._job_rail_states = {
+            key: button.isEnabled()
+            for key, button in self.tool_rail.buttons.items()
+        }
+        for key, button in self.tool_rail.buttons.items():
+            if key not in {"camera", "view"}:
+                button.setEnabled(False)
+        self.properties_panel.setEnabled(False)
+        self.tool_combo.setEnabled(False)
         self.job_progress.setRange(0, 0 if indeterminate else 100)
         self.job_progress.setValue(0)
         self.job_progress.setFormat(title if indeterminate else f"{title} · %p%")
         self.job_progress.show()
-        self.cancel_job_button.show()
+        self.cancel_job_button.setEnabled(True)
+        self.cancel_job_button.setVisible(request is not None)
         self.statusBar().showMessage(f"{title}…")
 
         def progress(fraction: float, status: str) -> None:
@@ -5816,6 +5835,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 if action is not None:
                     action.setEnabled(was_enabled)
             self._job_action_states = {}
+            for key, was_enabled in self._job_rail_states.items():
+                button = self.tool_rail.buttons.get(key)
+                if button is not None:
+                    button.setEnabled(was_enabled)
+            self._job_rail_states = {}
+            self.properties_panel.setEnabled(True)
+            self.tool_combo.setEnabled(True)
+            self.viewport.set_camera_control_mode(self._job_camera_was_active)
+            if not self._job_camera_was_active:
+                self.viewport.set_shape_draw_mode(self._job_draw_mode)
+                self.tool_rail.set_active_tool(
+                    self._job_draw_mode or "select"
+                )
+            else:
+                self.tool_rail.set_active_tool("camera")
             self._sync_toolpath_output_state()
             self._sync_selection_action_state()
             if self.generate_toolpaths_button is not None:
