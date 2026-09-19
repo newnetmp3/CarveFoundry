@@ -18,6 +18,8 @@ background-job lifecycle. It **composes** the following functional mixins:
 | `ui/workspace_commands.py` | Shared QAction registry, visible top menus, compact left tool rail and the hidden legacy ribbon host. |
 | `ui/two_sided_setup.py` / `core/two_sided.py` | Partition front/back models, bake physical reflection in XY, save and reload-verify separate CF3D projects with operator checklist. |
 | `ui/job_planner.py` / `cam/job_plan.py` | Session-owned generated motion sequence and cutter-stage grouping, reordering, validation and runtime estimates. |
+| `ui/stock_simulation.py` / `cam/stock_simulation.py` | Off-thread sampled 2.5D remaining-stock simulation, cutter-profile sweep, per-stage estimates and target-surface display. |
+| `ui/project_recovery.py` / `core/recovery.py` | Separate atomic CF3D idle checkpoints with checksum verification, startup restore and cleanup on explicit Save/Discard. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
 | `ui/text_editor.py` | Editable text Inspector, installed-font grouping, font-face validation, typography-to-mesh updates. |
 | `ui/interface_settings.py` | Load/save/migrate persistent layout and viewport preferences, display toggles, navigation defaults. |
