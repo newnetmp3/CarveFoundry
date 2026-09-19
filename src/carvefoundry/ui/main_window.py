@@ -50,6 +50,7 @@ from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .text_editor import TextEditorMixin
+from .two_sided_setup import TwoSidedSetupMixin
 from .viewport import MeshViewport
 from .workspace_commands import WorkspaceCommandsMixin
 
@@ -94,6 +95,7 @@ class Panel(QFrame):
 class MainWindow(
     WorkspaceCommandsMixin,
     TextEditorMixin,
+    TwoSidedSetupMixin,
     InterfaceSettingsMixin,
     PlanarOperationsMixin,
     RibbonActionsMixin,
