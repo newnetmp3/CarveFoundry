@@ -170,6 +170,174 @@ def _feature_linework(
     return merged
 
 
+def projected_silhouette(meshes: list[trimesh.Trimesh]) -> BaseGeometry:
+    """Return the combined outside XY silhouette for a set of meshes.
+
+    Internal holes are intentionally discarded: silhouette machining follows
+    only the visible outer envelope of each connected projected island.
+    """
+
+    regions = [projected_regions(mesh) for mesh in meshes]
+    if not regions:
+        raise ValueError("No geometry is available for silhouette machining.")
+    merged = unary_union(regions)
+    exteriors = [
+        Polygon(polygon.exterior)
+        for polygon in _polygon_parts(merged)
+        if polygon.area > _EPS
+    ]
+    if not exteriors:
+        raise ValueError("Project geometry produced no outside silhouette.")
+    silhouette = unary_union(exteriors)
+    if not silhouette.is_valid:
+        silhouette = silhouette.buffer(0)
+    return silhouette
+
+
+def geometry_silhouette(
+    meshes: list[trimesh.Trimesh],
+    cutter: Cutter,
+    settings: CamSettingsLike,
+    *,
+    name: str = "Silhouette",
+) -> Toolpath:
+    """Profile the combined outside silhouette of all project geometry."""
+
+    if not meshes:
+        raise ValueError("Silhouette requires at least one mesh.")
+    regions = projected_silhouette(meshes)
+    path_regions = regions.buffer(
+        cutter.radius_mm + settings.padding_mm,
+        join_style=2,
+    )
+    rings = [
+        (np.asarray(polygon.exterior.coords, dtype=float), True)
+        for polygon in _polygon_parts(path_regions)
+        if polygon.area > _EPS
+    ]
+    if not rings:
+        raise ValueError("Silhouette produced no machinable outside contours.")
+
+    if settings.overall_depth_mm is not None:
+        target_z = -abs(float(settings.overall_depth_mm))
+    else:
+        target_z = min(
+            min(-1e-4, float(np.asarray(mesh.bounds, dtype=float)[0, 2]))
+            for mesh in meshes
+        )
+    if (
+        settings.usable_bit_length_mm is not None
+        and abs(target_z) > settings.usable_bit_length_mm + 1e-9
+    ):
+        raise ValueError(
+            f"Requested silhouette depth {abs(target_z):.3f} mm exceeds the "
+            f"usable bit length {settings.usable_bit_length_mm:.3f} mm."
+        )
+
+    moves: list[ToolpathMove] = []
+    previous_depth = 0.0
+    for depth in _depth_passes(target_z, settings.max_stepdown_mm):
+        for points, exterior in _order_tagged_paths(rings):
+            start_index = _enter_depth(
+                moves,
+                points,
+                depth,
+                previous_depth,
+                settings,
+            )
+            final_tab_pass = (
+                settings.tabs_enabled
+                and exterior
+                and depth <= target_z + 1e-9
+            )
+            if final_tab_pass:
+                _cut_tabbed_ring(moves, points, depth, settings)
+            else:
+                for point in points[start_index:]:
+                    _cut(moves, point[0], point[1], depth, settings)
+            last = moves[-1]
+            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+        previous_depth = depth
+
+    return Toolpath(
+        name=name,
+        operation="silhouette",
+        cutter=cutter,
+        safe_z_mm=settings.safe_z_mm,
+        moves=moves,
+    )
+
+
+def geometry_face(
+    width_mm: float,
+    height_mm: float,
+    cutter: Cutter,
+    settings: CamSettingsLike,
+    *,
+    name: str = "Face",
+) -> Toolpath:
+    """Raster-face the full stock surface using the selected cutter."""
+
+    if width_mm <= 0 or height_mm <= 0:
+        raise ValueError("Facing requires positive stock width and height.")
+    depth = (
+        abs(float(settings.overall_depth_mm))
+        if settings.overall_depth_mm is not None
+        else 0.5
+    )
+    if (
+        settings.usable_bit_length_mm is not None
+        and depth > settings.usable_bit_length_mm + 1e-9
+    ):
+        raise ValueError(
+            f"Facing depth {depth:.3f} mm exceeds the usable bit length "
+            f"{settings.usable_bit_length_mm:.3f} mm."
+        )
+
+    radius = cutter.radius_mm
+    work = Polygon(
+        (
+            (radius, radius),
+            (width_mm - radius, radius),
+            (width_mm - radius, height_mm - radius),
+            (radius, height_mm - radius),
+        )
+    )
+    if work.is_empty or work.area <= _EPS:
+        raise ValueError("Selected cutter is too large to face this stock.")
+
+    step = max(cutter.diameter_mm * settings.stepover_fraction, 0.05)
+    strategy = _settings_value(settings.pocket_strategy)
+    axis_y = strategy == "raster_y"
+    paths = _scanline_segments(work, axis_y=axis_y, step=step)
+    moves: list[ToolpathMove] = []
+    current_point: np.ndarray | None = None
+    for cut_z in _depth_passes(-depth, settings.max_stepdown_mm):
+        current_point = None
+        for points in paths:
+            current_point = _cut_path_with_smart_link(
+                moves,
+                points,
+                cut_z,
+                work,
+                settings,
+                current_point,
+            )
+        if moves:
+            last = moves[-1]
+            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+
+    if not moves:
+        raise ValueError("Facing produced no toolpath.")
+    return Toolpath(
+        name=name,
+        operation="face",
+        cutter=cutter,
+        safe_z_mm=settings.safe_z_mm,
+        moves=moves,
+    )
+
+
 def engraving_paths(mesh: trimesh.Trimesh) -> list[np.ndarray]:
     """Return projected outlines plus real sharp internal model features."""
 
