@@ -80,6 +80,7 @@ from carvefoundry.core.smart_values import SmartValueError, SmartValues
 from carvefoundry.core.tools import DEFAULT_TOOLS, Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
+from carvefoundry.core.vector_path import VectorPath
 
 from .cam_generation_dialog import CamGenerationDialogMixin
 from .machine_control import MachineController
@@ -1011,6 +1012,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         transform: Transform3D,
         *,
         text_properties: TextProperties | None = None,
+        vector_path: VectorPath | None = None,
     ) -> ProjectItem:
         item = ProjectItem(
             name=self._unique_item_name(name),
@@ -1019,6 +1021,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             transform=transform,
             source_units=ModelUnits.MILLIMETERS,
             text_properties=text_properties,
+            vector_path=vector_path,
         )
         self._before_ribbon_mutation(f"draw {kind}")
         self.project.items.append(item)
@@ -1278,12 +1281,20 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         ):
             captured.append(captured[0])
 
+        path = VectorPath(
+            points_xy=tuple(
+                captured[:-1] if (
+                    len(captured) >= 3 and captured[0] == captured[-1]
+                ) else captured
+            ),
+            width_mm=self._tool_option_pen_width_mm,
+            depth_mm=self._tool_option_depth_mm,
+            closed=bool(
+                self._tool_option_pen_close_path and len(captured) >= 4
+            ),
+        )
         try:
-            mesh = polyline_mesh(
-                captured,
-                width_mm=self._tool_option_pen_width_mm,
-                depth_mm=self._tool_option_depth_mm,
-            )
+            mesh = path.mesh_asset()
         except ValueError as exc:
             self.statusBar().showMessage(f"Pen stroke failed: {exc}", 5000)
             return
@@ -1293,6 +1304,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             "pen",
             mesh,
             Transform3D(),
+            vector_path=path,
         )
 
     def _trace_image(self) -> None:
