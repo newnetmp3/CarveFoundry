@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-from PySide6.QtCore import QItemSelectionModel, QSettings, Qt, QThread, QTimer
+from PySide6.QtCore import QEvent, QItemSelectionModel, QSettings, Qt, QThread, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -331,6 +332,8 @@ class MainWindow(
 
         canvas_bar = QWidget()
         canvas_bar.setObjectName("ViewportBar")
+        self._viewport_action_bar = canvas_bar
+        canvas_bar.installEventFilter(self)
         canvas_bar_layout = QHBoxLayout(canvas_bar)
         canvas_bar_layout.setContentsMargins(7, 4, 7, 4)
         canvas_bar_layout.setSpacing(5)
@@ -338,8 +341,8 @@ class MainWindow(
         canvas_bar_layout.addWidget(QLabel("Object"))
         self.object_selector = QComboBox()
         self.object_selector.setObjectName("ObjectSelector")
-        self.object_selector.setMinimumWidth(190)
-        self.object_selector.setMaximumWidth(360)
+        self.object_selector.setMinimumWidth(130)
+        self.object_selector.setMaximumWidth(275)
         self.object_selector.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
@@ -382,6 +385,7 @@ class MainWindow(
         fit_button = QPushButton("Fit")
         fit_button.setToolTip("Fit the entire job to the viewport")
         fit_button.clicked.connect(self._fit_view)
+        self._viewport_fit_button = fit_button
         canvas_bar_layout.addWidget(fit_button)
 
         self.inspector_button = QPushButton("Inspector")
@@ -401,7 +405,33 @@ class MainWindow(
         import_button.clicked.connect(
             lambda _checked=False: self._import_file()
         )
+        self._viewport_import_button = import_button
         canvas_bar_layout.addWidget(import_button)
+
+        overflow = QToolButton(canvas_bar)
+        overflow.setObjectName("ViewportOverflowButton")
+        overflow.setText("⋯")
+        overflow.setToolTip(
+            "Workspace actions: Import, Fit, Inspector, Layers and CNC guide"
+        )
+        overflow.setAccessibleName("More viewport actions")
+        overflow.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(overflow)
+        menu.addAction(self._ui_actions["import"])
+        menu.addAction(self._ui_actions["fit_view"])
+        menu.addAction(self._ui_actions["layers"])
+        menu.addSeparator()
+        toggle_inspector = menu.addAction("Show / Hide Inspector")
+        toggle_inspector.triggered.connect(
+            self._toggle_properties_panel_option
+        )
+        menu.addAction(self._ui_actions["guided_workflow"])
+        overflow.setMenu(menu)
+        self._viewport_overflow_button = overflow
+        canvas_bar_layout.addWidget(overflow)
+        self._viewport_quick_controls = (
+            import_button, fit_button, self.inspector_button,
+        )
         canvas_layout.addWidget(canvas_bar)
 
         self.tool_options_bar = QWidget()
@@ -711,6 +741,33 @@ class MainWindow(
         splitter.setStretchFactor(0, 1)
         layout.addWidget(splitter, 1)
         return wrapper
+
+    def _update_viewport_action_density(self, available_width: int) -> None:
+        """Keep essential object/CAM controls visible without clipping.
+
+        Less frequent actions remain accessible through the always-visible
+        overflow menu, even on narrower splitters or a 1050px app window.
+        """
+        if not hasattr(self, "_viewport_quick_controls"):
+            return
+        import_button, fit_button, inspector_button = (
+            self._viewport_quick_controls
+        )
+        import_button.setVisible(available_width >= 1030)
+        fit_button.setVisible(available_width >= 900)
+        inspector_button.setVisible(available_width >= 790)
+        self.generate_toolpaths_button.setText(
+            "Toolpaths…" if available_width < 770
+            else "Generate Toolpaths"
+        )
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            watched is getattr(self, "_viewport_action_bar", None)
+            and event.type() == QEvent.Type.Resize
+        ):
+            self._update_viewport_action_density(event.size().width())
+        return super().eventFilter(watched, event)
 
     def _properties_panel_default_width(self) -> int:
         """Return a useful contextual-inspector width without stealing canvas."""
