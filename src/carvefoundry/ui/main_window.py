@@ -1531,7 +1531,8 @@ class MainWindow(
         if cutter is not None and hasattr(cutter, "name"):
             self._settings.setValue("tools/selected_name", cutter.name)
             self._settings.sync()
-            self._invalidate_toolpaths("Selected cutter")
+            # Generated toolpaths carry their own cutter geometry; changing
+            # the UI's *next* cutter must never erase earlier cutter stages.
         self._refresh_cam_detail_readouts()
         if hasattr(self, "text_cnc_hint"):
             self._update_text_cnc_hint()
