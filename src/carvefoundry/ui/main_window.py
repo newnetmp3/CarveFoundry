@@ -476,6 +476,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         for key, text, callback in specs:
             self._new_ui_action(key, text, callback)
+        for key in ("measure", "fixture_draw"):
+            self._ui_actions[key].setCheckable(True)
 
         self._new_ui_action(
             "transform_global",
@@ -1593,82 +1595,35 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             checkable=True,
         )
 
+        rail.add_action_tool(
+            "measure",
+            self._ui_actions["measure"],
+            tooltip=(
+                "Measure XY — drag two stock-top points to read the exact "
+                "planar length, ΔX, ΔY, and angle."
+            ),
+        )
+        fixture_menu = QMenu(rail)
+        self._add_menu_actions(fixture_menu, ("fixtures",))
+        rail.add_menu(
+            "fixture",
+            "Draw Fixture",
+            fixture_menu,
+            tooltip=(
+                "Draw a clamp/fence keep-out on the stock. Use the small "
+                "arrow to edit all fixtures, including off-stock fences."
+            ),
+            primary_callback=self._activate_fixture_tool,
+            checkable=True,
+        )
+
         rail.add_separator()
-
-        file_menu = QMenu(rail)
-        self._add_menu_actions(file_menu, ("new", "open", "save", "save_as"))
-        file_menu.addSeparator()
-        import_menu = file_menu.addMenu("Import")
-        self._add_menu_actions(
-            import_menu,
-            (
-                "import",
-                "import_stl",
-                "import_svg",
-                "import_dxf",
-                "import_image",
-                "import_gcode",
-            ),
-        )
-        file_menu.addSeparator()
-        self._add_menu_actions(
-            file_menu,
-            ("export_gcode", "export_resume", "export_tiled"),
-        )
-        rail.add_menu(
-            "file",
-            "Open",
-            file_menu,
-            tooltip="Project, import, save, and G-code output commands.",
-            primary_callback=self._open_project,
-        )
-
-        edit_menu = QMenu(rail)
-        self._add_menu_actions(
-            edit_menu,
-            (
-                "undo",
-                "redo",
-                "cut",
-                "copy",
-                "paste",
-                "duplicate",
-                "delete",
-                "select_all",
-            ),
-        )
-        rail.add_menu(
-            "edit",
-            "Cut",
-            edit_menu,
-            tooltip="Edit commands — undo/redo, clipboard, duplicate, delete, select all.",
-        )
-
-        arrange_menu = QMenu(rail)
-        self._add_menu_actions(
-            arrange_menu,
-            (
-                "align",
-                "center",
-                "group",
-                "ungroup",
-                "duplicate",
-                "move_up",
-                "move_down",
-                "layers",
-            ),
-        )
-        rail.add_menu(
-            "arrange",
-            "Align",
-            arrange_menu,
-            tooltip="Arrange, group, order, and Layers commands.",
-        )
 
         model_menu = QMenu(rail)
         self._add_menu_actions(
             model_menu,
-            ("stock_setup", "work_zero", "smart_values", "smart_bindings", "fit_view"),
+            ("stock_setup", "work_zero", "fixtures",
+             "smart_values", "smart_bindings", "fit_view"),
         )
         transform_menu = model_menu.addMenu("Transform")
         self._add_menu_actions(
@@ -1765,6 +1720,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "calculate",
                 "preview",
                 "simulate",
+                "preflight",
                 "export_toolpath",
                 "export_resume",
                 "export_tiled",
@@ -1829,59 +1785,28 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             tooltip="Machine setup, connection, probe, and jog controls.",
         )
 
-        view_menu = QMenu(rail)
-        display_menu = view_menu.addMenu("Display")
-        self._add_menu_actions(
-            display_menu,
-            ("stock", "grid", "rulers", "toolpaths", "rapids"),
+        rail.add_separator()
+        # Frequent actions stay one click away; general File/Edit/View
+        # commands remain in the permanent top menu rather than crowding rail.
+        rail.add_action_tool(
+            "generate",
+            self._ui_actions["calculate"],
+            tooltip="Generate current CAM operation with its configured cutter.",
         )
-        camera_menu = view_menu.addMenu("Camera")
-        self._add_menu_actions(
-            camera_menu,
-            (
-                "view_fit",
-                "frame_selected",
-                "view_2d",
-                "perspective",
-                "orthographic",
-                "isometric",
-            ),
+        rail.add_action_tool(
+            "preview",
+            self._ui_actions["preview"],
+            tooltip="Inspect calculated G-code in the toolpath backplotter.",
         )
-        fixed_menu = view_menu.addMenu("Fixed View")
-        self._add_menu_actions(
-            fixed_menu,
-            (
-                "view_top",
-                "view_bottom",
-                "view_front",
-                "view_back",
-                "view_left",
-                "view_right",
-            ),
+        rail.add_action_tool(
+            "preflight",
+            self._ui_actions["preflight"],
+            tooltip="Check machine travel, stock depth and fixture clearance.",
         )
-        workspace_menu = view_menu.addMenu("Workspace")
-        self._add_menu_actions(
-            workspace_menu,
-            (
-                "layers",
-                "inspector",
-                "isolate_selected",
-                "exit_isolate",
-                "status_bar",
-                "view_controls",
-                "reset_ui",
-            ),
-        )
-        navigation_menu = view_menu.addMenu("Navigation")
-        self._add_menu_actions(
-            navigation_menu,
-            ("reverse_horizontal", "invert_vertical"),
-        )
-        rail.add_menu(
-            "view",
-            "Perspective",
-            view_menu,
-            tooltip="Display, camera, fixed views, workspace, and navigation options.",
+        rail.add_action_tool(
+            "export",
+            self._ui_actions["export_toolpath"],
+            tooltip="Export preflight-checked G-code by cutter stage.",
         )
 
         rail.add_stretch()
