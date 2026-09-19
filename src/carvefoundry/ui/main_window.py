@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 from uuid import uuid4
 
 import numpy as np
@@ -77,7 +78,26 @@ _FONT_FAMILY_VARIANT_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("ExtraBold", "ExtraBold"),
     ("Ultra Bold", "UltraBold"),
     ("UltraBold", "UltraBold"),
+    ("SemiCondensed", "Semi Condensed"),
+    ("SemCond", "Semi Condensed"),
+    ("SemiBold", "SemiBold"),
+    ("SemBd", "SemiBold"),
+    ("SmBd", "SemiBold"),
+    ("ExtraLight", "ExtraLight"),
+    ("ExtLt", "ExtraLight"),
+    ("ExtraBold", "ExtraBold"),
+    ("ExtBd", "ExtraBold"),
+    ("Medium", "Medium"),
+    ("Med", "Medium"),
+    ("Retina", "Retina"),
+    ("Ret", "Retina"),
     ("Condensed", "Condensed"),
+    ("Cond", "Condensed"),
+    ("Mono", "Monospaced"),
+    ("Propo", "Proportional"),
+    ("NFM", "Nerd Font Mono"),
+    ("NFP", "Nerd Font Proportional"),
+    ("NF", "Nerd Font"),
     ("Compressed", "Compressed"),
     ("Expanded", "Expanded"),
     ("Extended", "Extended"),
@@ -2052,6 +2072,87 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return families
 
     @staticmethod
+    def _parse_fontconfig_text_font_aliases(
+        output: str,
+        families: list[str],
+    ) -> dict[str, tuple[str, str]]:
+        """Map full-name aliases back to their real family and style."""
+
+        available = {family.casefold(): family for family in families}
+        candidates: dict[str, set[tuple[str, str]]] = {}
+        for line in output.splitlines():
+            fields = line.split("\t")
+            if len(fields) < 3:
+                continue
+            family_name, style_name, full_name = (
+                field.strip() for field in fields[:3]
+            )
+            canonical = available.get(family_name.casefold())
+            alias = available.get(full_name.casefold())
+            if (
+                canonical is None
+                or alias is None
+                or canonical.casefold() == alias.casefold()
+            ):
+                continue
+            candidates.setdefault(alias.casefold(), set()).add(
+                (canonical, style_name or "Regular")
+            )
+
+        # If Fontconfig reports one full name ambiguously for more than one
+        # family/style, leave it visible instead of guessing.
+        return {
+            alias: next(iter(options))
+            for alias, options in candidates.items()
+            if len(options) == 1
+        }
+
+    @classmethod
+    def _fontconfig_text_font_aliases(
+        cls,
+        families: list[str],
+    ) -> dict[str, tuple[str, str]]:
+        """Return Linux Fontconfig aliases when available.
+
+        Qt sometimes exposes a font's full face name as another family.
+        Fontconfig keeps the canonical family/style relationship, so use it
+        to hide duplicates such as "... Med" or "... SemBd".  Non-Linux
+        systems simply fall back to the suffix grouping below.
+        """
+
+        try:
+            result = subprocess.run(
+                (
+                    "fc-list",
+                    "-f",
+                    "%{family[0]}\\t%{style[0]}\\t%{fullname[0]}\\n",
+                ),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+            )
+        except (FileNotFoundError, OSError, subprocess.SubprocessError):
+            return {}
+        if result.returncode != 0:
+            return {}
+        return cls._parse_fontconfig_text_font_aliases(
+            result.stdout,
+            families,
+        )
+
+    def _canonical_text_font_family(
+        self,
+        family: str,
+    ) -> tuple[str, str | None]:
+        alias = getattr(self, "_text_font_aliases", {}).get(
+            family.casefold()
+        )
+        if alias is None:
+            return family, None
+        return alias
+
+    @staticmethod
     def _font_family_variant_candidate(family: str) -> tuple[str, str]:
         """Split common family-level alternatives from a font family name."""
 
@@ -2119,6 +2220,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         return result
 
     def _font_group_for_family(self, family: str) -> tuple[str, str]:
+        family, _alias_style = self._canonical_text_font_family(family)
         for base, variants in self._text_font_groups.items():
             for variant, concrete_family in variants:
                 if concrete_family == family:
@@ -2143,6 +2245,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         preferred_family: str | None = None,
     ) -> None:
         variants = self._text_font_groups.get(base_family, [])
+        if preferred_family:
+            preferred_family, _alias_style = (
+                self._canonical_text_font_family(preferred_family)
+            )
         self.text_font_variant_combo.blockSignals(True)
         try:
             self.text_font_variant_combo.clear()
@@ -2232,8 +2338,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         layout.addLayout(typography_form)
 
         installed_families = self._installed_text_font_families()
-        self._text_font_groups = self._group_text_font_families(
+        self._text_font_aliases = self._fontconfig_text_font_aliases(
             installed_families
+        )
+        selectable_families = [
+            family
+            for family in installed_families
+            if family.casefold() not in self._text_font_aliases
+        ]
+        self._text_font_groups = self._group_text_font_families(
+            selectable_families
         )
 
         self.text_font_combo = QComboBox()
@@ -3945,9 +4059,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _sync_text_controls(self, item: ProjectItem) -> None:
         properties = item.text_properties or self._legacy_text_properties(item)
         family = properties.font_family or QFont().family()
+        canonical_family, alias_style = self._canonical_text_font_family(
+            family
+        )
         installed_families = set(QFontDatabase.families())
         display_family = (
-            family if family in installed_families else QFont().family()
+            canonical_family
+            if canonical_family in installed_families
+            else QFont().family()
         )
 
         self._updating_text_controls = True
@@ -3965,7 +4084,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             display_family = self._selected_text_font_family()
             self._refresh_text_font_styles(
                 display_family,
-                properties.font_style,
+                alias_style or properties.font_style,
             )
             self.text_size_spin.setValue(properties.size_pt)
             style_bold, style_italic = self._text_style_traits(
