@@ -11,6 +11,7 @@ import zstandard as zstd
 
 from .mesh import MeshImportError, load_stl
 from .project import Project, ProjectItem, Stock, TextProperties
+from .smart_values import SmartValueError, SmartValues
 from .transform import Transform3D
 from .units import ModelUnits
 
@@ -50,11 +51,12 @@ def _transform_to_dict(transform: Transform3D) -> dict[str, list[float]]:
     }
 
 
-def _stock_to_dict(stock: Stock) -> dict[str, float]:
+def _stock_to_dict(stock: Stock) -> dict[str, object]:
     return {
         "width_mm": stock.width_mm,
         "height_mm": stock.height_mm,
         "thickness_mm": stock.thickness_mm,
+        "xy_zero": stock.xy_zero,
     }
 
 
@@ -239,6 +241,7 @@ def _build_container(
                 "text_properties": _text_properties_to_dict(
                     item.text_properties
                 ),
+                "smart_bindings": dict(item.smart_bindings),
                 "asset_id": asset_id,
                 "source_name": source_name,
                 "transform": _transform_to_dict(item.transform),
@@ -253,6 +256,7 @@ def _build_container(
         "coordinate_system": {"linear_units": "mm"},
         "name": project.name,
         "stock": _stock_to_dict(project.stock),
+        "smart_values": dict(project.smart_values.expressions),
         "items": items,
         "assets": assets,
     }
@@ -323,11 +327,14 @@ def _load_stock(value: object) -> Stock:
             width_mm=float(value["width_mm"]),
             height_mm=float(value["height_mm"]),
             thickness_mm=float(value["thickness_mm"]),
+            xy_zero=str(value.get("xy_zero", "bottom_left")),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectFileError("Project stock dimensions are invalid.") from exc
     if min(stock.width_mm, stock.height_mm, stock.thickness_mm) <= 0:
         raise ProjectFileError("Project stock dimensions must be greater than zero.")
+    if stock.xy_zero not in {"bottom_left", "center"}:
+        raise ProjectFileError("Project XY work zero must be bottom_left or center.")
     return stock
 
 
@@ -616,6 +623,13 @@ def _load_native_item(
     )
     group_value = value.get("group_id")
     group_id = group_value if isinstance(group_value, str) and group_value else None
+    bindings_value = value.get("smart_bindings", {})
+    if not isinstance(bindings_value, dict) or not all(
+        isinstance(key, str) and isinstance(expression, str)
+        for key, expression in bindings_value.items()
+    ):
+        raise ProjectFileError(f"Project item {name!r} has invalid Smart Value bindings.")
+    smart_bindings = dict(bindings_value)
     item_id_value = value.get("item_id")
     item_id = (
         item_id_value
@@ -666,6 +680,7 @@ def _load_native_item(
         "source_units": source_units,
         "group_id": group_id,
         "text_properties": text_properties,
+        "smart_bindings": smart_bindings,
     }
     if item_id is not None:
         item_kwargs["item_id"] = item_id
@@ -692,6 +707,18 @@ def _load_native_project(project_path: Path) -> Project:
             if not isinstance(items_value, list):
                 raise ProjectFileError("Project items section is invalid.")
 
+            smart_values_raw = manifest.get("smart_values", {})
+            if not isinstance(smart_values_raw, dict) or not all(
+                isinstance(key, str) and isinstance(expression, str)
+                for key, expression in smart_values_raw.items()
+            ):
+                raise ProjectFileError("Project Smart Values section is invalid.")
+            smart_values = SmartValues(dict(smart_values_raw))
+            try:
+                smart_values.resolve_all()
+            except SmartValueError as exc:
+                raise ProjectFileError(f"Project Smart Values are invalid: {exc}") from exc
+
             assets = manifest.get("assets", {})
             materialized: dict[tuple[str, str], Path] = {}
             items = [
@@ -714,6 +741,7 @@ def _load_native_project(project_path: Path) -> Project:
         name=name,
         stock=stock,
         items=items,
+        smart_values=smart_values,
         _asset_workspace_owner=workspace_owner,
     )
 
