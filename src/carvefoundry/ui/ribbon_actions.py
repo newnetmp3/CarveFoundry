@@ -2436,75 +2436,68 @@ class RibbonActionsMixin:
 
         self._show_toolpath_generation_dialog()
 
-    def _calculate_toolpath_now(self) -> None:
-        item = self._selected_item()
-        if item is None or item.mesh is None:
-            self.statusBar().showMessage("Select a mesh or created shape first", 4000)
-            return
-        cutter = self.tool_combo.currentData()
-        if not isinstance(cutter, Cutter):
-            self.statusBar().showMessage("Select a valid cutter", 4000)
-            return
+    def _generate_toolpaths_for_item(
+        self,
+        item: ProjectItem,
+        cutter: Cutter,
+        operation: str,
+    ) -> list:
+        """Generate the selected CAM operation for one project object."""
+
         bounds = item.transformed_bounds_mm()
         mesh = item.transformed_mesh()
-        assert bounds is not None and mesh is not None
-        settings = self._cam_settings(bounds, mesh)
-        operation = self._active_cam_operation
+        if bounds is None or mesh is None:
+            return []
 
-        self.statusBar().showMessage(f"Calculating {operation} toolpath…")
-        try:
-            cut_type = self._cam_cut_type
-            if operation == "vcarve":
-                toolpath = geometry_vcarve(mesh, cutter, settings)
-            elif operation == "drill":
-                toolpath = geometry_drill(mesh, cutter, settings)
-            elif (
-                cut_type == "Pocket"
-                and operation in {"profile", "pocket", "engrave"}
-            ):
-                toolpath = geometry_pocket(mesh, cutter, settings)
-            elif (
-                cut_type in {"On Path", "Outside", "Inside"}
-                and operation in {"profile", "pocket", "engrave"}
-            ):
-                if operation == "engrave" and cut_type == "On Path":
-                    toolpath = geometry_engrave(mesh, cutter, settings)
-                else:
-                    offset_mode = {
-                        "On Path": "on",
-                        "Outside": "outside",
-                        "Inside": "inside",
-                    }[cut_type]
-                    toolpath = geometry_profile(
-                        mesh,
-                        cutter,
-                        settings,
-                        offset_mode=offset_mode,
-                    )
-                    if operation == "engrave":
-                        toolpath.name = "Engrave"
-                        toolpath.operation = "engrave"
-            elif operation == "profile":
-                toolpath = geometry_profile(mesh, cutter, settings)
-            elif operation == "pocket":
-                toolpath = geometry_pocket(mesh, cutter, settings)
-            elif operation == "engrave":
+        settings = self._cam_settings(bounds, mesh)
+        cut_type = self._cam_cut_type
+        if operation == "vcarve":
+            toolpath = geometry_vcarve(mesh, cutter, settings)
+        elif operation == "drill":
+            toolpath = geometry_drill(mesh, cutter, settings)
+        elif (
+            cut_type == "Pocket"
+            and operation in {"profile", "pocket", "engrave"}
+        ):
+            toolpath = geometry_pocket(mesh, cutter, settings)
+        elif (
+            cut_type in {"On Path", "Outside", "Inside"}
+            and operation in {"profile", "pocket", "engrave"}
+        ):
+            if operation == "engrave" and cut_type == "On Path":
                 toolpath = geometry_engrave(mesh, cutter, settings)
-            elif operation in {"rough", "finish", "rest"}:
-                toolpath = finish_3d(
+            else:
+                offset_mode = {
+                    "On Path": "on",
+                    "Outside": "outside",
+                    "Inside": "inside",
+                }[cut_type]
+                toolpath = geometry_profile(
                     mesh,
                     cutter,
                     settings,
-                    strategy=operation,
+                    offset_mode=offset_mode,
                 )
-            elif operation == "waterline":
-                toolpath = waterline_3d(mesh, cutter, settings)
-            else:
-                raise ValueError(f"Unknown CAM operation: {operation}")
-        except (RuntimeError, ValueError) as exc:
-            self._set_activity_info(f"Toolpath calculation failed\n{exc}")
-            self.statusBar().showMessage(f"Toolpath failed: {exc}", 8000)
-            return
+                if operation == "engrave":
+                    toolpath.name = "Engrave"
+                    toolpath.operation = "engrave"
+        elif operation == "profile":
+            toolpath = geometry_profile(mesh, cutter, settings)
+        elif operation == "pocket":
+            toolpath = geometry_pocket(mesh, cutter, settings)
+        elif operation == "engrave":
+            toolpath = geometry_engrave(mesh, cutter, settings)
+        elif operation in {"rough", "finish", "rest"}:
+            toolpath = finish_3d(
+                mesh,
+                cutter,
+                settings,
+                strategy=operation,
+            )
+        elif operation == "waterline":
+            toolpath = waterline_3d(mesh, cutter, settings)
+        else:
+            raise ValueError(f"Unknown CAM operation: {operation}")
 
         generated_toolpaths = [toolpath]
         if (
@@ -2547,6 +2540,71 @@ class RibbonActionsMixin:
         for generated in generated_toolpaths:
             generated.source_item_id = item.item_id
             generated.source_item_name = item.name
+        return generated_toolpaths
+
+    def _calculate_toolpath_now(self) -> None:
+        items = [
+            item
+            for item in self.project.items
+            if item.mesh is not None
+        ]
+        if not items:
+            self.statusBar().showMessage(
+                "Add a mesh or created shape before generating toolpaths",
+                4000,
+            )
+            return
+
+        cutter = self.tool_combo.currentData()
+        if not isinstance(cutter, Cutter):
+            self.statusBar().showMessage("Select a valid cutter", 4000)
+            return
+
+        operation = self._active_cam_operation
+        self.statusBar().showMessage(
+            f"Calculating {operation} toolpaths for {len(items)} object"
+            f"{'s' if len(items) != 1 else ''}…"
+        )
+
+        generated_toolpaths = []
+        try:
+            for item in items:
+                generated_toolpaths.extend(
+                    self._generate_toolpaths_for_item(
+                        item,
+                        cutter,
+                        operation,
+                    )
+                )
+        except ModuleNotFoundError as exc:
+            missing = exc.name or "required Python package"
+            message = (
+                f"Toolpath generation requires the missing dependency "
+                f"'{missing}'. Reinstall CarveFoundry dependencies."
+            )
+            self._set_activity_info(
+                f"Toolpath calculation failed\n{message}"
+            )
+            self.statusBar().showMessage(message, 10000)
+            return
+        except (RuntimeError, ValueError) as exc:
+            failed_item = item.name
+            message = f"{failed_item}: {exc}"
+            self._set_activity_info(
+                f"Toolpath calculation failed\n{message}"
+            )
+            self.statusBar().showMessage(
+                f"Toolpath failed: {message}",
+                10000,
+            )
+            return
+
+        if not generated_toolpaths:
+            self.statusBar().showMessage(
+                "The project geometry produced no toolpaths",
+                5000,
+            )
+            return
 
         if self._simulation_timer.isActive():
             self._simulation_timer.stop()
@@ -2571,11 +2629,20 @@ class RibbonActionsMixin:
         total_minutes = sum(
             path.estimated_cutting_minutes for path in generated_toolpaths
         )
-        operation_names = " + ".join(path.name for path in generated_toolpaths)
+        object_count = len(
+            {
+                path.source_item_id
+                for path in generated_toolpaths
+                if path.source_item_id
+            }
+        )
+        operation_names = sorted({path.name for path in generated_toolpaths})
+        operation_summary = " + ".join(operation_names)
         self._set_activity_info(
-            f"Toolpath ready\n{operation_names}\n\n"
-            f"Source: {item.name}\n"
-            f"Cutter: {toolpath.cutter.name}\n"
+            f"Toolpaths ready\n{operation_summary}\n\n"
+            f"Objects: {object_count}\n"
+            f"Cutter: {cutter.name}\n"
+            f"Paths: {len(generated_toolpaths):,}\n"
             f"Moves: {total_moves:,}\n"
             f"Cut distance: {total_cut:.1f} mm\n"
             f"Rapid distance: {total_rapid:.1f} mm\n"
@@ -2583,8 +2650,10 @@ class RibbonActionsMixin:
         )
         self._sync_toolpath_output_state()
         self.statusBar().showMessage(
-            f"Calculated {operation_names}",
-            5000,
+            f"Generated {len(generated_toolpaths)} toolpath"
+            f"{'s' if len(generated_toolpaths) != 1 else ''} for "
+            f"{object_count} object{'s' if object_count != 1 else ''}",
+            6000,
         )
 
     def _preview_toolpaths(self) -> None:
