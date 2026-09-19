@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import trimesh
 
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
@@ -263,3 +264,30 @@ def test_smart_values_bindings_and_center_work_zero_round_trip(tmp_path: Path) -
     assert loaded.stock.xy_zero == "center"
     assert loaded.smart_values.resolve("inside") == pytest.approx(59.0)
     assert loaded.items[0].smart_bindings == project.items[0].smart_bindings
+
+
+def test_fixture_keepouts_round_trip_and_reject_invalid_manifest(tmp_path: Path) -> None:
+    left_fence = Fixture("Metal left fence", -23, -10, -1.9, 120, 3.6, 2.0)
+    project = Project(
+        stock=Stock(170, 120, 19.4),
+        fixtures=[left_fence],
+    )
+    path = save_project(project, tmp_path / "fixture-keepouts.cf3d")
+    loaded = load_project(path)
+    assert loaded.fixtures == [left_fence]
+    manifest = project_to_dict(project, path)
+    assert manifest["fixtures"] == [{
+        "name": "Metal left fence",
+        "x_min_mm": -23,
+        "y_min_mm": -10,
+        "x_max_mm": -1.9,
+        "y_max_mm": 120,
+        "top_z_mm": 3.6,
+        "clearance_mm": 2.0,
+    }]
+
+
+def test_older_native_project_without_fixtures_loads_empty(tmp_path: Path) -> None:
+    project = Project(name="Before fixture editor")
+    path = save_project(project, tmp_path / "old.cf3d")
+    assert load_project(path).fixtures == []
