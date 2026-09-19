@@ -46,6 +46,12 @@ Put new behavior in the narrowest relevant module, not automatically in
   Booleans.
 - `cam/`: cutter-aware toolpath generation, GRBL post, fixture-aware preflight
   and process workers. Toolpaths use stock-bottom-left XY0 and stock-top Z0.
+  `cam/rest_machining.py` probes the selected cutter against sampled remaining
+  stock from `cam/stock_simulation.py`; it retains only useful contact-safe
+  raster centres and lets the existing raster linker handle disjoint regions.
+  `cam/job_process.py` simulates previous cutter stages once per Rest request.
+  These algorithms are 2.5D approximations, not cutter holder or machine
+  collision models; normal export preflight remains mandatory.
 - `rust/`: tested native raster/contact kernels; Python reference
   implementations remain available for comparison.
 
