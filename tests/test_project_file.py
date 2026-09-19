@@ -8,7 +8,6 @@ import trimesh
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
-from carvefoundry.core.smart_values import SmartValues
 from carvefoundry.core.project_file import (
     LEGACY_PROJECT_FILE_VERSION,
     PROJECT_FILE_MAGIC,
@@ -18,6 +17,7 @@ from carvefoundry.core.project_file import (
     project_to_dict,
     save_project,
 )
+from carvefoundry.core.smart_values import SmartValues
 from carvefoundry.core.transform import Transform3D
 
 
