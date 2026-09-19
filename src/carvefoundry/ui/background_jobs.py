@@ -61,26 +61,32 @@ class BackgroundWorker(QObject):
         with tempfile.TemporaryDirectory(prefix="carvefoundry-job-") as directory:
             request_path = Path(directory) / "request.pkl"
             result_path = Path(directory) / "result.pkl"
+            stderr_path = Path(directory) / "worker.log"
             self._report(0.01, "Preparing job")
             with request_path.open("wb") as handle:
                 pickle.dump(self._request, handle, protocol=pickle.HIGHEST_PROTOCOL)
             self._report(0.03, "Starting worker process")
             env = dict(os.environ)
             env["PYTHONUNBUFFERED"] = "1"
-            process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "carvefoundry.cam.job_worker_cli",
-                    str(request_path),
-                    str(result_path),
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                env=env,
-            )
+            error_log = stderr_path.open("wb")
+            try:
+                process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "carvefoundry.cam.job_worker_cli",
+                        str(request_path),
+                        str(result_path),
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=error_log,
+                    text=True,
+                    bufsize=1,
+                    env=env,
+                )
+            except BaseException:
+                error_log.close()
+                raise
             self._process = process
             assert process.stdout is not None
             try:
@@ -119,8 +125,10 @@ class BackgroundWorker(QObject):
                 if self._cancel.is_set():
                     raise JobCancelled()
                 if process.returncode != 0:
-                    assert process.stderr is not None
-                    error = process.stderr.read().strip()
+                    error_log.flush()
+                    error = stderr_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).strip()
                     raise RuntimeError(error[-3000:] or f"Worker exited {process.returncode}")
                 self._report(0.98, "Loading results")
                 with result_path.open("rb") as handle:
@@ -135,8 +143,7 @@ class BackgroundWorker(QObject):
                         process.kill()
                         process.wait()
                 process.stdout.close()
-                assert process.stderr is not None
-                process.stderr.close()
+                error_log.close()
 
     @Slot()
     def run(self) -> None:
