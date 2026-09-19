@@ -107,6 +107,9 @@ CARVEFOUNDRY_CAM_BACKEND=rust carvefoundry
 
 The normal default is auto, which uses Rust when the compiled extension is available and otherwise falls back to Python. Packaged/development installs build the Rust extension automatically.
 
+For module ownership and extension guidelines, see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Development
 
 Requires Python 3.12 or newer and a Rust toolchain new enough for PyO3 0.29 (Rust 1.83 or newer).
