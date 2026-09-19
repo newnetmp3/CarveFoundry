@@ -16,6 +16,7 @@ from .project import Project, ProjectItem, Stock, TextProperties
 from .smart_values import SmartValueError, SmartValues
 from .transform import Transform3D
 from .units import ModelUnits
+from .vector_path import VectorPath
 
 PROJECT_FILE_VERSION = 2
 LEGACY_PROJECT_FILE_VERSION = 1
@@ -244,6 +245,15 @@ def _build_container(
                     item.text_properties
                 ),
                 "smart_bindings": dict(item.smart_bindings),
+                "vector_path": (
+                    {
+                        "points_xy": [list(point) for point in item.vector_path.points_xy],
+                        "width_mm": item.vector_path.width_mm,
+                        "depth_mm": item.vector_path.depth_mm,
+                        "closed": item.vector_path.closed,
+                    }
+                    if item.vector_path is not None else None
+                ),
                 "asset_id": asset_id,
                 "source_name": source_name,
                 "transform": _transform_to_dict(item.transform),
@@ -659,6 +669,46 @@ def _load_native_item(
     ):
         raise ProjectFileError(f"Project item {name!r} has invalid Smart Value bindings.")
     smart_bindings = dict(bindings_value)
+    vector_value = value.get("vector_path")
+    vector_path = None
+    if vector_value is not None:
+        if not isinstance(vector_value, dict):
+            raise ProjectFileError(f"Project item {name!r}: invalid vector path.")
+        raw_points = vector_value.get("points_xy")
+        if not isinstance(raw_points, list) or not all(
+            isinstance(pair, list) and len(pair) == 2
+            for pair in raw_points
+        ):
+            raise ProjectFileError(
+                f"Project item {name!r}: vector path needs XY point pairs."
+            )
+        try:
+            if any(
+                isinstance(component, bool) or not isinstance(component, (int, float))
+                for pair in raw_points for component in pair
+            ):
+                raise ValueError("Vector points must be numbers.")
+            closed = vector_value.get("closed", False)
+            if not isinstance(closed, bool):
+                raise ValueError("Closed state must be boolean.")
+            width = vector_value["width_mm"]
+            depth = vector_value["depth_mm"]
+            if (
+                isinstance(width, bool) or not isinstance(width, (int, float))
+                or isinstance(depth, bool) or not isinstance(depth, (int, float))
+            ):
+                raise ValueError("Width/depth must be numbers.")
+            vector_path = VectorPath(
+                points_xy=tuple(tuple(float(v) for v in pair) for pair in raw_points),
+                width_mm=float(width),
+                depth_mm=float(depth),
+                closed=closed,
+            )
+            vector_path.validate()
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ProjectFileError(
+                f"Project item {name!r}: invalid editable path: {exc}"
+            ) from exc
     item_id_value = value.get("item_id")
     item_id = (
         item_id_value
@@ -710,6 +760,7 @@ def _load_native_item(
         "group_id": group_id,
         "text_properties": text_properties,
         "smart_bindings": smart_bindings,
+        "vector_path": vector_path,
     }
     if item_id is not None:
         item_kwargs["item_id"] = item_id
