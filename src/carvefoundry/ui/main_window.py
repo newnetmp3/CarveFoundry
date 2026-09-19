@@ -2714,9 +2714,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         note = QLabel(
             "Font geometry comes from the exact installed system font face. "
             "CarveFoundry refuses silent Qt font substitution when regenerating "
-            "text so CNC geometry cannot quietly change typefaces. Drag a corner "
-            "handle around selected text in the viewport to resize it live; text "
-            "depth stays unchanged."
+            "text so CNC geometry cannot quietly change typefaces. Selected text "
+            "uses the same viewport resize handles as other design objects."
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
@@ -2765,6 +2764,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         heading = QLabel("Model transform")
         heading.setObjectName("SectionHeading")
         layout.addWidget(heading)
+
+        resize_hint = QLabel(
+            "Drag a corner handle around the selected object in the viewport "
+            "to resize its XY footprint live. Z/depth stays unchanged."
+        )
+        resize_hint.setObjectName("Muted")
+        resize_hint.setWordWrap(True)
+        layout.addWidget(resize_hint)
 
         units_form = QFormLayout()
         self._configure_inspector_form(units_form)
@@ -3635,8 +3642,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return
 
         item = self.project.items[index]
-        if self.viewport.transform_interaction_kind == "resize-text":
-            self._invalidate_toolpaths("Text size")
+        if self.viewport.transform_interaction_kind == "resize-object":
+            reason = (
+                "Text size"
+                if item.kind.lower() == "text"
+                else "Model size"
+            )
+            self._invalidate_toolpaths(reason)
             local_size = item.local_size_mm()
             if local_size is not None:
                 self.statusBar().showMessage(
