@@ -274,13 +274,14 @@ def _enter_depth(
     else:
         _position_for_transition(moves, start[0], start[1], settings)
         entry_z = min(0.0, previous_depth_z)
-        if abs(moves[-1].z_mm - entry_z) > 1e-9:
-            _plunge(moves, start[0], start[1], entry_z, settings)
 
     if settings.ramp_angle_deg is None:
         if abs(moves[-1].z_mm - target_z) > 1e-9:
             _plunge(moves, start[0], start[1], target_z, settings)
         return start
+
+    if abs(moves[-1].z_mm - entry_z) > 1e-9:
+        _plunge(moves, start[0], start[1], entry_z, settings)
 
     dx = next_point[0] - start[0]
     dy = next_point[1] - start[1]
