@@ -53,7 +53,7 @@ def _comment(text: str) -> str:
     sanitized = (
         text.replace("(", "[")
         .replace(")", "]")
-        .replace("\\n", " ")
+        .replace("\n", " ")
         .replace("·", "-")
         .replace("°", " deg")
         .replace("×", "x")
