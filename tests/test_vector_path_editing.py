@@ -100,7 +100,12 @@ def test_native_project_preserves_path_nodes_and_editability(tmp_path):
     assert loaded.mesh.mesh.bounds == pytest.approx(item.mesh.mesh.bounds)
     changed = move_node(loaded.vector_path, 1, (2, 33))
     apply_vector_edit(loaded, changed)
+    assert loaded.source_path is None
     assert loaded.mesh.mesh.bounds[1, 1] > 33
+    revised = save_project(restored, tmp_path / "revised.cf3d")
+    reopened = load_project(revised).items[0]
+    assert reopened.vector_path == changed
+    assert reopened.mesh.mesh.bounds[1, 1] > 33
 
 
 def test_vector_path_is_shared_as_immutable_metadata_for_duplicated_objects():
