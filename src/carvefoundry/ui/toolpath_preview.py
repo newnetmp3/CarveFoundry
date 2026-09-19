@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from itertools import chain
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtGui import (
     QColor,
     QFontDatabase,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSlider,
     QSplitter,
@@ -29,9 +30,11 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.gcode import GrblPostSettings, render_grbl_program
+from carvefoundry.cam.job_process import GcodeRequest
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.project import Project, Stock
 
+from .background_jobs import BackgroundWorker, JobCallbacks
 from .viewport import MeshViewport
 
 
@@ -39,6 +42,8 @@ class ToolpathPreviewWindow(QMainWindow):
     """NC Viewer-inspired standalone backplotter for calculated toolpaths."""
 
     LAZY_CODE_MOVE_THRESHOLD = 150_000
+    ASYNC_CODE_MOVE_THRESHOLD = 3_000
+    CODE_APPEND_CHUNK = 1_500
 
     def __init__(
         self,
@@ -48,6 +53,7 @@ class ToolpathPreviewWindow(QMainWindow):
         post_settings: GrblPostSettings,
         source_names: list[str] | None = None,
         render_geometry_data: dict[str, object] | None = None,
+        estimated_minutes: float | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -63,9 +69,19 @@ class ToolpathPreviewWindow(QMainWindow):
         self._source_names = list(source_names or [])
         self._moves = list(chain.from_iterable(path.moves for path in toolpaths))
         self._post_settings = post_settings
+        self._estimated_minutes = estimated_minutes
         self._code_lines: list[str] = []
         self._move_code_lines: list[int] = []
         self._code_loaded = False
+        self._code_loading = False
+        self._code_offset = 0
+        self._code_thread: QThread | None = None
+        self._code_worker: BackgroundWorker | None = None
+        self._code_bridge: JobCallbacks | None = None
+        self._close_after_code = False
+        self._code_append_timer = QTimer(self)
+        self._code_append_timer.setInterval(0)
+        self._code_append_timer.timeout.connect(self._append_code_chunk)
         self._defer_code = (
             len(self._moves) > self.LAZY_CODE_MOVE_THRESHOLD
         )
@@ -159,6 +175,13 @@ class ToolpathPreviewWindow(QMainWindow):
         self._summary_label.setObjectName("Muted")
         top_layout.addWidget(self._summary_label)
         top_layout.addStretch(1)
+
+        self._code_progress = QProgressBar()
+        self._code_progress.setObjectName("BackplotCodeProgress")
+        self._code_progress.setRange(0, 100)
+        self._code_progress.setFixedWidth(240)
+        self._code_progress.hide()
+        top_layout.addWidget(self._code_progress)
 
         self._code_toggle = QPushButton("Code")
         self._code_toggle.setCheckable(True)
@@ -298,13 +321,20 @@ class ToolpathPreviewWindow(QMainWindow):
                 )
             )
         )
-        total_minutes = sum(
-            path.estimated_cutting_minutes for path in self._toolpaths
-        )
+        if self._estimated_minutes is not None:
+            cutting_label = f"~{self._estimated_minutes:.1f} min cutting"
+        elif len(self._moves) > self.ASYNC_CODE_MOVE_THRESHOLD:
+            # Do not walk millions of moves just to show the viewer window.
+            cutting_label = "cutting estimate pending"
+        else:
+            total_minutes = sum(
+                path.estimated_cutting_minutes for path in self._toolpaths
+            )
+            cutting_label = f"~{total_minutes:.1f} min cutting"
         source_prefix = f"{source_names}  •  " if source_names else ""
         self._summary_label.setText(
             f"{source_prefix}{operation_names}  •  {cutter_names}  •  "
-            f"{len(self._moves):,} moves  •  ~{total_minutes:.1f} min cutting"
+            f"{len(self._moves):,} moves  •  {cutting_label}"
         )
         return panel
 
