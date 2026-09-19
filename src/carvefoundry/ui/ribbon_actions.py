@@ -203,8 +203,10 @@ class RibbonActionsMixin:
         self._active_cam_operation = "finish"
         self._tabs_enabled = False
         self._active_shape_tool: str | None = None
+        self._camera_tool_active = True
         self._shape_tool_buttons: dict[str, object] = {}
         self._navigation_tool_button = None
+        self._camera_tool_button = None
         self._tool_option_depth_mm = 1.0
         self._tool_option_line_width_mm = 2.0
         self._tool_option_polygon_sides = 6
@@ -653,13 +655,47 @@ class RibbonActionsMixin:
         self._after_ribbon_mutation(f"create {kind}", True)
         self.statusBar().showMessage(f"Created {item.name}", 3000)
 
-    def _activate_navigation_tool(self) -> None:
-        """Return the viewport to normal selection and camera navigation."""
+    def _activate_camera_tool(self) -> None:
+        """Activate dedicated arcball-style viewport camera control."""
 
+        self._camera_tool_active = True
         self.viewport.set_shape_draw_mode(None)
+        self.viewport.set_camera_control_mode(True)
+        if self._camera_tool_button is not None:
+            self._camera_tool_button.blockSignals(True)
+            try:
+                self._camera_tool_button.setChecked(True)
+            finally:
+                self._camera_tool_button.blockSignals(False)
+        if self._navigation_tool_button is not None:
+            self._navigation_tool_button.blockSignals(True)
+            try:
+                self._navigation_tool_button.setChecked(False)
+            finally:
+                self._navigation_tool_button.blockSignals(False)
+        if hasattr(self, "tool_rail"):
+            self.tool_rail.set_active_tool("camera")
         self.statusBar().showMessage(
-            "Select tool — click objects to select • drag to orbit • "
-            "middle/right-drag to pan",
+            "Camera / Arcball — left-drag orbits • middle/right-drag pans • "
+            "wheel zooms",
+            3500,
+        )
+
+    def _activate_navigation_tool(self) -> None:
+        """Return the viewport to object selection / marquee mode."""
+
+        self._camera_tool_active = False
+        self.viewport.set_camera_control_mode(False)
+        self.viewport.set_shape_draw_mode(None)
+        if self._camera_tool_button is not None:
+            self._camera_tool_button.blockSignals(True)
+            try:
+                self._camera_tool_button.setChecked(False)
+            finally:
+                self._camera_tool_button.blockSignals(False)
+        self.statusBar().showMessage(
+            "Select tool — click objects to select • drag empty space for marquee • "
+            "Alt+drag orbits",
             3500,
         )
 
@@ -754,6 +790,15 @@ class RibbonActionsMixin:
     def _set_shape_tool(self, tool: str) -> None:
         """Activate one paint-style shape tool in the viewport."""
 
+        self._camera_tool_active = False
+        self.viewport.set_camera_control_mode(False)
+        if self._camera_tool_button is not None:
+            self._camera_tool_button.blockSignals(True)
+            try:
+                self._camera_tool_button.setChecked(False)
+            finally:
+                self._camera_tool_button.blockSignals(False)
+
         button = self._shape_tool_buttons.get(tool)
         wants_active = bool(button is None or button.isChecked())
         if self._active_shape_tool == tool and not wants_active:
@@ -793,11 +838,26 @@ class RibbonActionsMixin:
         if self._navigation_tool_button is not None:
             self._navigation_tool_button.blockSignals(True)
             try:
-                self._navigation_tool_button.setChecked(not bool(mode))
+                self._navigation_tool_button.setChecked(
+                    not bool(mode) and not self._camera_tool_active
+                )
             finally:
                 self._navigation_tool_button.blockSignals(False)
+        if self._camera_tool_button is not None:
+            self._camera_tool_button.blockSignals(True)
+            try:
+                self._camera_tool_button.setChecked(
+                    not bool(mode) and self._camera_tool_active
+                )
+            finally:
+                self._camera_tool_button.blockSignals(False)
         if hasattr(self, "tool_rail"):
-            self.tool_rail.set_active_draw_tool(mode or None)
+            active = (
+                "camera"
+                if not mode and self._camera_tool_active
+                else (mode or "select")
+            )
+            self.tool_rail.set_active_tool(active)
         self._sync_tool_options_bar(mode or None)
 
     def _add_drawn_item(
