@@ -64,12 +64,12 @@ from carvefoundry.cam.vector_ops import (
     geometry_vcarve,
 )
 from carvefoundry.core.fixtures import Fixture
-from carvefoundry.core.measurement import measure_xy
 from carvefoundry.core.machine_profiles import (
     MachineProfile,
     profiles_from_json,
     profiles_to_json,
 )
+from carvefoundry.core.measurement import measure_xy
 from carvefoundry.core.primitives import (
     bitmap_runs_mesh,
     ellipse_mesh,
