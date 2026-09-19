@@ -17,7 +17,12 @@ from typing import Any
 import numpy as np
 
 from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d, waterline_3d
-from carvefoundry.cam.gcode import GrblPostSettings, render_grbl_program, write_grbl, write_grbl_program
+from carvefoundry.cam.gcode import (
+    GrblPostSettings,
+    render_grbl_program,
+    write_grbl,
+    write_grbl_program,
+)
 from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program
 from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.vector_ops import (
