@@ -227,6 +227,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
@@ -3126,6 +3127,17 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                         current,
                         event.modifiers(),
                     )
+                if (
+                    self._shape_draw_mode in {"measure", "fixture"}
+                    and self._shape_drag_current_world is not None
+                ):
+                    start = self._shape_drag_start_world
+                    end = self._shape_drag_current_world
+                    self.shapeDragUpdated.emit(
+                        self._shape_draw_mode,
+                        float(start[0]), float(start[1]),
+                        float(end[0]), float(end[1]),
+                    )
                 self.requestUpdate()
             event.accept()
             return
@@ -3604,6 +3616,7 @@ class MeshViewport(QWidget):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
@@ -3639,6 +3652,9 @@ class MeshViewport(QWidget):
         )
         self._renderer.shapeDrawRequested.connect(
             self.shapeDrawRequested.emit
+        )
+        self._renderer.shapeDragUpdated.connect(
+            self.shapeDragUpdated.emit
         )
         self._renderer.freehandStrokeRequested.connect(
             self.freehandStrokeRequested.emit
