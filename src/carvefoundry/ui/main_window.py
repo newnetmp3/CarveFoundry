@@ -2788,6 +2788,7 @@ class MainWindow(
         project_path: Path | None,
         selected_row: int = 0,
     ) -> None:
+        self.viewport.set_node_edit_mode(False)
         self.project = project
         self.project_path = project_path
         self._toolpaths_stale_reason = None
@@ -2852,6 +2853,7 @@ class MainWindow(
         # Protect the job snapshot without blocking navigation or repaints.
         self._job_camera_was_active = self.viewport.camera_control_mode
         self._job_draw_mode = self.viewport.shape_draw_mode
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_shape_draw_mode(None)
         self.viewport.set_camera_control_mode(True)
         self.tool_rail.set_active_tool("camera")
