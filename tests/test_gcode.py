@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from carvefoundry.cam.gcode import (
+    GrblPostSettings,
     normalize_gcode_path,
     render_grbl,
     render_grbl_program,
@@ -85,3 +86,31 @@ def test_write_multi_operation_grbl(tmp_path: Path) -> None:
     text = path.read_text(encoding="ascii")
     assert text.count("(Operation ") == 2
     assert text.endswith("M2\n")
+
+
+def test_center_work_zero_offsets_output_coordinates() -> None:
+    program = render_grbl(
+        _toolpath(),
+        GrblPostSettings(x_offset_mm=-50.0, y_offset_mm=-25.0),
+    )
+    lines = program.splitlines()
+
+    assert "G0 X-49 Y-23 Z5" in lines
+    assert "G1 X-48 Y-23 Z-1.25 F1200" in lines
+
+
+def test_parking_is_emitted_once_after_final_retract() -> None:
+    options = GrblPostSettings(
+        park_enabled=True,
+        park_x_mm=10.0,
+        park_y_mm=20.0,
+        park_z_mm=12.0,
+    )
+    program = render_grbl_program([_toolpath(), _toolpath()], options)
+    lines = program.splitlines()
+
+    assert lines.count("(Park)") == 1
+    park_index = lines.index("(Park)")
+    assert lines[park_index + 1] == "G0 Z12"
+    assert lines[park_index + 2] == "G0 X10 Y20"
+    assert lines[-1] == "M2"
