@@ -213,6 +213,43 @@ def _cut(
     )
 
 
+def _transition_clearance_z(settings: BasicCamSettings) -> float:
+    if settings.raster_link_mode is RasterLinkMode.FULL_RETRACT:
+        return settings.safe_z_mm
+    return min(
+        settings.safe_z_mm,
+        max(0.0, settings.local_link_clearance_mm),
+    )
+
+
+def _position_for_transition(
+    moves: list[ToolpathMove],
+    x: float,
+    y: float,
+    settings: BasicCamSettings,
+) -> None:
+    if not moves:
+        _rapid(moves, x, y, settings.safe_z_mm)
+        return
+    previous = moves[-1]
+    travel_z = max(previous.z_mm, _transition_clearance_z(settings))
+    if previous.z_mm < travel_z - 1e-9:
+        _rapid(moves, previous.x_mm, previous.y_mm, travel_z)
+    if hypot(previous.x_mm - x, previous.y_mm - y) > 1e-9:
+        _rapid(moves, x, y, travel_z)
+
+
+def _final_retract(
+    moves: list[ToolpathMove],
+    settings: BasicCamSettings,
+) -> None:
+    if not moves:
+        return
+    last = moves[-1]
+    if last.z_mm < settings.safe_z_mm - 1e-9:
+        _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+
+
 def _enter_depth(
     moves: list[ToolpathMove],
     start: tuple[float, float],
@@ -798,6 +835,7 @@ def waterline_3d(
     ]
 
     moves: list[ToolpathMove] = []
+    previous_xy: np.ndarray | None = None
     for z in levels:
         section = mesh.section(
             plane_origin=(0.0, 0.0, z),
@@ -805,12 +843,68 @@ def waterline_3d(
         )
         if section is None:
             continue
-        for path in section.discrete:
-            points = np.asarray(path, dtype=float)
-            if len(points) < 2:
-                continue
+
+        remaining = [
+            np.asarray(path, dtype=float)
+            for path in section.discrete
+            if len(path) >= 2
+        ]
+        ordered: list[np.ndarray] = []
+        while remaining:
+            if previous_xy is None:
+                points = remaining.pop(0)
+            else:
+                best_index = 0
+                best_points = remaining[0]
+                best_distance = float("inf")
+                for index, candidate in enumerate(remaining):
+                    trial = candidate
+                    closed = (
+                        len(candidate) >= 3
+                        and np.linalg.norm(candidate[0, :2] - candidate[-1, :2])
+                        <= 1e-7
+                    )
+                    if closed:
+                        ring = candidate[:-1]
+                        distances = np.linalg.norm(
+                            ring[:, :2] - previous_xy[:2],
+                            axis=1,
+                        )
+                        start_index = int(np.argmin(distances))
+                        rotated = np.vstack(
+                            (ring[start_index:], ring[:start_index])
+                        )
+                        trial = np.vstack((rotated, rotated[0]))
+                        distance = float(np.min(distances))
+                    else:
+                        start_distance = float(
+                            np.linalg.norm(candidate[0, :2] - previous_xy[:2])
+                        )
+                        end_distance = float(
+                            np.linalg.norm(candidate[-1, :2] - previous_xy[:2])
+                        )
+                        if end_distance < start_distance:
+                            trial = candidate[::-1].copy()
+                            distance = end_distance
+                        else:
+                            distance = start_distance
+                    if distance < best_distance:
+                        best_index = index
+                        best_points = trial
+                        best_distance = distance
+                remaining.pop(best_index)
+                points = best_points
+            ordered.append(points)
+            previous_xy = points[-1]
+
+        for points in ordered:
             first = points[0]
-            _rapid(moves, float(first[0]), float(first[1]), settings.safe_z_mm)
+            _position_for_transition(
+                moves,
+                float(first[0]),
+                float(first[1]),
+                settings,
+            )
             _plunge(moves, float(first[0]), float(first[1]), float(z), settings)
             for point in points[1:]:
                 _cut(
@@ -820,9 +914,9 @@ def waterline_3d(
                     float(z),
                     settings,
                 )
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+            previous_xy = points[-1]
 
+    _final_retract(moves, settings)
     if not moves:
         raise ValueError("Waterline slicing produced no machinable contours.")
     return Toolpath(
