@@ -248,20 +248,24 @@ class ToolRail(QFrame):
     def add_stretch(self) -> None:
         self._layout.addStretch(1)
 
-    def set_active_draw_tool(self, tool: str | None) -> None:
-        """Reflect current viewport draw/select mode without changing it."""
+    def set_active_tool(self, tool: str) -> None:
+        """Reflect the active camera/select/draw mode without changing it."""
+
+        camera = self.buttons.get("camera")
+        if camera is not None:
+            camera.setChecked(tool == "camera")
 
         select = self.buttons.get("select")
         if select is not None:
-            select.setChecked(tool is None)
+            select.setChecked(tool == "select")
 
-        active_key = self._draw_button_keys.get(tool or "")
+        active_key = self._draw_button_keys.get(tool)
         for key in ("shapes", "line", "text"):
             button = self.buttons.get(key)
             if button is not None:
                 button.setChecked(key == active_key)
 
-        if tool and tool in self.actions and active_key == "shapes":
+        if tool in self.actions and active_key == "shapes":
             action = self.actions[tool]
             callback = self._action_callbacks.get(tool)
             if callback is not None:
@@ -271,6 +275,11 @@ class ToolRail(QFrame):
                     action,
                     callback,
                 )
+
+    def set_active_draw_tool(self, tool: str | None) -> None:
+        """Compatibility wrapper for older draw-mode synchronization."""
+
+        self.set_active_tool(tool or "select")
 
     def set_tool_enabled(self, key: str, enabled: bool) -> None:
         button = self.buttons.get(key)
