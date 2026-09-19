@@ -49,6 +49,7 @@ from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
+from .project_recovery import ProjectRecoveryMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .stock_simulation import StockSimulationMixin
@@ -99,6 +100,7 @@ class MainWindow(
     WorkspaceCommandsMixin,
     BatchLayoutMixin,
     StockSimulationMixin,
+    ProjectRecoveryMixin,
     TextEditorMixin,
     TwoSidedSetupMixin,
     JobPlannerMixin,
