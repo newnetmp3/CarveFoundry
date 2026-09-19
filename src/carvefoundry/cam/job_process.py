@@ -107,11 +107,11 @@ def _require_preflight(request: GcodeRequest, paths: list[Any]) -> str:
                "Checking cutter stage", force=True)
         if not outcome.safe_to_export:
             raise ValueError(
-                f"Cutter stage {index} ({stage[0].cutter.name}):\\n"
+                f"Cutter stage {index} ({stage[0].cutter.name}):\n"
                 + outcome.format_report()
             )
         reports.append(outcome.format_report())
-    return "\\n\\n".join(reports)
+    return "\n\n".join(reports)
 
 
 def _local_fixture(fixture: Fixture, dx: float, dy: float) -> Fixture:
@@ -410,8 +410,8 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             for stage in _tool_stages(toolpaths)
         ]
         return {
-            "report": "\\n\\n".join(
-                f"Cutter stage {index + 1}:\\n" + result.format_report()
+            "report": "\n\n".join(
+                f"Cutter stage {index + 1}:\n" + result.format_report()
                 for index, result in enumerate(outcomes)
             ),
             "safe_to_export": all(result.safe_to_export for result in outcomes),
@@ -491,7 +491,7 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 if not result.safe_to_export:
                     raise ValueError(
                         f"Tile row {tile.row + 1} column {tile.column + 1}, "
-                        f"cutter {stage[0].cutter.name}:\\n"
+                        f"cutter {stage[0].cutter.name}:\n"
                         + result.format_report()
                     )
             jobs.append((tiled_path, clipped, options))
