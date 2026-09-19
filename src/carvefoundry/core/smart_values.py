@@ -33,7 +33,7 @@ class SmartValues:
 
     expressions: dict[str, str] = field(default_factory=dict)
 
-    def set(self, name: str, expression: str | float | int) -> None:
+    def set(self, name: str, expression: str | float) -> None:
         key = str(name).strip()
         if not _NAME_RE.fullmatch(key):
             raise SmartValueError(
@@ -68,7 +68,7 @@ class SmartValues:
 
     def evaluate(
         self,
-        expression: str | float | int,
+        expression: str | float,
         *,
         extra_values: Mapping[str, float] | None = None,
     ) -> float:
