@@ -3507,13 +3507,13 @@ class RibbonActionsMixin:
 
             count = int(payload["object_count"])
             self._set_activity_info(
-                f"Toolpaths ready\\n{payload['summary']}\\n\\n"
-                f"Objects: {count}\\n"
-                f"Cutter: {cutter.name}\\n"
-                f"Paths: {len(paths):,}\\n"
-                f"Moves: {int(payload['moves']):,}\\n"
-                f"Cut distance: {float(payload['cut_mm']):.1f} mm\\n"
-                f"Rapid distance: {float(payload['rapid_mm']):.1f} mm\\n"
+                f"Toolpaths ready\n{payload['summary']}\n\n"
+                f"Objects: {count}\n"
+                f"Cutter: {cutter.name}\n"
+                f"Paths: {len(paths):,}\n"
+                f"Moves: {int(payload['moves']):,}\n"
+                f"Cut distance: {float(payload['cut_mm']):.1f} mm\n"
+                f"Rapid distance: {float(payload['rapid_mm']):.1f} mm\n"
                 f"Estimated cutting: {float(payload['minutes']):.1f} min"
             )
             self._sync_toolpath_output_state()
@@ -3525,7 +3525,7 @@ class RibbonActionsMixin:
             )
 
         def failed(message: str) -> None:
-            self._set_activity_info(f"Toolpath calculation failed\\n{message}")
+            self._set_activity_info(f"Toolpath calculation failed\n{message}")
             self._finish_toolpath_progress(
                 success=False, message="Generation failed"
             )
@@ -4926,12 +4926,12 @@ class RibbonActionsMixin:
         def done(result):
             written = [Path(path) for path in result["files"]]
             self._set_activity_info(
-                "Tiled G-code exported\\n"
-                f"Files: {len(written)}\\n"
+                "Tiled G-code exported\n"
+                f"Files: {len(written)}\n"
                 f"Tile size: {settings.tile_width_mm:g} × "
-                f"{settings.tile_height_mm:g} mm\\n"
-                f"Overlap: {settings.overlap_mm:g} mm\\n"
-                + "\\n".join(path.name for path in written[:12])
+                f"{settings.tile_height_mm:g} mm\n"
+                f"Overlap: {settings.overlap_mm:g} mm\n"
+                + "\n".join(path.name for path in written[:12])
             )
             self.statusBar().showMessage(
                 f"Exported {len(written)} tiled G-code files", 5000
