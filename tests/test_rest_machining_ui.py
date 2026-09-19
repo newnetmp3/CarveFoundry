@@ -108,3 +108,34 @@ def test_workshop_guide_has_real_rest_launcher_that_checks_prior_stages():
         window._guided_workflow_dialog.close()
     finally:
         window.close()
+
+
+def test_next_cutter_and_cam_choices_never_delete_previously_planned_job():
+    window = _window()
+    try:
+        first = _prior(window.project.items[0])
+        window.project.toolpaths = [first]
+        window._select_cam_operation("rough")
+        assert window.project.toolpaths == [first]
+        window._select_cam_operation("rest")
+        assert window.project.toolpaths == [first]
+        window._set_cam_detail(90)
+        assert window.project.toolpaths == [first]
+        window._set_cam_design_option("direction", "Raster Y")
+        assert window.project.toolpaths == [first]
+        window._toggle_tabs_operation()
+        assert window.project.toolpaths == [first]
+        if window.tool_combo.count() > 1:
+            window.tool_combo.setCurrentIndex(
+                (window.tool_combo.currentIndex() + 1)
+                % window.tool_combo.count()
+            )
+            assert window.project.toolpaths == [first]
+            assert window.project.toolpaths[0].cutter == first.cutter
+        rest = window._build_toolpath_generation_dialog()
+        assert rest.generation_fields["operation"].currentData() == "rest"
+        assert rest.generation_fields["append_job"].isChecked()
+        assert rest.generation_fields["generate"].isEnabled()
+        rest.close()
+    finally:
+        window.close()
