@@ -63,8 +63,10 @@ class TwoSidedSetupMixin:
 
         layout.addWidget(QLabel("Check the models that belong on the BACK:"))
         faces = QListWidget(dialog)
-        initial = set(self.project.items[index].item_id for index in
-                      self._selected_design_indices())
+        initial = {
+            self.project.items[index].item_id
+            for index in self._selected_design_indices()
+        }
         if not initial or initial == {item.item_id for item in models}:
             initial = {models[-1].item_id}
         for model in models:
