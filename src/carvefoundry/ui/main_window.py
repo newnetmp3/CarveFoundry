@@ -232,8 +232,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         status = QStatusBar()
         self.import_progress = QProgressBar()
         self.import_progress.setObjectName("ImportProgress")
-        self.import_progress.setFixedWidth(220)
-        self.import_progress.setTextVisible(False)
+        self.import_progress.setFixedWidth(300)
+        self.import_progress.setTextVisible(True)
+        self.import_progress.setFormat("Import · %p%")
         self.import_progress.hide()
         status.addPermanentWidget(self.import_progress)
 
@@ -6094,12 +6095,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         thread.start()
 
     def _import_progress_changed(self, index: int, total: int, name: str) -> None:
-        if total <= 1:
+        if index > total:
+            self.import_progress.setRange(0, max(1, total))
+            self.import_progress.setValue(max(1, total))
+            self.import_progress.setFormat("Import ready · %p%")
+            self.statusBar().showMessage("Finalizing imported items…")
+        elif total <= 1:
             self.import_progress.setRange(0, 0)
+            self.import_progress.setFormat(f"Loading {name}…")
+            self.statusBar().showMessage(f"Loading {name}…")
         else:
             self.import_progress.setRange(0, total)
             self.import_progress.setValue(max(0, index - 1))
-        self.statusBar().showMessage(f"Loading {name} ({index}/{total})…")
+            self.import_progress.setFormat(f"{name} · %p%")
+            self.statusBar().showMessage(
+                f"Loading {name} ({index}/{total})…"
+            )
 
     def _import_completed(self, infos: object, failures: object) -> None:
         if self.project is not self._import_target_project:
