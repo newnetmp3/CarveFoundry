@@ -51,10 +51,13 @@ def resolve_qt_font_face(
                     f"Font family '{family}' is not installed. Install the "
                     "font or choose another family before generating text."
                 )
-            matched_family = QFont().family()
+            matched_family = QFontInfo(QFont()).family()
         requested_family = family
     else:
-        matched_family = QFont().family()
+        # An empty family means "use the system default", not "require Qt's
+        # generic alias literally". Resolve that alias up front so the actual
+        # concrete face becomes the deterministic CNC font.
+        matched_family = QFontInfo(QFont()).family()
         requested_family = matched_family
 
     styles = list(QFontDatabase.styles(matched_family))
