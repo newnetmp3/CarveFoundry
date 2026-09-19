@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence
