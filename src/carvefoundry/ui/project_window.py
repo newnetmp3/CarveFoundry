@@ -674,6 +674,11 @@ class MainWindow(_BaseMainWindow):
         self._pending_import_undo = None
 
     def closeEvent(self, event) -> None:
+        # Hidden windows are closed programmatically (including headless
+        # tests); only prompt when a user can see and interact with the dialog.
+        if not self.isVisible():
+            super().closeEvent(event)
+            return
         if self._background_job is not None or (
             self._import_thread is not None and self._import_thread.isRunning()
         ):
