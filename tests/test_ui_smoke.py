@@ -767,6 +767,173 @@ def test_contextual_tool_options_bar_tracks_active_draw_tool() -> None:
         window.close()
 
 
+def test_text_viewport_resize_handles_scale_live_and_anchor_opposite_corner() -> None:
+    window = MainWindow()
+    try:
+        family = window._selected_text_font_family()
+        properties = TextProperties(
+            content="HANDLE",
+            font_family=family,
+            size_pt=36.0,
+            depth_mm=1.5,
+        )
+        item = ProjectItem(
+            "Resizable Text",
+            kind="text",
+            mesh=text_mesh(properties=properties),
+            transform=Transform3D(
+                translation_mm=(55.0, 45.0, -1.5),
+            ),
+            text_properties=properties,
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        before = renderer._text_resize_world_corners(item).copy()
+        before_size = item.local_size_mm()
+        assert before_size is not None
+        assert renderer._selected_text_resize_item() is not None
+        assert len(renderer._text_resize_frame_vertices(0.2)) == 40
+
+        assert renderer._begin_text_resize(0, 2)
+        assert renderer.transform_interaction_kind == "resize-text"
+        assert renderer._apply_text_resize_factor(0, 1.5)
+
+        after = renderer._text_resize_world_corners(item)
+        after_size = item.local_size_mm()
+        assert after_size is not None
+
+        # Handle 0 is opposite handle 2 and therefore remains fixed in world
+        # space while the dragged corner moves outward.
+        assert np.allclose(after[0], before[0], atol=1e-6)
+        before_diagonal = np.linalg.norm(before[2] - before[0])
+        after_diagonal = np.linalg.norm(after[2] - after[0])
+        assert after_diagonal == pytest.approx(before_diagonal * 1.5)
+        assert after_size[0] == pytest.approx(before_size[0] * 1.5)
+        assert after_size[1] == pytest.approx(before_size[1] * 1.5)
+        assert after_size[2] == pytest.approx(before_size[2])
+        assert item.transform.scale_xyz[2] == pytest.approx(1.0)
+    finally:
+        window.close()
+
+
+def test_text_resize_handles_remain_available_while_text_tool_is_active() -> None:
+    window = MainWindow()
+    try:
+        family = window._selected_text_font_family()
+        properties = TextProperties(
+            content="EDIT",
+            font_family=family,
+            size_pt=32.0,
+            depth_mm=1.0,
+        )
+        item = ProjectItem(
+            "Editable Text",
+            kind="text",
+            mesh=text_mesh(properties=properties),
+            text_properties=properties,
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+
+        window._set_shape_tool("text")
+        renderer = window.viewport._renderer
+
+        assert renderer.shape_draw_mode == "text"
+        assert not renderer.camera_control_mode
+        assert renderer._selected_text_resize_item() is not None
+        assert renderer._begin_text_resize(0, 1)
+    finally:
+        window.close()
+
+
+def test_text_resize_finish_invalidates_cam_as_text_size_change() -> None:
+    window = MainWindow()
+    try:
+        family = window._selected_text_font_family()
+        properties = TextProperties(
+            content="CAM",
+            font_family=family,
+            size_pt=30.0,
+            depth_mm=1.0,
+        )
+        item = ProjectItem(
+            "CAM Text",
+            kind="text",
+            mesh=text_mesh(properties=properties),
+            text_properties=properties,
+        )
+        cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+        path = Toolpath(
+            "Text profile",
+            "profile",
+            cutter,
+            1.5,
+            source_item_id=item.item_id,
+            source_item_name=item.name,
+        )
+        window._set_project(
+            Project(items=[item], toolpaths=[path]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        assert renderer._begin_text_resize(0, 2)
+        assert renderer._apply_text_resize_factor(0, 1.25)
+        window._viewport_transform_finished(0)
+
+        assert window.project.toolpaths == []
+        assert window._toolpaths_stale_reason == "Text size"
+        assert "Resized CAM Text" in window.statusBar().currentMessage()
+    finally:
+        window.close()
+
+
+def test_project_history_labels_viewport_text_resize() -> None:
+    window = ProjectMainWindow()
+    try:
+        family = window._selected_text_font_family()
+        properties = TextProperties(
+            content="UNDO",
+            font_family=family,
+            size_pt=30.0,
+            depth_mm=1.0,
+        )
+        item = ProjectItem(
+            "Undo Text",
+            kind="text",
+            mesh=text_mesh(properties=properties),
+            text_properties=properties,
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        assert renderer._begin_text_resize(0, 2)
+        window._viewport_transform_started(0)
+        assert renderer._apply_text_resize_factor(0, 1.2)
+        window._viewport_transform_finished(0)
+
+        assert window._undo_stack
+        assert window._undo_stack[-1].label == "resize text"
+    finally:
+        window.close()
+
+
 def test_text_edit_updates_geometry_preserves_placement_and_invalidates_cam() -> None:
     window = ProjectMainWindow()
     try:
