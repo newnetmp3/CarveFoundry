@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..cam.gcode import write_grbl, write_grbl_program
+from ..core.font_handler import describe_qt_font_face
 from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
@@ -405,12 +406,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         for operation, title in (
             ("profile", "Profile"),
+            ("silhouette", "Silhouette"),
             ("pocket", "Pocket"),
+            ("surface", "Surface"),
             ("vcarve", "V-Carve"),
             ("engrave", "Engrave"),
-            ("drill", "Drill"),
+            ("drill", "Drill Features"),
+            ("center_drill", "Center Drill"),
             ("rough", "Rough"),
             ("finish", "Finish"),
+            ("height_map", "Height Map"),
             ("rest", "Rest"),
             ("waterline", "Waterline"),
         ):
@@ -511,12 +516,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             operation: self._ui_actions[f"cam_{operation}"]
             for operation in (
                 "profile",
+                "silhouette",
                 "pocket",
+                "surface",
                 "vcarve",
                 "engrave",
                 "drill",
+                "center_drill",
                 "rough",
                 "finish",
+                "height_map",
                 "rest",
                 "waterline",
             )
@@ -692,17 +701,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ops_2d,
             (
                 "cam_profile",
+                "cam_silhouette",
                 "cam_pocket",
+                "cam_surface",
                 "cam_vcarve",
                 "cam_engrave",
                 "cam_drill",
+                "cam_center_drill",
                 "tabs",
             ),
         )
         ops_3d = toolpaths_menu.addMenu("3D")
         self._add_menu_actions(
             ops_3d,
-            ("cam_rough", "cam_finish", "cam_rest", "cam_waterline"),
+            (
+                "cam_rough",
+                "cam_finish",
+                "cam_height_map",
+                "cam_rest",
+                "cam_waterline",
+            ),
         )
 
         cutter_menu = toolpaths_menu.addMenu("Cutter")
@@ -1018,10 +1036,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._cam_operation_buttons: dict[str, object] = {}
         for operation, title in (
             ("profile", "Profile"),
+            ("silhouette", "Silhouette"),
             ("pocket", "Pocket"),
+            ("surface", "Surface"),
             ("vcarve", "V-Carve"),
             ("engrave", "Engrave"),
-            ("drill", "Drill"),
+            ("drill", "Drill Features"),
+            ("center_drill", "Center Drill"),
         ):
             button = operations_2d.add_button(
                 title,
@@ -1040,6 +1061,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         for operation, title in (
             ("rough", "Rough"),
             ("finish", "Finish"),
+            ("height_map", "Height Map"),
             ("rest", "Rest"),
             ("waterline", "Waterline"),
         ):
@@ -1512,17 +1534,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ops_2d,
             (
                 "cam_profile",
+                "cam_silhouette",
                 "cam_pocket",
+                "cam_surface",
                 "cam_vcarve",
                 "cam_engrave",
                 "cam_drill",
+                "cam_center_drill",
                 "tabs",
             ),
         )
         ops_3d = cam_menu.addMenu("3D")
         self._add_menu_actions(
             ops_3d,
-            ("cam_rough", "cam_finish", "cam_rest", "cam_waterline"),
+            (
+                "cam_rough",
+                "cam_finish",
+                "cam_height_map",
+                "cam_rest",
+                "cam_waterline",
+            ),
         )
         cam_menu.addSeparator()
 
@@ -2681,12 +2712,28 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._text_shortcuts.append(shortcut)
 
         note = QLabel(
-            "Font geometry comes from the installed system font. "
-            "Filled/Outline controls the solid CNC mesh, not a screen-only style."
+            "Font geometry comes from the exact installed system font face. "
+            "CarveFoundry refuses silent Qt font substitution when regenerating "
+            "text so CNC geometry cannot quietly change typefaces."
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
         layout.addWidget(note)
+
+        self.text_font_face_status = QLabel()
+        self.text_font_face_status.setObjectName("TextFontFaceStatus")
+        self.text_font_face_status.setWordWrap(True)
+        layout.addWidget(self.text_font_face_status)
+
+        self.text_font_verify_button = QPushButton("Verify Font Face")
+        self.text_font_verify_button.setToolTip(
+            "Verify that Qt resolves the selected family and style to the exact "
+            "installed face used to generate CNC outlines."
+        )
+        self.text_font_verify_button.clicked.connect(
+            self._verify_selected_text_font_face
+        )
+        layout.addWidget(self.text_font_verify_button)
 
         self.text_font_warning = QLabel()
         self.text_font_warning.setObjectName("TextFontWarning")
@@ -4084,15 +4131,48 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         installed = set(QFontDatabase.families())
         if requested_family and requested_family not in installed:
             fallback = self._selected_text_font_family()
+            self.text_font_face_status.setText("Font face: unresolved")
             self.text_font_warning.setText(
                 f"Font “{requested_family}” is not installed. "
-                f"Showing {fallback or 'the system fallback'}; install the "
-                "original font before editing if exact typography must be preserved."
+                f"Showing {fallback or 'the system fallback'} for editing only; "
+                "CarveFoundry will not regenerate CNC text with a substituted font."
             )
             self.text_font_warning.show()
             return
+
+        family = self._selected_text_font_family() or requested_family
+        style = self.text_font_style_combo.currentText() or "Regular"
+        try:
+            face = describe_qt_font_face(family, style)
+        except ValueError as exc:
+            self.text_font_face_status.setText("Font face: unresolved")
+            self.text_font_warning.setText(str(exc))
+            self.text_font_warning.show()
+            return
+
+        self.text_font_face_status.setText(
+            f"Font face: {face.display_name}  •  exact"
+        )
         self.text_font_warning.clear()
         self.text_font_warning.hide()
+
+    def _verify_selected_text_font_face(self) -> None:
+        family = self._selected_text_font_family()
+        style = self.text_font_style_combo.currentText() or "Regular"
+        try:
+            face = describe_qt_font_face(family, style)
+        except ValueError as exc:
+            self._update_text_font_availability(family)
+            self.statusBar().showMessage(
+                f"Font verification failed: {exc}",
+                7000,
+            )
+            return
+        self._update_text_font_availability(family)
+        self.statusBar().showMessage(
+            f"Exact font verified: {face.display_name}",
+            4000,
+        )
 
     def _sync_text_controls(self, item: ProjectItem) -> None:
         properties = item.text_properties or self._legacy_text_properties(item)
@@ -4248,6 +4328,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if self._updating_text_controls:
             return
         self._set_text_emphasis_buttons_from_style()
+        self._update_text_font_availability(
+            self._selected_text_font_family()
+        )
         self._text_control_changed()
 
     def _text_font_group_changed(self, base_family: str) -> None:
