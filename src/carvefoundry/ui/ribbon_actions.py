@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -1852,7 +1853,7 @@ class RibbonActionsMixin:
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget()
         grid = QGridLayout(body)
         grid.setContentsMargins(0, 0, 0, 0)
