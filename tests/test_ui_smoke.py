@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 from PySide6.QtCore import QPointF, Qt
@@ -764,6 +766,288 @@ def test_contextual_tool_options_bar_tracks_active_draw_tool() -> None:
         assert window._active_shape_tool is None
         assert window.viewport.shape_draw_mode is None
         assert window.tool_options_bar.isHidden()
+    finally:
+        window.close()
+
+
+def test_transform_gizmo_supports_global_and_local_orientation() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Rotated Model",
+            kind="model",
+            mesh=rectangle_mesh(20.0, 10.0, 3.0),
+            transform=Transform3D(rotation_deg=(0.0, 0.0, 90.0)),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+        renderer = window.viewport._renderer
+
+        renderer.set_transform_orientation("global")
+        assert np.allclose(
+            renderer._gizmo_world_axis(0),
+            (1.0, 0.0, 0.0),
+            atol=1e-7,
+        )
+
+        renderer.set_transform_orientation("local")
+        assert np.allclose(
+            renderer._gizmo_world_axis(0),
+            (0.0, 1.0, 0.0),
+            atol=1e-7,
+        )
+        assert np.allclose(
+            renderer._gizmo_world_axis(1),
+            (-1.0, 0.0, 0.0),
+            atol=1e-7,
+        )
+    finally:
+        window.close()
+
+
+def test_transform_snap_supports_persistent_and_temporary_ctrl_snap() -> None:
+    window = MainWindow()
+    try:
+        renderer = window.viewport._renderer
+        renderer.set_transform_snapping(True, 5.0)
+
+        assert renderer._snap_gizmo_distance(7.4) == pytest.approx(5.0)
+        assert renderer._snap_gizmo_distance(7.6) == pytest.approx(10.0)
+
+        renderer.set_transform_snapping(False, 5.0)
+        assert renderer._snap_gizmo_distance(7.4) == pytest.approx(7.4)
+        assert renderer._snap_gizmo_distance(
+            7.4,
+            Qt.KeyboardModifier.ControlModifier,
+        ) == pytest.approx(5.0)
+    finally:
+        window.close()
+
+
+def test_frame_selected_focuses_camera_without_changing_selection() -> None:
+    window = MainWindow()
+    try:
+        first = ProjectItem(
+            "First",
+            kind="model",
+            mesh=rectangle_mesh(10.0, 10.0, 2.0),
+            transform=Transform3D(
+                translation_mm=(15.0, 15.0, -2.0),
+            ),
+        )
+        second = ProjectItem(
+            "Far",
+            kind="model",
+            mesh=rectangle_mesh(10.0, 10.0, 2.0),
+            transform=Transform3D(
+                translation_mm=(250.0, 180.0, -2.0),
+            ),
+        )
+        window._set_project(
+            Project(items=[first, second]),
+            project_path=None,
+            selected_row=1,
+        )
+        renderer = window.viewport._renderer
+        scene_center = renderer._full_scene_bounds().mean(axis=0)
+        selected_center = renderer._item_bounds_mm(first).mean(axis=0)
+
+        assert renderer.frame_selected()
+        assert renderer.camera.zoom > 1.0
+        assert np.allclose(
+            np.asarray(renderer.camera.pan_world),
+            selected_center - scene_center,
+            atol=1e-7,
+        )
+        assert renderer.selected_item_indices == {0}
+    finally:
+        window.close()
+
+
+def test_isolate_selected_filters_models_and_matching_toolpaths_only() -> None:
+    window = MainWindow()
+    try:
+        first = ProjectItem(
+            "First",
+            kind="model",
+            mesh=rectangle_mesh(20.0, 20.0, 2.0),
+        )
+        second = ProjectItem(
+            "Second",
+            kind="model",
+            mesh=rectangle_mesh(20.0, 20.0, 2.0),
+            transform=Transform3D(
+                translation_mm=(40.0, 0.0, 0.0),
+            ),
+        )
+        cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+        first_path = Toolpath(
+            "First path",
+            "profile",
+            cutter,
+            1.5,
+            source_item_id=first.item_id,
+            source_item_name=first.name,
+        )
+        second_path = Toolpath(
+            "Second path",
+            "profile",
+            cutter,
+            1.5,
+            source_item_id=second.item_id,
+            source_item_name=second.name,
+        )
+        window._set_project(
+            Project(
+                items=[first, second],
+                toolpaths=[first_path, second_path],
+            ),
+            project_path=None,
+            selected_row=1,
+        )
+
+        window._isolate_selected()
+        renderer = window.viewport._renderer
+
+        assert window.viewport.isolated
+        assert renderer._item_viewport_visible(0, first)
+        assert not renderer._item_viewport_visible(1, second)
+        assert renderer._visible_toolpaths() == [first_path]
+        assert first.visible
+        assert second.visible
+
+        window._exit_isolate()
+        assert not window.viewport.isolated
+        assert renderer._item_viewport_visible(0, first)
+        assert renderer._item_viewport_visible(1, second)
+        assert renderer._visible_toolpaths() == [first_path, second_path]
+    finally:
+        window.close()
+
+
+def test_apply_scale_bakes_mesh_and_preserves_placed_geometry() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Scaled STL",
+            source_path=Path("/tmp/original-scaled.stl"),
+            kind="model",
+            mesh=rectangle_mesh(20.0, 12.0, 4.0),
+            transform=Transform3D(
+                translation_mm=(45.0, 35.0, -4.0),
+                rotation_deg=(0.0, 0.0, 25.0),
+                scale_xyz=(1.8, 1.4, 1.0),
+            ),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        before = item.transformed_mesh()
+        assert before is not None
+        before_bounds = np.asarray(before.bounds, dtype=float)
+        before_size = item.local_size_mm()
+        assert before_size is not None
+
+        window._apply_selected_scale()
+
+        after = item.transformed_mesh()
+        after_size = item.local_size_mm()
+        assert after is not None
+        assert after_size is not None
+        assert item.transform.scale_xyz == pytest.approx((1.0, 1.0, 1.0))
+        assert item.transform.rotation_deg == pytest.approx((0.0, 0.0, 25.0))
+        assert item.transform.translation_mm == pytest.approx(
+            (45.0, 35.0, -4.0)
+        )
+        assert item.source_units is ModelUnits.MILLIMETERS
+        assert item.source_path is None
+        assert np.allclose(after.bounds, before_bounds, atol=1e-7)
+        assert np.allclose(after_size, before_size, atol=1e-7)
+    finally:
+        window.close()
+
+
+def test_apply_rotation_and_scale_preserves_world_geometry_and_is_undoable() -> None:
+    window = ProjectMainWindow()
+    try:
+        item = ProjectItem(
+            "Baked Model",
+            kind="model",
+            mesh=rectangle_mesh(18.0, 9.0, 3.0),
+            transform=Transform3D(
+                translation_mm=(30.0, 42.0, -3.0),
+                rotation_deg=(12.0, -8.0, 33.0),
+                scale_xyz=(1.5, 0.8, 1.2),
+            ),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        before = item.transformed_mesh()
+        assert before is not None
+        before_vertices = np.asarray(before.vertices, dtype=float).copy()
+        original_scale = item.transform.scale_xyz
+        original_rotation = item.transform.rotation_deg
+
+        window._apply_selected_rotation_scale()
+
+        after = item.transformed_mesh()
+        assert after is not None
+        assert item.transform.scale_xyz == pytest.approx((1.0, 1.0, 1.0))
+        assert item.transform.rotation_deg == pytest.approx((0.0, 0.0, 0.0))
+        assert item.transform.translation_mm == pytest.approx(
+            (30.0, 42.0, -3.0)
+        )
+        assert np.allclose(after.vertices, before_vertices, atol=1e-7)
+        assert window._undo_stack
+        assert window._undo_stack[-1].label == "apply rotation and scale"
+
+        window._undo()
+        restored = window.project.items[0]
+        assert restored.transform.scale_xyz == pytest.approx(original_scale)
+        assert restored.transform.rotation_deg == pytest.approx(
+            original_rotation
+        )
+    finally:
+        window.close()
+
+
+def test_modeling_best_practice_controls_are_exposed() -> None:
+    window = MainWindow()
+    try:
+        for key in (
+            "transform_global",
+            "transform_local",
+            "snap_transform",
+            "apply_scale",
+            "apply_rotation_scale",
+            "frame_selected",
+            "isolate_selected",
+            "exit_isolate",
+        ):
+            assert key in window._ui_actions
+
+        assert window.transform_orientation_combo.count() == 2
+        assert window.transform_orientation_combo.currentData() in {
+            "global",
+            "local",
+        }
+        assert window.transform_snap_step_spin.value() > 0.0
+
+        frame_shortcut = next(
+            action
+            for action in window._shortcut_actions
+            if action.text() == "Frame Selected"
+        )
+        assert frame_shortcut.shortcut() == QKeySequence("Shift+F")
     finally:
         window.close()
 
