@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import monotonic, sleep
 
 import numpy as np
 import pytest
@@ -18,6 +19,16 @@ from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
 from carvefoundry.ui.toolpath_preview import ToolpathPreviewWindow
 
 _APP = QApplication.instance() or QApplication([])
+
+def _finish_background_job(window: MainWindow, *, timeout: float = 40.0) -> None:
+    """Pump Qt and require the worker to finish without a nested GUI loop."""
+    deadline = monotonic() + timeout
+    while window._background_job is not None and monotonic() < deadline:
+        _APP.processEvents()
+        sleep(0.01)
+    _APP.processEvents()
+    assert window._background_job is None, "Background job did not finish"
+
 
 
 def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
@@ -438,6 +449,9 @@ def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
 
         window._select_cam_operation("profile")
         assert window._calculate_toolpath_now()
+        assert window._background_job is not None
+        assert window.job_progress.isVisible() or not window.job_progress.isHidden()
+        _finish_background_job(window)
         assert window.toolpath_progress.value() == 100
         assert "Toolpaths ready" in window.toolpath_progress.format()
         assert window.project.toolpaths
@@ -477,8 +491,8 @@ def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
         assert window._selected_item() is None
 
         window._select_cam_operation("profile")
-        window._calculate_toolpath_now()
-
+        assert window._calculate_toolpath_now()
+        _finish_background_job(window)
         assert len(window.project.toolpaths) == 2
         assert {
             path.source_item_name
@@ -514,8 +528,8 @@ def test_waterline_generation_has_required_trimesh_graph_dependency() -> None:
         )
 
         window._select_cam_operation("waterline")
-        window._calculate_toolpath_now()
-
+        assert window._calculate_toolpath_now()
+        _finish_background_job(window)
         assert window.project.toolpaths
         assert window.project.toolpaths[0].operation == "3d_waterline"
         assert window.project.toolpaths[0].source_item_name == "Relief"
@@ -583,8 +597,8 @@ def test_surface_can_generate_from_stock_without_design_geometry() -> None:
         window._select_cam_operation("surface")
         window._settings.setValue("cam/overall_depth_mm", 0.5)
         window._settings.setValue("cam/stepdown_mm", 1.0)
-        window._calculate_toolpath_now()
-
+        assert window._calculate_toolpath_now()
+        _finish_background_job(window)
         assert len(window.project.toolpaths) == 1
         path = window.project.toolpaths[0]
         assert path.operation == "surface"
