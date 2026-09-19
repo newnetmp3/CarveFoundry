@@ -225,17 +225,21 @@ def _text_case(content: str, mode: str) -> str:
 
 
 def _font_for_text(properties: TextProperties):
-    """Create a real Qt system font and return millimeters per font unit."""
+    """Resolve the exact installed Qt face used for CNC glyph outlines."""
 
     from PySide6.QtGui import QFont
+
+    from .font_handler import resolve_qt_font_face
 
     millimeters_per_unit = (
         float(properties.size_pt) * _POINTS_TO_MM / _FONT_EM_UNITS
     )
-    font = QFont(properties.font_family) if properties.font_family else QFont()
-    if properties.font_style:
-        font.setStyleName(properties.font_style)
-    font.setPixelSize(_FONT_EM_UNITS)
+    font, _resolved = resolve_qt_font_face(
+        properties.font_family,
+        properties.font_style,
+        pixel_size=_FONT_EM_UNITS,
+        strict=True,
+    )
     if properties.bold:
         font.setBold(True)
     if properties.italic:

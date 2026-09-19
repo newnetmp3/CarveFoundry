@@ -12,7 +12,9 @@ from carvefoundry.cam.basic_ops import (
     finish_3d,
     rectangular_pocket,
     rectangular_profile,
+    waterline_3d,
 )
+from carvefoundry.cam.raster import RasterLinkMode
 from carvefoundry.cam.toolpath import MoveKind
 from carvefoundry.core.tools import Cutter, ToolType
 
@@ -260,3 +262,74 @@ def test_more_detail_generates_more_raster_cut_moves_for_same_tool() -> None:
     )
 
     assert detail_cuts > fast_cuts
+
+
+def test_basic_profile_keeps_multipass_contour_connected() -> None:
+    settings = BasicCamSettings(
+        max_stepdown_mm=1.0,
+        raster_link_mode=RasterLinkMode.SMART,
+        local_link_clearance_mm=0.5,
+    )
+    path = rectangular_profile(_bounds(), _tool(), settings)
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.safe_z_mm)
+    ]
+    assert len(safe_rapids) == 2
+
+
+def test_basic_pocket_has_no_full_retract_per_depth_pass() -> None:
+    settings = BasicCamSettings(
+        max_stepdown_mm=1.0,
+        stepover_fraction=0.5,
+        pocket_strategy=PocketStrategy.RASTER_X,
+        raster_link_mode=RasterLinkMode.SMART,
+        local_link_clearance_mm=0.5,
+    )
+    path = rectangular_pocket(_bounds(), _tool(), settings)
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.safe_z_mm)
+    ]
+    assert len(safe_rapids) == 2
+
+
+def test_waterline_uses_local_clearance_between_contours() -> None:
+    left = trimesh.creation.box(extents=(10.0, 10.0, 4.0))
+    left.apply_translation((0.0, 0.0, -2.0))
+    right = trimesh.creation.box(extents=(10.0, 10.0, 4.0))
+    right.apply_translation((20.0, 0.0, -2.0))
+    mesh = trimesh.util.concatenate((left, right))
+    settings = BasicCamSettings(
+        safe_z_mm=1.5,
+        raster_link_mode=RasterLinkMode.SMART,
+        local_link_clearance_mm=0.5,
+    )
+
+    path = waterline_3d(
+        mesh,
+        _tool(),
+        settings,
+        level_step_mm=2.0,
+    )
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.safe_z_mm)
+    ]
+    local_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.local_link_clearance_mm)
+    ]
+    assert len(safe_rapids) == 2
+    assert local_rapids

@@ -8,12 +8,16 @@ from carvefoundry.cam.basic_ops import (
     BasicCamSettings,
     PocketStrategy,
 )
+from carvefoundry.cam.raster import RasterLinkMode
 from carvefoundry.cam.toolpath import MoveKind
 from carvefoundry.cam.vector_ops import (
+    geometry_center_drill,
     geometry_drill,
     geometry_engrave,
+    geometry_face,
     geometry_pocket,
     geometry_profile,
+    geometry_silhouette,
     geometry_vcarve,
     projected_regions,
 )
@@ -226,3 +230,114 @@ def test_drill_refuses_non_circular_placeholder_center() -> None:
 
     with pytest.raises(ValueError, match="no circular projected features"):
         geometry_drill(mesh, cutter, _settings())
+
+
+def test_silhouette_follows_combined_outer_project_shape() -> None:
+    meshes = [
+        _extrude(box(0, 0, 10, 10)),
+        _extrude(box(8, 0, 18, 10)),
+    ]
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+    path = geometry_silhouette(
+        meshes,
+        cutter,
+        _settings(overall_depth_mm=1.0),
+    )
+
+    cut = _cut_xy(path)
+    assert cut[:, 0].min() == pytest.approx(-1.0, abs=0.05)
+    assert cut[:, 0].max() == pytest.approx(19.0, abs=0.05)
+    assert cut[:, 1].min() == pytest.approx(-1.0, abs=0.05)
+    assert cut[:, 1].max() == pytest.approx(11.0, abs=0.05)
+    assert path.operation == "silhouette"
+
+
+def test_profile_multipass_only_uses_full_safe_z_at_job_ends() -> None:
+    mesh = _donut_mesh()
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+    settings = _settings(
+        overall_depth_mm=2.0,
+        max_stepdown_mm=0.5,
+        raster_link_mode=RasterLinkMode.SMART,
+        local_link_clearance_mm=0.5,
+    )
+    path = geometry_profile(
+        mesh,
+        cutter,
+        settings,
+        offset_mode="on",
+    )
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.safe_z_mm)
+    ]
+    local_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.local_link_clearance_mm)
+    ]
+
+    # One initial Safe-Z positioning move and one final Safe-Z retract. The
+    # four depth passes on each closed contour stay connected.
+    assert len(safe_rapids) == 2
+    assert local_rapids
+
+
+def test_surface_raster_stays_down_across_stock_rows() -> None:
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+    settings = _settings(
+        overall_depth_mm=0.5,
+        max_stepdown_mm=1.0,
+        pocket_strategy=PocketStrategy.RASTER_X,
+        raster_link_mode=RasterLinkMode.SMART,
+    )
+    path = geometry_face(20.0, 10.0, cutter, settings)
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(settings.safe_z_mm)
+    ]
+    plunges = [move for move in path.moves if move.kind is MoveKind.PLUNGE]
+
+    assert path.operation == "surface"
+    assert len(safe_rapids) == 2
+    assert len(plunges) == 1
+
+
+def test_center_drill_uses_each_disconnected_region_centroid() -> None:
+    geometry = unary_union(
+        [
+            box(0, 0, 10, 10),
+            box(20, 0, 30, 10),
+        ]
+    )
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+    path = geometry_center_drill(
+        _extrude(geometry),
+        cutter,
+        _settings(
+            overall_depth_mm=1.0,
+            raster_link_mode=RasterLinkMode.SMART,
+        ),
+    )
+
+    plunge_xy = {
+        (round(move.x_mm, 2), round(move.y_mm, 2))
+        for move in path.moves
+        if move.kind is MoveKind.PLUNGE
+    }
+    assert {(5.0, 5.0), (25.0, 5.0)}.issubset(plunge_xy)
+
+    safe_rapids = [
+        move
+        for move in path.moves
+        if move.kind is MoveKind.RAPID
+        and move.z_mm == pytest.approx(1.5)
+    ]
+    assert len(safe_rapids) == 2
