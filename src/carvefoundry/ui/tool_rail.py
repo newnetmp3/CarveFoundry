@@ -48,7 +48,7 @@ class ToolRail(QFrame):
         self._content = QWidget()
         self._content.setObjectName("ToolRailContent")
         self._layout = QVBoxLayout(self._content)
-        self._layout.setContentsMargins(4, 5, 4, 5)
+        self._layout.setContentsMargins(3, 5, 3, 5)
         self._layout.setSpacing(2)
         self._scroll.setWidget(self._content)
         wrapper.addWidget(self._scroll)
