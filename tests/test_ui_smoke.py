@@ -768,6 +768,111 @@ def test_contextual_tool_options_bar_tracks_active_draw_tool() -> None:
         window.close()
 
 
+def test_model_viewport_resize_handles_scale_live_and_preserve_depth() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Imported Model",
+            kind="model",
+            mesh=rectangle_mesh(40.0, 24.0, 6.0),
+            transform=Transform3D(
+                translation_mm=(60.0, 45.0, -6.0),
+            ),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        before = renderer._resize_world_corners(item).copy()
+        before_size = item.local_size_mm()
+        assert before_size is not None
+        assert renderer._selected_resize_item() == (0, item)
+        assert len(renderer._resize_frame_vertices(0.2)) == 40
+
+        assert renderer._begin_resize(0, 2)
+        assert renderer.transform_interaction_kind == "resize-object"
+        assert renderer._apply_resize_factor(0, 1.5)
+
+        after = renderer._resize_world_corners(item)
+        after_size = item.local_size_mm()
+        assert after_size is not None
+
+        assert np.allclose(after[0], before[0], atol=1e-6)
+        assert after_size[0] == pytest.approx(before_size[0] * 1.5)
+        assert after_size[1] == pytest.approx(before_size[1] * 1.5)
+        assert after_size[2] == pytest.approx(before_size[2])
+        assert item.transform.scale_xyz[2] == pytest.approx(1.0)
+    finally:
+        window.close()
+
+
+def test_model_resize_finish_invalidates_cam_as_model_size_change() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Relief",
+            kind="model",
+            mesh=rectangle_mesh(30.0, 20.0, 4.0),
+        )
+        cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+        path = Toolpath(
+            "Relief profile",
+            "profile",
+            cutter,
+            1.5,
+            source_item_id=item.item_id,
+            source_item_name=item.name,
+        )
+        window._set_project(
+            Project(items=[item], toolpaths=[path]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        assert renderer._begin_resize(0, 2)
+        assert renderer._apply_resize_factor(0, 1.25)
+        window._viewport_transform_finished(0)
+
+        assert window.project.toolpaths == []
+        assert window._toolpaths_stale_reason == "Model size"
+        assert "Resized Relief" in window.statusBar().currentMessage()
+    finally:
+        window.close()
+
+
+def test_project_history_labels_viewport_model_resize() -> None:
+    window = ProjectMainWindow()
+    try:
+        item = ProjectItem(
+            "Model",
+            kind="model",
+            mesh=rectangle_mesh(20.0, 15.0, 3.0),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_navigation_tool()
+
+        renderer = window.viewport._renderer
+        assert renderer._begin_resize(0, 2)
+        window._viewport_transform_started(0)
+        assert renderer._apply_resize_factor(0, 1.2)
+        window._viewport_transform_finished(0)
+
+        assert window._undo_stack
+        assert window._undo_stack[-1].label == "resize object"
+    finally:
+        window.close()
+
+
 def test_text_viewport_resize_handles_scale_live_and_anchor_opposite_corner() -> None:
     window = MainWindow()
     try:
@@ -795,17 +900,17 @@ def test_text_viewport_resize_handles_scale_live_and_anchor_opposite_corner() ->
         window._activate_navigation_tool()
 
         renderer = window.viewport._renderer
-        before = renderer._text_resize_world_corners(item).copy()
+        before = renderer._resize_world_corners(item).copy()
         before_size = item.local_size_mm()
         assert before_size is not None
-        assert renderer._selected_text_resize_item() is not None
-        assert len(renderer._text_resize_frame_vertices(0.2)) == 40
+        assert renderer._selected_resize_item() is not None
+        assert len(renderer._resize_frame_vertices(0.2)) == 40
 
-        assert renderer._begin_text_resize(0, 2)
-        assert renderer.transform_interaction_kind == "resize-text"
-        assert renderer._apply_text_resize_factor(0, 1.5)
+        assert renderer._begin_resize(0, 2)
+        assert renderer.transform_interaction_kind == "resize-object"
+        assert renderer._apply_resize_factor(0, 1.5)
 
-        after = renderer._text_resize_world_corners(item)
+        after = renderer._resize_world_corners(item)
         after_size = item.local_size_mm()
         assert after_size is not None
 
@@ -850,8 +955,8 @@ def test_text_resize_handles_remain_available_while_text_tool_is_active() -> Non
 
         assert renderer.shape_draw_mode == "text"
         assert not renderer.camera_control_mode
-        assert renderer._selected_text_resize_item() is not None
-        assert renderer._begin_text_resize(0, 1)
+        assert renderer._selected_resize_item() is not None
+        assert renderer._begin_resize(0, 1)
     finally:
         window.close()
 
@@ -889,8 +994,8 @@ def test_text_resize_finish_invalidates_cam_as_text_size_change() -> None:
         window._activate_navigation_tool()
 
         renderer = window.viewport._renderer
-        assert renderer._begin_text_resize(0, 2)
-        assert renderer._apply_text_resize_factor(0, 1.25)
+        assert renderer._begin_resize(0, 2)
+        assert renderer._apply_resize_factor(0, 1.25)
         window._viewport_transform_finished(0)
 
         assert window.project.toolpaths == []
@@ -924,9 +1029,9 @@ def test_project_history_labels_viewport_text_resize() -> None:
         window._activate_navigation_tool()
 
         renderer = window.viewport._renderer
-        assert renderer._begin_text_resize(0, 2)
+        assert renderer._begin_resize(0, 2)
         window._viewport_transform_started(0)
-        assert renderer._apply_text_resize_factor(0, 1.2)
+        assert renderer._apply_resize_factor(0, 1.2)
         window._viewport_transform_finished(0)
 
         assert window._undo_stack
