@@ -44,11 +44,15 @@ It must not be described as a guarantee of physical safety.
    and fit/tolerance validation.
 6. **Stock-aware rest machining/adaptive clearing/feed optimization:** use
    actual remaining material and cutter engagement, with validated limits.
-7. **Direct Selection / editable vector nodes, group cutouts, text-on-path.**
-   Planar silhouette Union/Subtract/Intersect and signed Offset are implemented
-   separately: results are Z0-topped watertight extrusions, not 3D mesh
-   Booleans or editable source vector paths. Original shapes are hidden, not
-   destroyed; Undo/Redo and CF3D save/load preserve the outcome.
+7. **Extended vector editing, group cutouts and text-on-path:** Direct
+   Selection now edits newly drawn Pen/Line XY control points, with viewport
+   handles, exact coordinate controls, midpoint insertion/deletion, real mesh
+   rebuild, Undo/Redo and CF3D persistence. Imported STL/legacy pen meshes,
+   ellipse/polygon shape primitives, traced meshes and baked Boolean/Offset
+   results do NOT yet have editable source knots or Bézier handles. Group
+   cutouts and text-on-path remain unimplemented. Planar silhouette
+   Union/Subtract/Intersect and signed Offset separately produce Z0-topped
+   2.5D watertight extrusions, not true 3D mesh Booleans.
 8. **Multi-component 3D relief compositing and editable heightmap layers.**
 9. **Machine-integrated double-sided workflow:** Stock-registered two-face
    setup now partitions visible front/back models, reflects the chosen physical
