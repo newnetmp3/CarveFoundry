@@ -79,10 +79,14 @@ def job_report(paths: Sequence[Toolpath]) -> str:
     validate_job_order(paths)
     stages = cutter_stages(paths)
     rows = [
-        f"{len(paths)} operation(s), {len(stages)} cutter stage(s), "
-        f"{sum(len(path.moves) for path in paths):,} moves",
-        f"Feed-based cutting time (excludes rapids/tool changes): "
-        f"{sum(path.estimated_cutting_minutes for path in paths):.1f} min",
+        (
+            f"{len(paths)} operation(s), {len(stages)} cutter stage(s), "
+            f"{sum(len(path.moves) for path in paths):,} moves"
+        ),
+        (
+            f"Feed-based cutting time (excludes rapids/tool changes): "
+            f"{sum(path.estimated_cutting_minutes for path in paths):.1f} min"
+        ),
     ]
     for stage in stages:
         rows.append(
