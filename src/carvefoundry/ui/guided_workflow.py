@@ -67,20 +67,26 @@ class GuidedWorkflowMixin:
         return (
             (
                 "1 · Stock and work zero",
-                f"{stock.width_mm:g} × {stock.height_mm:g} × "
-                f"{stock.thickness_mm:g} mm · XY0 {stock.xy_zero} · top Z0",
+                (
+                    f"{stock.width_mm:g} × {stock.height_mm:g} × "
+                    f"{stock.thickness_mm:g} mm · XY0 {stock.xy_zero} · top Z0"
+                ),
                 good_stock, True,
             ),
             (
                 "2 · Machine profile",
-                f"{machine.name}: travel {machine.work_x_mm:g} × "
-                f"{machine.work_y_mm:g} × {machine.work_z_mm:g} mm",
+                (
+                    f"{machine.name}: travel {machine.work_x_mm:g} × "
+                    f"{machine.work_y_mm:g} × {machine.work_z_mm:g} mm"
+                ),
                 machine_ready, True,
             ),
             (
                 "3 · Register fences and clamps",
-                f"{len(self.project.fixtures)} recorded keep-out(s); "
-                "verify against your physical machine before every job",
+                (
+                    f"{len(self.project.fixtures)} recorded keep-out(s); "
+                    "verify against your physical machine before every job"
+                ),
                 bool(self.project.fixtures), True,
             ),
             (
@@ -95,8 +101,10 @@ class GuidedWorkflowMixin:
             ),
             (
                 "6 · Review full job and preview",
-                "Review cutter order, cutout-last, estimated runtime, "
-                "stock surface and remaining stock",
+                (
+                    "Review cutter order, cutout-last, estimated runtime, "
+                    "stock surface and remaining stock"
+                ),
                 has_paths, has_paths,
             ),
             (
@@ -110,8 +118,10 @@ class GuidedWorkflowMixin:
             ),
             (
                 "8 · Export per-cutter programs",
-                "Separate files on cutter changes; stop, change cutter and "
-                "re-probe stock-top Z0; physically verify fences and clamps",
+                (
+                    "Separate files on cutter changes; stop, change cutter and "
+                    "re-probe stock-top Z0; physically verify fences and clamps"
+                ),
                 bool(verified), bool(verified),
             ),
         )
