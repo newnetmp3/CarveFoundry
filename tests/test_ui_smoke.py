@@ -14,6 +14,7 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
+from carvefoundry.ui.toolpath_preview import ToolpathPreviewWindow
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -357,6 +358,51 @@ def test_viewport_bounds_use_cached_toolpath_geometry() -> None:
         assert bounds[1, 1] >= 1.0
     finally:
         window.close()
+
+
+def test_large_toolpath_preview_defers_gcode_until_code_panel_opens(
+    monkeypatch,
+) -> None:
+    toolpath = _render_cache_test_toolpath()
+    calls: list[int] = []
+    original = ToolpathPreviewWindow._render_program
+
+    def tracked_render(self):
+        calls.append(1)
+        return original(self)
+
+    monkeypatch.setattr(
+        ToolpathPreviewWindow,
+        "LAZY_CODE_MOVE_THRESHOLD",
+        2,
+    )
+    monkeypatch.setattr(
+        ToolpathPreviewWindow,
+        "_render_program",
+        tracked_render,
+    )
+
+    preview = ToolpathPreviewWindow(
+        toolpaths=[toolpath],
+        stock=Project().stock,
+        post_settings=window_post_settings(),
+    )
+    try:
+        assert preview._defer_code
+        assert not preview._code_loaded
+        assert calls == []
+        assert not preview._code_toggle.isChecked()
+        assert preview._left_panel.isHidden()
+
+        preview._code_toggle.click()
+
+        assert preview._code_loaded
+        assert calls == [1]
+        assert preview._code_toggle.isChecked()
+        assert not preview._left_panel.isHidden()
+        assert preview.code_editor.blockCount() > 1
+    finally:
+        preview.close()
 
 
 def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
