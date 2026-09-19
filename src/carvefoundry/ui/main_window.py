@@ -5866,6 +5866,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 self.tool_rail.set_active_tool("camera")
             self._sync_toolpath_output_state()
             self._sync_selection_action_state()
+            if hasattr(self, "_sync_history_action_state"):
+                self._sync_history_action_state()
             if self.generate_toolpaths_button is not None:
                 self.generate_toolpaths_button.setEnabled(True)
             QTimer.singleShot(
