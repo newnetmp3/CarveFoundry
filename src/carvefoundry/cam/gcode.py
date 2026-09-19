@@ -116,11 +116,6 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
 
     lines.append(f"G0 Z{safe_z}")
     _append_parking(lines, options, safe_z_mm=toolpath.safe_z_mm)
-    _append_parking(
-        lines,
-        options,
-        safe_z_mm=max(toolpath.safe_z_mm for toolpath in toolpaths),
-    )
     lines.append("M2")
     return "\n".join(lines) + "\n"
 
@@ -172,6 +167,11 @@ def render_grbl_program(
 
         lines.append(f"G0 Z{safe_z}")
 
+    _append_parking(
+        lines,
+        options,
+        safe_z_mm=max(toolpath.safe_z_mm for toolpath in toolpaths),
+    )
     lines.append("M2")
     return "\n".join(lines) + "\n"
 
