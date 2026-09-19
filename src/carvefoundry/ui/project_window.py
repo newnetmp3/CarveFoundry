@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from carvefoundry.core.history import WorkspaceSnapshot, capture_workspace, restore_workspace
@@ -35,6 +36,7 @@ class MainWindow(_BaseMainWindow):
 
     def __init__(self) -> None:
         self._project_dirty = False
+        self._after_save_action = None
         self._undo_stack: list[_UndoEntry] = []
         self._redo_stack: list[_UndoEntry] = []
         self._history_state_id = 0
@@ -261,25 +263,64 @@ class MainWindow(_BaseMainWindow):
         *,
         project_name: str | None = None,
     ) -> bool:
-        original_name = self.project.name
-        if project_name is not None:
-            self.project.name = project_name
-        elif self.project.name == "Untitled":
-            self.project.name = path.stem
+        """Save asynchronously without marking unsaved edits as committed early."""
 
-        try:
-            saved_path = save_project(self.project, path)
-        except ProjectFileError as exc:
-            self.project.name = original_name
-            self._set_activity_info(f"Project save failed\n{exc}")
-            self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
-            self._update_project_title()
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
             return False
+        project = self.project
+        original_name = project.name
+        old_path = self.project_path
+        saved_state = self._history_state_id
+        if project_name is not None:
+            project.name = project_name
+        elif project.name == "Untitled":
+            project.name = path.stem
+        self._update_project_title()
 
-        self.project_path = saved_path
-        self._mark_project_clean()
-        self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
-        return True
+        def save(progress):
+            progress(0.03, "Compressing project and embedded assets")
+            saved = save_project(project, path)
+            progress(0.96, "Project written")
+            return saved
+
+        def after_cleanup(action) -> None:
+            if self._background_job is not None:
+                QTimer.singleShot(20, lambda: after_cleanup(action))
+            else:
+                action()
+
+        def done(saved_path):
+            self.project_path = saved_path
+            if self._history_state_id == saved_state:
+                self._mark_project_clean()
+            else:
+                self._update_project_title()
+            self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+            action = self._after_save_action
+            self._after_save_action = None
+            if action is not None:
+                after_cleanup(action)
+
+        def failed(message: str) -> None:
+            if self.project is project:
+                project.name = original_name
+                self.project_path = old_path
+                self._update_project_title()
+            self._after_save_action = None
+            self._set_activity_info(f"Project save failed\\n{message}")
+            self.statusBar().showMessage(
+                f"Could not save project: {message}", 8000
+            )
+
+        started = self._start_background_job(
+            "Save project", task=save, on_done=done,
+            on_failed=failed, indeterminate=True,
+        )
+        if not started:
+            project.name = original_name
+            self._update_project_title()
+        return started
 
     def _confirm_new_project(self) -> bool:
         if not self._project_dirty:
@@ -303,12 +344,16 @@ class MainWindow(_BaseMainWindow):
         result = dialog.exec()
 
         if result == QMessageBox.StandardButton.Save:
-            return self._save_project()
+            self._after_save_action = self._new_project
+            if not self._save_project():
+                self._after_save_action = None
+            return False
         return result == QMessageBox.StandardButton.Discard
 
     def _new_project(self) -> None:
         if not self._confirm_new_project():
-            self.statusBar().showMessage("New project canceled", 3000)
+            if self._after_save_action is None:
+                self.statusBar().showMessage("New project canceled", 3000)
             return
         self._set_project(Project(), project_path=None)
         self.statusBar().showMessage("New project created", 3000)
@@ -335,10 +380,18 @@ class MainWindow(_BaseMainWindow):
         result = dialog.exec()
 
         if result == QMessageBox.StandardButton.Save:
-            return self._save_project()
+            self._after_save_action = lambda: self._open_project_path(
+                self._pending_open_target
+            )
+            if not self._save_project():
+                self._after_save_action = None
+            return False
         return result == QMessageBox.StandardButton.Discard
 
     def _open_project(self) -> None:
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open CarveFoundry Project",
@@ -348,24 +401,35 @@ class MainWindow(_BaseMainWindow):
         if not path:
             self.statusBar().showMessage("Open project canceled", 3000)
             return
-
         target = Path(path)
+        self._pending_open_target = target
         if not self._confirm_open_project(target.name):
-            self.statusBar().showMessage("Open project canceled", 3000)
+            if self._after_save_action is None:
+                self.statusBar().showMessage("Open project canceled", 3000)
             return
+        self._open_project_path(target)
 
-        # Load completely before replacing the current project. If the file is
-        # invalid or references missing assets, the current workspace remains
-        # intact.
-        try:
-            project = load_project(target)
-        except ProjectFileError as exc:
-            self._set_activity_info(f"Project open failed\n{exc}")
-            self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
-            return
+    def _open_project_path(self, target: Path) -> None:
+        def load(progress):
+            progress(0.03, "Reading project and embedded assets")
+            loaded = load_project(target)
+            progress(0.96, "Project loaded")
+            return loaded
 
-        self._set_project(project, project_path=target)
-        self.statusBar().showMessage(f"Opened {target.name}", 5000)
+        def done(loaded):
+            self._set_project(loaded, project_path=target)
+            self.statusBar().showMessage(f"Opened {target.name}", 5000)
+
+        def failed(message: str) -> None:
+            self._set_activity_info(f"Project open failed\\n{message}")
+            self.statusBar().showMessage(
+                f"Could not open project: {message}", 8000
+            )
+
+        self._start_background_job(
+            "Open project", task=load, on_done=done,
+            on_failed=failed, indeterminate=True,
+        )
 
     # Mutating workspace actions mark the project as modified. Keeping this in
     # one lifecycle layer makes the dirty state reliable for New/Open/Close.
@@ -609,3 +673,33 @@ class MainWindow(_BaseMainWindow):
     def _import_thread_finished(self) -> None:
         super()._import_thread_finished()
         self._pending_import_undo = None
+
+    def closeEvent(self, event) -> None:
+        if self._background_job is not None or (
+            self._import_thread is not None and self._import_thread.isRunning()
+        ):
+            super().closeEvent(event)
+            return
+        if not self._project_dirty:
+            super().closeEvent(event)
+            return
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Unsaved Changes")
+        dialog.setText(f'Save changes to "{self.project.name}" before closing?')
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Save)
+        answer = dialog.exec()
+        if answer == QMessageBox.StandardButton.Discard:
+            super().closeEvent(event)
+        elif answer == QMessageBox.StandardButton.Save:
+            self._after_save_action = self.close
+            if not self._save_project():
+                self._after_save_action = None
+            event.ignore()
+        else:
+            event.ignore()
