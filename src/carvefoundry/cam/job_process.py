@@ -33,6 +33,8 @@ from carvefoundry.cam.job_workflows import (
 )
 from carvefoundry.cam.preflight import check_preflight
 from carvefoundry.cam.render_geometry import build_render_geometry
+from carvefoundry.cam.rest_machining import stock_aware_rest_3d
+from carvefoundry.cam.stock_simulation import StockRemovalResult, simulate_stock_removal
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
@@ -45,7 +47,7 @@ from carvefoundry.cam.vector_ops import (
 )
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.machine_profiles import MachineProfile
-from carvefoundry.core.project import ProjectItem, Stock
+from carvefoundry.core.project import Project, ProjectItem, Stock
 from carvefoundry.core.tools import Cutter
 
 _LAST_UPDATE = 0.0
@@ -76,6 +78,8 @@ class CamRequest:
     stock_settings: BasicCamSettings | None = None
     silhouette_settings: BasicCamSettings | None = None
     previous_toolpaths: list[Any] | None = None
+    rest_min_remaining_mm: float = 0.15
+    rest_grid_spacing_mm: float = 0.75
 
 
 @dataclass(slots=True)
@@ -131,6 +135,7 @@ def _generate_item(
     settings: BasicCamSettings,
     job: CamRequest,
     progress,
+    previous_stock: StockRemovalResult | None = None,
 ) -> list[Any]:
     mesh = item.transformed_mesh()
     if mesh is None:
@@ -174,7 +179,31 @@ def _generate_item(
         path = geometry_pocket(mesh, cutter, settings)
     elif operation == "engrave":
         path = geometry_engrave(mesh, cutter, settings)
-    elif operation in {"rough", "finish", "rest"}:
+    elif operation == "rest":
+        if previous_stock is None:
+            raise ValueError("3D Rest requires previous simulated machining stages.")
+        preceding = [
+            prior for prior in (job.previous_toolpaths or [])
+            if prior.source_item_id == item.item_id
+        ]
+        if not preceding:
+            raise ValueError(
+                f"{item.name}: generate a roughing/finishing stage for this "
+                "object before stock-aware rest cleanup."
+            )
+        if any(
+            "full depth cutout" in previous.name.casefold()
+            for previous in preceding
+        ):
+            raise ValueError(
+                f"{item.name}: cannot rest-machine after its full-depth cutout."
+            )
+        path = stock_aware_rest_3d(
+            mesh, cutter, settings, previous_stock,
+            minimum_remaining_mm=job.rest_min_remaining_mm,
+            progress=on_cam_progress,
+        )
+    elif operation in {"rough", "finish"}:
         path = finish_3d(
             mesh, cutter, settings, strategy=operation, progress=on_cam_progress
         )
@@ -245,6 +274,30 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
         path.source_item_name = "All design objects"
         generated = [path]
     else:
+        previous_stock = None
+        if job.operation == "rest":
+            if not job.previous_toolpaths:
+                raise ValueError(
+                    "3D Rest needs earlier generated operations in the SAME job. "
+                    "Generate rough/finish first, then append stock-aware rest."
+                )
+            # Simulate the full preceding job ONCE and share its sampled
+            # remaining stock across all selected design objects.
+            previous_stock = simulate_stock_removal(
+                Project(
+                    stock=Stock(
+                        job.stock_width_mm,
+                        job.stock_height_mm,
+                        job.thickness_mm,
+                    ),
+                    toolpaths=list(job.previous_toolpaths),
+                ),
+                spacing_mm=job.rest_grid_spacing_mm,
+                compare_model=False,
+                progress=lambda value, message: report(
+                    0.05 * value, f"Previous cutter stages: {message}",
+                ),
+            )
         groups: list[list[Any]] = []
         count = max(1, len(job.settings_by_item))
         for index, (item, settings) in enumerate(job.settings_by_item):
@@ -260,7 +313,9 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
                     item_start + item_span * max(0.0, min(1.0, value)),
                     f"{item_name}: {message}",
                 )
-            group = _generate_item(item, settings, job, on_item)
+            group = _generate_item(
+                item, settings, job, on_item, previous_stock,
+            )
             if group:
                 groups.append(group)
 
