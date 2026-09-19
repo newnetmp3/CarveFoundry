@@ -267,7 +267,7 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     if request.mode == "preview_code":
         program = render_grbl_program(toolpaths, settings)
         report(0.70, "Indexing move references", force=True)
-        lines = program.rstrip("\\n").splitlines()
+        lines = program.rstrip("\n").splitlines()
         commands = [
             index for index, line in enumerate(lines)
             if line.lstrip().startswith(("G0 ", "G1 "))
