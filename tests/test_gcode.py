@@ -114,3 +114,31 @@ def test_parking_is_emitted_once_after_final_retract() -> None:
     assert lines[park_index + 1] == "G0 Z12"
     assert lines[park_index + 2] == "G0 X10 Y20"
     assert lines[-1] == "M2"
+
+
+def test_progress_does_not_change_any_gcode_moves(tmp_path: Path) -> None:
+    path = _toolpath()
+    progress_single: list[float] = []
+    progress_multi: list[float] = []
+
+    single = render_grbl(path, progress=progress_single.append)
+    multi = render_grbl_program(
+        [path, path], progress=progress_multi.append
+    )
+
+    assert single == render_grbl(path)
+    assert multi == render_grbl_program([path, path])
+    assert progress_single[0] == 0.0
+    assert progress_single[-1] == 1.0
+    assert progress_multi[0] == 0.0
+    assert progress_multi[-1] == 1.0
+    assert progress_multi == sorted(progress_multi)
+
+    output_progress: list[float] = []
+    written = write_grbl_program(
+        [path, path],
+        tmp_path / "progress.nc",
+        progress=output_progress.append,
+    )
+    assert written.read_text(encoding="ascii") == multi
+    assert output_progress[-1] == 1.0
