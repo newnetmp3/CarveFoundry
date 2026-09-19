@@ -73,8 +73,8 @@ def stock_aware_rest_3d(
     computed = calculate_3d_finish(
         mesh, cutter, rest_settings, name="3D Rest",
         progress=(
-            lambda fraction: progress(
-                0.60 * fraction, "Preparing cutter-contact-safe cleanup grid",
+            lambda fraction, status: progress(
+                0.60 * fraction, f"Preparing cleanup grid: {status}",
             )
             if progress is not None else None
         ),
