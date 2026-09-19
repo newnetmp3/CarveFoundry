@@ -78,10 +78,10 @@ def test_raised_rapid_crossing_can_clear_fixture() -> None:
 def test_rapid_crossing_too_low_is_blocked() -> None:
     path = Toolpath(
         "Low travel", "engrave",
-        Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0), 5,
+        Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0), 4,
         [
-            ToolpathMove(10, 10, 5, MoveKind.RAPID),
-            ToolpathMove(60, 10, 5, MoveKind.RAPID),
+            ToolpathMove(10, 10, 4, MoveKind.RAPID),
+            ToolpathMove(60, 10, 4, MoveKind.RAPID),
         ],
     )
     result = check_preflight(
