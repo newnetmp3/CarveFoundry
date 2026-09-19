@@ -325,6 +325,7 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             ".nc", ".gcode", ".tap", ".cnc"
         } else ".nc"
         paths: list[str] = []
+        tile_count = len(tiles)
         for index, tile in enumerate(tiles):
             report(0.05 + 0.9 * index / max(1, len(tiles)),
                    f"Exporting tile {index + 1} / {len(tiles)}", force=True)
@@ -349,9 +350,9 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 clipped,
                 tiled_path,
                 options,
-                progress=lambda fraction, tile_index=index, tile_count=len(tiles): report(
-                    0.05 + 0.9 * (tile_index + fraction) / max(1, tile_count),
-                    f"Writing tile {tile_index + 1} / {tile_count}",
+                progress=lambda fraction, tile_index=index, count=tile_count: report(
+                    0.05 + 0.9 * (tile_index + fraction) / max(1, count),
+                    f"Writing tile {tile_index + 1} / {count}",
                 ),
             )))
         if not paths:
