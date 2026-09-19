@@ -61,6 +61,7 @@ class WorkspaceCommandsMixin:
             ("export_resume", "Export Resume G-code…", self._export_resume_gcode),
             ("export_tiled", "Export Tiled G-code…", self._export_tiled_gcode),
             ("fixtures", "Clamps and Fences…", self._fixture_editor),
+            ("two_sided", "Double-Sided Stock Setup…", self._double_sided_setup),
             ("preflight", "CNC Preflight…", self._preflight_toolpaths),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
@@ -442,7 +443,8 @@ class WorkspaceCommandsMixin:
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
             project_menu,
-            ("stock_setup", "work_zero", "fixtures", "smart_values", "smart_bindings"),
+            ("stock_setup", "work_zero", "fixtures", "two_sided",
+             "smart_values", "smart_bindings"),
         )
 
         edit_menu = bar.addMenu("Edit")
@@ -1322,7 +1324,7 @@ class WorkspaceCommandsMixin:
         model_menu = QMenu(rail)
         self._add_menu_actions(
             model_menu,
-            ("stock_setup", "work_zero", "fixtures",
+            ("stock_setup", "work_zero", "fixtures", "two_sided",
              "smart_values", "smart_bindings", "fit_view"),
         )
         transform_menu = model_menu.addMenu("Transform")
