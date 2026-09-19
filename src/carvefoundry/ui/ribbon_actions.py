@@ -1155,7 +1155,14 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
                 ),
                 rotation_deg=(0.0, 0.0, degrees(atan2(dy, dx))),
             )
-            self._add_drawn_item("Line", "line", mesh, transform)
+            self._add_drawn_item(
+                "Line", "line", mesh, transform,
+                vector_path=VectorPath(
+                    points_xy=((-length / 2.0, 0.0), (length / 2.0, 0.0)),
+                    width_mm=self._tool_option_line_width_mm,
+                    depth_mm=depth,
+                ),
+            )
             return
 
         if tool == "text":
@@ -1290,7 +1297,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             width_mm=self._tool_option_pen_width_mm,
             depth_mm=self._tool_option_depth_mm,
             closed=bool(
-                self._tool_option_pen_close_path and len(captured) >= 4
+                len(captured) >= 3 and captured[0] == captured[-1]
             ),
         )
         try:
