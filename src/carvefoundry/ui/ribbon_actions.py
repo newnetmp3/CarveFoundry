@@ -425,6 +425,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             group_id=group_id,
             text_properties=item.text_properties,
             smart_bindings=dict(item.smart_bindings),
+            vector_path=item.vector_path,
         )
 
     def _unique_item_name(self, stem: str) -> str:
