@@ -214,6 +214,90 @@ def test_waterline_generation_has_required_trimesh_graph_dependency() -> None:
         window.close()
 
 
+def test_generation_dialog_exposes_extended_milling_methods() -> None:
+    window = MainWindow()
+    try:
+        dialog = window._build_toolpath_generation_dialog()
+        fields = dialog.generation_fields
+
+        operations = {
+            fields["operation"].itemData(index)
+            for index in range(fields["operation"].count())
+        }
+        assert {
+            "profile",
+            "silhouette",
+            "pocket",
+            "surface",
+            "vcarve",
+            "engrave",
+            "drill",
+            "center_drill",
+            "rough",
+            "finish",
+            "height_map",
+            "rest",
+            "waterline",
+        }.issubset(operations)
+
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("surface")
+        )
+        assert fields["generate"].isEnabled()
+        assert fields["direction"].isEnabled()
+        assert fields["pocket_stepover"].isEnabled()
+        assert not fields["3d_style"].isEnabled()
+        dialog.close()
+
+        for key in (
+            "cam_silhouette",
+            "cam_surface",
+            "cam_center_drill",
+            "cam_height_map",
+        ):
+            assert key in window._ui_actions
+    finally:
+        window.close()
+
+
+def test_surface_can_generate_from_stock_without_design_geometry() -> None:
+    window = MainWindow()
+    try:
+        window._set_project(
+            Project(),
+            project_path=None,
+            selected_row=0,
+        )
+        assert window.generate_toolpaths_button is not None
+        assert window.generate_toolpaths_button.isEnabled()
+
+        window._select_cam_operation("surface")
+        window._settings.setValue("cam/overall_depth_mm", 0.5)
+        window._settings.setValue("cam/stepdown_mm", 1.0)
+        window._calculate_toolpath_now()
+
+        assert len(window.project.toolpaths) == 1
+        path = window.project.toolpaths[0]
+        assert path.operation == "surface"
+        assert path.source_item_name == "Stock"
+    finally:
+        window.close()
+
+
+def test_text_inspector_exposes_exact_font_verification() -> None:
+    window = MainWindow()
+    try:
+        family = window._selected_text_font_family()
+        window._update_text_font_availability(family)
+
+        assert window.text_font_verify_button.text() == "Verify Font Face"
+        assert "Font face:" in window.text_font_face_status.text()
+        assert "exact" in window.text_font_face_status.text().lower()
+        assert window.text_font_warning.isHidden()
+    finally:
+        window.close()
+
+
 def test_generation_dialog_blocks_incompatible_vcarve_cutter() -> None:
     window = MainWindow()
     try:
