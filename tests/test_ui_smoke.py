@@ -1,7 +1,7 @@
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence
-from PySide6.QtWidgets import QApplication, QComboBox, QSizePolicy
+from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh, text_mesh
@@ -77,6 +77,104 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
         assert window.viewport.camera_control_mode
         assert window.tool_rail.buttons["camera"].isChecked()
         assert not window.tool_rail.buttons["select"].isChecked()
+    finally:
+        window.close()
+
+
+def test_generate_toolpaths_button_opens_complete_requirement_dialog() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Panel",
+            kind="rectangle",
+            mesh=rectangle_mesh(40.0, 30.0, 2.0),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+
+        assert window.generate_toolpaths_button is not None
+        assert window.generate_toolpaths_button.text() == "Generate Toolpaths"
+        assert window.generate_toolpaths_button.isEnabled()
+        assert window._ui_actions["calculate"].text() == "Generate Toolpaths…"
+
+        dialog = window._build_toolpath_generation_dialog()
+        fields = dialog.generation_fields
+
+        section_titles = {
+            box.title()
+            for box in dialog.findChildren(QGroupBox)
+        }
+        assert {
+            "1. Source & Operation",
+            "2. Cutter",
+            "3. Geometry & Strategy",
+            "4. Depth Requirements",
+            "5. Motion & Safety",
+            "6. Tabs / Cutout Holding",
+            "7. Generation Readiness",
+        }.issubset(section_titles)
+
+        assert fields["source"].currentData() == 0
+        assert fields["operation"].currentData() == "finish"
+        assert fields["generate"].isEnabled()
+        assert not fields["cut_type"].isEnabled()
+        assert fields["3d_style"].isEnabled()
+        assert fields["linking"].isEnabled()
+
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("profile")
+        )
+        assert fields["cut_type"].isEnabled()
+        assert not fields["3d_style"].isEnabled()
+        assert not fields["linking"].isEnabled()
+        assert fields["tabs_enabled"].isEnabled()
+        dialog.close()
+    finally:
+        window.close()
+
+
+def test_generation_dialog_blocks_incompatible_vcarve_cutter() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Badge",
+            kind="rectangle",
+            mesh=rectangle_mesh(30.0, 20.0, 2.0),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        dialog = window._build_toolpath_generation_dialog()
+        fields = dialog.generation_fields
+
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("vcarve")
+        )
+
+        flat_index = next(
+            index
+            for index in range(fields["cutter"].count())
+            if fields["cutter"].itemData(index).tool_type
+            == ToolType.FLAT_END_MILL
+        )
+        fields["cutter"].setCurrentIndex(flat_index)
+        assert not fields["generate"].isEnabled()
+        assert "V-Carve cutter" in fields["readiness"].text()
+
+        v_index = next(
+            index
+            for index in range(fields["cutter"].count())
+            if fields["cutter"].itemData(index).tool_type
+            in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}
+        )
+        fields["cutter"].setCurrentIndex(v_index)
+        assert fields["generate"].isEnabled()
+        dialog.close()
     finally:
         window.close()
 
