@@ -119,12 +119,12 @@ def prepare_two_sided(
     active = [item for item in project.items if item.visible and item.mesh is not None]
     ids = {item.item_id for item in active}
     back_ids = set(back_item_ids)
-    if not back_ids or not ids - back_ids:
-        raise ValueError("Assign at least one visible model to each face.")
-    if back_ids - ids:
-        raise ValueError("Back face selection includes hidden or missing geometry.")
     if len(ids) != len(active):
         raise ValueError("Duplicate item IDs prevent unambiguous face assignment.")
+    if back_ids - ids:
+        raise ValueError("Back face selection includes hidden or missing geometry.")
+    if not back_ids or not ids - back_ids:
+        raise ValueError("Assign at least one visible model to each face.")
 
     for item in active:
         _validated_bounds(item, stock)
