@@ -300,6 +300,27 @@ def test_basic_pocket_has_no_full_retract_per_depth_pass() -> None:
     assert len(safe_rapids) == 2
 
 
+def test_waterline_reports_level_progress() -> None:
+    mesh = trimesh.creation.box(extents=(10.0, 10.0, 4.0))
+    mesh.apply_translation((0.0, 0.0, -2.0))
+    updates: list[tuple[float, str]] = []
+
+    waterline_3d(
+        mesh,
+        _tool(),
+        BasicCamSettings(safe_z_mm=1.5),
+        level_step_mm=1.0,
+        progress=lambda fraction, stage: updates.append((fraction, stage)),
+    )
+
+    assert updates[0] == (0.0, "Slicing waterline levels")
+    assert updates[-1][0] == pytest.approx(1.0)
+    assert "4/4" in updates[-1][1]
+    assert [fraction for fraction, _stage in updates] == sorted(
+        fraction for fraction, _stage in updates
+    )
+
+
 def test_waterline_uses_local_clearance_between_contours() -> None:
     left = trimesh.creation.box(extents=(10.0, 10.0, 4.0))
     left.apply_translation((0.0, 0.0, -2.0))
