@@ -1213,13 +1213,18 @@ def geometry_center_drill(
         )
         ordered.append(centers.pop(index))
 
+    depths = _depth_passes(target_z, settings.max_stepdown_mm)
     moves: list[ToolpathMove] = []
     for x, y in ordered:
-        _rapid(moves, x, y, settings.safe_z_mm)
-        for depth in _depth_passes(target_z, settings.max_stepdown_mm):
+        start = np.asarray((x, y), dtype=float)
+        _position_above_start(moves, start, settings)
+        for depth_index, depth in enumerate(depths):
             _plunge(moves, x, y, depth, settings)
-            _rapid(moves, x, y, settings.safe_z_mm)
+            if depth_index < len(depths) - 1:
+                clearance = _transition_clearance_z(settings)
+                _rapid(moves, x, y, clearance)
 
+    _final_retract(moves, settings)
     return Toolpath(
         name=name,
         operation="center_drill",
@@ -1227,7 +1232,6 @@ def geometry_center_drill(
         safe_z_mm=settings.safe_z_mm,
         moves=moves,
     )
-
 
 def geometry_drill(
     mesh: trimesh.Trimesh,
@@ -1253,13 +1257,18 @@ def geometry_drill(
         )
         ordered.append(centers.pop(index))
 
+    depths = _depth_passes(target_z, settings.max_stepdown_mm)
     moves: list[ToolpathMove] = []
     for x, y in ordered:
-        _rapid(moves, x, y, settings.safe_z_mm)
-        for depth in _depth_passes(target_z, settings.max_stepdown_mm):
+        start = np.asarray((x, y), dtype=float)
+        _position_above_start(moves, start, settings)
+        for depth_index, depth in enumerate(depths):
             _plunge(moves, x, y, depth, settings)
-            _rapid(moves, x, y, settings.safe_z_mm)
+            if depth_index < len(depths) - 1:
+                clearance = _transition_clearance_z(settings)
+                _rapid(moves, x, y, clearance)
 
+    _final_retract(moves, settings)
     return Toolpath(
         name=name,
         operation="drill",
@@ -1267,3 +1276,4 @@ def geometry_drill(
         safe_z_mm=settings.safe_z_mm,
         moves=moves,
     )
+
