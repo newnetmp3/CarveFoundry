@@ -192,6 +192,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     GIZMO_LENGTH_PX = 72.0
     GIZMO_PICK_RADIUS_PX = 10.0
     GIZMO_MIN_PROJECTED_PX = 18.0
+    TEXT_RESIZE_HANDLE_RADIUS_PX = 11.0
+    TEXT_RESIZE_HANDLE_HALF_SIZE_PX = 5.5
+    TEXT_RESIZE_MIN_FACTOR = 0.05
+    TEXT_RESIZE_MAX_FACTOR = 100.0
 
     def __init__(self, project: Project | None = None) -> None:
         super().__init__()
@@ -219,6 +223,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_distance = 0.0
         self._object_drag_started = False
         self._active_gizmo_axis: int | None = None
+        self._active_text_resize_handle: int | None = None
+        self._text_resize_initial_scale: tuple[float, float, float] | None = None
+        self._text_resize_initial_translation: tuple[float, float, float] | None = None
+        self._text_resize_active_vector_world: np.ndarray | None = None
+        self._text_resize_active_world: np.ndarray | None = None
+        self._text_resize_opposite_world: np.ndarray | None = None
+        self._transform_interaction_kind: str | None = None
         self._shape_draw_mode: str | None = None
         self._shape_drag_start_world: np.ndarray | None = None
         self._shape_drag_current_world: np.ndarray | None = None
@@ -284,6 +295,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.selected_item_indices.clear()
         self._selection_drag_start_screen = None
         self._selection_drag_current_screen = None
+        self._active_text_resize_handle = None
+        self._text_resize_initial_scale = None
+        self._text_resize_initial_translation = None
+        self._text_resize_active_vector_world = None
+        self._text_resize_active_world = None
+        self._text_resize_opposite_world = None
+        self._transform_interaction_kind = None
         self._prepared_mesh_uploads.clear()
         if fit_view:
             self.fit_view()
@@ -310,6 +328,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             and 0 <= int(index) < len(self.project.items)
         }
         self.selected_item_indices = valid
+        if self._interaction_mode != "text-resize":
+            self._active_text_resize_handle = None
+            self._transform_interaction_kind = None
         if primary in valid:
             self.selected_item_index = int(primary)
         elif valid:
@@ -437,6 +458,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.setCursor(QCursor(shape))
 
     @property
+    def transform_interaction_kind(self) -> str | None:
+        return self._transform_interaction_kind
+
+    @property
     def camera_control_mode(self) -> bool:
         return self._camera_control_mode
 
@@ -446,6 +471,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._selection_drag_start_screen = None
         self._selection_drag_current_screen = None
         self._active_gizmo_axis = None
+        self._active_text_resize_handle = None
+        self._transform_interaction_kind = None
         self._update_interaction_cursor()
         self.requestUpdate()
 
@@ -463,6 +490,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._shape_drag_current_world = None
         self._freehand_points_world = []
         self._interaction_mode = None
+        self._active_text_resize_handle = None
+        self._transform_interaction_kind = None
         self._update_interaction_cursor()
         self.shapeDrawModeChanged.emit(normalized or "")
         self.requestUpdate()
@@ -1887,6 +1916,260 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         finally:
             self._functions.glEnable(GL_DEPTH_TEST)
 
+    def _selected_text_resize_item(self) -> tuple[int, ProjectItem] | None:
+        if (
+            self.project is None
+            or self._camera_control_mode
+            or len(self.selected_item_indices) != 1
+            or self.selected_item_index is None
+            or self.selected_item_index not in self.selected_item_indices
+            or not 0 <= self.selected_item_index < len(self.project.items)
+        ):
+            return None
+        item = self.project.items[self.selected_item_index]
+        if (
+            not item.visible
+            or item.mesh is None
+            or item.kind.lower() != "text"
+        ):
+            return None
+        return self.selected_item_index, item
+
+    @staticmethod
+    def _text_resize_opposite_handle(handle: int) -> int:
+        return (int(handle) + 2) % 4
+
+    def _text_resize_world_corners(self, item: ProjectItem) -> np.ndarray:
+        if item.mesh is None:
+            return np.empty((0, 3), dtype=float)
+        bounds = np.asarray(item.mesh.bounds, dtype=float)
+        bounds *= float(item.source_units.millimeters_per_unit)
+        minimum, maximum = bounds
+        z = float(maximum[2])
+        local = np.asarray(
+            (
+                (minimum[0], minimum[1], z),
+                (maximum[0], minimum[1], z),
+                (maximum[0], maximum[1], z),
+                (minimum[0], maximum[1], z),
+            ),
+            dtype=float,
+        )
+        pivot = tuple(float(value) for value in bounds.mean(axis=0))
+        return item.transform.apply_points(local, pivot=pivot)
+
+    def _text_resize_handle_screen_points(
+        self,
+        view_projection: QMatrix4x4,
+    ) -> list[QPointF | None]:
+        selected = self._selected_text_resize_item()
+        if selected is None:
+            return []
+        _index, item = selected
+        corners = self._text_resize_world_corners(item)
+        return [
+            self._project_world_point(
+                tuple(float(value) for value in corner),
+                view_projection,
+            )
+            for corner in corners
+        ]
+
+    def pick_text_resize_handle(self, position: QPointF) -> int | None:
+        selected = self._selected_text_resize_item()
+        if selected is None:
+            return None
+        projection, view_matrix, _world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        points = self._text_resize_handle_screen_points(view_projection)
+        best_handle: int | None = None
+        best_distance = float("inf")
+        for handle, point in enumerate(points):
+            if point is None:
+                continue
+            distance = float(
+                np.hypot(
+                    position.x() - point.x(),
+                    position.y() - point.y(),
+                )
+            )
+            if (
+                distance <= self.TEXT_RESIZE_HANDLE_RADIUS_PX
+                and distance < best_distance
+            ):
+                best_handle = handle
+                best_distance = distance
+        return best_handle
+
+    def _begin_text_resize(self, item_index: int, handle: int) -> bool:
+        if (
+            self.project is None
+            or not 0 <= item_index < len(self.project.items)
+            or handle not in {0, 1, 2, 3}
+        ):
+            return False
+        item = self.project.items[item_index]
+        if item.mesh is None or item.kind.lower() != "text":
+            return False
+        corners = self._text_resize_world_corners(item)
+        if len(corners) != 4:
+            return False
+        opposite = self._text_resize_opposite_handle(handle)
+        center = corners.mean(axis=0)
+        self._text_resize_initial_scale = tuple(item.transform.scale_xyz)
+        self._text_resize_initial_translation = tuple(
+            item.transform.translation_mm
+        )
+        self._text_resize_active_world = corners[handle].copy()
+        self._text_resize_opposite_world = corners[opposite].copy()
+        self._text_resize_active_vector_world = corners[handle] - center
+        self._active_text_resize_handle = handle
+        self._interaction_mode = "text-resize"
+        self._transform_interaction_kind = "resize-text"
+        return True
+
+    def _apply_text_resize_factor(
+        self,
+        item_index: int,
+        factor: float,
+    ) -> bool:
+        if (
+            self.project is None
+            or not 0 <= item_index < len(self.project.items)
+            or self._text_resize_initial_scale is None
+            or self._text_resize_initial_translation is None
+            or self._text_resize_active_vector_world is None
+        ):
+            return False
+        item = self.project.items[item_index]
+        if item.kind.lower() != "text" or item.mesh is None:
+            return False
+
+        factor = max(
+            self.TEXT_RESIZE_MIN_FACTOR,
+            min(self.TEXT_RESIZE_MAX_FACTOR, float(factor)),
+        )
+        sx, sy, sz = self._text_resize_initial_scale
+        item.transform.scale_xyz = (
+            max(1e-6, sx * factor),
+            max(1e-6, sy * factor),
+            sz,
+        )
+        initial_translation = np.asarray(
+            self._text_resize_initial_translation,
+            dtype=float,
+        )
+        translation = (
+            initial_translation
+            + self._text_resize_active_vector_world * (factor - 1.0)
+        )
+        item.transform.translation_mm = tuple(
+            float(value) for value in translation
+        )
+        item.transform.validate()
+        return True
+
+    def _text_resize_factor_from_cursor(self, position: QPointF) -> float | None:
+        if (
+            self._text_resize_active_world is None
+            or self._text_resize_opposite_world is None
+        ):
+            return None
+        projection, view_matrix, _world_per_pixel = self._camera_geometry()
+        view_projection = projection * view_matrix
+        active = self._project_world_point(
+            tuple(float(value) for value in self._text_resize_active_world),
+            view_projection,
+        )
+        opposite = self._project_world_point(
+            tuple(float(value) for value in self._text_resize_opposite_world),
+            view_projection,
+        )
+        if active is None or opposite is None:
+            return None
+        diagonal = np.asarray(
+            (active.x() - opposite.x(), active.y() - opposite.y()),
+            dtype=float,
+        )
+        length_sq = float(diagonal @ diagonal)
+        if length_sq <= 1e-9:
+            return None
+        cursor = np.asarray(
+            (position.x() - opposite.x(), position.y() - opposite.y()),
+            dtype=float,
+        )
+        return float(cursor @ diagonal / length_sq)
+
+    def _text_resize_frame_vertices(self, world_per_pixel: float) -> np.ndarray:
+        selected = self._selected_text_resize_item()
+        if selected is None:
+            return np.empty((0, 3), dtype=np.float32)
+        _index, item = selected
+        corners = self._text_resize_world_corners(item)
+        if len(corners) != 4:
+            return np.empty((0, 3), dtype=np.float32)
+
+        vertices: list[np.ndarray] = []
+        for first, second in (
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+        ):
+            vertices.extend((corners[first], corners[second]))
+
+        right, up, _view = self._camera_basis()
+        half = max(
+            float(world_per_pixel) * self.TEXT_RESIZE_HANDLE_HALF_SIZE_PX,
+            0.05,
+        )
+        for corner in corners:
+            square = (
+                corner - right * half - up * half,
+                corner + right * half - up * half,
+                corner + right * half + up * half,
+                corner - right * half + up * half,
+            )
+            vertices.extend(
+                (
+                    square[0],
+                    square[1],
+                    square[1],
+                    square[2],
+                    square[2],
+                    square[3],
+                    square[3],
+                    square[0],
+                )
+            )
+        return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
+    def _draw_text_resize_handles(
+        self,
+        view_projection: QMatrix4x4,
+        world_per_pixel: float,
+    ) -> None:
+        if self._functions is None or self._selected_text_resize_item() is None:
+            return
+        vertices = self._text_resize_frame_vertices(world_per_pixel)
+        if len(vertices) == 0:
+            return
+        color = (
+            QVector4D(1.0, 0.86, 0.25, 1.0)
+            if self._active_text_resize_handle is not None
+            else QVector4D(0.92, 1.0, 0.82, 1.0)
+        )
+        self._functions.glDisable(GL_DEPTH_TEST)
+        try:
+            self._draw_lines(
+                vertices,
+                view_projection=view_projection,
+                color=color,
+                line_width=2.2,
+            )
+        finally:
+            self._functions.glEnable(GL_DEPTH_TEST)
+
     def _selected_bounds_geometry(self) -> np.ndarray:
         """Return world-space AABB line vertices for every selected item."""
 
@@ -2176,6 +2459,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._draw_toolpath_preview(view_projection, world_per_pixel)
         self._draw_shape_preview(view_projection)
         self._draw_selection_marquee()
+        self._draw_text_resize_handles(
+            view_projection,
+            world_per_pixel,
+        )
         self._draw_translation_gizmo(
             view_projection,
             world_per_pixel,
@@ -2204,6 +2491,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_distance = 0.0
         self._object_drag_started = False
         self._active_gizmo_axis = None
+        self._active_text_resize_handle = None
+        self._transform_interaction_kind = None
 
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -2213,6 +2502,28 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
             event.accept()
             return
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and not self._camera_control_mode
+            and not (
+                event.modifiers() & Qt.KeyboardModifier.AltModifier
+            )
+        ):
+            resize_handle = self.pick_text_resize_handle(event.position())
+            if (
+                resize_handle is not None
+                and self.selected_item_index is not None
+                and self._begin_text_resize(
+                    self.selected_item_index,
+                    resize_handle,
+                )
+            ):
+                self._press_item_index = self.selected_item_index
+                self._interaction_mode = "text-resize"
+                self.requestUpdate()
+                event.accept()
+                return
 
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -2247,6 +2558,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 self._press_item_index = self.selected_item_index
                 self._active_gizmo_axis = gizmo_axis
                 self._interaction_mode = "gizmo"
+                self._transform_interaction_kind = "move"
                 self.requestUpdate()
             elif force_orbit:
                 self._interaction_mode = "orbit"
@@ -2331,6 +2643,32 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "text-resize"
+            and self._press_item_index is not None
+            and self._active_text_resize_handle is not None
+            and self.project is not None
+        ):
+            factor = self._text_resize_factor_from_cursor(event.position())
+            if factor is not None:
+                clamped_factor = max(
+                    self.TEXT_RESIZE_MIN_FACTOR,
+                    min(self.TEXT_RESIZE_MAX_FACTOR, factor),
+                )
+                if not self._object_drag_started:
+                    self._object_drag_started = True
+                    self.itemTransformStarted.emit(self._press_item_index)
+                if self._apply_text_resize_factor(
+                    self._press_item_index,
+                    clamped_factor,
+                ):
+                    self.itemTransformChanged.emit(self._press_item_index)
+                    self.requestUpdate()
+                    self.viewChanged.emit()
+            event.accept()
+            return
+
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
             and self._interaction_mode == "gizmo"
             and self._press_item_index is not None
             and self._active_gizmo_axis is not None
@@ -2378,6 +2716,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self._pan_pixels(delta)
             self.requestUpdate()
             self.viewChanged.emit()
+
+        if event.buttons() == Qt.MouseButton.NoButton:
+            handle = self.pick_text_resize_handle(event.position())
+            if handle is not None:
+                diagonal = handle in {0, 2}
+                cursor = (
+                    Qt.CursorShape.SizeFDiagCursor
+                    if diagonal
+                    else Qt.CursorShape.SizeBDiagCursor
+                )
+                self.setCursor(QCursor(cursor))
+            else:
+                self._update_interaction_cursor()
 
         event.accept()
 
@@ -2454,7 +2805,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             event.button() == Qt.MouseButton.LeftButton
-            and self._interaction_mode == "gizmo"
+            and self._interaction_mode in {"gizmo", "text-resize"}
             and self._object_drag_started
             and self._press_item_index is not None
         ):
@@ -2509,6 +2860,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis = None
+        self._active_text_resize_handle = None
+        self._text_resize_initial_scale = None
+        self._text_resize_initial_translation = None
+        self._text_resize_active_vector_world = None
+        self._text_resize_active_world = None
+        self._text_resize_opposite_world = None
+        self._transform_interaction_kind = None
         self._update_interaction_cursor()
         self.requestUpdate()
         event.accept()
@@ -2887,6 +3245,10 @@ class MeshViewport(QWidget):
     @property
     def shape_draw_mode(self) -> str | None:
         return self._renderer.shape_draw_mode
+
+    @property
+    def transform_interaction_kind(self) -> str | None:
+        return self._renderer.transform_interaction_kind
 
     @property
     def camera_control_mode(self) -> bool:

@@ -2714,7 +2714,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         note = QLabel(
             "Font geometry comes from the exact installed system font face. "
             "CarveFoundry refuses silent Qt font substitution when regenerating "
-            "text so CNC geometry cannot quietly change typefaces."
+            "text so CNC geometry cannot quietly change typefaces. Drag a corner "
+            "handle around selected text in the viewport to resize it live; text "
+            "depth stays unchanged."
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
@@ -3629,14 +3631,32 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
     def _viewport_transform_finished(self, index: int) -> None:
         self._viewport_transform_changed(index)
-        if 0 <= index < len(self.project.items):
-            self._invalidate_toolpaths("Model position")
-            item = self.project.items[index]
-            x, y, z = item.transform.translation_mm
-            self.statusBar().showMessage(
-                f"Moved {item.name} — X {x:.2f}  Y {y:.2f}  Z {z:.2f} mm",
-                3000,
-            )
+        if not 0 <= index < len(self.project.items):
+            return
+
+        item = self.project.items[index]
+        if self.viewport.transform_interaction_kind == "resize-text":
+            self._invalidate_toolpaths("Text size")
+            local_size = item.local_size_mm()
+            if local_size is not None:
+                self.statusBar().showMessage(
+                    f"Resized {item.name} — "
+                    f"W {local_size[0]:.2f}  H {local_size[1]:.2f} mm",
+                    3000,
+                )
+            else:
+                self.statusBar().showMessage(
+                    f"Resized {item.name}",
+                    3000,
+                )
+            return
+
+        self._invalidate_toolpaths("Model position")
+        x, y, z = item.transform.translation_mm
+        self.statusBar().showMessage(
+            f"Moved {item.name} — X {x:.2f}  Y {y:.2f}  Z {z:.2f} mm",
+            3000,
+        )
 
     def _before_context_transform(self, _index: int, _label: str) -> None:
         """History hook for a discrete viewport/context-menu transform."""

@@ -511,7 +511,12 @@ class MainWindow(_BaseMainWindow):
         snapshot, selected_row, before = pending
         after = self._transform_signature(self.project.items[index])
         if after != before:
-            self._record_undo(snapshot, selected_row, "move object")
+            label = (
+                "resize text"
+                if self.viewport.transform_interaction_kind == "resize-text"
+                else "move object"
+            )
+            self._record_undo(snapshot, selected_row, label)
 
     def _before_context_transform(self, index: int, label: str) -> None:
         super()._before_context_transform(index, label)
