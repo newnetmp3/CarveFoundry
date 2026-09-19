@@ -418,6 +418,51 @@ def test_large_toolpath_preview_defers_gcode_until_code_panel_opens(
         preview.close()
 
 
+def test_large_preview_code_renders_without_blocking_qt(monkeypatch) -> None:
+    toolpath = _render_cache_test_toolpath()
+    monkeypatch.setattr(
+        ToolpathPreviewWindow, "LAZY_CODE_MOVE_THRESHOLD", 2
+    )
+    monkeypatch.setattr(
+        ToolpathPreviewWindow, "ASYNC_CODE_MOVE_THRESHOLD", 3
+    )
+
+    preview = ToolpathPreviewWindow(
+        toolpaths=[toolpath],
+        stock=Project().stock,
+        post_settings=GrblPostSettings(),
+    )
+    try:
+        assert not preview._code_loaded
+        preview._code_toggle.click()
+        assert preview._code_loading
+        assert preview._code_thread is not None
+
+        heartbeat: list[bool] = []
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(
+            0,
+            lambda: heartbeat.append(
+                preview._code_loading and not preview._code_loaded
+            ),
+        )
+        _APP.processEvents()
+        assert heartbeat == [True], "Preview G-code blocked Qt events"
+
+        deadline = monotonic() + 30.0
+        while not preview._code_loaded and monotonic() < deadline:
+            _APP.processEvents()
+            sleep(0.01)
+        _APP.processEvents()
+        assert preview._code_loaded, preview.code_editor.placeholderText()
+        assert preview._code_thread is None
+        assert preview._code_progress.value() == 100
+        assert preview.code_editor.blockCount() > len(toolpath.moves)
+    finally:
+        preview.close()
+
+
 def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
     window = MainWindow()
     try:
