@@ -315,14 +315,10 @@ def test_fontconfig_aliases_collapse_full_face_names_into_styles() -> None:
         "FiraCode Nerd Font Propo",
     ]
     aliases = MainWindow._parse_fontconfig_text_font_aliases(
-        "\n".join(
-            (
-                "FiraCode Nerd Font\tMedium\tFiraCode Nerd Font Med",
-                (
-                    "FiraCode Nerd Font Mono\tSemiBold\t"
-                    "FiraCode Nerd Font Mono SemBd"
-                ),
-            )
+        (
+            "FiraCode Nerd Font\tMedium\tFiraCode Nerd Font Med\n"
+            "FiraCode Nerd Font Mono\tSemiBold\t"
+            "FiraCode Nerd Font Mono SemBd"
         ),
         families,
     )
