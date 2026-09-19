@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from math import atan2, ceil, degrees, hypot, pi, sqrt
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 import numpy as np
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
@@ -2824,6 +2826,15 @@ class RibbonActionsMixin:
         ready_layout.addWidget(help_row("readiness", readiness))
         grid.addWidget(ready_box, 3, 0, 1, 2)
 
+        generation_progress = QProgressBar()
+        generation_progress.setObjectName("ToolpathGenerationProgress")
+        generation_progress.setRange(0, 100)
+        generation_progress.setValue(0)
+        generation_progress.setTextVisible(True)
+        generation_progress.setFormat("Ready to generate · %p%")
+        generation_progress.hide()
+        outer.addWidget(generation_progress)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         generate_button = buttons.addButton(
             "Generate Toolpaths",
@@ -3050,8 +3061,21 @@ class RibbonActionsMixin:
                 self._tabs_button.setChecked(self._tabs_enabled)
             self._settings.sync()
 
-            dialog.accept()
-            self._calculate_toolpath_now()
+            generation_progress.setValue(0)
+            generation_progress.setFormat("Preparing toolpath generation · %p%")
+            generation_progress.show()
+            buttons.setEnabled(False)
+            self._toolpath_dialog_progress = generation_progress
+            try:
+                success = self._calculate_toolpath_now()
+            finally:
+                self._toolpath_dialog_progress = None
+
+            if success:
+                dialog.accept()
+            else:
+                buttons.setEnabled(True)
+                update_relevance_and_readiness()
 
         def uses_tabs_for_current() -> bool:
             operation = str(operation_combo.currentData() or "")
@@ -3101,6 +3125,7 @@ class RibbonActionsMixin:
         dialog.generation_fields = fields
         dialog.generation_help_buttons = help_buttons
         dialog.generation_help_text = generation_help
+        dialog.generation_progress = generation_progress
         dialog.refresh_generation_readiness = update_relevance_and_readiness
         update_relevance_and_readiness()
         return dialog
@@ -3119,6 +3144,8 @@ class RibbonActionsMixin:
         item: ProjectItem,
         cutter: Cutter,
         operation: str,
+        *,
+        progress: Callable[[float, str], None] | None = None,
     ) -> list:
         """Generate the selected CAM operation for one project object."""
 
@@ -3129,6 +3156,22 @@ class RibbonActionsMixin:
 
         settings = self._cam_settings(bounds, mesh)
         cut_type = self._cam_cut_type
+        needs_cutout = (
+            operation == "finish"
+            and self._relief_style() is ReliefStyle.FULL_DEPTH
+        )
+        main_end = 0.85 if needs_cutout else 0.95
+
+        def report_main(fraction: float, status: str) -> None:
+            if progress is not None:
+                mapped = 0.05 + (main_end - 0.05) * max(
+                    0.0,
+                    min(1.0, float(fraction)),
+                )
+                progress(mapped, status)
+
+        if progress is not None:
+            progress(0.02, "Preparing model geometry")
         if operation == "vcarve":
             toolpath = geometry_vcarve(mesh, cutter, settings)
         elif operation == "drill":
@@ -3173,6 +3216,7 @@ class RibbonActionsMixin:
                 cutter,
                 settings,
                 strategy=operation,
+                progress=report_main,
             )
         elif operation == "height_map":
             toolpath = finish_3d(
@@ -3180,19 +3224,33 @@ class RibbonActionsMixin:
                 cutter,
                 settings,
                 strategy="finish",
+                progress=report_main,
             )
             toolpath.name = "Height Map"
             toolpath.operation = "height_map"
         elif operation == "waterline":
-            toolpath = waterline_3d(mesh, cutter, settings)
+            toolpath = waterline_3d(
+                mesh,
+                cutter,
+                settings,
+                progress=report_main,
+            )
         else:
             raise ValueError(f"Unknown CAM operation: {operation}")
 
+        if progress is not None and operation not in {
+            "rough",
+            "finish",
+            "height_map",
+            "rest",
+            "waterline",
+        }:
+            progress(main_end, f"{self._cam_operation_title(operation)} path ready")
+
         generated_toolpaths = [toolpath]
-        if (
-            operation == "finish"
-            and self._relief_style() is ReliefStyle.FULL_DEPTH
-        ):
+        if needs_cutout:
+            if progress is not None:
+                progress(0.88, "Generating full-depth cutout")
             cutout_settings = BasicCamSettings(
                 safe_z_mm=settings.safe_z_mm,
                 feed_mm_min=settings.feed_mm_min,
@@ -3225,13 +3283,17 @@ class RibbonActionsMixin:
                     offset_mode="outside",
                 )
             )
+            if progress is not None:
+                progress(0.98, "Full-depth cutout ready")
 
+        if progress is not None:
+            progress(1.0, "Object toolpath ready")
         for generated in generated_toolpaths:
             generated.source_item_id = item.item_id
             generated.source_item_name = item.name
         return generated_toolpaths
 
-    def _calculate_toolpath_now(self) -> None:
+    def _calculate_toolpath_now(self) -> bool:
         items = [
             item
             for item in self.project.items
@@ -3240,7 +3302,7 @@ class RibbonActionsMixin:
         cutter = self.tool_combo.currentData()
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
-            return
+            return False
 
         operation = self._active_cam_operation
         if not items and operation != "surface":
@@ -3248,7 +3310,7 @@ class RibbonActionsMixin:
                 "Add a mesh or created shape before generating this operation",
                 4000,
             )
-            return
+            return False
 
         target_description = (
             "stock"
@@ -3260,11 +3322,18 @@ class RibbonActionsMixin:
         self.statusBar().showMessage(
             f"Calculating {operation} toolpaths for {target_description}…"
         )
+        self._toolpath_progress_last_value = -1
+        self._toolpath_progress_last_text = ""
+        self._update_toolpath_progress(
+            0.0,
+            f"Preparing {self._cam_operation_title(operation)}",
+        )
 
         generated_toolpaths = []
         item = None
         try:
             if operation == "surface":
+                self._update_toolpath_progress(0.08, "Preparing stock surface")
                 stock = self.project.stock
                 if items:
                     reference_mesh = items[0].transformed_mesh()
@@ -3305,7 +3374,12 @@ class RibbonActionsMixin:
                 toolpath.source_item_id = "stock"
                 toolpath.source_item_name = "Stock"
                 generated_toolpaths.append(toolpath)
+                self._update_toolpath_progress(0.90, "Stock surface path ready")
             elif operation == "silhouette":
+                self._update_toolpath_progress(
+                    0.08,
+                    "Combining project silhouette",
+                )
                 placed_meshes = [
                     mesh
                     for source_item in items
@@ -3339,13 +3413,39 @@ class RibbonActionsMixin:
                 toolpath.source_item_id = "project-silhouette"
                 toolpath.source_item_name = "All design objects"
                 generated_toolpaths.append(toolpath)
+                self._update_toolpath_progress(
+                    0.90,
+                    "Combined silhouette path ready",
+                )
             else:
                 groups: list[list] = []
-                for item in items:
+                item_count = max(1, len(items))
+                for item_index, item in enumerate(items):
+                    segment_start = 0.05 + 0.85 * item_index / item_count
+                    segment_end = 0.05 + 0.85 * (item_index + 1) / item_count
+                    segment_span = segment_end - segment_start
+
+                    def item_progress(
+                        fraction: float,
+                        status: str,
+                        *,
+                        start: float = segment_start,
+                        span: float = segment_span,
+                        item_name: str = item.name,
+                    ) -> None:
+                        self._update_toolpath_progress(
+                            start + span * max(
+                                0.0,
+                                min(1.0, float(fraction)),
+                            ),
+                            f"{item_name}: {status}",
+                        )
+
                     group = self._generate_toolpaths_for_item(
                         item,
                         cutter,
                         operation,
+                        progress=item_progress,
                     )
                     if group:
                         groups.append(group)
@@ -3353,6 +3453,10 @@ class RibbonActionsMixin:
                 # Keep each object's internal operation order intact (for
                 # example Finish before Cutout), but visit object groups by
                 # nearest next start to reduce non-cutting XY travel.
+                self._update_toolpath_progress(
+                    0.92,
+                    "Optimizing multi-object cutting order",
+                )
                 current_xy = np.array((0.0, 0.0), dtype=float)
                 remaining = list(groups)
                 while remaining:
@@ -3395,8 +3499,12 @@ class RibbonActionsMixin:
             self._set_activity_info(
                 f"Toolpath calculation failed\n{message}"
             )
+            self._finish_toolpath_progress(
+                success=False,
+                message="Generation failed",
+            )
             self.statusBar().showMessage(message, 10000)
-            return
+            return False
         except (RuntimeError, ValueError) as exc:
             failed_item = (
                 item.name
@@ -3407,18 +3515,26 @@ class RibbonActionsMixin:
             self._set_activity_info(
                 f"Toolpath calculation failed\n{message}"
             )
+            self._finish_toolpath_progress(
+                success=False,
+                message="Generation failed",
+            )
             self.statusBar().showMessage(
                 f"Toolpath failed: {message}",
                 10000,
             )
-            return
+            return False
 
         if not generated_toolpaths:
+            self._finish_toolpath_progress(
+                success=False,
+                message="No toolpaths generated",
+            )
             self.statusBar().showMessage(
                 "The project geometry produced no toolpaths",
                 5000,
             )
-            return
+            return False
 
         if self._simulation_timer.isActive():
             self._simulation_timer.stop()
@@ -3429,6 +3545,10 @@ class RibbonActionsMixin:
             preview.close()
             self._toolpath_preview_window = None
 
+        self._update_toolpath_progress(
+            0.96,
+            "Committing generated toolpaths",
+        )
         self._before_ribbon_mutation(f"calculate {operation}")
         self.project.toolpaths = generated_toolpaths
         self._toolpaths_stale_reason = None
@@ -3462,6 +3582,10 @@ class RibbonActionsMixin:
             if operation == "surface"
             else f"Objects: {object_count}\n"
         )
+        self._update_toolpath_progress(
+            0.99,
+            "Updating preview and runtime estimates",
+        )
         self._set_activity_info(
             f"Toolpaths ready\n{operation_summary}\n\n"
             f"{source_summary}"
@@ -3486,6 +3610,11 @@ class RibbonActionsMixin:
             ),
             6000,
         )
+        self._finish_toolpath_progress(
+            success=True,
+            message="Toolpaths ready",
+        )
+        return True
 
     def _preview_toolpaths(self) -> None:
         if not self.project.toolpaths:
