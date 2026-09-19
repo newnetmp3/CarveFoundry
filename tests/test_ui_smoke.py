@@ -1701,3 +1701,34 @@ def test_text_edit_updates_geometry_preserves_placement_and_invalidates_cam() ->
         assert window.project.toolpaths == []
     finally:
         window.close()
+
+
+def test_toolpath_lod_restores_full_detail_after_navigation_idle() -> None:
+    window = MainWindow()
+    try:
+        renderer = window.viewport._renderer
+
+        renderer._interaction_mode = None
+        renderer._toolpath_wheel_lod_active = False
+        assert not renderer._toolpath_interactive_lod_active()
+
+        renderer._interaction_mode = "orbit"
+        assert renderer._toolpath_interactive_lod_active()
+
+        renderer._interaction_mode = "pan"
+        assert renderer._toolpath_interactive_lod_active()
+
+        renderer._interaction_mode = None
+        assert not renderer._toolpath_interactive_lod_active()
+
+        renderer._toolpath_wheel_lod_active = True
+        renderer._toolpath_lod_restore_timer.start()
+        assert renderer._toolpath_interactive_lod_active()
+        assert renderer._toolpath_lod_restore_timer.isActive()
+
+        renderer._restore_toolpath_full_detail()
+
+        assert not renderer._toolpath_interactive_lod_active()
+        assert not renderer._toolpath_lod_restore_timer.isActive()
+    finally:
+        window.close()
