@@ -1034,7 +1034,7 @@ class CamGenerationDialogMixin:
         add_help_row(tabs_form, "Tab count", "tab_count", tab_count)
         grid.addWidget(tabs_box, 2, 1)
 
-        rest_box, rest_form = group("7. Stock-Aware Rest Cleanup")
+        rest_box, rest_form = group("Stock-Aware Rest Cleanup")
         rest_intro = QLabel(
             "Generate roughing/finishing first. This operation simulates the "
             "existing job on stock, then appends cleanup ONLY where the "
@@ -1075,7 +1075,7 @@ class CamGenerationDialogMixin:
         rest_form.addRow("Stock simulation spacing", rest_resolution)
         grid.addWidget(rest_box, 3, 0, 1, 2)
 
-        ready_box = QGroupBox("8. Generation Readiness")
+        ready_box = QGroupBox("7. Generation Readiness")
         ready_layout = QVBoxLayout(ready_box)
         readiness = QLabel()
         readiness.setWordWrap(True)
