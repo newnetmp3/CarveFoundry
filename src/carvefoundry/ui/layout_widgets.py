@@ -1,7 +1,7 @@
 """Reusable compact, accessible workspace section controls."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QTimer, Qt
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QLabel,
