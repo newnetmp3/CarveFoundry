@@ -29,8 +29,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMessageBox,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
@@ -1902,8 +1902,15 @@ class RibbonActionsMixin:
             QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
         )
         status_bar = getattr(self, "toolpath_progress", None)
-        if status_bar is not None:
-            QTimer.singleShot(1800, status_bar.hide)
+        if status_bar is not None and success:
+            QTimer.singleShot(
+                1800,
+                lambda bar=status_bar: (
+                    bar.hide()
+                    if bar.value() == 100
+                    else None
+                ),
+            )
 
     def _generation_double_spin(
         value: float,
