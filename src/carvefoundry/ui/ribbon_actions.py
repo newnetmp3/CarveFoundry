@@ -3478,6 +3478,10 @@ class RibbonActionsMixin:
             self._before_ribbon_mutation(f"calculate {operation}")
             self.project.toolpaths = paths
             self._toolpaths_stale_reason = None
+            self._prepared_toolpath_geometry = payload["render_geometry"]
+            self.viewport.prepare_toolpath_render_cache(
+                paths, self._prepared_toolpath_geometry
+            )
             self.viewport.set_toolpaths_visible(True)
             self.viewport.set_simulation_fraction(1.0)
             self.viewport.update()
@@ -3534,6 +3538,7 @@ class RibbonActionsMixin:
             stock=self.project.stock,
             post_settings=self._grbl_post_settings(),
             source_names=self._toolpath_source_names(self.project.toolpaths),
+            render_geometry_data=self._prepared_toolpath_geometry,
             parent=self,
         )
         window.destroyed.connect(
