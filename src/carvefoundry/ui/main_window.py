@@ -182,6 +182,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._model_selection_buttons: list[object] = []
         self._selection_action_buttons: dict[str, object] = {}
         self._calculate_button = None
+        self.generate_toolpaths_button: QPushButton | None = None
         self._toolpaths_stale_reason: str | None = None
         self._text_update_timer = QTimer(self)
         self._text_update_timer.setSingleShot(True)
@@ -377,7 +378,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("custom_profile", "Custom Profile", self._new_custom_profile_tool),
             ("calculator", "Feeds && Speeds Calculator", self._feeds_speeds_calculator),
             ("advanced_cam", "Advanced CAM…", self._toolpath_design_advanced),
-            ("calculate", "Calculate", self._calculate_toolpath),
+            ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
             ("preview", "Preview", self._preview_toolpaths),
             ("export_toolpath", "Export G-code", self._export_gcode),
             ("machine_profile", "Machine Profile", self._machine_profile),
@@ -1185,7 +1186,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         generate = toolpaths.add_group("Generate")
         self._calculate_button = generate.add_button(
-            "Calculate",
+            "Generate Toolpaths…",
             self._calculate_toolpath,
             primary=True,
         )
@@ -1713,6 +1714,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "No calculated toolpath for the current job."
         )
         canvas_bar_layout.addWidget(self.cam_status_label)
+
+        self.generate_toolpaths_button = QPushButton("Generate Toolpaths")
+        self.generate_toolpaths_button.setObjectName("PrimaryButton")
+        self.generate_toolpaths_button.setToolTip(
+            "Review all requirements and options, then generate the selected "
+            "toolpath."
+        )
+        self.generate_toolpaths_button.clicked.connect(
+            self._show_toolpath_generation_dialog
+        )
+        canvas_bar_layout.addWidget(self.generate_toolpaths_button)
 
         fit_button = QPushButton("Fit")
         fit_button.setToolTip("Fit the entire job to the viewport")
@@ -2892,6 +2904,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             and item is not None
             and item.mesh is not None
         )
+        has_any_mesh = any(
+            project_item.mesh is not None
+            for project_item in self.project.items
+        )
         has_grouped = any(
             self.project.items[index].group_id is not None
             for index in indices
@@ -2900,11 +2916,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         current_index = self._selected_item_index()
 
         if self._calculate_button is not None:
-            self._calculate_button.setEnabled(has_mesh)
+            self._calculate_button.setEnabled(has_any_mesh)
             self._calculate_button.setToolTip(
-                "Calculate a toolpath for the selected object."
-                if has_mesh
-                else "Select a model or drawn shape before calculating."
+                "Review requirements and generate toolpaths."
+                if has_any_mesh
+                else "Import or draw geometry before generating toolpaths."
+            )
+        if self.generate_toolpaths_button is not None:
+            self.generate_toolpaths_button.setEnabled(has_any_mesh)
+            self.generate_toolpaths_button.setToolTip(
+                "Review all requirements and options, then generate toolpaths."
+                if has_any_mesh
+                else "Import or draw geometry before generating toolpaths."
             )
 
         for button in self._model_selection_buttons:
