@@ -533,6 +533,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if step_mm is not None:
             self.snap_step_mm = max(0.001, float(step_mm))
 
+    def _snap_gizmo_distance(
+        self,
+        distance_mm: float,
+        modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier,
+    ) -> float:
+        snap_active = self.snap_enabled or bool(
+            modifiers & Qt.KeyboardModifier.ControlModifier
+        )
+        if not snap_active:
+            return float(distance_mm)
+        step = max(self.snap_step_mm, 0.001)
+        return round(float(distance_mm) / step) * step
+
     def toggle_stock(self) -> None:
         self.show_stock = not self.show_stock
         self.requestUpdate()
@@ -623,6 +636,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._shape_drag_current_world = None
         self._freehand_points_world = []
         self._interaction_mode = None
+        self._active_gizmo_axis = None
+        self._gizmo_drag_origin_translation = None
+        self._gizmo_drag_axis_world = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
         self._update_interaction_cursor()
@@ -2852,13 +2869,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 and self._gizmo_drag_axis_world is not None
             ):
                 self._gizmo_drag_accumulated_delta += float(axis_delta)
-                distance = self._gizmo_drag_accumulated_delta
-                snap_active = self.snap_enabled or bool(
-                    event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                distance = self._snap_gizmo_distance(
+                    self._gizmo_drag_accumulated_delta,
+                    event.modifiers(),
                 )
-                if snap_active:
-                    step = max(self.snap_step_mm, 0.001)
-                    distance = round(distance / step) * step
 
                 candidate = (
                     self._gizmo_drag_origin_translation
@@ -3049,6 +3063,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis = None
+        self._gizmo_drag_origin_translation = None
+        self._gizmo_drag_axis_world = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._resize_initial_scale = None
         self._resize_initial_translation = None
