@@ -8,6 +8,7 @@ from uuid import uuid4
 import numpy as np
 import trimesh
 
+from .fixtures import Fixture
 from .mesh import MeshAsset
 from .smart_values import SmartValues
 from .transform import Transform3D
@@ -163,6 +164,7 @@ class Project:
     stock: Stock = field(default_factory=Stock)
     items: list[ProjectItem] = field(default_factory=list)
     smart_values: SmartValues = field(default_factory=SmartValues)
+    fixtures: list[Fixture] = field(default_factory=list)
     toolpaths: list[Toolpath] = field(
         default_factory=list,
         repr=False,
