@@ -31,8 +31,8 @@ def _model_window():
 
 def test_accordion_is_compact_persistent_and_menu_focus_opens_collapsed_section():
     window = _model_window()
-    window.show()
-    _APP.processEvents()
+    # Native QOpenGLWindow must remain unshown in offscreen software CI.
+    # Verify the accordion and spin's text-selection state without mapping it.
     original = {
         key: window._settings.value(f"interface/inspector_sections/{key}")
         for key in ("setup", "position", "rotation", "size", "scale")
