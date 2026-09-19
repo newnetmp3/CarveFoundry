@@ -398,6 +398,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("line", "Line", self._create_line),
             ("text", "Text", self._create_text),
             ("pen", "Pen", self._create_pen_path),
+            ("measure", "Measure XY", self._activate_measure_tool),
+            ("fixture_draw", "Draw Fixture", self._activate_fixture_tool),
             ("trace_image", "Trace Image", self._trace_image),
             ("align", "Align", self._align_selected_items),
             ("center", "Center", self._center_selected_items),
@@ -2001,7 +2003,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_options_title.setObjectName("ToolOptionsTitle")
         tool_options_layout.addWidget(self.tool_options_title)
 
-        tool_options_layout.addWidget(QLabel("Depth"))
+        self.tool_options_depth_label = QLabel("Depth")
+        tool_options_layout.addWidget(self.tool_options_depth_label)
         self.tool_options_depth_spin = QDoubleSpinBox()
         self.tool_options_depth_spin.setRange(0.05, 1000.0)
         self.tool_options_depth_spin.setDecimals(3)
@@ -2127,6 +2130,60 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         tool_options_layout.addWidget(self.tool_options_font_value)
 
+        self.tool_options_fixture_top_label = QLabel("Top Z")
+        tool_options_layout.addWidget(self.tool_options_fixture_top_label)
+        self.tool_options_fixture_top_spin = QDoubleSpinBox()
+        self.tool_options_fixture_top_spin.setObjectName("FixtureTopZ")
+        self.tool_options_fixture_top_spin.setRange(-100000, 100000)
+        self.tool_options_fixture_top_spin.setDecimals(3)
+        self.tool_options_fixture_top_spin.setValue(self._fixture_top_z_mm)
+        self.tool_options_fixture_top_spin.setSuffix(" mm")
+        self.tool_options_fixture_top_spin.setToolTip(
+            "Fixture top relative to stock-top Z0. For a fence measured "
+            "from the bed, subtract stock thickness from fence height."
+        )
+        self.tool_options_fixture_top_spin.setMaximumWidth(120)
+        self.tool_options_fixture_top_spin.valueChanged.connect(
+            self._fixture_top_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_fixture_top_spin)
+
+        self.tool_options_fixture_clearance_label = QLabel("Margin")
+        tool_options_layout.addWidget(self.tool_options_fixture_clearance_label)
+        self.tool_options_fixture_clearance_spin = QDoubleSpinBox()
+        self.tool_options_fixture_clearance_spin.setObjectName("FixtureMargin")
+        self.tool_options_fixture_clearance_spin.setRange(0, 100000)
+        self.tool_options_fixture_clearance_spin.setDecimals(3)
+        self.tool_options_fixture_clearance_spin.setValue(
+            self._fixture_clearance_mm
+        )
+        self.tool_options_fixture_clearance_spin.setSuffix(" mm")
+        self.tool_options_fixture_clearance_spin.setToolTip(
+            "Extra XY/Z safety margin beyond the cutter radius."
+        )
+        self.tool_options_fixture_clearance_spin.setMaximumWidth(120)
+        self.tool_options_fixture_clearance_spin.valueChanged.connect(
+            self._fixture_clearance_changed
+        )
+        tool_options_layout.addWidget(
+            self.tool_options_fixture_clearance_spin
+        )
+
+        self.tool_options_measure_label = QLabel(
+            "Drag two points on stock top (XY · Z0)"
+        )
+        self.tool_options_measure_label.setObjectName("ToolMeasureResult")
+        self.tool_options_measure_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        tool_options_layout.addWidget(self.tool_options_measure_label)
+        self.tool_options_measure_clear = QPushButton("Clear")
+        self.tool_options_measure_clear.setObjectName("ToolMeasureClear")
+        self.tool_options_measure_clear.clicked.connect(
+            self._clear_measurement
+        )
+        tool_options_layout.addWidget(self.tool_options_measure_clear)
+
         tool_options_layout.addStretch(1)
 
         self.tool_options_apply_button = QPushButton("✓")
@@ -2167,6 +2224,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_options_text_edit.hide()
         self.tool_options_font_label.hide()
         self.tool_options_font_value.hide()
+        self.tool_options_fixture_top_label.hide()
+        self.tool_options_fixture_top_spin.hide()
+        self.tool_options_fixture_clearance_label.hide()
+        self.tool_options_fixture_clearance_spin.hide()
+        self.tool_options_measure_label.hide()
+        self.tool_options_measure_clear.hide()
         canvas_layout.addWidget(self.tool_options_bar)
 
         self.viewport = MeshViewport(self.project)
