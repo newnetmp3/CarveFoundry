@@ -218,6 +218,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._viewport_transform_finished
         )
         self.viewport.shapeDrawRequested.connect(self._shape_drawn)
+        self.viewport.freehandStrokeRequested.connect(
+            self._freehand_pen_drawn
+        )
         self.viewport.shapeDrawModeChanged.connect(
             self._shape_draw_mode_changed
         )
@@ -466,7 +469,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._navigation_tool_button.setChecked(False)
         self._shape_tool_buttons = {
             name: self._ui_actions[name]
-            for name in ("rectangle", "ellipse", "polygon", "line", "text")
+            for name in (
+                "rectangle",
+                "ellipse",
+                "polygon",
+                "line",
+                "text",
+                "pen",
+            )
         }
         for action in self._shape_tool_buttons.values():
             action.setCheckable(True)
@@ -1374,8 +1384,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             "vector",
             "Pen",
             vector_menu,
-            tooltip="Vector tools — Pen and Trace Image.",
+            tooltip=(
+                "Vector tools — Pen draws freehand directly in the viewport; "
+                "Trace Image converts artwork to vector-like geometry."
+            ),
             primary_callback=self._create_pen_path,
+            checkable=True,
         )
 
         rail.add_separator()
@@ -1752,6 +1766,70 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         tool_options_layout.addWidget(self.tool_options_line_width_spin)
 
+        self.tool_options_pen_width_label = QLabel("Width")
+        tool_options_layout.addWidget(self.tool_options_pen_width_label)
+        self.tool_options_pen_width_spin = QDoubleSpinBox()
+        self.tool_options_pen_width_spin.setRange(0.05, 1000.0)
+        self.tool_options_pen_width_spin.setDecimals(3)
+        self.tool_options_pen_width_spin.setSingleStep(0.25)
+        self.tool_options_pen_width_spin.setSuffix(" mm")
+        self.tool_options_pen_width_spin.setValue(
+            self._tool_option_pen_width_mm
+        )
+        self.tool_options_pen_width_spin.setMaximumWidth(110)
+        self.tool_options_pen_width_spin.valueChanged.connect(
+            self._tool_option_pen_width_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_pen_width_spin)
+
+        self.tool_options_pen_smoothing_label = QLabel("Smooth")
+        tool_options_layout.addWidget(self.tool_options_pen_smoothing_label)
+        self.tool_options_pen_smoothing_spin = QSpinBox()
+        self.tool_options_pen_smoothing_spin.setRange(0, 100)
+        self.tool_options_pen_smoothing_spin.setSuffix("%")
+        self.tool_options_pen_smoothing_spin.setValue(
+            self._tool_option_pen_smoothing
+        )
+        self.tool_options_pen_smoothing_spin.setMaximumWidth(82)
+        self.tool_options_pen_smoothing_spin.setToolTip(
+            "Smooth the captured freehand path after mouse-up."
+        )
+        self.tool_options_pen_smoothing_spin.valueChanged.connect(
+            self._tool_option_pen_smoothing_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_pen_smoothing_spin)
+
+        self.tool_options_pen_spacing_label = QLabel("Spacing")
+        tool_options_layout.addWidget(self.tool_options_pen_spacing_label)
+        self.tool_options_pen_spacing_spin = QDoubleSpinBox()
+        self.tool_options_pen_spacing_spin.setRange(0.02, 25.0)
+        self.tool_options_pen_spacing_spin.setDecimals(2)
+        self.tool_options_pen_spacing_spin.setSingleStep(0.05)
+        self.tool_options_pen_spacing_spin.setSuffix(" mm")
+        self.tool_options_pen_spacing_spin.setValue(
+            self._tool_option_pen_spacing_mm
+        )
+        self.tool_options_pen_spacing_spin.setMaximumWidth(105)
+        self.tool_options_pen_spacing_spin.setToolTip(
+            "Minimum distance between captured freehand points."
+        )
+        self.tool_options_pen_spacing_spin.valueChanged.connect(
+            self._tool_option_pen_spacing_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_pen_spacing_spin)
+
+        self.tool_options_pen_close_check = QCheckBox("Close path")
+        self.tool_options_pen_close_check.setChecked(
+            self._tool_option_pen_close_path
+        )
+        self.tool_options_pen_close_check.setToolTip(
+            "Connect the end of each stroke back to its starting point."
+        )
+        self.tool_options_pen_close_check.toggled.connect(
+            self._tool_option_pen_close_changed
+        )
+        tool_options_layout.addWidget(self.tool_options_pen_close_check)
+
         self.tool_options_text_label = QLabel("Text")
         tool_options_layout.addWidget(self.tool_options_text_label)
         self.tool_options_text_edit = QLineEdit(self._tool_option_text)
@@ -1801,6 +1879,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_options_polygon_sides.hide()
         self.tool_options_line_width_label.hide()
         self.tool_options_line_width_spin.hide()
+        self.tool_options_pen_width_label.hide()
+        self.tool_options_pen_width_spin.hide()
+        self.tool_options_pen_smoothing_label.hide()
+        self.tool_options_pen_smoothing_spin.hide()
+        self.tool_options_pen_spacing_label.hide()
+        self.tool_options_pen_spacing_spin.hide()
+        self.tool_options_pen_close_check.hide()
         self.tool_options_text_label.hide()
         self.tool_options_text_edit.hide()
         self.tool_options_font_label.hide()

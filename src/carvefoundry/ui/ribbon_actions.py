@@ -209,6 +209,10 @@ class RibbonActionsMixin:
         self._camera_tool_button = None
         self._tool_option_depth_mm = 1.0
         self._tool_option_line_width_mm = 2.0
+        self._tool_option_pen_width_mm = 2.0
+        self._tool_option_pen_smoothing = 35
+        self._tool_option_pen_spacing_mm = 0.35
+        self._tool_option_pen_close_path = False
         self._tool_option_polygon_sides = 6
         self._tool_option_text = "Text"
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
@@ -759,6 +763,39 @@ class RibbonActionsMixin:
             )
             self.tool_options_line_width_spin.blockSignals(False)
 
+        is_pen = mode == "pen"
+        self.tool_options_pen_width_label.setVisible(is_pen)
+        self.tool_options_pen_width_spin.setVisible(is_pen)
+        self.tool_options_pen_smoothing_label.setVisible(is_pen)
+        self.tool_options_pen_smoothing_spin.setVisible(is_pen)
+        self.tool_options_pen_spacing_label.setVisible(is_pen)
+        self.tool_options_pen_spacing_spin.setVisible(is_pen)
+        self.tool_options_pen_close_check.setVisible(is_pen)
+        if is_pen:
+            self.tool_options_pen_width_spin.blockSignals(True)
+            self.tool_options_pen_width_spin.setValue(
+                self._tool_option_pen_width_mm
+            )
+            self.tool_options_pen_width_spin.blockSignals(False)
+            self.tool_options_pen_smoothing_spin.blockSignals(True)
+            self.tool_options_pen_smoothing_spin.setValue(
+                self._tool_option_pen_smoothing
+            )
+            self.tool_options_pen_smoothing_spin.blockSignals(False)
+            self.tool_options_pen_spacing_spin.blockSignals(True)
+            self.tool_options_pen_spacing_spin.setValue(
+                self._tool_option_pen_spacing_mm
+            )
+            self.tool_options_pen_spacing_spin.blockSignals(False)
+            self.tool_options_pen_close_check.blockSignals(True)
+            self.tool_options_pen_close_check.setChecked(
+                self._tool_option_pen_close_path
+            )
+            self.tool_options_pen_close_check.blockSignals(False)
+            self.viewport.set_pen_sample_spacing(
+                self._tool_option_pen_spacing_mm
+            )
+
         is_text = mode == "text"
         self.tool_options_text_label.setVisible(is_text)
         self.tool_options_text_edit.setVisible(is_text)
@@ -780,6 +817,22 @@ class RibbonActionsMixin:
 
     def _tool_option_line_width_changed(self, value: float) -> None:
         self._tool_option_line_width_mm = float(value)
+
+    def _tool_option_pen_width_changed(self, value: float) -> None:
+        self._tool_option_pen_width_mm = float(value)
+
+    def _tool_option_pen_smoothing_changed(self, value: int) -> None:
+        self._tool_option_pen_smoothing = max(0, min(100, int(value)))
+
+    def _tool_option_pen_spacing_changed(self, value: float) -> None:
+        self._tool_option_pen_spacing_mm = max(0.02, float(value))
+        if hasattr(self, "viewport"):
+            self.viewport.set_pen_sample_spacing(
+                self._tool_option_pen_spacing_mm
+            )
+
+    def _tool_option_pen_close_changed(self, checked: bool) -> None:
+        self._tool_option_pen_close_path = bool(checked)
 
     def _tool_option_polygon_sides_changed(self, value: int) -> None:
         self._tool_option_polygon_sides = int(value)
@@ -820,12 +873,23 @@ class RibbonActionsMixin:
             finally:
                 self._navigation_tool_button.blockSignals(False)
 
+        if tool == "pen":
+            self.viewport.set_pen_sample_spacing(
+                self._tool_option_pen_spacing_mm
+            )
         self.viewport.set_shape_draw_mode(tool)
         label = tool.title()
-        self.statusBar().showMessage(
-            f"{label} tool — drag on the stock to draw • Shift constrains • "
-            "Alt+drag orbits • Esc returns to Select"
-        )
+        if tool == "pen":
+            message = (
+                "Pen tool — draw freehand directly on the stock • "
+                "Alt+drag orbits • Esc returns to Select"
+            )
+        else:
+            message = (
+                f"{label} tool — drag on the stock to draw • Shift constrains • "
+                "Alt+drag orbits • Esc returns to Select"
+            )
+        self.statusBar().showMessage(message)
 
     def _shape_draw_mode_changed(self, mode: str) -> None:
         self._active_shape_tool = mode or None
@@ -1026,26 +1090,75 @@ class RibbonActionsMixin:
         self._set_shape_tool("text")
 
     def _create_pen_path(self) -> None:
-        form = _ActionForm(self, "Pen / Polyline")
-        form.add_line("points", "XY points", "0,0; 50,0; 50,30")
-        form.add_double("width", "Stroke width", 2.0, minimum=0.1, suffix=" mm")
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        if form.exec() != QDialog.DialogCode.Accepted:
-            return
-        try:
-            points = []
-            for token in str(form.value("points")).split(";"):
-                x_text, y_text = token.split(",", 1)
-                points.append((float(x_text.strip()), float(y_text.strip())))
-            mesh = polyline_mesh(
-                points,
-                width_mm=form.value("width"),
-                depth_mm=form.value("depth"),
+        self._set_shape_tool("pen")
+
+    def _smooth_pen_points(
+        self,
+        points_xy: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        """Apply adjustable freehand smoothing while preserving endpoints."""
+
+        points = np.asarray(points_xy, dtype=float)
+        if len(points) < 3 or self._tool_option_pen_smoothing <= 0:
+            return [tuple(map(float, point)) for point in points]
+
+        blend = self._tool_option_pen_smoothing / 100.0
+        passes = 1 + self._tool_option_pen_smoothing // 34
+        smoothed = points.copy()
+        for _ in range(passes):
+            averaged = smoothed.copy()
+            averaged[1:-1] = (
+                smoothed[:-2] + 2.0 * smoothed[1:-1] + smoothed[2:]
+            ) / 4.0
+            smoothed[1:-1] = (
+                (1.0 - blend) * smoothed[1:-1]
+                + blend * averaged[1:-1]
             )
-        except (TypeError, ValueError) as exc:
-            self.statusBar().showMessage(f"Invalid pen path: {exc}", 5000)
+        return [tuple(map(float, point)) for point in smoothed]
+
+    def _freehand_pen_drawn(self, points: object) -> None:
+        """Create one persistent pen object from a viewport freehand stroke."""
+
+        try:
+            captured = [
+                (float(point[0]), float(point[1]))
+                for point in points
+            ]
+        except (TypeError, ValueError, IndexError):
+            self.statusBar().showMessage("Invalid freehand pen stroke", 3000)
             return
-        self._add_generated_item("Pen Path", "pen", mesh)
+
+        if len(captured) < 2:
+            return
+
+        captured = self._smooth_pen_points(captured)
+        if (
+            self._tool_option_pen_close_path
+            and len(captured) >= 3
+            and hypot(
+                captured[-1][0] - captured[0][0],
+                captured[-1][1] - captured[0][1],
+            )
+            > 1e-9
+        ):
+            captured.append(captured[0])
+
+        try:
+            mesh = polyline_mesh(
+                captured,
+                width_mm=self._tool_option_pen_width_mm,
+                depth_mm=self._tool_option_depth_mm,
+            )
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Pen stroke failed: {exc}", 5000)
+            return
+
+        self._add_drawn_item(
+            "Pen Stroke",
+            "pen",
+            mesh,
+            Transform3D(),
+        )
 
     def _trace_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

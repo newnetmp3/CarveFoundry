@@ -181,6 +181,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
     MIN_ZOOM = 0.01
@@ -221,6 +222,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._shape_draw_mode: str | None = None
         self._shape_drag_start_world: np.ndarray | None = None
         self._shape_drag_current_world: np.ndarray | None = None
+        self._freehand_points_world: list[np.ndarray] = []
+        self._pen_sample_spacing_mm = 0.35
         self._selection_drag_start_screen: QPointF | None = None
         self._selection_drag_current_screen: QPointF | None = None
         self._selection_drag_mode = "replace"
@@ -446,15 +449,19 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._update_interaction_cursor()
         self.requestUpdate()
 
+    def set_pen_sample_spacing(self, spacing_mm: float) -> None:
+        self._pen_sample_spacing_mm = max(0.02, float(spacing_mm))
+
     def set_shape_draw_mode(self, mode: str | None) -> None:
         normalized = mode.lower() if mode else None
-        allowed = {"rectangle", "ellipse", "polygon", "line", "text"}
+        allowed = {"rectangle", "ellipse", "polygon", "line", "text", "pen"}
         if normalized is not None and normalized not in allowed:
             raise ValueError(f"Unsupported shape draw mode: {mode}")
 
         self._shape_draw_mode = normalized
         self._shape_drag_start_world = None
         self._shape_drag_current_world = None
+        self._freehand_points_world = []
         self._interaction_mode = None
         self._update_interaction_cursor()
         self.shapeDrawModeChanged.emit(normalized or "")
@@ -1500,6 +1507,20 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         start = self._shape_drag_start_world
         end = self._shape_drag_current_world
         mode = self._shape_draw_mode
+        if mode == "pen":
+            if len(self._freehand_points_world) < 2:
+                return np.empty((0, 3), dtype=np.float32)
+            z = 0.035
+            vertices: list[tuple[float, float, float]] = []
+            for first, second in pairwise(self._freehand_points_world):
+                vertices.extend(
+                    (
+                        (float(first[0]), float(first[1]), z),
+                        (float(second[0]), float(second[1]), z),
+                    )
+                )
+            return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
         if start is None or end is None or mode is None:
             return np.empty((0, 3), dtype=np.float32)
 
@@ -2204,6 +2225,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             if point is not None:
                 self._shape_drag_start_world = point
                 self._shape_drag_current_world = point.copy()
+                if self._shape_draw_mode == "pen":
+                    self._freehand_points_world = [point.copy()]
                 self._interaction_mode = "shape-draw"
                 self.requestUpdate()
             event.accept()
@@ -2275,11 +2298,24 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             current = self._stock_plane_point(event.position())
             if current is not None:
-                self._shape_drag_current_world = self._constrained_shape_point(
-                    self._shape_drag_start_world,
-                    current,
-                    event.modifiers(),
-                )
+                if self._shape_draw_mode == "pen":
+                    self._shape_drag_current_world = current
+                    previous = (
+                        self._freehand_points_world[-1]
+                        if self._freehand_points_world
+                        else self._shape_drag_start_world
+                    )
+                    distance = float(
+                        np.linalg.norm(current[:2] - previous[:2])
+                    )
+                    if distance >= self._pen_sample_spacing_mm:
+                        self._freehand_points_world.append(current.copy())
+                else:
+                    self._shape_drag_current_world = self._constrained_shape_point(
+                        self._shape_drag_start_world,
+                        current,
+                        event.modifiers(),
+                    )
                 self.requestUpdate()
             event.accept()
             return
@@ -2346,6 +2382,41 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "shape-draw"
+            and self._shape_draw_mode == "pen"
+            and self._shape_drag_start_world is not None
+        ):
+            current = self._stock_plane_point(event.position())
+            if current is not None:
+                self._shape_drag_current_world = current
+                previous = (
+                    self._freehand_points_world[-1]
+                    if self._freehand_points_world
+                    else self._shape_drag_start_world
+                )
+                if float(np.linalg.norm(current[:2] - previous[:2])) > 1e-9:
+                    self._freehand_points_world.append(current.copy())
+
+            points = [
+                (float(point[0]), float(point[1]))
+                for point in self._freehand_points_world
+            ]
+            if len(points) >= 2:
+                self.freehandStrokeRequested.emit(points)
+
+            self._shape_drag_start_world = None
+            self._shape_drag_current_world = None
+            self._freehand_points_world = []
+            self._last_mouse_pos = None
+            self._press_pos = None
+            self._interaction_mode = None
+            self._interaction_distance = 0.0
+            self.requestUpdate()
+            event.accept()
+            return
+
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._interaction_mode == "shape-draw"
@@ -2633,6 +2704,7 @@ class MeshViewport(QWidget):
     itemTransformChanged = Signal(int)
     itemTransformFinished = Signal(int)
     shapeDrawRequested = Signal(str, float, float, float, float)
+    freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968
@@ -2667,6 +2739,9 @@ class MeshViewport(QWidget):
         )
         self._renderer.shapeDrawRequested.connect(
             self.shapeDrawRequested.emit
+        )
+        self._renderer.freehandStrokeRequested.connect(
+            self.freehandStrokeRequested.emit
         )
         self._renderer.shapeDrawModeChanged.connect(
             self.shapeDrawModeChanged.emit
@@ -2822,6 +2897,9 @@ class MeshViewport(QWidget):
 
     def set_shape_draw_mode(self, mode: str | None) -> None:
         self._renderer.set_shape_draw_mode(mode)
+
+    def set_pen_sample_spacing(self, spacing_mm: float) -> None:
+        self._renderer.set_pen_sample_spacing(spacing_mm)
 
     @property
     def reverse_horizontal_drag(self) -> bool:
