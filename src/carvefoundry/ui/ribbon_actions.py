@@ -4848,20 +4848,29 @@ class RibbonActionsMixin:
                     raise SmartValueError(
                         f"{key.replace('_', ' ')} must be greater than zero."
                     )
+            for item in items:
+                size = item.local_size_mm()
+                if size is None:
+                    continue
+                for axis, key in enumerate(("size_x", "size_y", "size_z")):
+                    if (
+                        key in resolved_template
+                        and float(size[axis]) <= 1.0e-12
+                    ):
+                        raise SmartValueError(
+                            f"{item.name}: cannot bind "
+                            f"{key.replace('_', ' ')} because the current "
+                            "model dimension is zero."
+                        )
         except (SmartValueError, ZeroDivisionError) as exc:
             QMessageBox.warning(self, "Smart Value Bindings", str(exc))
             return
 
         self._before_ribbon_mutation("bind Smart Values")
-        try:
-            for item in items:
-                item.smart_bindings = dict(bindings)
-                resolved = self._resolve_item_smart_bindings(item)
-                self._apply_resolved_smart_bindings(item, resolved)
-        except SmartValueError as exc:
-            QMessageBox.warning(self, "Smart Value Bindings", str(exc))
-            self._undo()
-            return
+        for item in items:
+            item.smart_bindings = dict(bindings)
+            resolved = self._resolve_item_smart_bindings(item)
+            self._apply_resolved_smart_bindings(item, resolved)
 
         self._refresh_project_list(indices[-1] + 1)
         self._select_project_indices(indices, primary=indices[-1])
