@@ -305,12 +305,21 @@ def test_text_font_selector_previews_grouped_families_and_variants() -> None:
 def test_select_tool_and_escape_cancel_active_drawing_mode() -> None:
     window = MainWindow()
     try:
+        camera_button = window._camera_tool_button
         select_button = window._navigation_tool_button
         rectangle_button = window._shape_tool_buttons["rectangle"]
 
+        assert camera_button is not None
+        assert camera_button.isChecked()
         assert select_button is not None
-        assert select_button.isChecked()
+        assert not select_button.isChecked()
+        assert window.viewport.camera_control_mode
         assert window.viewport.shape_draw_mode is None
+
+        window._activate_navigation_tool()
+        assert select_button.isChecked()
+        assert not camera_button.isChecked()
+        assert not window.viewport.camera_control_mode
 
         rectangle_button.setChecked(True)
         window._set_shape_tool("rectangle")
