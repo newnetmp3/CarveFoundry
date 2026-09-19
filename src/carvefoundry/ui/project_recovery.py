@@ -146,7 +146,7 @@ class ProjectRecoveryMixin:
             self._show_recovery_dialog()
 
     def _show_recovery_dialog(self) -> None:
-        entries = list_recoveries(self._recovery_dir)
+        entries = list(list_recoveries(self._recovery_dir))
         if not entries:
             self.statusBar().showMessage("No recovery checkpoints found", 4500)
             return
