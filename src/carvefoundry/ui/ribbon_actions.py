@@ -64,6 +64,7 @@ from carvefoundry.cam.vector_ops import (
     geometry_vcarve,
 )
 from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.measurement import measure_xy
 from carvefoundry.core.machine_profiles import (
     MachineProfile,
     profiles_from_json,
@@ -236,6 +237,9 @@ class RibbonActionsMixin:
         self._tool_option_pen_close_path = False
         self._tool_option_polygon_sides = 6
         self._tool_option_text = "Text"
+        self._fixture_top_z_mm = 5.0
+        self._fixture_clearance_mm = 2.0
+        self._measurement = None
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
         self._cam_detail_widgets: list[object] = []
         self._toolpath_dialog_progress = None
@@ -766,6 +770,33 @@ class RibbonActionsMixin:
         self.tool_options_depth_spin.blockSignals(True)
         self.tool_options_depth_spin.setValue(self._tool_option_depth_mm)
         self.tool_options_depth_spin.blockSignals(False)
+        has_depth = mode not in {"measure", "fixture"}
+        self.tool_options_depth_label.setVisible(has_depth)
+        self.tool_options_depth_spin.setVisible(has_depth)
+        is_fixture = mode == "fixture"
+        for element in (
+            self.tool_options_fixture_top_label,
+            self.tool_options_fixture_top_spin,
+            self.tool_options_fixture_clearance_label,
+            self.tool_options_fixture_clearance_spin,
+        ):
+            element.setVisible(is_fixture)
+        if is_fixture:
+            self.tool_options_fixture_top_spin.blockSignals(True)
+            self.tool_options_fixture_top_spin.setValue(self._fixture_top_z_mm)
+            self.tool_options_fixture_top_spin.blockSignals(False)
+            self.tool_options_fixture_clearance_spin.blockSignals(True)
+            self.tool_options_fixture_clearance_spin.setValue(
+                self._fixture_clearance_mm
+            )
+            self.tool_options_fixture_clearance_spin.blockSignals(False)
+        self.tool_options_measure_label.setVisible(mode == "measure")
+        self.tool_options_measure_clear.setVisible(mode == "measure")
+        if mode == "measure":
+            self.tool_options_measure_label.setText(
+                self._measurement.label if self._measurement is not None
+                else "Drag two points on stock top (XY · Z0)"
+            )
 
         is_polygon = mode == "polygon"
         self.tool_options_polygon_label.setVisible(is_polygon)
@@ -835,6 +866,21 @@ class RibbonActionsMixin:
                 else QFontInfo(QFont()).family()
             )
             self.tool_options_font_value.setText(family)
+
+    def _fixture_top_changed(self, value: float) -> None:
+        self._fixture_top_z_mm = float(value)
+
+    def _fixture_clearance_changed(self, value: float) -> None:
+        self._fixture_clearance_mm = float(value)
+
+    def _clear_measurement(self) -> None:
+        self._measurement = None
+        self.viewport.set_measurement(None)
+        if hasattr(self, "tool_options_measure_label"):
+            self.tool_options_measure_label.setText(
+                "Drag two points on stock top (XY · Z0)"
+            )
+        self.statusBar().showMessage("Measurement cleared", 2500)
 
     def _tool_option_depth_changed(self, value: float) -> None:
         self._tool_option_depth_mm = float(value)
@@ -991,6 +1037,42 @@ class RibbonActionsMixin:
         center_y = (min_y + max_y) / 2.0
         depth = self._tool_option_depth_mm
 
+        if tool == "measure":
+            reading = measure_xy((x0, y0), (x1, y1))
+            self._measurement = reading
+            self.viewport.set_measurement(
+                reading.start_xy, reading.end_xy
+            )
+            self.tool_options_measure_label.setText(reading.label)
+            self.statusBar().showMessage(reading.label, 12000)
+            return
+
+        if tool == "fixture":
+            if width < 0.1 or height < 0.1:
+                self.statusBar().showMessage(
+                    "Draw a fixture with positive X and Y dimensions", 4000
+                )
+                return
+            fixture = Fixture(
+                name=f"Fixture {len(self.project.fixtures) + 1}",
+                x_min_mm=min_x,
+                y_min_mm=min_y,
+                x_max_mm=max_x,
+                y_max_mm=max_y,
+                top_z_mm=self._fixture_top_z_mm,
+                clearance_mm=self._fixture_clearance_mm,
+            )
+            fixture.validate()
+            self._before_ribbon_mutation("draw fixture")
+            self.project.fixtures.append(fixture)
+            self.viewport.update()
+            self._after_ribbon_mutation("draw fixture", True)
+            self.statusBar().showMessage(
+                f"Added {fixture.name} — top Z{fixture.top_z_mm:g} mm, "
+                f"clearance {fixture.clearance_mm:g} mm", 6000
+            )
+            return
+
         if tool in {"rectangle", "ellipse", "polygon", "text"} and (
             width < 0.10 or height < 0.10
         ):
@@ -1097,6 +1179,12 @@ class RibbonActionsMixin:
             )
             self._focus_text_editor()
             return
+
+    def _activate_measure_tool(self) -> None:
+        self._set_shape_tool("measure")
+
+    def _activate_fixture_tool(self) -> None:
+        self._set_shape_tool("fixture")
 
     def _create_rectangle(self) -> None:
         self._set_shape_tool("rectangle")
