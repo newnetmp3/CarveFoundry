@@ -29,9 +29,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMessageBox,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -47,7 +49,14 @@ from carvefoundry.cam.basic_ops import (
     finish_3d,
     waterline_3d,
 )
-from carvefoundry.cam.gcode import GrblPostSettings
+from carvefoundry.cam.gcode import GrblPostSettings, write_grbl_program
+from carvefoundry.cam.job_workflows import (
+    TilingSettings,
+    find_safe_resume_index,
+    plan_tiles,
+    resume_toolpath,
+    tile_program,
+)
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
@@ -59,6 +68,11 @@ from carvefoundry.cam.vector_ops import (
     geometry_silhouette,
     geometry_vcarve,
 )
+from carvefoundry.core.machine_profiles import (
+    MachineProfile,
+    profiles_from_json,
+    profiles_to_json,
+)
 from carvefoundry.core.primitives import (
     bitmap_runs_mesh,
     ellipse_mesh,
@@ -69,6 +83,7 @@ from carvefoundry.core.primitives import (
     text_mesh,
 )
 from carvefoundry.core.project import ProjectItem, TextProperties
+from carvefoundry.core.smart_values import SmartValueError, SmartValues
 from carvefoundry.core.tools import DEFAULT_TOOLS, Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
