@@ -38,6 +38,9 @@ class DirectSelectionMixin:
 
     def _set_direct_selection(self, enabled: bool) -> None:
         if enabled and self._editable_vector_item() is None:
+            action = self._ui_actions.get("direct_select")
+            if action is not None:
+                action.setChecked(False)
             self.statusBar().showMessage(
                 "Select an editable Pen Stroke or Line to use Direct Selection. "
                 "Imported STL and baked Boolean meshes have no retained knots.",
@@ -70,6 +73,18 @@ class DirectSelectionMixin:
 
     def _activate_direct_selection(self) -> None:
         self._set_direct_selection(True)
+
+    def _node_edit_mode_changed(self, enabled: bool) -> None:
+        action = self._ui_actions.get("direct_select")
+        if action is not None:
+            action.setChecked(enabled)
+        if not enabled:
+            dialog = getattr(self, "_vector_node_dialog", None)
+            if dialog is not None:
+                self._vector_node_dialog = None
+                self._vector_nodes_table = None
+                dialog.close()
+
 
     def _commit_vector_path(self, item_id: str, path, *, label: str) -> bool:
         indices = [
