@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.core.vector_path import (
-    apply_vector_edit,
     insert_node,
     move_node,
     node_world_points,
@@ -40,7 +39,7 @@ class DirectSelectionMixin:
     def _set_direct_selection(self, enabled: bool) -> None:
         if enabled and self._editable_vector_item() is None:
             self.statusBar().showMessage(
-                "Select an editable Pen Stroke to use Direct Selection. "
+                "Select an editable Pen Stroke or Line to use Direct Selection. "
                 "Imported STL and baked Boolean meshes have no retained knots.",
                 8500,
             )
@@ -149,7 +148,7 @@ class DirectSelectionMixin:
             old.raise_()
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("Direct Selection — Editable Pen Nodes")
+        dialog.setWindowTitle("Direct Selection — Editable Vector Nodes")
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         dialog.setMinimumSize(465, 390)
         layout = QVBoxLayout(dialog)
@@ -244,7 +243,7 @@ class DirectSelectionMixin:
         delete.clicked.connect(lambda: edit("delete"))
 
         footer = QLabel(
-            "Only newly drawn Pen Strokes retain nodes. Imported and "
+            "Only newly drawn Pen Strokes and Lines retain nodes. Imported and "
             "Boolean-result meshes are not silently converted. "
             "On a 3D-tilted path, reset X/Y tilt before moving XY knots."
         )
