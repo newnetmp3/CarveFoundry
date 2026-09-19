@@ -139,6 +139,23 @@ force for the entire exported plan.
 inside .cf3d.** Regenerate toolpaths after reopening, and keep separate
 front/back projects from two-sided setup.
 
+## Batch production grid
+
+Select a part or multiple component objects, then choose **Design → Arrange →
+Batch Production Grid…** (also in the Position flyout). Specify copy count,
+columns, gap and stock margin. The operation checks the full combined template
+footprint against the stock and recorded clamp/fence rectangles using the
+**currently selected cutter's radius**, then generates independently editable
+stock-relative copies in a background worker. Originals are hidden, not
+destroyed, and Undo/Redo restores them. Copies of multiple components are
+grouped by finished part.
+
+This is regular row/column layout, **not** irregular nesting or automatic
+optimization of rotation/grain. The chosen cutter checks initial clearance;
+use mandatory CNC preflight for every cutter in the finished multi-tool job.
+X/Y Smart Value bindings must be removed from template objects so they cannot
+overwrite calculated batch positions.
+
 ## Native CAM core
 
 The CPU-heavy mesh rasterization and cutter-contact calculations are implemented in Rust and exposed to the Python application through PyO3. The PySide6 UI, project model, cutter definitions, and orchestration remain Python.
