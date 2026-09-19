@@ -6,6 +6,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
+from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
@@ -385,7 +386,7 @@ def test_large_toolpath_preview_defers_gcode_until_code_panel_opens(
     preview = ToolpathPreviewWindow(
         toolpaths=[toolpath],
         stock=Project().stock,
-        post_settings=window_post_settings(),
+        post_settings=GrblPostSettings(),
     )
     try:
         assert preview._defer_code
