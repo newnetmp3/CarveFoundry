@@ -177,3 +177,46 @@ def test_tiled_preflight_checks_all_tiles_before_writing(tmp_path: Path) -> None
 def test_fixture_validation_rejects_invalid_rectangles() -> None:
     with pytest.raises(ValueError, match="positive XY"):
         Fixture("Clamp", 5, 0, 5, 10, 3).validate()
+
+
+def test_multi_cutter_export_creates_separate_ordered_programs(tmp_path: Path) -> None:
+    flat = _path()
+    vbit = _path()
+    vbit.name = "V detail"
+    vbit.cutter = Cutter("22 degree V-bit", ToolType.V_BIT, 6.35, angle_deg=22)
+    flat_again = _path()
+    flat_again.name = "Final cleanup"
+    result = run_gcode(GcodeRequest(
+        toolpaths=[flat, vbit, flat_again],
+        path=str(tmp_path / "multi.nc"),
+        settings=GrblPostSettings(),
+        stock=Stock(80, 40, 18),
+        machine_profile=_profile(),
+    ))
+    files = [Path(file) for file in result["files"]]
+    assert len(files) == 3
+    assert len({f.name for f in files}) == 3
+    assert "tool01" in files[0].name
+    assert "tool02" in files[1].name
+    assert "tool03" in files[2].name
+    for output in files:
+        gcode = output.read_text(encoding="ascii")
+        assert gcode.count("M2") == 1
+        assert gcode.count("(Cutter:") == 1
+    assert not (tmp_path / "multi.nc").exists()
+
+
+def test_adjacent_operations_with_same_cutter_share_one_file(tmp_path: Path) -> None:
+    first = _path()
+    next_one = _path()
+    next_one.name = "Finish detail"
+    result = run_gcode(GcodeRequest(
+        toolpaths=[first, next_one],
+        path=str(tmp_path / "same-cutter.nc"),
+        settings=GrblPostSettings(),
+        stock=Stock(80, 40, 18),
+        machine_profile=_profile(),
+    ))
+    assert result["files"] == [str(tmp_path / "same-cutter.nc")]
+    assert "(Operation 1: Detail)" in (tmp_path / "same-cutter.nc").read_text()
+    assert "(Operation 2: Finish detail)" in (tmp_path / "same-cutter.nc").read_text()
