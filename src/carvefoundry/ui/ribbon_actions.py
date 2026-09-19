@@ -790,6 +790,11 @@ class RibbonActionsMixin:
                 self._fixture_clearance_mm
             )
             self.tool_options_fixture_clearance_spin.blockSignals(False)
+        self.tool_options_fixture_size_label.setVisible(is_fixture)
+        if is_fixture:
+            self.tool_options_fixture_size_label.setText(
+                "Drag a rectangle on the stock to place a fixture"
+            )
         self.tool_options_measure_label.setVisible(mode == "measure")
         self.tool_options_measure_clear.setVisible(mode == "measure")
         if mode == "measure":
@@ -1018,6 +1023,20 @@ class RibbonActionsMixin:
         self._after_ribbon_mutation(f"draw {kind}", True)
         self.statusBar().showMessage(f"Drew {item.name}", 2500)
         return item
+
+    def _shape_drag_updated(
+        self, tool: str, x0: float, y0: float, x1: float, y1: float,
+    ) -> None:
+        """Show accurate dimensions while dragging; commit only on release."""
+
+        if tool == "measure":
+            self.tool_options_measure_label.setText(
+                measure_xy((x0, y0), (x1, y1)).label
+            )
+        elif tool == "fixture":
+            self.tool_options_fixture_size_label.setText(
+                f"XY {abs(x1 - x0):.3f} × {abs(y1 - y0):.3f} mm"
+            )
 
     def _shape_drawn(
         self,
