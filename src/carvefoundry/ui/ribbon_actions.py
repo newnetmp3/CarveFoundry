@@ -1708,25 +1708,51 @@ class RibbonActionsMixin:
 
     def _sync_cam_control_relevance(self) -> None:
         operation = self._active_cam_operation
-        is_3d = operation in {"rough", "finish", "rest", "waterline"}
+        is_3d = operation in {
+            "rough",
+            "finish",
+            "height_map",
+            "rest",
+            "waterline",
+        }
         uses_cut_type = operation in {"profile", "pocket", "engrave"}
+        uses_entry = operation not in {
+            "rough",
+            "finish",
+            "height_map",
+            "rest",
+            "waterline",
+            "drill",
+            "center_drill",
+        }
+        uses_milling = operation in {
+            "profile",
+            "silhouette",
+            "pocket",
+            "surface",
+            "engrave",
+        }
+        uses_direction = is_3d or operation in {"pocket", "surface"}
+        uses_detail = is_3d or operation == "vcarve"
 
         for combo in self._cam_selector_widgets.get("cut_type", []):
             combo.setEnabled(uses_cut_type)
         for combo in self._cam_selector_widgets.get("3d_cut_style", []):
             combo.setEnabled(is_3d)
+        for combo in self._cam_selector_widgets.get("direction", []):
+            combo.setEnabled(uses_direction)
         for combo in self._cam_selector_widgets.get("entry", []):
-            combo.setEnabled(not is_3d)
+            combo.setEnabled(uses_entry)
         for combo in self._cam_selector_widgets.get("milling", []):
-            combo.setEnabled(not is_3d)
+            combo.setEnabled(uses_milling)
         for combo in self._cam_selector_widgets.get("linking", []):
             combo.setEnabled(is_3d)
 
         for widget in self._cam_detail_widgets:
-            widget.setEnabled(is_3d)
+            widget.setEnabled(uses_detail)
 
         if self._tabs_button is not None:
-            self._tabs_button.setEnabled(operation == "profile")
+            self._tabs_button.setEnabled(operation in {"profile", "silhouette"})
 
     def _toggle_tabs_operation(self) -> None:
         self._tabs_enabled = not self._tabs_enabled
@@ -1796,12 +1822,16 @@ class RibbonActionsMixin:
     def _cam_operation_title(operation: str) -> str:
         return {
             "profile": "Profile",
+            "silhouette": "Silhouette",
             "pocket": "Pocket",
+            "surface": "Surface / Face",
             "vcarve": "V-Carve",
             "engrave": "Engrave",
-            "drill": "Drill",
+            "drill": "Drill Features",
+            "center_drill": "Center Drill",
             "rough": "3D Rough",
             "finish": "3D Finish",
+            "height_map": "Height Map",
             "rest": "3D Rest",
             "waterline": "3D Waterline",
         }.get(operation, operation.replace("_", " ").title())
@@ -1900,7 +1930,10 @@ class RibbonActionsMixin:
                 f"{'s' if len(source_items) != 1 else ''}\n{names}"
             )
         else:
-            source_summary.setText("No design geometry in this project")
+            source_summary.setText(
+                "No design geometry in this project\n"
+                "Surface / Face can still machine the stock."
+            )
         source_summary.setToolTip(
             "Generate Toolpaths always processes every design object that "
             "contains mesh geometry. The current selection is ignored."
