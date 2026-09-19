@@ -22,7 +22,7 @@ work offset, controller travel origin, hold-downs omitted from the project,
 cutter holder envelope, spindle state, or where the machine is currently parked.
 It must not be described as a guarantee of physical safety.
 
-## Not yet implemented — only ship as complete end-to-end features
+## Further development — do not treat proposals as implemented
 
 1. **Live, managed CNC sender:** GRBL planner/serial response tracking, real
    machine position, feed overrides, pause, stop, recovery and alarm handling;
