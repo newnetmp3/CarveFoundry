@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from math import atan2, ceil, degrees, hypot, pi, sqrt
 from pathlib import Path
-from collections.abc import Callable
 from uuid import uuid4
 
 import numpy as np
