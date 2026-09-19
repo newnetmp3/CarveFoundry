@@ -22,6 +22,30 @@ Planned and current areas include:
 
 CarveFoundry is not designed around a ball-nose-only 3D finishing assumption. Cutter definitions model the actual cutter profile so flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and future custom revolved profiles can be handled by the CAM engine.
 
+## Compact left toolbar
+
+The vertical rail prioritizes **interactive viewport tools**. Camera/Arcball
+remains the default, followed by Select, Shapes, Line, Text, Pen, Measure XY,
+and Draw Fixture. Move through the longer rail using the mouse wheel over
+the icons; the top File/Edit/View menus retain the general commands.
+
+The **Measure XY** tool measures a drag on the *stock-top Z0 plane*,
+reporting length, signed ΔX, signed ΔY and the counterclockwise angle
+from +X. The yellow measurement line remains until you click **Clear**
+or open a different project. This is a **planar measurement**, not an
+arbitrary 3D surface/mesh distance.
+
+With **Draw Fixture**, set Top Z and extra cutter-clearance margin in the
+contextual options bar, then drag an XY rectangle on the stock. The
+result is a real project-owned preflight keep-out, visible in the viewport,
+undoable and saved in .cf3d. The small arrow on its tool button opens
+**Clamps and Fences** for editing, deleting or adding off-stock fence
+regions that cannot be drawn within the stock rectangle.
+
+Generate Toolpaths, Preview, CNC Preflight and G-code Export are
+one-click buttons near the bottom of the scrollable rail. More advanced
+CAM, cutter and machine controls remain in their flyout menus.
+
 ## Workshop preflight and cutter stages
 
 CarveFoundry stores clamps and fences as project fixture keep-out zones.
