@@ -4708,8 +4708,8 @@ class RibbonActionsMixin:
         layout = QVBoxLayout(dialog)
         explanation = QLabel(
             "Fixture XY is measured from the stock bottom-left corner. "
-            "Top Z is relative to the stock top (Z0); e.g. a 23 mm high "
-            "fence has Top Z = +23 mm if its base is at stock top. "
+            "Top Z is relative to the stock top (Z0); a 23 mm fence "
+            "measured from the bed has Top Z = 23 - stock thickness. "
             "Keep-out clearance applies beyond the cutter radius."
         )
         explanation.setWordWrap(True)
@@ -4750,7 +4750,8 @@ class RibbonActionsMixin:
         def edit_fixture(current: Fixture | None) -> Fixture | None:
             defaults = current or Fixture(
                 "Left fence", -23.0, 0.0, -1.0,
-                self.project.stock.height_mm, 23.0, 2.0,
+                self.project.stock.height_mm,
+                23.0 - self.project.stock.thickness_mm, 2.0,
             )
             while True:
                 form = _ActionForm(dialog, "Add Fixture" if current is None else "Edit Fixture")
@@ -4817,6 +4818,7 @@ class RibbonActionsMixin:
         if entries != self.project.fixtures:
             self._before_ribbon_mutation("edit fixtures")
             self.project.fixtures = entries
+            self.viewport.update()
             self._after_ribbon_mutation("edit fixtures", True)
             self.statusBar().showMessage(
                 f"Saved {len(entries)} fixture keep-out(s)", 4500
