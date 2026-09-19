@@ -130,7 +130,9 @@ def test_generate_toolpaths_button_opens_complete_requirement_dialog() -> None:
         )
         assert fields["cut_type"].isEnabled()
         assert not fields["3d_style"].isEnabled()
-        assert not fields["linking"].isEnabled()
+        assert fields["linking"].isEnabled()
+        assert fields["local_clearance"].isEnabled()
+        assert not fields["link_tolerance"].isEnabled()
         assert fields["tabs_enabled"].isEnabled()
         dialog.close()
     finally:
