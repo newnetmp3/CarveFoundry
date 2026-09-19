@@ -1565,6 +1565,12 @@ class MainWindow(
             "scale": "Scale",
         }
         target = controls.get(section, self.position_spins)
+        accordion = getattr(self, "_transform_sections", {}).get(section)
+        if accordion is not None:
+            accordion.setExpanded(True)
+        self.properties_panel.scroll_area.ensureWidgetVisible(
+            target[0], 12, 45,
+        )
         target[0].setFocus(Qt.FocusReason.OtherFocusReason)
         target[0].selectAll()
         self.statusBar().showMessage(
