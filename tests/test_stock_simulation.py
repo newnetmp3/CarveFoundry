@@ -79,6 +79,30 @@ def test_conical_cutter_removes_only_tip_at_outer_radius():
     assert result.remaining_z_mm[11, 10] == pytest.approx(0, abs=1e-6)
 
 
+@pytest.mark.parametrize(
+    "cutter",
+    [
+        Cutter(
+            "tapered ball", ToolType.TAPERED_BALL_NOSE, 4,
+            taper_angle_deg=15, ball_radius_mm=0.5,
+        ),
+        Cutter(
+            "custom", ToolType.CUSTOM, 4,
+            profile_points=((0, 0), (0.5, 0.2), (2, 1.0)),
+        ),
+    ],
+)
+def test_tapered_and_custom_simulation_uses_authoritative_profile(cutter):
+    result = simulate_stock_removal(
+        project([path("Details", cutter, depth=-3)]),
+        spacing_mm=1, compare_model=False,
+    )
+    assert result.remaining_z_mm[10, 10] == pytest.approx(-3)
+    assert result.remaining_z_mm[11, 10] == pytest.approx(
+        min(0, -3 + cutter.profile_height_mm(1)), abs=1e-6,
+    )
+
+
 def test_multiple_stages_reduce_same_stock_not_reset_per_cutter():
     flat = Cutter("flat", ToolType.FLAT_END_MILL, 4)
     first = path("Rough", flat, depth=-1, operation="rough")
