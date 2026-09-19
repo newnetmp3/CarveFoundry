@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from ..cam.gcode import write_grbl, write_grbl_program
 from ..core.font_handler import describe_qt_font_face
+from ..core.mesh import mesh_asset_from_geometry
 from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
@@ -44,6 +45,7 @@ from ..core.project_file import (
     load_project,
     save_project,
 )
+from ..core.transform import Transform3D
 from ..core.units import ModelUnits
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
@@ -370,6 +372,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("rotate", "Rotate", lambda: self._focus_transform_section("rotation")),
             ("size", "Size", lambda: self._focus_transform_section("size")),
             ("scale", "Scale", lambda: self._focus_transform_section("scale")),
+            ("apply_scale", "Apply Scale", self._apply_selected_scale),
+            (
+                "apply_rotation_scale",
+                "Apply Rotation && Scale",
+                self._apply_selected_rotation_scale,
+            ),
+            ("frame_selected", "Frame Selected", self._frame_selected),
+            ("isolate_selected", "Isolate Selected", self._isolate_selected),
+            ("exit_isolate", "Exit Isolate", self._exit_isolate),
             ("center_xy", "Center XY", self._center_selected_xy),
             ("top_z0", "Top to Z0", self._top_selected_to_surface),
             ("fit_stock", "Fit Stock", self._fit_selected_inside_stock),
@@ -403,6 +414,32 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         for key, text, callback in specs:
             self._new_ui_action(key, text, callback)
+
+        self._new_ui_action(
+            "transform_global",
+            "Global Orientation",
+            lambda: self._set_transform_orientation("global"),
+            checkable=True,
+            checked=True,
+            tooltip="Move gizmo axes follow the stock/world XYZ axes.",
+        )
+        self._new_ui_action(
+            "transform_local",
+            "Local Orientation",
+            lambda: self._set_transform_orientation("local"),
+            checkable=True,
+            tooltip="Move gizmo axes follow the selected object's rotation.",
+        )
+        self._new_ui_action(
+            "snap_transform",
+            "Snap Translation",
+            self._toggle_transform_snap,
+            checkable=True,
+            tooltip=(
+                "Snap gizmo movement to the configured millimeter increment. "
+                "Hold Ctrl during a gizmo drag for temporary snapping."
+            ),
+        )
 
         for operation, title in (
             ("profile", "Profile"),
@@ -689,10 +726,25 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             transform_menu,
             ("position", "rotate", "size", "scale"),
         )
+        orientation_menu = transform_menu.addMenu("Orientation")
+        self._add_menu_actions(
+            orientation_menu,
+            ("transform_global", "transform_local"),
+        )
+        transform_menu.addSeparator()
+        self._add_menu_actions(
+            transform_menu,
+            ("snap_transform", "apply_scale", "apply_rotation_scale"),
+        )
         placement_menu = model_menu.addMenu("Placement")
         self._add_menu_actions(
             placement_menu,
             ("center_xy", "top_z0", "fit_stock", "reset_transform"),
+        )
+        model_menu.addSeparator()
+        self._add_menu_actions(
+            model_menu,
+            ("frame_selected", "isolate_selected", "exit_isolate"),
         )
 
         toolpaths_menu = bar.addMenu("Toolpaths")
@@ -856,7 +908,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         workspace_menu = view_menu.addMenu("Workspace")
         self._add_menu_actions(
             workspace_menu,
-            ("layers", "inspector", "status_bar", "view_controls", "reset_ui"),
+            (
+                "layers",
+                "inspector",
+                "isolate_selected",
+                "exit_isolate",
+                "status_bar",
+                "view_controls",
+                "reset_ui",
+            ),
         )
         navigation_menu = view_menu.addMenu("Navigation")
         self._add_menu_actions(
@@ -1516,10 +1576,25 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             transform_menu,
             ("position", "rotate", "size", "scale"),
         )
+        orientation_menu = transform_menu.addMenu("Orientation")
+        self._add_menu_actions(
+            orientation_menu,
+            ("transform_global", "transform_local"),
+        )
+        transform_menu.addSeparator()
+        self._add_menu_actions(
+            transform_menu,
+            ("snap_transform", "apply_scale", "apply_rotation_scale"),
+        )
         placement_menu = model_menu.addMenu("Placement")
         self._add_menu_actions(
             placement_menu,
             ("center_xy", "top_z0", "fit_stock", "reset_transform"),
+        )
+        model_menu.addSeparator()
+        self._add_menu_actions(
+            model_menu,
+            ("frame_selected", "isolate_selected", "exit_isolate"),
         )
         rail.add_menu(
             "model",
@@ -1642,7 +1717,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         camera_menu = view_menu.addMenu("Camera")
         self._add_menu_actions(
             camera_menu,
-            ("view_fit", "view_2d", "perspective", "orthographic", "isometric"),
+            (
+                "view_fit",
+                "frame_selected",
+                "view_2d",
+                "perspective",
+                "orthographic",
+                "isometric",
+            ),
         )
         fixed_menu = view_menu.addMenu("Fixed View")
         self._add_menu_actions(
@@ -2786,6 +2868,44 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         units_form.addRow("Model units", self.source_units_combo)
 
+        self.transform_orientation_combo = QComboBox()
+        self.transform_orientation_combo.addItem("Global", "global")
+        self.transform_orientation_combo.addItem("Local", "local")
+        self.transform_orientation_combo.setToolTip(
+            "Global uses stock/world XYZ axes. Local rotates the move gizmo "
+            "with the selected object."
+        )
+        self._configure_inspector_field(self.transform_orientation_combo)
+        self.transform_orientation_combo.currentIndexChanged.connect(
+            self._transform_orientation_changed
+        )
+        units_form.addRow("Gizmo orientation", self.transform_orientation_combo)
+
+        self.transform_snap_check = QCheckBox("Snap translation")
+        self.transform_snap_check.setToolTip(
+            "Snap gizmo moves to a fixed increment. Ctrl temporarily enables "
+            "snapping during a drag."
+        )
+        self.transform_snap_check.toggled.connect(
+            self._transform_snap_changed
+        )
+        units_form.addRow("Precision", self.transform_snap_check)
+
+        self.transform_snap_step_spin = QDoubleSpinBox()
+        self.transform_snap_step_spin.setRange(0.001, 1000.0)
+        self.transform_snap_step_spin.setDecimals(3)
+        self.transform_snap_step_spin.setSingleStep(0.5)
+        self.transform_snap_step_spin.setSuffix(" mm")
+        self.transform_snap_step_spin.setValue(1.0)
+        self.transform_snap_step_spin.setToolTip(
+            "Translation snapping increment in millimeters."
+        )
+        self._configure_inspector_field(self.transform_snap_step_spin)
+        self.transform_snap_step_spin.valueChanged.connect(
+            self._transform_snap_changed
+        )
+        units_form.addRow("Snap step", self.transform_snap_step_spin)
+
         self.position_spins = tuple(
             self._configured_spin(
                 minimum=-100000.0,
@@ -2926,6 +3046,33 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         action_layout.addWidget(top_button)
         layout.addWidget(action_bar)
 
+        apply_bar = QWidget()
+        apply_bar.setMinimumWidth(0)
+        apply_layout = QHBoxLayout(apply_bar)
+        apply_layout.setContentsMargins(0, 0, 0, 0)
+        apply_layout.setSpacing(6)
+
+        apply_scale_button = QPushButton("Apply Scale")
+        apply_scale_button.setMinimumWidth(0)
+        apply_scale_button.setToolTip(
+            "Bake the selected object's current scale into its mesh and reset "
+            "Scale to 1,1,1. Useful before CAM/export."
+        )
+        apply_scale_button.clicked.connect(self._apply_selected_scale)
+        apply_layout.addWidget(apply_scale_button)
+
+        apply_rotation_scale_button = QPushButton("Apply R+S")
+        apply_rotation_scale_button.setMinimumWidth(0)
+        apply_rotation_scale_button.setToolTip(
+            "Bake rotation and scale into the selected mesh while preserving "
+            "its placed position."
+        )
+        apply_rotation_scale_button.clicked.connect(
+            self._apply_selected_rotation_scale
+        )
+        apply_layout.addWidget(apply_rotation_scale_button)
+        layout.addWidget(apply_bar)
+
         reset_button = QPushButton("Reset Transform")
         reset_button.setMinimumWidth(0)
         reset_button.clicked.connect(self._reset_selected_transform)
@@ -2982,6 +3129,23 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         for button in self._model_selection_buttons:
             button.setEnabled(has_mesh)
+
+        has_bakeable_mesh = any(
+            0 <= index < len(self.project.items)
+            and self.project.items[index].mesh is not None
+            and self.project.items[index].kind.lower() != "text"
+            for index in indices
+        )
+        for key, enabled in (
+            ("frame_selected", has_selection),
+            ("isolate_selected", has_selection),
+            ("exit_isolate", self.viewport.isolated),
+            ("apply_scale", has_bakeable_mesh),
+            ("apply_rotation_scale", has_bakeable_mesh),
+        ):
+            action = self._ui_actions.get(key)
+            if action is not None:
+                action.setEnabled(enabled)
 
         enabled_by_action = {
             "cut": has_selection,
@@ -4849,6 +5013,209 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
     def _fit_view(self) -> None:
         self.viewport.fit_view()
 
+    def _frame_selected(self) -> None:
+        if not self.viewport.frame_selected():
+            self.statusBar().showMessage(
+                "Select one or more visible design objects to frame",
+                3000,
+            )
+            return
+        self.statusBar().showMessage("Framed selected object(s)", 2000)
+
+    def _isolate_selected(self) -> None:
+        if not self.viewport.isolate_selected():
+            self.statusBar().showMessage(
+                "Select one or more visible design objects to isolate",
+                3000,
+            )
+            return
+        self._sync_selection_action_state()
+        self.statusBar().showMessage(
+            "Isolate view enabled • CAM still uses the full project",
+            3500,
+        )
+
+    def _exit_isolate(self) -> None:
+        if not self.viewport.isolated:
+            self.statusBar().showMessage("Isolate view is not active", 2000)
+            return
+        self.viewport.show_all_items()
+        self._sync_selection_action_state()
+        self.statusBar().showMessage("Returned to full project view", 2000)
+
+    def _set_transform_orientation(self, orientation: str) -> None:
+        normalized = str(orientation).strip().lower()
+        self.viewport.set_transform_orientation(normalized)
+        if hasattr(self, "transform_orientation_combo"):
+            index = self.transform_orientation_combo.findData(normalized)
+            if index >= 0:
+                self.transform_orientation_combo.blockSignals(True)
+                try:
+                    self.transform_orientation_combo.setCurrentIndex(index)
+                finally:
+                    self.transform_orientation_combo.blockSignals(False)
+        for key, target in (
+            ("transform_global", "global"),
+            ("transform_local", "local"),
+        ):
+            action = self._ui_actions.get(key)
+            if action is not None:
+                action.setChecked(normalized == target)
+        self._settings.setValue("viewport/transform_orientation", normalized)
+        self.statusBar().showMessage(
+            f"Transform orientation: {normalized.title()}",
+            2000,
+        )
+
+    def _transform_orientation_changed(self, _index: int) -> None:
+        orientation = self.transform_orientation_combo.currentData()
+        if orientation in {"global", "local"}:
+            self._set_transform_orientation(str(orientation))
+
+    def _transform_snap_changed(self, _value=None) -> None:
+        enabled = self.transform_snap_check.isChecked()
+        step = float(self.transform_snap_step_spin.value())
+        self.transform_snap_step_spin.setEnabled(enabled)
+        self.viewport.set_transform_snapping(enabled, step)
+        action = self._ui_actions.get("snap_transform")
+        if action is not None:
+            action.setChecked(enabled)
+        self._settings.setValue("viewport/transform_snap_enabled", enabled)
+        self._settings.setValue("viewport/transform_snap_step_mm", step)
+
+    def _toggle_transform_snap(self) -> None:
+        self.transform_snap_check.setChecked(
+            not self.transform_snap_check.isChecked()
+        )
+
+    def _apply_selected_transform_components(
+        self,
+        *,
+        apply_rotation: bool,
+        apply_scale: bool,
+        label: str,
+    ) -> None:
+        indices = self._selected_design_indices(expand_groups=True)
+        if not indices:
+            self.statusBar().showMessage(
+                "Select one or more mesh objects first",
+                3000,
+            )
+            return
+
+        self._before_ribbon_mutation(label)
+        changed = 0
+        skipped_text = 0
+        selected_after = list(indices)
+
+        for index in indices:
+            if not 0 <= index < len(self.project.items):
+                continue
+            item = self.project.items[index]
+            if item.mesh is None:
+                continue
+            if item.kind.lower() == "text":
+                skipped_text += 1
+                continue
+
+            rotation = (
+                item.transform.rotation_deg
+                if apply_rotation
+                else (0.0, 0.0, 0.0)
+            )
+            scale = (
+                item.transform.scale_xyz
+                if apply_scale
+                else (1.0, 1.0, 1.0)
+            )
+            rotation_changed = any(abs(value) > 1e-9 for value in rotation)
+            scale_changed = any(abs(value - 1.0) > 1e-9 for value in scale)
+            if not rotation_changed and not scale_changed:
+                continue
+
+            source_mesh_mm = item.source_mesh_mm()
+            if source_mesh_mm is None:
+                continue
+            baked = Transform3D(
+                rotation_deg=rotation,
+                scale_xyz=scale,
+            ).apply_to_mesh(source_mesh_mm)
+
+            translation = item.transform.translation_mm
+            remaining_rotation = (
+                (0.0, 0.0, 0.0)
+                if apply_rotation
+                else item.transform.rotation_deg
+            )
+            remaining_scale = (
+                (1.0, 1.0, 1.0)
+                if apply_scale
+                else item.transform.scale_xyz
+            )
+            item.mesh = mesh_asset_from_geometry(baked)
+            item.source_units = ModelUnits.MILLIMETERS
+            item.source_path = None
+            item.transform = Transform3D(
+                translation_mm=translation,
+                rotation_deg=remaining_rotation,
+                scale_xyz=remaining_scale,
+            )
+            changed += 1
+
+        if changed:
+            self._invalidate_toolpaths("Applied model transform")
+            self._refresh_project_list(self.project_list.currentRow())
+            valid_selection = [
+                index
+                for index in selected_after
+                if 0 <= index < len(self.project.items)
+            ]
+            if valid_selection:
+                self._select_project_indices(
+                    valid_selection,
+                    primary=valid_selection[-1],
+                )
+            self.viewport.update()
+
+        self._after_ribbon_mutation(label, bool(changed))
+        if changed:
+            suffix = (
+                f" • skipped {skipped_text} editable text object"
+                f"{'s' if skipped_text != 1 else ''}"
+                if skipped_text
+                else ""
+            )
+            self.statusBar().showMessage(
+                f"{label.title()} on {changed} object"
+                f"{'s' if changed != 1 else ''}{suffix}",
+                4500,
+            )
+        elif skipped_text:
+            self.statusBar().showMessage(
+                "Editable text keeps its live font transform; "
+                "Apply Transform is for mesh-based objects",
+                4500,
+            )
+        else:
+            self.statusBar().showMessage(
+                "Selected object transform is already applied",
+                3000,
+            )
+
+    def _apply_selected_scale(self) -> None:
+        self._apply_selected_transform_components(
+            apply_rotation=False,
+            apply_scale=True,
+            label="apply scale",
+        )
+
+    def _apply_selected_rotation_scale(self) -> None:
+        self._apply_selected_transform_components(
+            apply_rotation=True,
+            apply_scale=True,
+            label="apply rotation and scale",
+        )
+
     def _install_shortcuts(self) -> None:
         """Install predictable desktop shortcuts for frequent workspace actions."""
 
@@ -4870,6 +5237,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("Select Tool", "V", self._activate_navigation_tool),
             ("Select / Cancel Tool", "Escape", self._cancel_active_tool),
             ("Fit View", "Ctrl+0", self._fit_view),
+            ("Frame Selected", "Shift+F", self._frame_selected),
         )
 
         self._shortcut_actions: list[QAction] = []
@@ -4935,6 +5303,34 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.viewport.set_rulers_visible(rulers_visible)
         self.viewport.set_reverse_horizontal_drag(reverse_horizontal)
         self.viewport.set_invert_vertical_drag(invert_vertical)
+
+        orientation = str(
+            self._settings.value(
+                "viewport/transform_orientation",
+                "global",
+            )
+        ).lower()
+        if orientation not in {"global", "local"}:
+            orientation = "global"
+        snap_enabled = self._settings_bool(
+            "viewport/transform_snap_enabled",
+            False,
+        )
+        try:
+            snap_step = float(
+                self._settings.value(
+                    "viewport/transform_snap_step_mm",
+                    1.0,
+                )
+            )
+        except (TypeError, ValueError):
+            snap_step = 1.0
+        snap_step = max(0.001, snap_step)
+
+        self._set_transform_orientation(orientation)
+        self.transform_snap_step_spin.setValue(snap_step)
+        self.transform_snap_check.setChecked(snap_enabled)
+        self._transform_snap_changed()
 
         stored_sizes = self._settings.value("interface/splitter_sizes")
         restored_splitter = False
@@ -5024,6 +5420,18 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._settings.setValue(
             "viewport/invert_vertical_navigation",
             self.viewport.invert_vertical_drag,
+        )
+        self._settings.setValue(
+            "viewport/transform_orientation",
+            self.viewport.transform_orientation,
+        )
+        self._settings.setValue(
+            "viewport/transform_snap_enabled",
+            self.viewport.snap_enabled,
+        )
+        self._settings.setValue(
+            "viewport/transform_snap_step_mm",
+            self.viewport.snap_step_mm,
         )
         self._settings.remove("interface/project_panel_visible")
         self._settings.remove("interface/properties_panel_visible")
