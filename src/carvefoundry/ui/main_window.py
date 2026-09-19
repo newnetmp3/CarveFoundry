@@ -318,6 +318,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("delete", "Delete", self._delete_selected_item),
             ("duplicate", "Duplicate", self._duplicate_selected_item),
             ("select_all", "Select All", self._select_all_design_items),
+            ("camera", "Camera Orbit", self._activate_camera_tool),
             ("select", "Select / Marquee", self._activate_navigation_tool),
             ("rectangle", "Rectangle", self._create_rectangle),
             ("ellipse", "Ellipse", self._create_ellipse),
@@ -457,9 +458,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             )
 
         # Replace the hidden-ribbon state handles with the user-visible actions.
+        self._camera_tool_button = self._ui_actions["camera"]
+        self._camera_tool_button.setCheckable(True)
+        self._camera_tool_button.setChecked(True)
         self._navigation_tool_button = self._ui_actions["select"]
         self._navigation_tool_button.setCheckable(True)
-        self._navigation_tool_button.setChecked(True)
+        self._navigation_tool_button.setChecked(False)
         self._shape_tool_buttons = {
             name: self._ui_actions[name]
             for name in ("rectangle", "ellipse", "polygon", "line", "text")
@@ -774,7 +778,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         camera_menu = view_menu.addMenu("Camera")
         self._add_menu_actions(
             camera_menu,
-            ("view_fit", "view_2d", "perspective", "orthographic", "isometric"),
+            (
+                "camera",
+                "view_fit",
+                "view_2d",
+                "perspective",
+                "orthographic",
+                "isometric",
+            ),
         )
         fixed_menu = view_menu.addMenu("Fixed View")
         self._add_menu_actions(
@@ -1302,6 +1313,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         rail = ToolRail(self)
 
         rail.add_action_tool(
+            "camera",
+            self._ui_actions["camera"],
+            tooltip=(
+                "Camera / Arcball\n"
+                "Left-drag rotates the view. Middle/right-drag pans. "
+                "Mouse wheel zooms. This is the default viewport tool."
+            ),
+        )
+        rail.add_action_tool(
             "select",
             self._ui_actions["select"],
             tooltip=(
@@ -1583,7 +1603,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
         rail.add_stretch()
-        rail.set_active_draw_tool(None)
+        rail.set_active_tool("camera")
         return rail
 
     def _build_workspace(self) -> QWidget:
