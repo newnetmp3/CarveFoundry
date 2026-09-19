@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
+import trimesh
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
 from PySide6.QtWidgets import (
@@ -46,10 +47,13 @@ from carvefoundry.cam.basic_ops import (
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.cam.vector_ops import (
+    geometry_center_drill,
     geometry_drill,
     geometry_engrave,
+    geometry_face,
     geometry_pocket,
     geometry_profile,
+    geometry_silhouette,
     geometry_vcarve,
 )
 from carvefoundry.core.primitives import (
@@ -1660,12 +1664,16 @@ class RibbonActionsMixin:
             self._invalidate_toolpaths("Toolpath operation")
         labels = {
             "profile": "Profile",
+            "silhouette": "Silhouette",
             "pocket": "Pocket",
+            "surface": "Surface / Face",
             "vcarve": "V-Carve",
             "engrave": "Engrave",
-            "drill": "Drill",
+            "drill": "Drill Features",
+            "center_drill": "Center Drill",
             "rough": "3D Rough",
             "finish": "3D Finish",
+            "height_map": "Height Map",
             "rest": "3D Rest",
             "waterline": "3D Waterline",
         }
@@ -1903,12 +1911,16 @@ class RibbonActionsMixin:
         operation_combo = QComboBox()
         for operation in (
             "profile",
+            "silhouette",
             "pocket",
+            "surface",
             "vcarve",
             "engrave",
             "drill",
+            "center_drill",
             "rough",
             "finish",
+            "height_map",
             "rest",
             "waterline",
         ):
@@ -2193,22 +2205,44 @@ class RibbonActionsMixin:
 
         def update_relevance_and_readiness() -> None:
             operation = str(operation_combo.currentData() or "")
-            is_3d = operation in {"rough", "finish", "rest", "waterline"}
+            is_3d = operation in {
+                "rough",
+                "finish",
+                "height_map",
+                "rest",
+                "waterline",
+            }
             uses_cut_type = operation in {"profile", "pocket", "engrave"}
             uses_detail = is_3d or operation == "vcarve"
-            uses_entry = not is_3d and operation != "drill"
-            uses_milling = operation in {"profile", "pocket", "engrave"}
+            uses_entry = operation not in {
+                "rough",
+                "finish",
+                "height_map",
+                "rest",
+                "waterline",
+                "drill",
+                "center_drill",
+            }
+            uses_milling = operation in {
+                "profile",
+                "silhouette",
+                "pocket",
+                "surface",
+                "engrave",
+            }
             uses_linking = is_3d
-            uses_tabs = operation == "profile" or (
+            uses_tabs = operation in {"profile", "silhouette"} or (
                 operation == "finish"
                 and style_3d.currentText() == "Full Depth Cutout"
             )
 
             cut_type.setEnabled(uses_cut_type)
             style_3d.setEnabled(is_3d)
-            direction.setEnabled(is_3d or operation == "pocket")
+            direction.setEnabled(
+                is_3d or operation in {"pocket", "surface"}
+            )
             detail.setEnabled(uses_detail)
-            pocket_stepover.setEnabled(operation == "pocket")
+            pocket_stepover.setEnabled(operation in {"pocket", "surface"})
             entry.setEnabled(uses_entry)
             ramp_angle.setEnabled(
                 uses_entry and entry.currentText() == "Custom Ramp"
@@ -2234,14 +2268,19 @@ class RibbonActionsMixin:
                 cutter_details.setText("No valid cutter selected")
 
             checks: list[tuple[bool, str]] = []
+            requires_geometry = operation != "surface"
             checks.append(
                 (
-                    bool(source_items),
+                    bool(source_items) or not requires_geometry,
                     (
-                        f"All {len(source_items)} design object"
-                        f"{'s' if len(source_items) != 1 else ''} will be generated"
-                        if source_items
-                        else "Project contains design geometry"
+                        "Stock surface will be generated"
+                        if operation == "surface"
+                        else (
+                            f"All {len(source_items)} design object"
+                            f"{'s' if len(source_items) != 1 else ''} will be generated"
+                            if source_items
+                            else "Project contains design geometry"
+                        )
                     ),
                 )
             )
@@ -2379,7 +2418,7 @@ class RibbonActionsMixin:
 
         def uses_tabs_for_current() -> bool:
             operation = str(operation_combo.currentData() or "")
-            return operation == "profile" or (
+            return operation in {"profile", "silhouette"} or (
                 operation == "finish"
                 and style_3d.currentText() == "Full Depth Cutout"
             )
@@ -2455,6 +2494,8 @@ class RibbonActionsMixin:
             toolpath = geometry_vcarve(mesh, cutter, settings)
         elif operation == "drill":
             toolpath = geometry_drill(mesh, cutter, settings)
+        elif operation == "center_drill":
+            toolpath = geometry_center_drill(mesh, cutter, settings)
         elif (
             cut_type == "Pocket"
             and operation in {"profile", "pocket", "engrave"}
@@ -2494,6 +2535,15 @@ class RibbonActionsMixin:
                 settings,
                 strategy=operation,
             )
+        elif operation == "height_map":
+            toolpath = finish_3d(
+                mesh,
+                cutter,
+                settings,
+                strategy="finish",
+            )
+            toolpath.name = "Height Map"
+            toolpath.operation = "height_map"
         elif operation == "waterline":
             toolpath = waterline_3d(mesh, cutter, settings)
         else:
@@ -2561,21 +2611,111 @@ class RibbonActionsMixin:
             return
 
         operation = self._active_cam_operation
+        if not items and operation != "surface":
+            self.statusBar().showMessage(
+                "Add a mesh or created shape before generating this operation",
+                4000,
+            )
+            return
+
+        target_description = (
+            "stock"
+            if operation == "surface"
+            else (
+                f"{len(items)} object{'s' if len(items) != 1 else ''}"
+            )
+        )
         self.statusBar().showMessage(
-            f"Calculating {operation} toolpaths for {len(items)} object"
-            f"{'s' if len(items) != 1 else ''}…"
+            f"Calculating {operation} toolpaths for {target_description}…"
         )
 
         generated_toolpaths = []
+        item = None
         try:
-            for item in items:
-                generated_toolpaths.extend(
-                    self._generate_toolpaths_for_item(
-                        item,
-                        cutter,
-                        operation,
+            if operation == "surface":
+                stock = self.project.stock
+                if items:
+                    reference_mesh = items[0].transformed_mesh()
+                    assert reference_mesh is not None
+                else:
+                    reference_mesh = trimesh.creation.box(
+                        extents=(
+                            stock.width_mm,
+                            stock.height_mm,
+                            max(stock.thickness_mm, 0.1),
+                        )
                     )
+                    reference_mesh.apply_translation(
+                        (
+                            stock.width_mm / 2.0,
+                            stock.height_mm / 2.0,
+                            -stock.thickness_mm / 2.0,
+                        )
+                    )
+                stock_bounds = np.array(
+                    (
+                        (0.0, 0.0, -stock.thickness_mm),
+                        (stock.width_mm, stock.height_mm, 0.0),
+                    ),
+                    dtype=float,
                 )
+                settings = self._cam_settings(
+                    stock_bounds,
+                    reference_mesh,
+                )
+                toolpath = geometry_face(
+                    stock.width_mm,
+                    stock.height_mm,
+                    cutter,
+                    settings,
+                    name="Surface",
+                )
+                toolpath.source_item_id = "stock"
+                toolpath.source_item_name = "Stock"
+                generated_toolpaths.append(toolpath)
+            elif operation == "silhouette":
+                placed_meshes = [
+                    mesh
+                    for source_item in items
+                    if (mesh := source_item.transformed_mesh()) is not None
+                ]
+                if not placed_meshes:
+                    raise ValueError(
+                        "Project contains no geometry for a silhouette."
+                    )
+                minima = np.vstack(
+                    [
+                        np.asarray(mesh.bounds, dtype=float)[0]
+                        for mesh in placed_meshes
+                    ]
+                ).min(axis=0)
+                maxima = np.vstack(
+                    [
+                        np.asarray(mesh.bounds, dtype=float)[1]
+                        for mesh in placed_meshes
+                    ]
+                ).max(axis=0)
+                settings = self._cam_settings(
+                    np.vstack((minima, maxima)),
+                    placed_meshes[0],
+                )
+                toolpath = geometry_silhouette(
+                    placed_meshes,
+                    cutter,
+                    settings,
+                )
+                toolpath.source_item_id = "project-silhouette"
+                toolpath.source_item_name = "All design objects"
+                generated_toolpaths.append(toolpath)
+            else:
+                for item in items:
+                    generated_toolpaths.extend(
+                        self._generate_toolpaths_for_item(
+                            item,
+                            cutter,
+                            operation,
+                        )
+                    )
         except ModuleNotFoundError as exc:
             missing = exc.name or "required Python package"
             message = (
@@ -2588,7 +2728,11 @@ class RibbonActionsMixin:
             self.statusBar().showMessage(message, 10000)
             return
         except (RuntimeError, ValueError) as exc:
-            failed_item = item.name
+            failed_item = (
+                item.name
+                if item is not None
+                else self._cam_operation_title(operation)
+            )
             message = f"{failed_item}: {exc}"
             self._set_activity_info(
                 f"Toolpath calculation failed\n{message}"
@@ -2634,13 +2778,22 @@ class RibbonActionsMixin:
                 path.source_item_id
                 for path in generated_toolpaths
                 if path.source_item_id
+                not in {None, "stock", "project-silhouette"}
             }
         )
+        if operation == "silhouette":
+            object_count = len(items)
+        elif operation == "surface":
+            object_count = 0
         operation_names = sorted({path.name for path in generated_toolpaths})
         operation_summary = " + ".join(operation_names)
         self._set_activity_info(
             f"Toolpaths ready\n{operation_summary}\n\n"
-            f"Objects: {object_count}\n"
+            (
+                "Source: Stock\n"
+                if operation == "surface"
+                else f"Objects: {object_count}\n"
+            )
             f"Cutter: {cutter.name}\n"
             f"Paths: {len(generated_toolpaths):,}\n"
             f"Moves: {total_moves:,}\n"
@@ -2652,7 +2805,14 @@ class RibbonActionsMixin:
         self.statusBar().showMessage(
             f"Generated {len(generated_toolpaths)} toolpath"
             f"{'s' if len(generated_toolpaths) != 1 else ''} for "
-            f"{object_count} object{'s' if object_count != 1 else ''}",
+            + (
+                "stock"
+                if operation == "surface"
+                else (
+                    f"{object_count} object"
+                    f"{'s' if object_count != 1 else ''}"
+                )
+            ),
             6000,
         )
 
