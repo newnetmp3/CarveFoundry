@@ -169,6 +169,8 @@ def check_preflight(
                 path.name,
             ))
         r = path.cutter.radius_mm
+        min_xyz[2] = min(min_xyz[2], path.safe_z_mm)
+        max_xyz[2] = max(max_xyz[2], path.safe_z_mm)
         for idx, move in enumerate(path.moves):
             count += 1
             for axis, coordinate in enumerate(move.xyz):
@@ -250,7 +252,11 @@ def check_preflight(
             for fixture in fixtures:
                 if _fixture_collision(
                     (last.x_mm, last.y_mm, park_z),
-                    (settings.park_x_mm, settings.park_y_mm, park_z),
+                    (
+                        settings.park_x_mm - settings.x_offset_mm,
+                        settings.park_y_mm - settings.y_offset_mm,
+                        park_z,
+                    ),
                     fixture, paths[-1].cutter.radius_mm,
                 ):
                     findings.append(Finding(
