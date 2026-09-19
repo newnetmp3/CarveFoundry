@@ -1,7 +1,6 @@
 """Session CAM job planner: review, reorder, remove and preview real toolpaths."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
