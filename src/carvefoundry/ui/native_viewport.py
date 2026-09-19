@@ -2996,6 +2996,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if (
             event.button() == Qt.MouseButton.LeftButton
             and not self._camera_control_mode
+            and self._shape_draw_mode not in {"measure", "fixture"}
             and not (
                 event.modifiers() & Qt.KeyboardModifier.AltModifier
             )
