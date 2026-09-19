@@ -1910,6 +1910,12 @@ class MainWindow(
             return None
         return index
 
+    def _refresh_inspector_context(self) -> None:
+        """Refresh contextual UI exactly once after a selection change."""
+        self._refresh_cam_detail_readouts()
+        self._sync_selection_action_state()
+        self._sync_toolpath_output_state()
+
     def _update_properties(self, row: int) -> None:
         if hasattr(self, "object_selector"):
             desired = max(
@@ -1951,9 +1957,7 @@ class MainWindow(
                 selected_indices,
                 primary=primary,
             )
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         if row <= 0:
@@ -1968,9 +1972,7 @@ class MainWindow(
             self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         item_index = row - 1
@@ -1980,9 +1982,7 @@ class MainWindow(
             self.text_widget.setVisible(False)
             self.transform_widget.setVisible(False)
             self.viewport.set_selected_item(None)
-            self._refresh_cam_detail_readouts()
-            self._sync_selection_action_state()
-            self._sync_toolpath_output_state()
+            self._refresh_inspector_context()
             return
 
         item = self.project.items[item_index]
@@ -1997,9 +1997,7 @@ class MainWindow(
             self._sync_text_controls(item)
         if has_mesh:
             self._sync_transform_controls(item)
-        self._refresh_cam_detail_readouts()
-        self._sync_selection_action_state()
-        self._sync_toolpath_output_state()
+        self._refresh_inspector_context()
 
     def _sync_transform_controls(self, item: ProjectItem) -> None:
         self._updating_transform_controls = True
