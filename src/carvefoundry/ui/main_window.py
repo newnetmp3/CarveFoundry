@@ -45,10 +45,10 @@ from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .batch_layout import BatchLayoutMixin
 from .direct_selection import DirectSelectionMixin
+from .guided_workflow import GuidedWorkflowMixin
 from .import_worker import ImportWorker
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
-from .guided_workflow import GuidedWorkflowMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
 from .project_recovery import ProjectRecoveryMixin
