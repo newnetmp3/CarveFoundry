@@ -422,6 +422,22 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             or index in self._isolated_item_indices
         )
 
+    def _visible_toolpaths(self) -> list:
+        if self.project is None:
+            return []
+        if self._isolated_item_indices is None:
+            return list(self.project.toolpaths)
+        isolated_ids = {
+            self.project.items[index].item_id
+            for index in self._isolated_item_indices
+            if 0 <= index < len(self.project.items)
+        }
+        return [
+            toolpath
+            for toolpath in self.project.toolpaths
+            if toolpath.source_item_id in isolated_ids
+        ]
+
     @property
     def isolated(self) -> bool:
         return self._isolated_item_indices is not None
@@ -798,7 +814,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             minimum = np.minimum(minimum, item_bounds[0])
             maximum = np.maximum(maximum, item_bounds[1])
 
-        for toolpath in self.project.toolpaths:
+        for toolpath in self._visible_toolpaths():
             toolpath_bounds = toolpath.bounds_xyz_mm
             if toolpath_bounds is None:
                 continue
@@ -2448,8 +2464,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             empty = np.empty((0, 3), dtype=np.float32)
             return empty, empty
 
+        visible_toolpaths = self._visible_toolpaths()
+        if not visible_toolpaths:
+            empty = np.empty((0, 3), dtype=np.float32)
+            return empty, empty
+
         segments: list[tuple[object, object]] = []
-        for toolpath in self.project.toolpaths:
+        for toolpath in visible_toolpaths:
             for previous, current in zip(toolpath.moves, toolpath.moves[1:]):
                 segments.append((previous, current))
 
@@ -2485,7 +2506,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         points = [
             move.xyz
-            for toolpath in self.project.toolpaths
+            for toolpath in self._visible_toolpaths()
             for move in toolpath.moves
         ]
         if not points:
