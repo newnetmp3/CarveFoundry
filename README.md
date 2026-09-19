@@ -156,6 +156,45 @@ use mandatory CNC preflight for every cutter in the finished multi-tool job.
 X/Y Smart Value bindings must be removed from template objects so they cannot
 overwrite calculated batch positions.
 
+## Sampled material-removal simulation
+
+Choose **Toolpaths → Simulate Material Removal…** after generating a machining
+job. This is separate from the existing backplot/path animation. CarveFoundry
+simulates each cutting/plunge move, in cutter-stage order, against a regular XY
+grid of remaining stock using the selected flat, ball, V/cone, tapered ball or
+custom radial cutter profile. G0 rapid moves are not treated as cuts. The
+standalone viewer shows remaining stock height, approximate removed volume by
+operation and (when a 3D model is present) deviation from the top model
+surface: blue = remaining material above target, red = cut below target.
+Choose XY sample spacing before calculation; the application rejects overly
+large grids/sampling workloads instead of silently degrading resolution.
+Long simulations support cancellation.
+
+**Scope:** This is sampled **2.5D material removal**, not exact continuous
+volumetric CSG. It cannot represent undercuts, physical holder contact,
+runout, machine acceleration, the actual work offset or fixtures not recorded
+in the project. Model comparison uses the *top surface* of visible 3D objects:
+intentional 2D pocket/cutout operations can be below that surface. Simulated
+volume is approximate. Always run mandatory CNC preflight before exporting.
+
+## Automatic project recovery
+
+CarveFoundry saves a **separate complete CF3D recovery checkpoint** after
+approximately one minute without further editing. This does not replace your
+manually saved file and does not clear the unsaved-change indicator. On the
+next visible startup, existing checkpoints appear in a Restore/Discard dialog;
+they remain available until successfully saved or deliberately discarded.
+The File menu also offers **Recover Autosave…**, **Save Recovery Checkpoint**
+and an **Automatic Recovery Checkpoints** toggle.
+
+The recovery area lives in your normal Linux application-data directory, not
+in the project folder. Checkpoints have atomic metadata, SHA-256 verification
+before restore and bounded retention. Restoring loads a normal project as
+**unsaved changes**. If the source file changed since the checkpoint, the
+restore dialog warns you. Only an explicit normal **Save** can overwrite
+the source project. A deliberate Discard of unsaved work removes that
+session's recovery checkpoint.
+
 ## Native CAM core
 
 The CPU-heavy mesh rasterization and cutter-contact calculations are implemented in Rust and exposed to the Python application through PyO3. The PySide6 UI, project model, cutter definitions, and orchestration remain Python.
