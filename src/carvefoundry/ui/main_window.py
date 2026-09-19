@@ -90,7 +90,14 @@ class Panel(QFrame):
         layout.addWidget(self.scroll_area, 1)
 
 
-class MainWindow(WorkspaceCommandsMixin, TextEditorMixin, InterfaceSettingsMixin, PlanarOperationsMixin, RibbonActionsMixin, QMainWindow):
+class MainWindow(
+    WorkspaceCommandsMixin,
+    TextEditorMixin,
+    InterfaceSettingsMixin,
+    PlanarOperationsMixin,
+    RibbonActionsMixin,
+    QMainWindow,
+):
     def __init__(self):
         super().__init__()
         self.project = Project()
