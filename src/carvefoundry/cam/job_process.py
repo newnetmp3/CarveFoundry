@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 
 from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d, waterline_3d
-from carvefoundry.cam.gcode import GrblPostSettings, write_grbl, write_grbl_program
+from carvefoundry.cam.gcode import GrblPostSettings, render_grbl_program, write_grbl, write_grbl_program
 from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program
 from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.vector_ops import (
@@ -264,6 +264,32 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     toolpaths = request.toolpaths
     settings = request.settings
     report(0.05, "Preparing G-code", force=True)
+    if request.mode == "preview_code":
+        program = render_grbl_program(toolpaths, settings)
+        report(0.70, "Indexing move references", force=True)
+        lines = program.rstrip("\\n").splitlines()
+        commands = [
+            index for index, line in enumerate(lines)
+            if line.lstrip().startswith(("G0 ", "G1 "))
+        ]
+        offsets: list[int] = []
+        command_offset = 0
+        for index, toolpath in enumerate(toolpaths):
+            command_offset += 1
+            matched = commands[
+                command_offset:command_offset + len(toolpath.moves)
+            ]
+            if len(matched) == len(toolpath.moves):
+                offsets.extend(matched)
+            else:
+                fallback = commands[0] if commands else 0
+                offsets.extend([fallback] * len(toolpath.moves))
+            command_offset += len(toolpath.moves) + 1
+            report(
+                0.70 + 0.25 * (index + 1) / len(toolpaths),
+                "Preparing viewer references",
+            )
+        return {"code_lines": lines, "move_code_lines": offsets}
     if request.mode == "resume":
         toolpaths = [
             resume_toolpath(
