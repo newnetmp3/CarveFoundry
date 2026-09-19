@@ -131,5 +131,6 @@ def batch_grid(
                 group_id=group_id,
                 text_properties=source.text_properties,
                 smart_bindings=dict(source.smart_bindings),
+            vector_path=source.vector_path,
             ))
     return output
