@@ -32,8 +32,12 @@ It must not be described as a guarantee of physical safety.
    potential gouges, not merely a path-tracing playback.
 3. **Robust job recovery:** immutable job manifests, machine state/work-zero
    and tool identification, verified safe entry and machine-aware resumption.
-4. **Multi-tool machining plan UI:** group/order operations by cutter, explicit
-   rough/finish/detail/cutout dependencies and per-cutter setup records.
+4. **Persistent multi-tool planning and dependencies:** A session-owned
+   multi-cutter job planner now supports appending operations, reordering/removing
+   generated paths, cutout/rough-before-finish checks, stage estimates, full
+   preview and preflighted per-cutter export. Native CF3D still does NOT retain
+   calculated paths or tool-stage setup records; full automatic operation
+   dependency generation and stock-aware sequencing remain future work.
 5. **V-carve inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
    and fit/tolerance validation.
 6. **Stock-aware rest machining/adaptive clearing/feed optimization:** use
@@ -44,9 +48,13 @@ It must not be described as a guarantee of physical safety.
    Booleans or editable source vector paths. Original shapes are hidden, not
    destroyed; Undo/Redo and CF3D save/load preserve the outcome.
 8. **Multi-component 3D relief compositing and editable heightmap layers.**
-9. **Double-sided machining wizard:** choose actual physical flip axis, compute
-   stock-relative registration, and validate front/back alignment across
-   origin modes, fixtures and tool changes.
+9. **Machine-integrated double-sided workflow:** Stock-registered two-face
+   setup now partitions visible front/back models, reflects the chosen physical
+   flip axis, validates XY/Z containment, and writes two verified CF3D projects
+   and a setup checklist in a new folder without touching source geometry.
+   Each face must separately generate, preflight and export G-code. Live fixture
+   detection, physical registration testing, machine-aware flip verification,
+   and automatic multi-face G-code execution are NOT implemented.
 10. **Batch production and nesting:** generate multiple positioned copies with
     registration margin, clamp area and machine travel checks.
 11. **Spoilboard mapping and probe-backed height compensation** with verified
