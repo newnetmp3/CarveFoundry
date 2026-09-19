@@ -193,7 +193,9 @@ before restore and bounded retention. Restoring loads a normal project as
 **unsaved changes**. If the source file changed since the checkpoint, the
 restore dialog warns you. Only an explicit normal **Save** can overwrite
 the source project. A deliberate Discard of unsaved work removes that
-session's recovery checkpoint.
+session's recovery checkpoint. The checkpoint preserves the same design,
+stock, fixture and mesh information as a normal CF3D Save; session-owned
+generated toolpaths and machining-job order must be regenerated after restore.
 
 ## Native CAM core
 
