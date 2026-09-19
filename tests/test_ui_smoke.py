@@ -6,7 +6,8 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
-from carvefoundry.cam.toolpath import Toolpath
+from carvefoundry.cam.gcode import GrblPostSettings
+from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
 from carvefoundry.core.tools import Cutter, ToolType
@@ -14,6 +15,7 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
+from carvefoundry.ui.toolpath_preview import ToolpathPreviewWindow
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -222,6 +224,186 @@ def test_generation_dialog_has_verbose_help_for_every_option() -> None:
         dialog.close()
     finally:
         window.close()
+
+
+def _render_cache_test_toolpath() -> Toolpath:
+    cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+    return Toolpath(
+        "Dense preview",
+        "finish",
+        cutter,
+        1.5,
+        moves=[
+            ToolpathMove(0.0, 0.0, 1.5, MoveKind.RAPID),
+            ToolpathMove(0.0, 0.0, 0.0, MoveKind.PLUNGE, 300.0),
+            ToolpathMove(1.0, 0.0, 0.0, MoveKind.CUT, 1000.0),
+            ToolpathMove(2.0, 0.0, 0.0, MoveKind.CUT, 1000.0),
+            ToolpathMove(2.0, 1.0, 1.5, MoveKind.RAPID),
+            ToolpathMove(3.0, 1.0, 0.0, MoveKind.PLUNGE, 300.0),
+            ToolpathMove(4.0, 1.0, 0.0, MoveKind.CUT, 1000.0),
+        ],
+    )
+
+
+def test_toolpath_render_geometry_is_cached_between_repaints() -> None:
+    window = MainWindow()
+    try:
+        toolpath = _render_cache_test_toolpath()
+        window._set_project(
+            Project(toolpaths=[toolpath]),
+            project_path=None,
+            selected_row=0,
+        )
+        renderer = window.viewport._renderer
+
+        first = renderer._ensure_toolpath_render_cache()
+        second = renderer._ensure_toolpath_render_cache()
+
+        assert first is second
+        assert first.segment_count == 6
+        assert len(first.cut_vertices) == 10
+        assert len(first.rapid_vertices) == 2
+        assert first.bounds is not None
+        assert np.allclose(first.bounds[0], (0.0, 0.0, 0.0))
+        assert np.allclose(first.bounds[1], (4.0, 1.0, 1.5))
+
+        toolpath.moves.append(
+            ToolpathMove(5.0, 1.0, 0.0, MoveKind.CUT, 1000.0)
+        )
+        rebuilt = renderer._ensure_toolpath_render_cache()
+        assert rebuilt is not first
+        assert rebuilt.segment_count == 7
+    finally:
+        window.close()
+
+
+def test_toolpath_simulation_prefix_uses_cached_counts() -> None:
+    window = MainWindow()
+    try:
+        toolpath = _render_cache_test_toolpath()
+        window._set_project(
+            Project(toolpaths=[toolpath]),
+            project_path=None,
+            selected_row=0,
+        )
+        renderer = window.viewport._renderer
+        cache = renderer._ensure_toolpath_render_cache()
+
+        renderer.simulation_fraction = 0.5
+        cut_count, rapid_count = renderer._toolpath_visible_vertex_counts(
+            cache
+        )
+        assert cut_count == 6
+        assert rapid_count == 0
+
+        renderer.simulation_fraction = 1.0
+        cut_count, rapid_count = renderer._toolpath_visible_vertex_counts(
+            cache
+        )
+        assert cut_count == 10
+        assert rapid_count == 2
+    finally:
+        window.close()
+
+
+def test_dense_toolpath_builds_interaction_lod_without_changing_exact_path() -> None:
+    window = MainWindow()
+    try:
+        toolpath = _render_cache_test_toolpath()
+        window._set_project(
+            Project(toolpaths=[toolpath]),
+            project_path=None,
+            selected_row=0,
+        )
+        renderer = window.viewport._renderer
+        renderer.TOOLPATH_INTERACTIVE_SEGMENT_BUDGET = 2
+        renderer._invalidate_toolpath_render_cache()
+
+        cache = renderer._ensure_toolpath_render_cache()
+
+        assert cache.lod_stride == 3
+        assert len(cache.cut_lod_vertices) < len(cache.cut_vertices)
+        assert np.array_equal(
+            renderer._toolpath_line_geometry()[0],
+            cache.cut_vertices,
+        )
+        assert len(toolpath.moves) == 7
+    finally:
+        window.close()
+
+
+def test_viewport_bounds_use_cached_toolpath_geometry() -> None:
+    class BoundsGuardToolpath(Toolpath):
+        @property
+        def bounds_xyz_mm(self):
+            raise AssertionError("viewport should use cached render bounds")
+
+    window = MainWindow()
+    try:
+        base = _render_cache_test_toolpath()
+        guarded = BoundsGuardToolpath(
+            base.name,
+            base.operation,
+            base.cutter,
+            base.safe_z_mm,
+            moves=list(base.moves),
+        )
+        window._set_project(
+            Project(toolpaths=[guarded]),
+            project_path=None,
+            selected_row=0,
+        )
+
+        bounds = window.viewport._renderer._full_scene_bounds()
+        assert bounds[1, 0] >= 4.0
+        assert bounds[1, 1] >= 1.0
+    finally:
+        window.close()
+
+
+def test_large_toolpath_preview_defers_gcode_until_code_panel_opens(
+    monkeypatch,
+) -> None:
+    toolpath = _render_cache_test_toolpath()
+    calls: list[int] = []
+    original = ToolpathPreviewWindow._render_program
+
+    def tracked_render(self):
+        calls.append(1)
+        return original(self)
+
+    monkeypatch.setattr(
+        ToolpathPreviewWindow,
+        "LAZY_CODE_MOVE_THRESHOLD",
+        2,
+    )
+    monkeypatch.setattr(
+        ToolpathPreviewWindow,
+        "_render_program",
+        tracked_render,
+    )
+
+    preview = ToolpathPreviewWindow(
+        toolpaths=[toolpath],
+        stock=Project().stock,
+        post_settings=GrblPostSettings(),
+    )
+    try:
+        assert preview._defer_code
+        assert not preview._code_loaded
+        assert calls == []
+        assert not preview._code_toggle.isChecked()
+        assert preview._left_panel.isHidden()
+
+        preview._code_toggle.click()
+
+        assert preview._code_loaded
+        assert calls == [1]
+        assert preview._code_toggle.isChecked()
+        assert not preview._left_panel.isHidden()
+        assert preview.code_editor.blockCount() > 1
+    finally:
+        preview.close()
 
 
 def test_toolpath_generation_progress_is_determinate_and_shared() -> None:

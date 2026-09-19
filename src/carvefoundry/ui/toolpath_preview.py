@@ -38,6 +38,8 @@ from .viewport import MeshViewport
 class ToolpathPreviewWindow(QMainWindow):
     """NC Viewer-inspired standalone backplotter for calculated toolpaths."""
 
+    LAZY_CODE_MOVE_THRESHOLD = 150_000
+
     def __init__(
         self,
         *,
@@ -60,7 +62,12 @@ class ToolpathPreviewWindow(QMainWindow):
         self._source_names = list(source_names or [])
         self._moves = list(chain.from_iterable(path.moves for path in toolpaths))
         self._post_settings = post_settings
-        self._code_lines, self._move_code_lines = self._render_program()
+        self._code_lines: list[str] = []
+        self._move_code_lines: list[int] = []
+        self._code_loaded = False
+        self._defer_code = (
+            len(self._moves) > self.LAZY_CODE_MOVE_THRESHOLD
+        )
         self._playing = False
 
         preview_project = Project(
@@ -84,7 +91,15 @@ class ToolpathPreviewWindow(QMainWindow):
 
         self._build_ui()
         self._install_shortcuts()
-        self._load_code()
+        if self._defer_code:
+            self._left_panel.hide()
+            self._code_toggle.setChecked(False)
+            self.code_editor.setPlaceholderText(
+                "G-code loading is deferred for this large toolpath. "
+                "Click Code to load it."
+            )
+        else:
+            self._ensure_code_loaded()
         self._set_position(0 if self._moves else -1)
         self.viewport.set_isometric_view()
 
@@ -142,8 +157,11 @@ class ToolpathPreviewWindow(QMainWindow):
 
         self._code_toggle = QPushButton("Code")
         self._code_toggle.setCheckable(True)
-        self._code_toggle.setChecked(True)
-        self._code_toggle.setToolTip("Show or hide the G-code / DRO sidebar")
+        self._code_toggle.setChecked(not self._defer_code)
+        self._code_toggle.setToolTip(
+            "Show or hide the G-code / DRO sidebar. For very large "
+            "toolpaths, G-code is loaded only when this panel is opened."
+        )
         self._code_toggle.clicked.connect(self._toggle_code_panel)
         top_layout.addWidget(self._code_toggle)
 
@@ -358,11 +376,27 @@ class ToolpathPreviewWindow(QMainWindow):
 
     def _toggle_code_panel(self) -> None:
         visible = self._code_toggle.isChecked()
+        if visible:
+            self._ensure_code_loaded()
         self._left_panel.setVisible(visible)
         if visible:
             sizes = self._splitter.sizes()
             total = max(sum(sizes), self.width())
             self._splitter.setSizes([390, max(570, total - 390)])
+
+    def _ensure_code_loaded(self) -> None:
+        if self._code_loaded:
+            return
+        self._code_lines, self._move_code_lines = self._render_program()
+        self._load_code()
+        self._code_loaded = True
+        if self._moves and hasattr(self, "_slider"):
+            index = max(
+                0,
+                min(self._slider.value(), len(self._move_code_lines) - 1),
+            )
+            if self._move_code_lines:
+                self._highlight_code_line(self._move_code_lines[index])
 
     def _load_code(self) -> None:
         numbered = "\n".join(
@@ -414,7 +448,7 @@ class ToolpathPreviewWindow(QMainWindow):
         )
         self.viewport.set_toolpath_marker(move.xyz)
 
-        if index < len(self._move_code_lines):
+        if self._code_loaded and index < len(self._move_code_lines):
             self._highlight_code_line(self._move_code_lines[index])
         self._apply_plot_position(index)
 

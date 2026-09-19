@@ -6,7 +6,7 @@ from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PySide6.QtCore import QPoint, QPointF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QCursor,
@@ -156,6 +156,52 @@ class _GpuMesh:
 
 
 @dataclass(slots=True)
+class _GpuLineGeometry:
+    vao: QOpenGLVertexArrayObject
+    vertex_buffer: QOpenGLBuffer
+    vertex_count: int = 0
+
+    def destroy(self) -> None:
+        if self.vertex_buffer.isCreated():
+            self.vertex_buffer.destroy()
+        if self.vao.isCreated():
+            self.vao.destroy()
+
+
+@dataclass(slots=True)
+class _ToolpathRenderCache:
+    key: tuple[tuple[int, int, int], ...]
+    cut_vertices: np.ndarray
+    rapid_vertices: np.ndarray
+    cut_lod_vertices: np.ndarray
+    rapid_lod_vertices: np.ndarray
+    rapid_prefix: np.ndarray
+    points: np.ndarray
+    bounds: np.ndarray | None
+    segment_count: int
+    lod_stride: int
+
+    @classmethod
+    def empty(
+        cls,
+        key: tuple[tuple[int, int, int], ...] = (),
+    ) -> _ToolpathRenderCache:
+        vertices = np.empty((0, 3), dtype=np.float32)
+        return cls(
+            key=key,
+            cut_vertices=vertices,
+            rapid_vertices=vertices.copy(),
+            cut_lod_vertices=vertices.copy(),
+            rapid_lod_vertices=vertices.copy(),
+            rapid_prefix=np.zeros(1, dtype=np.uint32),
+            points=vertices.copy(),
+            bounds=None,
+            segment_count=0,
+            lod_stride=1,
+        )
+
+
+@dataclass(slots=True)
 class _CameraState:
     # Default to a CNC-friendly XY plan view: +X right, +Y up, with the
     # stock origin at the lower-left.  Perspective remains the default
@@ -196,6 +242,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     RESIZE_HANDLE_HALF_SIZE_PX = 5.5
     RESIZE_MIN_FACTOR = 0.05
     RESIZE_MAX_FACTOR = 100.0
+    TOOLPATH_INTERACTIVE_SEGMENT_BUDGET = 120_000
 
     def __init__(self, project: Project | None = None) -> None:
         super().__init__()
@@ -251,6 +298,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._stock_program: QOpenGLShaderProgram | None = None
         self._line_vao: QOpenGLVertexArrayObject | None = None
         self._line_buffer: QOpenGLBuffer | None = None
+        self._toolpath_cut_gpu: _GpuLineGeometry | None = None
+        self._toolpath_rapid_gpu: _GpuLineGeometry | None = None
+        self._toolpath_cut_lod_gpu: _GpuLineGeometry | None = None
+        self._toolpath_rapid_lod_gpu: _GpuLineGeometry | None = None
+        self._toolpath_gpu_key: tuple[tuple[int, int, int], ...] | None = None
+        self._toolpath_render_cache = _ToolpathRenderCache.empty()
+        self._toolpath_interaction_lod_frames = 0
         self._mesh_cache: dict[int, _GpuMesh] = {}
         self._prepared_mesh_uploads: dict[int, tuple[object, bytes, int]] = {}
         self._renderer_description = "Native OpenGL initializing…"
@@ -314,6 +368,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._gizmo_drag_axis_world = None
         self._gizmo_drag_accumulated_delta = 0.0
         self._prepared_mesh_uploads.clear()
+        self._invalidate_toolpath_render_cache()
         if fit_view:
             self.fit_view()
         else:
@@ -438,6 +493,161 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             if toolpath.source_item_id in isolated_ids
         ]
 
+    def _toolpath_cache_key(
+        self,
+        toolpaths: list,
+    ) -> tuple[tuple[int, int, int], ...]:
+        return tuple(
+            (id(toolpath), id(toolpath.moves), len(toolpath.moves))
+            for toolpath in toolpaths
+        )
+
+    def _invalidate_toolpath_render_cache(self) -> None:
+        self._toolpath_render_cache = _ToolpathRenderCache.empty()
+        self._toolpath_gpu_key = None
+
+    def _ensure_toolpath_render_cache(self) -> _ToolpathRenderCache:
+        toolpaths = self._visible_toolpaths()
+        key = self._toolpath_cache_key(toolpaths)
+        if self._toolpath_render_cache.key == key:
+            return self._toolpath_render_cache
+
+        if not toolpaths:
+            self._toolpath_render_cache = _ToolpathRenderCache.empty(key)
+            self._toolpath_gpu_key = None
+            return self._toolpath_render_cache
+
+        cut_chunks: list[np.ndarray] = []
+        rapid_chunks: list[np.ndarray] = []
+        point_chunks: list[np.ndarray] = []
+        rapid_flag_chunks: list[np.ndarray] = []
+        segment_count = 0
+
+        for toolpath in toolpaths:
+            moves = toolpath.moves
+            move_count = len(moves)
+            if move_count == 0:
+                continue
+
+            coords = np.fromiter(
+                (
+                    coordinate
+                    for move in moves
+                    for coordinate in move.xyz
+                ),
+                dtype=np.float32,
+                count=move_count * 3,
+            ).reshape((-1, 3))
+            point_chunks.append(coords)
+            if move_count < 2:
+                continue
+
+            rapid_flags = np.fromiter(
+                (
+                    move.kind is MoveKind.RAPID
+                    for move in moves[1:]
+                ),
+                dtype=np.bool_,
+                count=move_count - 1,
+            )
+            segments = np.empty(
+                (move_count - 1, 2, 3),
+                dtype=np.float32,
+            )
+            segments[:, 0, :] = coords[:-1]
+            segments[:, 1, :] = coords[1:]
+            if np.any(~rapid_flags):
+                cut_chunks.append(
+                    segments[~rapid_flags].reshape((-1, 3))
+                )
+            if np.any(rapid_flags):
+                rapid_chunks.append(
+                    segments[rapid_flags].reshape((-1, 3))
+                )
+            rapid_flag_chunks.append(rapid_flags)
+            segment_count += move_count - 1
+
+        empty = np.empty((0, 3), dtype=np.float32)
+        cut_vertices = (
+            np.concatenate(cut_chunks, axis=0)
+            if cut_chunks
+            else empty.copy()
+        )
+        rapid_vertices = (
+            np.concatenate(rapid_chunks, axis=0)
+            if rapid_chunks
+            else empty.copy()
+        )
+        points = (
+            np.concatenate(point_chunks, axis=0)
+            if point_chunks
+            else empty.copy()
+        )
+
+        if rapid_flag_chunks:
+            rapid_flags = np.concatenate(rapid_flag_chunks)
+            rapid_prefix = np.empty(
+                len(rapid_flags) + 1,
+                dtype=np.uint32,
+            )
+            rapid_prefix[0] = 0
+            np.cumsum(
+                rapid_flags,
+                dtype=np.uint32,
+                out=rapid_prefix[1:],
+            )
+        else:
+            rapid_prefix = np.zeros(1, dtype=np.uint32)
+
+        lod_stride = max(
+            1,
+            int(
+                np.ceil(
+                    segment_count
+                    / self.TOOLPATH_INTERACTIVE_SEGMENT_BUDGET
+                )
+            ),
+        )
+
+        def decimate(vertices: np.ndarray) -> np.ndarray:
+            if lod_stride <= 1 or len(vertices) <= 2:
+                return vertices
+            segments = vertices.reshape((-1, 2, 3))
+            return np.ascontiguousarray(
+                segments[::lod_stride].reshape((-1, 3)),
+                dtype=np.float32,
+            )
+
+        bounds = None
+        if len(points):
+            bounds = np.vstack(
+                (
+                    np.min(points, axis=0),
+                    np.max(points, axis=0),
+                )
+            ).astype(float)
+
+        self._toolpath_render_cache = _ToolpathRenderCache(
+            key=key,
+            cut_vertices=np.ascontiguousarray(
+                cut_vertices,
+                dtype=np.float32,
+            ),
+            rapid_vertices=np.ascontiguousarray(
+                rapid_vertices,
+                dtype=np.float32,
+            ),
+            cut_lod_vertices=decimate(cut_vertices),
+            rapid_lod_vertices=decimate(rapid_vertices),
+            rapid_prefix=rapid_prefix,
+            points=np.ascontiguousarray(points, dtype=np.float32),
+            bounds=bounds,
+            segment_count=segment_count,
+            lod_stride=lod_stride,
+        )
+        self._toolpath_gpu_key = None
+        return self._toolpath_render_cache
+
     @property
     def isolated(self) -> bool:
         return self._isolated_item_indices is not None
@@ -455,6 +665,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if not isolated:
             return False
         self._isolated_item_indices = isolated
+        self._invalidate_toolpath_render_cache()
         self.requestUpdate()
         self.viewChanged.emit()
         return True
@@ -463,6 +674,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         if self._isolated_item_indices is None:
             return
         self._isolated_item_indices = None
+        self._invalidate_toolpath_render_cache()
         self.requestUpdate()
         self.viewChanged.emit()
 
@@ -619,6 +831,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
+        self._toolpath_interaction_lod_frames = 0
         self._update_interaction_cursor()
         self.requestUpdate()
 
@@ -717,6 +930,11 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self._line_buffer.release()
             self._line_vao.release()
 
+            self._toolpath_cut_gpu = self._create_gpu_line_geometry()
+            self._toolpath_rapid_gpu = self._create_gpu_line_geometry()
+            self._toolpath_cut_lod_gpu = self._create_gpu_line_geometry()
+            self._toolpath_rapid_lod_gpu = self._create_gpu_line_geometry()
+
             fmt = context.format()
             profile = fmt.profile().name.replace("Profile", "")
             self._renderer_description = (
@@ -739,6 +957,20 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         for entry in self._mesh_cache.values():
             entry.destroy()
         self._mesh_cache.clear()
+
+        for geometry in (
+            self._toolpath_cut_gpu,
+            self._toolpath_rapid_gpu,
+            self._toolpath_cut_lod_gpu,
+            self._toolpath_rapid_lod_gpu,
+        ):
+            if geometry is not None:
+                geometry.destroy()
+        self._toolpath_cut_gpu = None
+        self._toolpath_rapid_gpu = None
+        self._toolpath_cut_lod_gpu = None
+        self._toolpath_rapid_lod_gpu = None
+        self._toolpath_gpu_key = None
 
         if self._line_buffer is not None and self._line_buffer.isCreated():
             self._line_buffer.destroy()
@@ -831,18 +1063,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             minimum = np.minimum(minimum, item_bounds[0])
             maximum = np.maximum(maximum, item_bounds[1])
 
-        for toolpath in self._visible_toolpaths():
-            toolpath_bounds = toolpath.bounds_xyz_mm
-            if toolpath_bounds is None:
-                continue
-            minimum = np.minimum(
-                minimum,
-                np.asarray(toolpath_bounds[0], dtype=float),
-            )
-            maximum = np.maximum(
-                maximum,
-                np.asarray(toolpath_bounds[1], dtype=float),
-            )
+        toolpath_bounds = self._ensure_toolpath_render_cache().bounds
+        if toolpath_bounds is not None:
+            minimum = np.minimum(minimum, toolpath_bounds[0])
+            maximum = np.maximum(maximum, toolpath_bounds[1])
 
         return np.vstack((minimum, maximum))
 
@@ -1072,6 +1296,116 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ]
         for key in stale_prepared:
             self._prepared_mesh_uploads.pop(key, None)
+
+    def _create_gpu_line_geometry(self) -> _GpuLineGeometry:
+        if self._line_program is None:
+            raise RuntimeError("OpenGL line shader is not available.")
+
+        vao = QOpenGLVertexArrayObject()
+        if not vao.create():
+            raise RuntimeError("Could not create toolpath line VAO.")
+
+        vertex_buffer = QOpenGLBuffer(QOpenGLBuffer.Type.VertexBuffer)
+        if not vertex_buffer.create():
+            vao.destroy()
+            raise RuntimeError("Could not create toolpath line vertex buffer.")
+        vertex_buffer.setUsagePattern(QOpenGLBuffer.UsagePattern.StaticDraw)
+
+        vao.bind()
+        vertex_buffer.bind()
+        self._line_program.bind()
+        self._line_program.enableAttributeArray(0)
+        self._line_program.setAttributeBuffer(0, GL_FLOAT, 0, 3, 12)
+        self._line_program.release()
+        vertex_buffer.release()
+        vao.release()
+        return _GpuLineGeometry(vao, vertex_buffer)
+
+    @staticmethod
+    def _upload_gpu_line_geometry(
+        geometry: _GpuLineGeometry,
+        vertices: np.ndarray,
+    ) -> None:
+        line_vertices = np.ascontiguousarray(
+            vertices,
+            dtype=np.float32,
+        ).reshape((-1, 3))
+        geometry.vertex_count = len(line_vertices)
+        if geometry.vertex_count == 0:
+            return
+        line_bytes = line_vertices.tobytes()
+        geometry.vertex_buffer.bind()
+        geometry.vertex_buffer.allocate(line_bytes, len(line_bytes))
+        geometry.vertex_buffer.release()
+
+    def _ensure_toolpath_gpu_cache(
+        self,
+        cache: _ToolpathRenderCache,
+    ) -> bool:
+        geometries = (
+            self._toolpath_cut_gpu,
+            self._toolpath_rapid_gpu,
+            self._toolpath_cut_lod_gpu,
+            self._toolpath_rapid_lod_gpu,
+        )
+        if any(geometry is None for geometry in geometries):
+            return False
+        if self._toolpath_gpu_key == cache.key:
+            return True
+
+        assert self._toolpath_cut_gpu is not None
+        assert self._toolpath_rapid_gpu is not None
+        assert self._toolpath_cut_lod_gpu is not None
+        assert self._toolpath_rapid_lod_gpu is not None
+        self._upload_gpu_line_geometry(
+            self._toolpath_cut_gpu,
+            cache.cut_vertices,
+        )
+        self._upload_gpu_line_geometry(
+            self._toolpath_rapid_gpu,
+            cache.rapid_vertices,
+        )
+        self._upload_gpu_line_geometry(
+            self._toolpath_cut_lod_gpu,
+            cache.cut_lod_vertices,
+        )
+        self._upload_gpu_line_geometry(
+            self._toolpath_rapid_lod_gpu,
+            cache.rapid_lod_vertices,
+        )
+        self._toolpath_gpu_key = cache.key
+        return True
+
+    def _draw_gpu_lines(
+        self,
+        geometry: _GpuLineGeometry | None,
+        vertex_count: int,
+        *,
+        view_projection: QMatrix4x4,
+        color: QVector4D,
+        line_width: float = 1.0,
+    ) -> None:
+        if (
+            self._functions is None
+            or self._line_program is None
+            or geometry is None
+            or vertex_count <= 0
+            or geometry.vertex_count <= 0
+        ):
+            return
+
+        count = min(int(vertex_count), geometry.vertex_count)
+        self._line_program.bind()
+        self._line_program.setUniformValue("u_mvp", view_projection)
+        self._line_program.setUniformValue("u_color", color)
+        geometry.vao.bind()
+        self._functions.glLineWidth(max(1.0, float(line_width)))
+        try:
+            self._functions.glDrawArrays(GL_LINES, 0, count)
+        finally:
+            self._functions.glLineWidth(1.0)
+        geometry.vao.release()
+        self._line_program.release()
 
     def _draw_lines(
         self,
@@ -2472,43 +2806,35 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         finally:
             self._functions.glEnable(GL_DEPTH_TEST)
 
+    def _toolpath_visible_vertex_counts(
+        self,
+        cache: _ToolpathRenderCache,
+    ) -> tuple[int, int]:
+        if cache.segment_count <= 0 or self.simulation_fraction <= 0.0:
+            return 0, 0
+
+        visible_segments = round(
+            cache.segment_count * self.simulation_fraction
+        )
+        visible_segments = max(
+            1,
+            min(cache.segment_count, visible_segments),
+        )
+        rapid_segments = int(cache.rapid_prefix[visible_segments])
+        cut_segments = visible_segments - rapid_segments
+        return cut_segments * 2, rapid_segments * 2
+
     def _toolpath_line_geometry(
         self,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Return cut/plunge and rapid line segments for the visible preview."""
+        """Return cached exact line vertices for the visible simulation prefix."""
 
-        if self.project is None or not self.project.toolpaths:
-            empty = np.empty((0, 3), dtype=np.float32)
-            return empty, empty
-
-        visible_toolpaths = self._visible_toolpaths()
-        if not visible_toolpaths:
-            empty = np.empty((0, 3), dtype=np.float32)
-            return empty, empty
-
-        segments: list[tuple[object, object]] = []
-        for toolpath in visible_toolpaths:
-            for previous, current in zip(toolpath.moves, toolpath.moves[1:]):
-                segments.append((previous, current))
-
-        if not segments:
-            empty = np.empty((0, 3), dtype=np.float32)
-            return empty, empty
-
-        visible_count = round(len(segments) * self.simulation_fraction)
-        if self.simulation_fraction > 0.0:
-            visible_count = max(1, visible_count)
-        visible_segments = segments[:visible_count]
-
-        cut_vertices: list[tuple[float, float, float]] = []
-        rapid_vertices: list[tuple[float, float, float]] = []
-        for previous, current in visible_segments:
-            target = rapid_vertices if current.kind is MoveKind.RAPID else cut_vertices
-            target.extend((previous.xyz, current.xyz))
-
-        cut = np.asarray(cut_vertices, dtype=np.float32).reshape((-1, 3))
-        rapid = np.asarray(rapid_vertices, dtype=np.float32).reshape((-1, 3))
-        return cut, rapid
+        cache = self._ensure_toolpath_render_cache()
+        cut_count, rapid_count = self._toolpath_visible_vertex_counts(cache)
+        return (
+            cache.cut_vertices[:cut_count],
+            cache.rapid_vertices[:rapid_count],
+        )
 
     def _toolpath_point_geometry(
         self,
@@ -2521,12 +2847,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             return np.empty((0, 3), dtype=np.float32)
 
-        points = [
-            move.xyz
-            for toolpath in self._visible_toolpaths()
-            for move in toolpath.moves
-        ]
-        if not points:
+        points = self._ensure_toolpath_render_cache().points
+        if not len(points):
             return np.empty((0, 3), dtype=np.float32)
 
         # Keep the overlay responsive on very dense 3D finishing paths.
@@ -2577,18 +2899,48 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             return
 
-        cut_vertices, rapid_vertices = self._toolpath_line_geometry()
+        cache = self._ensure_toolpath_render_cache()
+        if not self._ensure_toolpath_gpu_cache(cache):
+            return
+
+        cut_count, rapid_count = self._toolpath_visible_vertex_counts(cache)
+        use_lod = (
+            cache.lod_stride > 1
+            and (
+                self._interaction_mode in {"orbit", "pan"}
+                or self._toolpath_interaction_lod_frames > 0
+            )
+        )
+        if use_lod:
+            full_cut_segments = max(len(cache.cut_vertices) // 2, 1)
+            full_rapid_segments = max(len(cache.rapid_vertices) // 2, 1)
+            cut_fraction = (cut_count // 2) / full_cut_segments
+            rapid_fraction = (rapid_count // 2) / full_rapid_segments
+            cut_count = round(
+                len(cache.cut_lod_vertices) * cut_fraction / 2.0
+            ) * 2
+            rapid_count = round(
+                len(cache.rapid_lod_vertices) * rapid_fraction / 2.0
+            ) * 2
+            cut_geometry = self._toolpath_cut_lod_gpu
+            rapid_geometry = self._toolpath_rapid_lod_gpu
+        else:
+            cut_geometry = self._toolpath_cut_gpu
+            rapid_geometry = self._toolpath_rapid_gpu
+
         self._functions.glDisable(GL_DEPTH_TEST)
         try:
-            self._draw_lines(
-                cut_vertices,
+            self._draw_gpu_lines(
+                cut_geometry,
+                cut_count,
                 view_projection=view_projection,
                 color=QVector4D(0.78, 1.0, 0.24, 0.98),
                 line_width=2.5,
             )
             if self.show_rapids:
-                self._draw_lines(
-                    rapid_vertices,
+                self._draw_gpu_lines(
+                    rapid_geometry,
+                    rapid_count,
                     view_projection=view_projection,
                     color=QVector4D(1.0, 0.62, 0.20, 0.90),
                     line_width=1.5,
@@ -2640,6 +2992,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             view_projection,
             world_per_pixel,
         )
+
+        if self._toolpath_interaction_lod_frames > 0:
+            self._toolpath_interaction_lod_frames -= 1
 
     def _pan_pixels(self, delta: QPointF) -> None:
         _projection, _view, world_per_pixel = self._camera_geometry()
@@ -2785,6 +3140,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         delta = event.position() - self._last_mouse_pos
         self._last_mouse_pos = event.position()
         self._interaction_distance += abs(delta.x()) + abs(delta.y())
+        if self._interaction_mode in {"orbit", "pan"}:
+            self._toolpath_interaction_lod_frames = 1
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
@@ -3130,7 +3487,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.viewChanged.emit()
         event.accept()
 
+    def _restore_toolpath_full_detail(self) -> None:
+        self._toolpath_interaction_lod_frames = 0
+        self.requestUpdate()
+
     def wheelEvent(self, event: QWheelEvent) -> None:
+        self._toolpath_interaction_lod_frames = 1
+        QTimer.singleShot(60, self._restore_toolpath_full_detail)
         angle_steps = event.angleDelta().y() / 120.0
         steps = angle_steps if angle_steps else event.pixelDelta().y() / 120.0
         if steps:
