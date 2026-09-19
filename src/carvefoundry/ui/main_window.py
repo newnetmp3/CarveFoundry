@@ -276,6 +276,15 @@ class MainWindow(
             if key in self._history_action_buttons:
                 self._history_action_buttons[key].append(button)
 
+        guide_button = QPushButton("Guided CNC Job")
+        guide_button.setObjectName("TitleQuickButton")
+        guide_button.setToolTip(
+            "Step-by-step stock, machine, fixtures, toolpaths, "
+            "simulation, CNC preflight and export."
+        )
+        guide_button.clicked.connect(self._show_guided_workflow)
+        line.addWidget(guide_button)
+
         self.machine_status_label = QLabel("OFFLINE")
         self.machine_status_label.setObjectName("MachineStatus")
         self.machine_status_label.setToolTip(
