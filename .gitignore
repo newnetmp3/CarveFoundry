@@ -10,6 +10,7 @@ venv/
 htmlcov/
 dist/
 build/
+rust/target/
 *.egg-info/
 .idea/
 .vscode/
