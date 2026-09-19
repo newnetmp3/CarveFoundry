@@ -9,6 +9,7 @@ import numpy as np
 import trimesh
 
 from .mesh import MeshAsset
+from .smart_values import SmartValues
 from .transform import Transform3D
 from .units import ModelUnits
 
@@ -24,6 +25,7 @@ class Stock:
     width_mm: float = 300.0
     height_mm: float = 200.0
     thickness_mm: float = 19.0
+    xy_zero: str = "bottom_left"
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,7 @@ class ProjectItem:
     group_id: str | None = None
     item_id: str = field(default_factory=lambda: uuid4().hex)
     text_properties: TextProperties | None = None
+    smart_bindings: dict[str, str] = field(default_factory=dict)
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
@@ -159,6 +162,7 @@ class Project:
     name: str = "Untitled"
     stock: Stock = field(default_factory=Stock)
     items: list[ProjectItem] = field(default_factory=list)
+    smart_values: SmartValues = field(default_factory=SmartValues)
     toolpaths: list[Toolpath] = field(
         default_factory=list,
         repr=False,
@@ -234,6 +238,7 @@ class Project:
             source_units=source.source_units,
             group_id=None,
             text_properties=source.text_properties,
+            smart_bindings=dict(source.smart_bindings),
         )
         new_index = index + 1
         self.items.insert(new_index, duplicate)
