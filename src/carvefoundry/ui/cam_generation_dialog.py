@@ -1034,14 +1034,55 @@ class CamGenerationDialogMixin:
         add_help_row(tabs_form, "Tab count", "tab_count", tab_count)
         grid.addWidget(tabs_box, 2, 1)
 
-        ready_box = QGroupBox("7. Generation Readiness")
+        rest_box, rest_form = group("7. Stock-Aware Rest Cleanup")
+        rest_intro = QLabel(
+            "Generate roughing/finishing first. This operation simulates the "
+            "existing job on stock, then appends cleanup ONLY where the "
+            "selected cutter can remove leftover material. A smaller cutter "
+            "can reach detail the previous tool missed. It cannot infer "
+            "actual cuts performed outside CarveFoundry."
+        )
+        rest_intro.setWordWrap(True)
+        rest_form.addRow(rest_intro)
+        rest_allowance = self._generation_double_spin(
+            float(self._settings.value("cam/rest_min_remaining_mm", 0.15)),
+            minimum=0.01,
+            maximum=5.0,
+            suffix=" mm",
+            step=0.05,
+        )
+        rest_allowance.setToolTip(
+            "Minimum residual material to justify a rest cut (above the "
+            "contact-safe cutter surface). Larger values skip shallow "
+            "leftovers; smaller values add more paths."
+        )
+        fields["rest_allowance"] = rest_allowance
+        rest_form.addRow("Minimum leftover height", rest_allowance)
+        rest_resolution = self._generation_double_spin(
+            float(self._settings.value("cam/rest_grid_spacing_mm", 0.75)),
+            minimum=0.1,
+            maximum=10.0,
+            suffix=" mm",
+            step=0.25,
+        )
+        rest_resolution.setToolTip(
+            "XY sampling of previously removed stock, not final finishing "
+            "stepover. Smaller samples cost more memory/time; no grid above "
+            "600,000 stock cells is permitted. Use resolution smaller than "
+            "the detail you need to detect."
+        )
+        fields["rest_resolution"] = rest_resolution
+        rest_form.addRow("Stock simulation spacing", rest_resolution)
+        grid.addWidget(rest_box, 3, 0, 1, 2)
+
+        ready_box = QGroupBox("8. Generation Readiness")
         ready_layout = QVBoxLayout(ready_box)
         readiness = QLabel()
         readiness.setWordWrap(True)
         readiness.setTextFormat(Qt.TextFormat.RichText)
         fields["readiness"] = readiness
         ready_layout.addWidget(help_row("readiness", readiness))
-        grid.addWidget(ready_box, 3, 0, 1, 2)
+        grid.addWidget(ready_box, 4, 0, 1, 2)
 
         generation_progress = QProgressBar()
         generation_progress.setObjectName("ToolpathGenerationProgress")
@@ -1086,6 +1127,13 @@ class CamGenerationDialogMixin:
                 "rest",
                 "waterline",
             }
+            rest_active = operation == "rest"
+            rest_box.setVisible(rest_active)
+            if rest_active:
+                append_job.setChecked(bool(self.project.toolpaths))
+                append_job.setEnabled(False)
+            else:
+                append_job.setEnabled(bool(self.project.toolpaths))
             uses_cut_type = operation in {"profile", "pocket", "engrave"}
             uses_detail = is_3d or operation == "vcarve"
             uses_entry = operation not in {
@@ -1169,6 +1217,35 @@ class CamGenerationDialogMixin:
                     "Valid cutter selected",
                 )
             )
+            if rest_active:
+                previous = self.project.toolpaths
+                relevant = {
+                    path.source_item_id
+                    for path in previous
+                    if "full depth cutout" not in path.name.casefold()
+                }
+                checks.append((
+                    bool(previous),
+                    "Existing cutter stages are present and will be appended",
+                ))
+                checks.append((
+                    bool(previous) and all(
+                        item.item_id in relevant
+                        for item in source_items
+                    ),
+                    "Each visible model has a preceding machining operation",
+                ))
+                checks.append((
+                    not any(
+                        "full depth cutout" in path.name.casefold()
+                        for path in previous
+                        if any(
+                            path.source_item_id == item.item_id
+                            for item in source_items
+                        )
+                    ),
+                    "No selected model has already been freed by a cutout",
+                ))
             if operation == "vcarve":
                 checks.append(
                     (
@@ -1280,6 +1357,8 @@ class CamGenerationDialogMixin:
                 "cam/local_link_clearance_mm": local_clearance.value(),
                 "cam/direct_link_tolerance_mm": link_tolerance.value(),
                 "cam/custom_ramp_angle_deg": ramp_angle.value(),
+                "cam/rest_min_remaining_mm": rest_allowance.value(),
+                "cam/rest_grid_spacing_mm": rest_resolution.value(),
             }
             for setting_key, setting_value in values.items():
                 self._settings.setValue(setting_key, setting_value)
@@ -1337,6 +1416,8 @@ class CamGenerationDialogMixin:
             tab_height,
             tab_width,
             tab_count,
+            rest_allowance,
+            rest_resolution,
         )
         for widget in watched_widgets:
             if isinstance(widget, QComboBox):
