@@ -81,6 +81,40 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
         window.close()
 
 
+def test_pen_tool_draws_freehand_without_dialog_and_exposes_options() -> None:
+    window = MainWindow()
+    try:
+        window._create_pen_path()
+
+        assert window.viewport.shape_draw_mode == "pen"
+        assert not window.viewport.camera_control_mode
+        assert window._ui_actions["pen"].isChecked()
+        assert window.tool_rail.buttons["vector"].isChecked()
+        assert not window.tool_options_bar.isHidden()
+        assert not window.tool_options_pen_width_spin.isHidden()
+        assert not window.tool_options_pen_smoothing_spin.isHidden()
+        assert not window.tool_options_pen_spacing_spin.isHidden()
+        assert not window.tool_options_pen_close_check.isHidden()
+        assert window.tool_options_text_edit.isHidden()
+
+        window.tool_options_pen_width_spin.setValue(3.25)
+        window.tool_options_pen_smoothing_spin.setValue(60)
+        window.tool_options_pen_spacing_spin.setValue(0.2)
+        window.tool_options_pen_close_check.setChecked(True)
+
+        before = len(window.project.items)
+        window._freehand_pen_drawn(
+            [(10.0, 10.0), (15.0, 12.0), (20.0, 9.0), (25.0, 14.0)]
+        )
+
+        assert len(window.project.items) == before + 1
+        assert window.project.items[-1].kind == "pen"
+        assert window.project.items[-1].name.startswith("Pen Stroke")
+        assert window.viewport.shape_draw_mode == "pen"
+    finally:
+        window.close()
+
+
 def test_viewport_multi_selection_syncs_layers_and_actions() -> None:
     window = MainWindow()
     try:
