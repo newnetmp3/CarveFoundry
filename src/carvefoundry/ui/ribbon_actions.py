@@ -1132,12 +1132,16 @@ class RibbonActionsMixin:
             return
 
         captured = self._smooth_pen_points(captured)
-        if self._tool_option_pen_close_path and len(captured) >= 3:
-            if hypot(
+        if (
+            self._tool_option_pen_close_path
+            and len(captured) >= 3
+            and hypot(
                 captured[-1][0] - captured[0][0],
                 captured[-1][1] - captured[0][1],
-            ) > 1e-9:
-                captured.append(captured[0])
+            )
+            > 1e-9
+        ):
+            captured.append(captured[0])
 
         try:
             mesh = polyline_mesh(
