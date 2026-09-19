@@ -1854,6 +1854,11 @@ def test_measure_tool_reads_exact_stock_xy_without_making_mesh() -> None:
         assert not window.tool_options_bar.isHidden()
         assert window.tool_options_depth_spin.isHidden()
         assert not window.tool_options_measure_label.isHidden()
+        window.viewport._renderer.shapeDragUpdated.emit(
+            "measure", 10, 20, 40, 60
+        )
+        assert "50.000 mm" in window.tool_options_measure_label.text()
+        assert window._measurement is None
 
         window._shape_drawn("measure", 10, 20, 40, 60)
         assert len(window.project.items) == before
@@ -1886,6 +1891,13 @@ def test_fixture_draw_ui_writes_real_keepout_with_undo_and_cf3d(
         assert not window.tool_options_fixture_clearance_spin.isHidden()
         window.tool_options_fixture_top_spin.setValue(3.6)
         window.tool_options_fixture_clearance_spin.setValue(2.5)
+        window.viewport._renderer.shapeDragUpdated.emit(
+            "fixture", 10, 30, 40, 50
+        )
+        assert "30.000 × 20.000 mm" in (
+            window.tool_options_fixture_size_label.text()
+        )
+        assert not window.project.fixtures
 
         window._shape_drawn("fixture", 10, 30, 40, 50)
         assert len(window.project.fixtures) == 1
