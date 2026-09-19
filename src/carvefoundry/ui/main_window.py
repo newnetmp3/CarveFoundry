@@ -5819,7 +5819,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             if on_failed is not None:
                 on_failed(message)
             else:
-                self._set_activity_info(f"{title} failed\\n{message}")
+                self._set_activity_info(f"{title} failed\n{message}")
                 self.statusBar().showMessage(f"{title} failed: {message}", 9000)
             self.job_progress.setFormat(f"{title} failed")
 
@@ -6011,10 +6011,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         def done(result):
             output_path = Path(result["files"][0])
             self._set_activity_info(
-                f"G-code exported\\n{output_path}\\n\\n"
-                f"Operations: {result['summary']}\\n"
-                f"Cutter: {toolpath.cutter.name}\\n"
-                f"Moves: {result['moves']:,}\\n"
+                f"G-code exported\n{output_path}\n\n"
+                f"Operations: {result['summary']}\n"
+                f"Cutter: {toolpath.cutter.name}\n"
+                f"Moves: {result['moves']:,}\n"
                 f"Estimated cutting: {result['minutes']:.1f} min "
                 "(rapids excluded)"
             )
