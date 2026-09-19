@@ -1746,7 +1746,7 @@ class RibbonActionsMixin:
         for combo in self._cam_selector_widgets.get("milling", []):
             combo.setEnabled(uses_milling)
         for combo in self._cam_selector_widgets.get("linking", []):
-            combo.setEnabled(is_3d)
+            combo.setEnabled(True)
 
         for widget in self._cam_detail_widgets:
             widget.setEnabled(uses_detail)
@@ -2160,7 +2160,7 @@ class RibbonActionsMixin:
         linking.addItems(("Smart Min-Lift", "Local Lift", "Full Retract"))
         linking.setCurrentText(self._cam_linking)
         fields["linking"] = linking
-        motion_form.addRow("3D linking", linking)
+        motion_form.addRow("Path linking", linking)
 
         local_clearance = self._generation_double_spin(
             float(self._settings.value("cam/local_link_clearance_mm", 0.5)),
@@ -2263,7 +2263,7 @@ class RibbonActionsMixin:
                 "surface",
                 "engrave",
             }
-            uses_linking = is_3d
+            uses_linking = True
             uses_tabs = operation in {"profile", "silhouette"} or (
                 operation == "finish"
                 and style_3d.currentText() == "Full Depth Cutout"
@@ -2283,7 +2283,7 @@ class RibbonActionsMixin:
             milling.setEnabled(uses_milling)
             linking.setEnabled(uses_linking)
             local_clearance.setEnabled(uses_linking)
-            link_tolerance.setEnabled(uses_linking)
+            link_tolerance.setEnabled(is_3d)
             tabs_box.setEnabled(uses_tabs)
 
             cutter = cutter_combo.currentData()
