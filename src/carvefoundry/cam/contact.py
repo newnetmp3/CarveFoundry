@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil, hypot
+from typing import Callable
 
 import numpy as np
 
@@ -37,7 +38,12 @@ def _aligned_slices(length: int, offset: int) -> tuple[slice, slice]:
     return slice(-offset, length), slice(0, length + offset)
 
 
-def compensate_height_field(surface: HeightField, cutter: Cutter) -> CutterContactMap:
+def compensate_height_field(
+    surface: HeightField,
+    cutter: Cutter,
+    *,
+    progress: Callable[[float], None] | None = None,
+) -> CutterContactMap:
     """Compute a collision-safe tool-tip height map from the cutter's actual profile.
 
     For every tool center, the cutter surface must remain at or above every
@@ -56,7 +62,10 @@ def compensate_height_field(surface: HeightField, cutter: Cutter) -> CutterConta
     max_dx = ceil(radius / surface.spacing_x_mm)
     max_dy = ceil(radius / surface.spacing_y_mm)
 
-    for offset_y in range(-max_dy, max_dy + 1):
+    y_offsets = list(range(-max_dy, max_dy + 1))
+    if progress is not None:
+        progress(0.0)
+    for row_index, offset_y in enumerate(y_offsets):
         dy = offset_y * surface.spacing_y_mm
         destination_y, source_y = _aligned_slices(len(surface.y_mm), offset_y)
         for offset_x in range(-max_dx, max_dx + 1):
@@ -74,6 +83,9 @@ def compensate_height_field(surface: HeightField, cutter: Cutter) -> CutterConta
             candidate = source_view - profile_height
             np.maximum(result_view, np.where(valid, candidate, -np.inf), out=result_view)
             touched[destination_y, destination_x] |= valid
+
+        if progress is not None:
+            progress((row_index + 1) / len(y_offsets))
 
     result[~touched] = np.nan
     return CutterContactMap(surface=surface, cutter=cutter, tip_z_mm=result)
