@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import trimesh
 
 from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d, waterline_3d
 from carvefoundry.cam.gcode import GrblPostSettings, write_grbl, write_grbl_program
@@ -164,7 +163,7 @@ def _generate_item(
     return paths
 
 
-def run_cam(job: CamRequest) -> list[Any]:
+def run_cam(job: CamRequest) -> dict[str, Any]:
     report(0.04, "Preparing CAM", force=True)
     generated: list[Any] = []
     if job.operation == "surface":
@@ -233,8 +232,21 @@ def run_cam(job: CamRequest) -> list[Any]:
                     break
     if not generated:
         raise ValueError("The geometry produced no toolpaths.")
-    report(0.94, "Saving calculated moves", force=True)
-    return generated
+    report(0.94, "Estimating runtime", force=True)
+    return {
+        "toolpaths": generated,
+        "moves": sum(len(path.moves) for path in generated),
+        "cut_mm": sum(path.cutting_distance_mm for path in generated),
+        "rapid_mm": sum(path.rapid_distance_mm for path in generated),
+        "minutes": sum(path.estimated_cutting_minutes for path in generated),
+        "object_count": len({
+            path.source_item_id for path in generated
+            if path.source_item_id not in {None, "stock", "project-silhouette"}
+        }) if job.operation not in {"surface", "silhouette"} else (
+            0 if job.operation == "surface" else len(job.settings_by_item)
+        ),
+        "summary": " + ".join(sorted({path.name for path in generated})),
+    }
 
 
 def run_gcode(request: GcodeRequest) -> list[str]:
