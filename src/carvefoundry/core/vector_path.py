@@ -101,6 +101,7 @@ def apply_vector_edit(item: ProjectItem, path: VectorPath) -> None:
         raise ValueError("Editable pen source units must remain millimeters.")
     mesh = path.mesh_asset()
     item.mesh = mesh
+    item.source_path = None
     item.vector_path = path
 
 
