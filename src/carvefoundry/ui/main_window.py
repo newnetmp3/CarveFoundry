@@ -44,9 +44,11 @@ from ..core.transform import Transform3D
 from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .batch_layout import BatchLayoutMixin
+from .direct_selection import DirectSelectionMixin
 from .import_worker import ImportWorker
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
+from .guided_workflow import GuidedWorkflowMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
 from .project_recovery import ProjectRecoveryMixin
@@ -98,6 +100,8 @@ class Panel(QFrame):
 
 class MainWindow(
     WorkspaceCommandsMixin,
+    DirectSelectionMixin,
+    GuidedWorkflowMixin,
     BatchLayoutMixin,
     StockSimulationMixin,
     ProjectRecoveryMixin,
@@ -232,6 +236,7 @@ class MainWindow(
         self.viewport.freehandStrokeRequested.connect(
             self._freehand_pen_drawn
         )
+        self.viewport.nodeMoveRequested.connect(self._node_drag_finished)
         self.viewport.shapeDrawModeChanged.connect(
             self._shape_draw_mode_changed
         )
