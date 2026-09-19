@@ -8,11 +8,9 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-import trimesh
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -49,24 +47,20 @@ from carvefoundry.cam.basic_ops import (
     finish_3d,
     waterline_3d,
 )
-from carvefoundry.cam.gcode import GrblPostSettings, write_grbl_program
+from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.job_process import CamRequest, GcodeRequest
 from carvefoundry.cam.job_workflows import (
     TilingSettings,
     find_safe_resume_index,
     plan_tiles,
-    resume_toolpath,
-    tile_program,
 )
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
     geometry_engrave,
-    geometry_face,
     geometry_pocket,
     geometry_profile,
-    geometry_silhouette,
     geometry_vcarve,
 )
 from carvefoundry.core.machine_profiles import (
@@ -3470,7 +3464,7 @@ class RibbonActionsMixin:
 
         def finished(payload: object) -> None:
             if not isinstance(payload, dict):
-                raise ValueError("Invalid CAM worker result.")
+                raise TypeError("Invalid CAM worker result.")
             paths = payload["toolpaths"]
             if self._simulation_timer.isActive():
                 self._simulation_timer.stop()
@@ -4864,7 +4858,7 @@ class RibbonActionsMixin:
             rebase_each_tile=bool(form.value("rebase")),
         )
         try:
-            tiles = plan_tiles(
+            plan_tiles(
                 stock.width_mm,
                 stock.height_mm,
                 settings,
