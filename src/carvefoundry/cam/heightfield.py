@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from typing import Callable
 
 import numpy as np
 import trimesh
@@ -66,6 +67,7 @@ class HeightField:
         spacing_mm: float,
         padding_mm: float = 0.0,
         fill_missing_z_mm: float | None = None,
+        progress: Callable[[float], None] | None = None,
     ) -> HeightField:
         """Rasterize the top-most Z surface of *mesh* onto a regular XY grid.
 
@@ -102,7 +104,11 @@ class HeightField:
         z_field = np.full((y_count, x_count), -np.inf, dtype=float)
 
         tolerance = 1e-10
-        for face in faces:
+        face_count = len(faces)
+        progress_stride = max(1, face_count // 100)
+        if progress is not None:
+            progress(0.0)
+        for face_index, face in enumerate(faces):
             triangle = vertices[face]
             x0, y0, z0 = triangle[0]
             x1, y1, z1 = triangle[1]
@@ -143,6 +149,14 @@ class HeightField:
             interpolated_z = weight0 * z0 + weight1 * z1 + weight2 * z2
             target = z_field[iy0 : iy1 + 1, ix0 : ix1 + 1]
             np.maximum(target, np.where(inside, interpolated_z, -np.inf), out=target)
+            if (
+                progress is not None
+                and (
+                    face_index % progress_stride == 0
+                    or face_index == face_count - 1
+                )
+            ):
+                progress((face_index + 1) / face_count)
 
         missing = ~np.isfinite(z_field)
         if fill_missing_z_mm is None:
