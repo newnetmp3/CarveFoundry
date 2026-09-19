@@ -1081,6 +1081,50 @@ def _drill_centers(regions: BaseGeometry) -> list[tuple[float, float]]:
     return centers
 
 
+def geometry_center_drill(
+    mesh: trimesh.Trimesh,
+    cutter: Cutter,
+    settings: CamSettingsLike,
+    *,
+    name: str = "Center Drill",
+) -> Toolpath:
+    """Drill the centroid of each disconnected projected region."""
+
+    regions = projected_regions(mesh)
+    centers = [
+        (float(polygon.centroid.x), float(polygon.centroid.y))
+        for polygon in _polygon_parts(regions)
+        if polygon.area > _EPS
+    ]
+    if not centers:
+        raise ValueError("Center Drill found no projected regions.")
+
+    target_z = _target_depth(mesh, settings)
+    ordered: list[tuple[float, float]] = [centers.pop(0)]
+    while centers:
+        x, y = ordered[-1]
+        index = min(
+            range(len(centers)),
+            key=lambda i: hypot(centers[i][0] - x, centers[i][1] - y),
+        )
+        ordered.append(centers.pop(index))
+
+    moves: list[ToolpathMove] = []
+    for x, y in ordered:
+        _rapid(moves, x, y, settings.safe_z_mm)
+        for depth in _depth_passes(target_z, settings.max_stepdown_mm):
+            _plunge(moves, x, y, depth, settings)
+            _rapid(moves, x, y, settings.safe_z_mm)
+
+    return Toolpath(
+        name=name,
+        operation="center_drill",
+        cutter=cutter,
+        safe_z_mm=settings.safe_z_mm,
+        moves=moves,
+    )
+
+
 def geometry_drill(
     mesh: trimesh.Trimesh,
     cutter: Cutter,
