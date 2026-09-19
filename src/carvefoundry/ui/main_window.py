@@ -79,14 +79,25 @@ _FONT_FAMILY_VARIANT_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("Ultra Bold", "UltraBold"),
     ("UltraBold", "UltraBold"),
     ("SemCond", "Semi Condensed"),
+    ("SmCn", "Semi Condensed"),
     ("SemBd", "SemiBold"),
     ("SmBd", "SemiBold"),
+    ("ExtCond", "Extra Condensed"),
+    ("XCn", "Extra Condensed"),
     ("ExtLt", "ExtraLight"),
+    ("XLt", "ExtraLight"),
     ("ExtBd", "ExtraBold"),
+    ("XBd", "ExtraBold"),
     ("Med", "Medium"),
+    ("Md", "Medium"),
+    ("Lt", "Light"),
+    ("Th", "Thin"),
+    ("Blk", "Black"),
+    ("Bk", "Book"),
     ("Ret", "Retina"),
     ("Condensed", "Condensed"),
     ("Cond", "Condensed"),
+    ("Cn", "Condensed"),
     ("Mono", "Monospaced"),
     ("Propo", "Proportional"),
     ("NFM", "Nerd Font Mono"),
@@ -2151,6 +2162,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         """Split common family-level alternatives from a font family name."""
 
         remaining = family.strip()
+        qualifier = ""
+        if remaining.endswith("]"):
+            qualifier_start = remaining.rfind(" [")
+            if qualifier_start > 0:
+                qualifier = remaining[qualifier_start:]
+                remaining = remaining[:qualifier_start].rstrip()
+
         parts: list[str] = []
         while remaining:
             matched = False
@@ -2168,7 +2186,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 break
             if not matched:
                 break
-        return remaining or family, " ".join(parts) or "Regular"
+        base = remaining or family
+        if qualifier and remaining:
+            base = f"{remaining}{qualifier}"
+        return base, " ".join(parts) or "Regular"
 
     @classmethod
     def _group_text_font_families(
