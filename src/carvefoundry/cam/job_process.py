@@ -349,9 +349,9 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 clipped,
                 tiled_path,
                 options,
-                progress=lambda fraction: report(
-                    0.05 + 0.9 * (index + fraction) / max(1, len(tiles)),
-                    f"Writing tile {index + 1} / {len(tiles)}",
+                progress=lambda fraction, tile_index=index, tile_count=len(tiles): report(
+                    0.05 + 0.9 * (tile_index + fraction) / max(1, tile_count),
+                    f"Writing tile {tile_index + 1} / {tile_count}",
                 ),
             )))
         if not paths:
