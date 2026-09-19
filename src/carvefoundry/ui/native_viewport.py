@@ -2024,6 +2024,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._text_resize_opposite_world = corners[opposite].copy()
         self._text_resize_active_vector_world = corners[handle] - center
         self._active_text_resize_handle = handle
+        self._interaction_mode = "text-resize"
         self._transform_interaction_kind = "resize-text"
         return True
 
