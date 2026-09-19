@@ -6020,17 +6020,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
         def done(result):
-            output_path = Path(result["files"][0])
+            output_files = [Path(name) for name in result["files"]]
             self._set_activity_info(
-                f"G-code exported\n{output_path}\n\n"
-                f"Operations: {result['summary']}\n"
-                f"Cutter: {toolpath.cutter.name}\n"
-                f"Moves: {result['moves']:,}\n"
-                f"Estimated cutting: {result['minutes']:.1f} min "
-                "(rapids excluded)"
+                f"G-code exported\\nFiles: {len(output_files)}\\n"
+                + "\\n".join(str(file) for file in output_files)
+                + f"\\n\\nOperations: {result['summary']}\\n"
+                + f"Moves: {result['moves']:,}\\n"
+                + f"Estimated cutting: {result['minutes']:.1f} min "
+                "(rapids excluded)\\n"
+                + (
+                    "One program per cutter stage. Stop, change and "
+                    "re-probe the cutter before running the next file."
+                    if len(output_files) > 1 else ""
+                )
             )
             self.statusBar().showMessage(
-                f"Exported {output_path.name}", 5000
+                f"Exported {len(output_files)} G-code file(s)", 5000
             )
 
         def failed(message: str) -> None:
