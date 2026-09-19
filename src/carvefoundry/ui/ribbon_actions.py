@@ -3523,7 +3523,8 @@ class RibbonActionsMixin:
         if self._background_job is not None:
             self.statusBar().showMessage("Another operation is running", 4000)
             return False
-        items = [item for item in self.project.items if item.mesh is not None]
+        # Hidden source shapes must never contribute duplicate/obsolete CNC cuts.
+        items = [item for item in self.project.items if item.visible and item.mesh is not None]
         cutter = self.tool_combo.currentData()
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
