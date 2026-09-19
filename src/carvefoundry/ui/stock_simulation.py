@@ -122,7 +122,14 @@ class StockSimulationMixin:
         buttons.rejected.connect(dialog.close)
         layout.addWidget(buttons)
         self._stock_removal_dialog = dialog
+        dialog.destroyed.connect(
+            lambda _object=None: self._on_stock_dialog_destroyed(dialog)
+        )
         dialog.show()
+
+    def _on_stock_dialog_destroyed(self, dialog) -> None:
+        if getattr(self, "_stock_removal_dialog", None) is dialog:
+            self._stock_removal_dialog = None
 
     def _run_stock_removal(self, *, spacing_mm: float = 0.75) -> bool:
         if self._background_job is not None:
@@ -166,6 +173,7 @@ class StockSimulationMixin:
             task=calculate,
             on_done=completed,
             on_failed=failed,
+            cancelable=True,
         )
 
     def _simulate_stock_removal(self) -> None:
