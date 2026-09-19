@@ -5,10 +5,12 @@ import json
 import struct
 import tempfile
 from pathlib import Path, PurePosixPath
+from dataclasses import asdict
 from typing import Any, BinaryIO
 
 import zstandard as zstd
 
+from .fixtures import Fixture
 from .mesh import MeshImportError, load_stl
 from .project import Project, ProjectItem, Stock, TextProperties
 from .smart_values import SmartValueError, SmartValues
@@ -256,6 +258,7 @@ def _build_container(
         "coordinate_system": {"linear_units": "mm"},
         "name": project.name,
         "stock": _stock_to_dict(project.stock),
+        "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
         "items": items,
         "assets": assets,
@@ -317,6 +320,32 @@ def save_project(project: Project, path: str | Path) -> Path:
         raise ProjectFileError(f"Could not save project: {exc}") from exc
 
     return project_path
+
+
+def _load_fixtures(value: object) -> list[Fixture]:
+    if not isinstance(value, list):
+        raise ProjectFileError("Project fixtures must be a list.")
+    fixtures: list[Fixture] = []
+    for index, raw in enumerate(value):
+        if not isinstance(raw, dict):
+            raise ProjectFileError(f"Fixture {index + 1} must be an object.")
+        try:
+            fixture = Fixture(
+                name=str(raw["name"]),
+                x_min_mm=float(raw["x_min_mm"]),
+                y_min_mm=float(raw["y_min_mm"]),
+                x_max_mm=float(raw["x_max_mm"]),
+                y_max_mm=float(raw["y_max_mm"]),
+                top_z_mm=float(raw["top_z_mm"]),
+                clearance_mm=float(raw.get("clearance_mm", 2.0)),
+            )
+            fixture.validate()
+        except (KeyError, ValueError, TypeError) as exc:
+            raise ProjectFileError(
+                f"Fixture {index + 1} is invalid: {exc}"
+            ) from exc
+        fixtures.append(fixture)
+    return fixtures
 
 
 def _load_stock(value: object) -> Stock:
@@ -703,6 +732,7 @@ def _load_native_project(project_path: Path) -> Project:
             if not isinstance(name, str) or not name:
                 raise ProjectFileError("Project name is invalid.")
             stock = _load_stock(manifest.get("stock"))
+            fixtures = _load_fixtures(manifest.get("fixtures", []))
             items_value = manifest.get("items", [])
             if not isinstance(items_value, list):
                 raise ProjectFileError("Project items section is invalid.")
@@ -742,6 +772,7 @@ def _load_native_project(project_path: Path) -> Project:
         stock=stock,
         items=items,
         smart_values=smart_values,
+        fixtures=fixtures,
         _asset_workspace_owner=workspace_owner,
     )
 
