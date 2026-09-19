@@ -143,6 +143,126 @@ def test_generate_toolpaths_button_opens_complete_requirement_dialog() -> None:
         window.close()
 
 
+def test_generation_dialog_has_verbose_help_for_every_option() -> None:
+    window = MainWindow()
+    try:
+        dialog = window._build_toolpath_generation_dialog()
+        fields = dialog.generation_fields
+        help_buttons = dialog.generation_help_buttons
+        help_text = dialog.generation_help_text
+
+        expected_help = {
+            "source_summary",
+            "operation",
+            "stock",
+            "cutter",
+            "cutter_details",
+            "cut_type",
+            "3d_style",
+            "direction",
+            "detail",
+            "pocket_stepover",
+            "padding",
+            "cut_depth",
+            "stepdown",
+            "bit_length",
+            "safe_z",
+            "feed",
+            "plunge",
+            "entry",
+            "ramp_angle",
+            "milling",
+            "linking",
+            "local_clearance",
+            "link_tolerance",
+            "tabs_enabled",
+            "tab_height",
+            "tab_width",
+            "tab_count",
+            "readiness",
+        }
+        assert set(help_buttons) == expected_help
+        assert set(help_text) == expected_help
+
+        for key in expected_help:
+            assert fields[key].toolTip()
+            assert len(fields[key].toolTip()) >= 100
+            button = help_buttons[key]
+            assert button.text() == "?"
+            assert button.objectName() == f"GenerationHelp_{key}"
+            assert button.toolTip()
+            assert button.isEnabled()
+
+        operation = fields["operation"]
+        operation_tips = {
+            operation.itemData(
+                index,
+                Qt.ItemDataRole.ToolTipRole,
+            )
+            for index in range(operation.count())
+        }
+        assert all(operation_tips)
+        assert any("envelope" in str(tip) for tip in operation_tips)
+        assert any("constant-Z" in str(tip) for tip in operation_tips)
+
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("finish")
+        )
+        assert not fields["cut_type"].isEnabled()
+        assert help_buttons["cut_type"].isEnabled()
+
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("pocket")
+        )
+        fields["tabs_enabled"].setChecked(False)
+        assert not fields["tabs_enabled"].isEnabled()
+        assert not fields["tab_height"].isEnabled()
+        assert help_buttons["tabs_enabled"].isEnabled()
+        assert help_buttons["tab_height"].isEnabled()
+        dialog.close()
+    finally:
+        window.close()
+
+
+def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Progress Panel",
+            kind="rectangle",
+            mesh=rectangle_mesh(20.0, 15.0, 2.0),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        dialog = window._build_toolpath_generation_dialog()
+
+        assert dialog.generation_progress.minimum() == 0
+        assert dialog.generation_progress.maximum() == 100
+        assert dialog.generation_progress.isHidden()
+        assert window.toolpath_progress.minimum() == 0
+        assert window.toolpath_progress.maximum() == 100
+
+        window._toolpath_dialog_progress = dialog.generation_progress
+        window._update_toolpath_progress(0.42, "Building test path")
+        assert dialog.generation_progress.value() == 42
+        assert window.toolpath_progress.value() == 42
+        assert "Building test path" in dialog.generation_progress.format()
+        assert not dialog.generation_progress.isHidden()
+        window._toolpath_dialog_progress = None
+
+        window._select_cam_operation("profile")
+        assert window._calculate_toolpath_now()
+        assert window.toolpath_progress.value() == 100
+        assert "Toolpaths ready" in window.toolpath_progress.format()
+        assert window.project.toolpaths
+        dialog.close()
+    finally:
+        window.close()
+
+
 def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
     window = MainWindow()
     try:

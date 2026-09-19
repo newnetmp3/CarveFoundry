@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import ceil, isfinite
 
@@ -62,6 +63,7 @@ def calculate_3d_finish(
     settings: Finish3DSettings,
     *,
     name: str = "3D Finish",
+    progress: Callable[[float, str], None] | None = None,
 ) -> Finish3DResult:
     """Run the geometry-safe baseline 3D finishing pipeline.
 
@@ -81,12 +83,52 @@ def calculate_3d_finish(
             f"limit is {settings.max_surface_samples:,}. Increase surface spacing."
         )
 
+    if progress is not None:
+        progress(0.0, "Sampling 3D surface")
     surface = HeightField.from_mesh_top_surface(
         mesh_mm,
         spacing_mm=settings.surface_spacing_mm,
         padding_mm=settings.surface_padding_mm,
         fill_missing_z_mm=settings.background_z_mm,
+        progress=(
+            (lambda value: progress(0.45 * value, "Sampling 3D surface"))
+            if progress is not None
+            else None
+        ),
     )
-    contact = compensate_height_field(surface, cutter)
-    toolpath = generate_raster_finishing(contact, settings.raster, name=name)
+    if progress is not None:
+        progress(0.45, "Compensating for cutter geometry")
+    contact = compensate_height_field(
+        surface,
+        cutter,
+        progress=(
+            (
+                lambda value: progress(
+                    0.45 + 0.30 * value,
+                    "Compensating for cutter geometry",
+                )
+            )
+            if progress is not None
+            else None
+        ),
+    )
+    if progress is not None:
+        progress(0.75, "Building optimized raster path")
+    toolpath = generate_raster_finishing(
+        contact,
+        settings.raster,
+        name=name,
+        progress=(
+            (
+                lambda value: progress(
+                    0.75 + 0.25 * value,
+                    "Building optimized raster path",
+                )
+            )
+            if progress is not None
+            else None
+        ),
+    )
+    if progress is not None:
+        progress(1.0, "3D path ready")
     return Finish3DResult(surface=surface, contact=contact, toolpath=toolpath)

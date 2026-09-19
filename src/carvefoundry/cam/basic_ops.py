@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
@@ -773,6 +774,7 @@ def finish_3d(
     settings: BasicCamSettings,
     *,
     strategy: str = "finish",
+    progress: Callable[[float, str], None] | None = None,
 ) -> Toolpath:
     if strategy not in {"rough", "finish", "rest"}:
         raise ValueError(f"Unsupported raster 3D strategy: {strategy}")
@@ -796,6 +798,7 @@ def finish_3d(
             "finish": "3D Finish",
             "rest": "3D Rest",
         }[strategy],
+        progress=progress,
     )
     toolpath = result.toolpath
 
@@ -830,6 +833,7 @@ def waterline_3d(
     *,
     level_step_mm: float | None = None,
     name: str = "3D Waterline",
+    progress: Callable[[float, str], None] | None = None,
 ) -> Toolpath:
     bounds = np.asarray(mesh.bounds, dtype=float)
     min_z = float(bounds[0, 2])
@@ -846,7 +850,9 @@ def waterline_3d(
 
     moves: list[ToolpathMove] = []
     previous_xy: np.ndarray | None = None
-    for z in levels:
+    if progress is not None:
+        progress(0.0, "Slicing waterline levels")
+    for level_index, z in enumerate(levels):
         section = mesh.section(
             plane_origin=(0.0, 0.0, z),
             plane_normal=(0.0, 0.0, 1.0),
@@ -925,6 +931,12 @@ def waterline_3d(
                     settings,
                 )
             previous_xy = points[-1]
+
+        if progress is not None:
+            progress(
+                (level_index + 1) / level_count,
+                f"Slicing waterline level {level_index + 1}/{level_count}",
+            )
 
     _final_retract(moves, settings)
     if not moves:

@@ -226,6 +226,17 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.import_progress.setTextVisible(False)
         self.import_progress.hide()
         status.addPermanentWidget(self.import_progress)
+
+        self.toolpath_progress = QProgressBar()
+        self.toolpath_progress.setObjectName("ToolpathProgress")
+        self.toolpath_progress.setRange(0, 100)
+        self.toolpath_progress.setValue(0)
+        self.toolpath_progress.setFixedWidth(320)
+        self.toolpath_progress.setTextVisible(True)
+        self.toolpath_progress.setFormat("Toolpath generation · %p%")
+        self.toolpath_progress.hide()
+        status.addPermanentWidget(self.toolpath_progress)
+
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
         self._install_shortcuts()

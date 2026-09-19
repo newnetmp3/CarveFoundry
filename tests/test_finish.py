@@ -69,6 +69,31 @@ def test_finish_pipeline_uses_selected_v_bit_geometry() -> None:
     assert result.contact.tip_z_mm[center_y, center_x - 1] == pytest.approx(1.0)
 
 
+def test_finish_pipeline_reports_meaningful_progress_stages() -> None:
+    mesh = trimesh.creation.box(extents=(4.0, 4.0, 2.0))
+    mesh.apply_translation((0.0, 0.0, -1.0))
+    cutter = Cutter("2 mm flat", ToolType.FLAT_END_MILL, 2.0)
+    updates: list[tuple[float, str]] = []
+
+    calculate_3d_finish(
+        mesh,
+        cutter,
+        _settings(),
+        progress=lambda fraction, stage: updates.append((fraction, stage)),
+    )
+
+    assert updates
+    assert updates[0][0] == pytest.approx(0.0)
+    assert updates[-1][0] == pytest.approx(1.0)
+    fractions = [fraction for fraction, _stage in updates]
+    assert fractions == sorted(fractions)
+    stages = {stage for _fraction, stage in updates}
+    assert "Sampling 3D surface" in stages
+    assert "Compensating for cutter geometry" in stages
+    assert "Building optimized raster path" in stages
+    assert "3D path ready" in stages
+
+
 def test_finish_pipeline_blocks_excessive_surface_grid() -> None:
     mesh = trimesh.creation.box(extents=(100.0, 100.0, 10.0))
     cutter = Cutter("flat", ToolType.FLAT_END_MILL, 2.0)
