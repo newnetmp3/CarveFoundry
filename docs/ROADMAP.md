@@ -27,9 +27,11 @@ It must not be described as a guarantee of physical safety.
 1. **Live, managed CNC sender:** GRBL planner/serial response tracking, real
    machine position, feed overrides, pause, stop, recovery and alarm handling;
    design for interrupted transfers and controller disconnection.
-2. **True material-removal simulation:** model the cutter swept volume and
-   remaining stock and account for tool profile; report uncut material and
-   potential gouges, not merely a path-tracing playback.
+2. **Exact volumetric simulation beyond the new sampled stock preview:**
+   A 2.5D top-down stock-removal viewer now models actual cutter radial
+   profiles, moves, approximate removed volume and top-surface deviation.
+   Accurate undercuts, continuous CSG, holder collision and live machining
+   verification remain unimplemented.
 3. **Robust job recovery:** immutable job manifests, machine state/work-zero
    and tool identification, verified safe entry and machine-aware resumption.
 4. **Persistent multi-tool planning and dependencies:** A session-owned
@@ -63,8 +65,11 @@ It must not be described as a guarantee of physical safety.
 11. **Spoilboard mapping and probe-backed height compensation** with verified
     source/units and explicit controller dependencies.
 12. **Material presets, first-run machine wizard and packaged Linux releases.**
-13. **Autosave/crash recovery:** atomic backups, resume/restore choice and
-    safeguards against corrupted or obsolete checkpoints.
+13. **Extended recovery features:** Complete CF3D idle checkpoints,
+    checksum verification, source modification warnings, restore/discard
+    choice, user-controlled normal Save, and bounded retention now exist.
+    Persistent Undo history, cross-device sync and cloud backups remain
+    unimplemented.
 
 For each item, do not add a button or a stub until calculation, UI,
 persistence (where needed), export/sender behavior and regression tests can
