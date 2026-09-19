@@ -200,9 +200,16 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
         for index, (item, settings) in enumerate(job.settings_by_item):
             start = 0.05 + 0.85 * index / count
             span = 0.85 / count
-            def on_item(value: float, message: str) -> None:
-                report(start + span * max(0.0, min(1.0, value)),
-                       f"{item.name}: {message}")
+            def on_item(
+                value: float, message: str, *,
+                item_start: float = start,
+                item_span: float = span,
+                item_name: str = item.name,
+            ) -> None:
+                report(
+                    item_start + item_span * max(0.0, min(1.0, value)),
+                    f"{item_name}: {message}",
+                )
             group = _generate_item(item, settings, job, on_item)
             if group:
                 groups.append(group)
@@ -331,12 +338,12 @@ def main() -> int:
         elif isinstance(request, GcodeRequest):
             result = run_gcode(request)
         else:
-            raise ValueError("Unknown job request type.")
+            raise TypeError("Unknown job request type.")
         with Path(sys.argv[2]).open("wb") as handle:
             pickle.dump(result, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        report(1.0, "Completed", force=True)
+        report(0.97, "Worker complete", force=True)
         return 0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - subprocess boundary reports all errors
         print(json.dumps({"type": "error", "message": str(exc)}), flush=True)
         traceback.print_exc(file=sys.stderr)
         return 1
