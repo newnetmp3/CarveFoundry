@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from carvefoundry.core.tools import Cutter, ToolType
 
 from .cam_dialog_help import cam_generation_help
+from .layout_widgets import CamSectionNavigator
 
 
 class CamGenerationDialogMixin:
@@ -58,8 +59,8 @@ class CamGenerationDialogMixin:
         dialog = QDialog(self)
         dialog.setObjectName("ToolpathGenerationDialog")
         dialog.setWindowTitle("Generate Toolpaths")
-        dialog.resize(860, 760)
-        dialog.setMinimumSize(720, 600)
+        dialog.resize(1090, 760)
+        dialog.setMinimumSize(820, 600)
         dialog.setModal(True)
 
         outer = QVBoxLayout(dialog)
@@ -72,7 +73,23 @@ class CamGenerationDialogMixin:
         title_font.setPointSize(max(12, title_font.pointSize() + 3))
         title_font.setBold(True)
         title.setFont(title_font)
-        outer.addWidget(title)
+        title_row = QHBoxLayout()
+        title_row.addWidget(title, 1)
+        steps_toggle = QPushButton("Hide steps", dialog)
+        steps_toggle.setObjectName("CamStepsToggle")
+        steps_toggle.setCheckable(True)
+        steps_toggle.setChecked(
+            bool(self._settings.value(
+                "cam/show_step_navigation", True, type=bool,
+            ))
+        )
+        steps_toggle.setAccessibleName("Show CAM step navigation")
+        steps_toggle.setToolTip(
+            "Show/hide the form's section shortcuts to reclaim canvas "
+            "space on smaller screens."
+        )
+        title_row.addWidget(steps_toggle)
+        outer.addLayout(title_row)
 
         intro = QLabel(
             "Complete the required sections below. Options that do not apply "
@@ -83,6 +100,13 @@ class CamGenerationDialogMixin:
         intro.setWordWrap(True)
         intro.setObjectName("Muted")
         outer.addWidget(intro)
+        cam_brief = QLabel(dialog)
+        cam_brief.setObjectName("CamContextSummary")
+        cam_brief.setWordWrap(True)
+        cam_brief.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse,
+        )
+        outer.addWidget(cam_brief)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -93,7 +117,22 @@ class CamGenerationDialogMixin:
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
         scroll.setWidget(body)
-        outer.addWidget(scroll, 1)
+        workspace = QWidget(dialog)
+        workspace_layout = QHBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(8)
+        navigator = CamSectionNavigator(scroll, workspace)
+        workspace_layout.addWidget(navigator)
+        workspace_layout.addWidget(scroll, 1)
+        outer.addWidget(workspace, 1)
+
+        def show_step_navigation(visible: bool) -> None:
+            navigator.setVisible(visible)
+            steps_toggle.setText("Hide steps" if visible else "Show steps")
+            self._settings.setValue("cam/show_step_navigation", visible)
+
+        steps_toggle.toggled.connect(show_step_navigation)
+        show_step_navigation(steps_toggle.isChecked())
 
         fields: dict[str, QWidget] = {}
         help_buttons: dict[str, QPushButton] = {}
@@ -735,6 +774,18 @@ class CamGenerationDialogMixin:
         ready_layout.addWidget(help_row("readiness", readiness))
         grid.addWidget(ready_box, 4, 0, 1, 2)
 
+        for key, heading, section in (
+            ("source", "1  Source / Operation", source_box),
+            ("cutter", "2  Cutter", cutter_box),
+            ("strategy", "3  Strategy", strategy_box),
+            ("depth", "4  Depth", depth_box),
+            ("motion", "5  Motion / Safety", motion_box),
+            ("tabs", "6  Holding tabs", tabs_box),
+            ("rest", "   Rest cleanup", rest_box),
+            ("readiness", "7  Readiness", ready_box),
+        ):
+            navigator.add_section(key, heading, section)
+
         generation_progress = QProgressBar()
         generation_progress.setObjectName("ToolpathGenerationProgress")
         generation_progress.setRange(0, 100)
@@ -962,6 +1013,25 @@ class CamGenerationDialogMixin:
                 )
             )
             generate_button.setEnabled(all_ready)
+            cam_brief.setText(
+                f"{operation_combo.currentText()}   •   "
+                f"{cutter.name if isinstance(cutter, Cutter) else 'No cutter'}"
+                f"   •   {len(source_items)} visible model(s)   •   "
+                f"{stock.width_mm:g} × {stock.height_mm:g} × "
+                f"{stock.thickness_mm:g} mm stock"
+                + (
+                    f"   •   {len(self.project.toolpaths)} earlier operation(s)"
+                    if self.project.toolpaths else ""
+                )
+            )
+            navigator.set_available("rest", rest_active)
+            navigator.set_available("tabs", uses_tabs)
+            navigator.set_ready("readiness", all_ready)
+            navigator.set_ready("source", bool(source_items) or operation == "surface")
+            navigator.set_ready("cutter", isinstance(cutter, Cutter))
+            navigator.set_ready("depth", (
+                safe_z.value() > 0 and stepdown.value() > 0
+            ))
 
         def accept_and_generate() -> None:
             update_relevance_and_readiness()
@@ -1080,6 +1150,9 @@ class CamGenerationDialogMixin:
             else:
                 widget.valueChanged.connect(update_relevance_and_readiness)
 
+        fields["section_nav"] = navigator
+        fields["context_summary"] = cam_brief
+        dialog.section_navigator = navigator
         dialog.generation_fields = fields
         dialog.generation_help_buttons = help_buttons
         dialog.generation_help_text = generation_help
