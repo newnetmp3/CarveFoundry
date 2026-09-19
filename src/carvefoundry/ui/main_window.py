@@ -2963,18 +2963,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         current_index = self._selected_item_index()
 
         if self._calculate_button is not None:
-            self._calculate_button.setEnabled(has_any_mesh)
+            self._calculate_button.setEnabled(True)
             self._calculate_button.setToolTip(
-                "Review requirements and generate toolpaths."
-                if has_any_mesh
-                else "Import or draw geometry before generating toolpaths."
+                "Review requirements and generate toolpaths. Surface / Face "
+                "can run from stock alone; other operations require geometry."
             )
         if self.generate_toolpaths_button is not None:
-            self.generate_toolpaths_button.setEnabled(has_any_mesh)
+            self.generate_toolpaths_button.setEnabled(True)
             self.generate_toolpaths_button.setToolTip(
-                "Review all requirements and options, then generate toolpaths."
-                if has_any_mesh
-                else "Import or draw geometry before generating toolpaths."
+                "Review all requirements and options, then generate toolpaths. "
+                "Surface / Face can run from stock alone."
             )
 
         for button in self._model_selection_buttons:
@@ -3007,7 +3005,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
 
         if hasattr(self, "tool_rail"):
             self.tool_rail.set_tool_enabled("arrange", has_selection)
-            self.tool_rail.set_tool_enabled("cam", has_mesh)
+            self.tool_rail.set_tool_enabled("cam", True)
 
     def _set_history_action_state(
         self,
