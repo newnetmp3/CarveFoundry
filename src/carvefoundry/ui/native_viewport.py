@@ -295,6 +295,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.selected_item_indices.clear()
         self._selection_drag_start_screen = None
         self._selection_drag_current_screen = None
+        self._active_text_resize_handle = None
+        self._text_resize_initial_scale = None
+        self._text_resize_initial_translation = None
+        self._text_resize_active_vector_world = None
+        self._text_resize_active_world = None
+        self._text_resize_opposite_world = None
+        self._transform_interaction_kind = None
         self._prepared_mesh_uploads.clear()
         if fit_view:
             self.fit_view()
@@ -321,6 +328,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             and 0 <= int(index) < len(self.project.items)
         }
         self.selected_item_indices = valid
+        if self._interaction_mode != "text-resize":
+            self._active_text_resize_handle = None
+            self._transform_interaction_kind = None
         if primary in valid:
             self.selected_item_index = int(primary)
         elif valid:
