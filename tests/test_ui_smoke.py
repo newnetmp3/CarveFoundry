@@ -117,7 +117,8 @@ def test_generate_toolpaths_button_opens_complete_requirement_dialog() -> None:
             "7. Generation Readiness",
         }.issubset(section_titles)
 
-        assert fields["source"].currentData() == 0
+        assert "All 1 design object" in fields["source_summary"].text()
+        assert "Panel" in fields["source_summary"].text()
         assert fields["operation"].currentData() == "finish"
         assert fields["generate"].isEnabled()
         assert not fields["cut_type"].isEnabled()
@@ -132,6 +133,83 @@ def test_generate_toolpaths_button_opens_complete_requirement_dialog() -> None:
         assert not fields["linking"].isEnabled()
         assert fields["tabs_enabled"].isEnabled()
         dialog.close()
+    finally:
+        window.close()
+
+
+def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
+    window = MainWindow()
+    try:
+        project = Project(
+            items=[
+                ProjectItem(
+                    "Left",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(20.0, 15.0, 2.0),
+                    transform=Transform3D(
+                        translation_mm=(10.0, 10.0, 0.0),
+                    ),
+                ),
+                ProjectItem(
+                    "Right",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(18.0, 12.0, 2.0),
+                    transform=Transform3D(
+                        translation_mm=(50.0, 10.0, 0.0),
+                    ),
+                ),
+            ]
+        )
+        window._set_project(
+            project,
+            project_path=None,
+            selected_row=0,
+        )
+        assert window._selected_item() is None
+
+        window._select_cam_operation("profile")
+        window._calculate_toolpath_now()
+
+        assert len(window.project.toolpaths) == 2
+        assert {
+            path.source_item_name
+            for path in window.project.toolpaths
+        } == {"Left", "Right"}
+        assert {
+            path.source_item_id
+            for path in window.project.toolpaths
+        } == {
+            project.items[0].item_id,
+            project.items[1].item_id,
+        }
+    finally:
+        window.close()
+
+
+def test_waterline_generation_has_required_trimesh_graph_dependency() -> None:
+    window = MainWindow()
+    try:
+        project = Project(
+            items=[
+                ProjectItem(
+                    "Relief",
+                    kind="rectangle",
+                    mesh=rectangle_mesh(20.0, 15.0, 3.0),
+                )
+            ]
+        )
+        window._set_project(
+            project,
+            project_path=None,
+            selected_row=0,
+        )
+
+        window._select_cam_operation("waterline")
+        window._calculate_toolpath_now()
+
+        assert window.project.toolpaths
+        assert window.project.toolpaths[0].operation == "3d_waterline"
+        assert window.project.toolpaths[0].source_item_name == "Relief"
     finally:
         window.close()
 
