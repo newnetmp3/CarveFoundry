@@ -112,8 +112,48 @@ _STANDARD_FALLBACKS: dict[str, QtWidgets.QStyle.StandardPixmap] = {
 }
 
 
+def _arcball_icon() -> QtGui.QIcon:
+    """Return a compact camera-orbit/arcball icon for the tool rail."""
+
+    size = 24
+    pixmap = QtGui.QPixmap(size, size)
+    pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+    pen = QtGui.QPen(QtGui.QColor("#dbe3ef"), 1.6)
+    pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+    painter.setPen(pen)
+    painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+
+    sphere = QtCore.QRectF(4.0, 4.0, 16.0, 16.0)
+    painter.drawEllipse(sphere)
+    painter.drawArc(QtCore.QRectF(7.0, 4.0, 10.0, 16.0), 90 * 16, 180 * 16)
+    painter.drawArc(QtCore.QRectF(4.0, 8.0, 16.0, 8.0), 0, 360 * 16)
+
+    orbit_pen = QtGui.QPen(QtGui.QColor("#c8ff3d"), 1.8)
+    orbit_pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+    painter.setPen(orbit_pen)
+    painter.drawArc(QtCore.QRectF(1.8, 1.8, 20.4, 20.4), 34 * 16, 130 * 16)
+
+    arrow = QtGui.QPolygonF(
+        (
+            QtCore.QPointF(18.7, 2.6),
+            QtCore.QPointF(22.0, 3.2),
+            QtCore.QPointF(20.0, 5.8),
+        )
+    )
+    painter.setBrush(QtGui.QColor("#c8ff3d"))
+    painter.drawPolygon(arrow)
+    painter.end()
+
+    return QtGui.QIcon(pixmap)
+
+
 def _ribbon_icon(text: str) -> QtGui.QIcon:
     label = text.replace("\n", " ").strip().lower()
+    if label in {"camera orbit", "arcball", "camera rotate"}:
+        return _arcball_icon()
     candidates = _ICON_CANDIDATES.get(label, ())
     for candidate in candidates:
         icon = QtGui.QIcon.fromTheme(candidate)
