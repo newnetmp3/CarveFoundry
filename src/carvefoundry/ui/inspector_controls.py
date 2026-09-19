@@ -124,9 +124,16 @@ class InspectorControlsMixin:
         resize_hint.setWordWrap(True)
         layout.addWidget(resize_hint)
 
+        self._transform_sections: dict[str, InspectorSection] = {}
+        setup_section = InspectorSection(
+            "Object & Gizmo Settings", key="setup",
+            settings=self._settings, expanded=False,
+        )
+        self._transform_sections["setup"] = setup_section
         units_form = QFormLayout()
         self._configure_inspector_form(units_form)
-        layout.addLayout(units_form)
+        setup_section.content_layout.addLayout(units_form)
+        layout.addWidget(setup_section)
 
         self.source_units_combo = QComboBox()
         for units in ModelUnits:
@@ -241,22 +248,33 @@ class InspectorControlsMixin:
         )
 
         def add_axis_group(
+            key: str,
             title: str,
             spins: tuple[QDoubleSpinBox, ...],
-        ) -> None:
-            title_label = QLabel(title)
-            title_label.setObjectName("InspectorFieldHeading")
-            layout.addWidget(title_label)
-
+            *,
+            expanded: bool,
+        ) -> InspectorSection:
+            section = InspectorSection(
+                title, key=key, settings=self._settings,
+                expanded=expanded,
+            )
+            self._transform_sections[key] = section
             axis_form = QFormLayout()
             self._configure_inspector_form(axis_form)
             for axis, spin in zip(("X", "Y", "Z"), spins, strict=True):
                 axis_form.addRow(axis, spin)
                 spin.valueChanged.connect(self._transform_control_changed)
-            layout.addLayout(axis_form)
+            section.content_layout.addLayout(axis_form)
+            layout.addWidget(section)
+            return section
 
-        add_axis_group("Position", self.position_spins)
-        add_axis_group("Rotate about", self.rotation_spins)
+        add_axis_group(
+            "position", "Position · mm", self.position_spins, expanded=True,
+        )
+        rotation_section = add_axis_group(
+            "rotation", "Rotation · degrees", self.rotation_spins,
+            expanded=False,
+        )
 
         rotation_note = QLabel(
             "Rotation axes: X → YZ plane   Y → XZ plane   Z → XY plane"
@@ -266,17 +284,21 @@ class InspectorControlsMixin:
         rotation_note.setToolTip(
             "X/Y/Z name the axis being rotated around, not the plane being rotated."
         )
-        layout.addWidget(rotation_note)
+        rotation_section.content_layout.addWidget(rotation_note)
 
-        add_axis_group("Size", self.size_spins)
-        add_axis_group("Scale", self.scale_spins)
+        add_axis_group(
+            "size", "Size · mm", self.size_spins, expanded=True,
+        )
+        add_axis_group(
+            "scale", "Scale · factor", self.scale_spins, expanded=False,
+        )
 
         lock_bar = QWidget()
         lock_bar.setMinimumWidth(0)
         lock_layout = QHBoxLayout(lock_bar)
         lock_layout.setContentsMargins(0, 0, 0, 0)
         lock_layout.setSpacing(8)
-        lock_layout.addWidget(QLabel("Lock axes"))
+        lock_layout.addWidget(QLabel("Lock Size / Scale axes"))
         self.lock_axis_checks = tuple(
             QCheckBox(axis)
             for axis in ("X", "Y", "Z")
