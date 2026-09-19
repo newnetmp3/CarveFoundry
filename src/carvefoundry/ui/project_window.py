@@ -15,7 +15,6 @@ from carvefoundry.core.project_file import (
 )
 
 from .main_window import MainWindow as _BaseMainWindow
-from .project_recovery import ProjectRecoveryMixin
 
 
 @dataclass(slots=True)
@@ -26,7 +25,7 @@ class _UndoEntry:
     label: str
 
 
-class MainWindow(ProjectRecoveryMixin, _BaseMainWindow):
+class MainWindow(_BaseMainWindow):
     """Main window with project lifecycle and unsaved-change protection.
 
     This layer keeps project lifecycle concerns separate from the workspace while
