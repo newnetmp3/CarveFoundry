@@ -214,6 +214,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.toolpath_marker_xyz: tuple[float, float, float] | None = None
         self.reverse_horizontal_drag = False
         self.invert_vertical_drag = False
+        self.transform_orientation = "global"
+        self.snap_enabled = False
+        self.snap_step_mm = 1.0
+        self._isolated_item_indices: set[int] | None = None
         self._camera_control_mode = True
 
         self._last_mouse_pos: QPointF | None = None
@@ -223,6 +227,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_distance = 0.0
         self._object_drag_started = False
         self._active_gizmo_axis: int | None = None
+        self._gizmo_drag_origin_translation: np.ndarray | None = None
+        self._gizmo_drag_axis_world: np.ndarray | None = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle: int | None = None
         self._resize_initial_scale: tuple[float, float, float] | None = None
         self._resize_initial_translation: tuple[float, float, float] | None = None
@@ -302,6 +309,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._resize_active_world = None
         self._resize_opposite_world = None
         self._transform_interaction_kind = None
+        self._isolated_item_indices = None
+        self._gizmo_drag_origin_translation = None
+        self._gizmo_drag_axis_world = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._prepared_mesh_uploads.clear()
         if fit_view:
             self.fit_view()
@@ -403,6 +414,109 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.requestUpdate()
         self.viewChanged.emit()
 
+    def _item_viewport_visible(self, index: int, item: ProjectItem) -> bool:
+        if not item.visible or item.mesh is None:
+            return False
+        return (
+            self._isolated_item_indices is None
+            or index in self._isolated_item_indices
+        )
+
+    @property
+    def isolated(self) -> bool:
+        return self._isolated_item_indices is not None
+
+    def isolate_selected(self) -> bool:
+        if self.project is None:
+            return False
+        isolated = {
+            index
+            for index in self.selected_item_indices
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].visible
+            and self.project.items[index].mesh is not None
+        }
+        if not isolated:
+            return False
+        self._isolated_item_indices = isolated
+        self.requestUpdate()
+        self.viewChanged.emit()
+        return True
+
+    def show_all_items(self) -> None:
+        if self._isolated_item_indices is None:
+            return
+        self._isolated_item_indices = None
+        self.requestUpdate()
+        self.viewChanged.emit()
+
+    def frame_selected(self) -> bool:
+        if self.project is None or not self.selected_item_indices:
+            return False
+        bounds = [
+            self._item_bounds_mm(self.project.items[index])
+            for index in sorted(self.selected_item_indices)
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].visible
+            and self.project.items[index].mesh is not None
+        ]
+        if not bounds:
+            return False
+
+        selected_minimum = np.min(
+            np.vstack([item_bounds[0] for item_bounds in bounds]),
+            axis=0,
+        )
+        selected_maximum = np.max(
+            np.vstack([item_bounds[1] for item_bounds in bounds]),
+            axis=0,
+        )
+        selected_bounds = np.vstack((selected_minimum, selected_maximum))
+        scene_bounds = self._full_scene_bounds()
+        scene_center = scene_bounds.mean(axis=0)
+        selected_center = selected_bounds.mean(axis=0)
+        scene_diagonal = max(
+            float(np.linalg.norm(scene_bounds[1] - scene_bounds[0])),
+            1e-6,
+        )
+        selected_diagonal = max(
+            float(np.linalg.norm(selected_bounds[1] - selected_bounds[0])),
+            1e-6,
+        )
+
+        self.camera.pan_world = tuple(
+            float(value)
+            for value in selected_center - scene_center
+        )
+        self.camera.zoom = max(
+            self.MIN_ZOOM,
+            min(
+                self.MAX_ZOOM,
+                scene_diagonal / selected_diagonal,
+            ),
+        )
+        self.requestUpdate()
+        self.viewChanged.emit()
+        return True
+
+    def set_transform_orientation(self, orientation: str) -> None:
+        normalized = str(orientation).strip().lower()
+        if normalized not in {"global", "local"}:
+            raise ValueError(
+                f"Unsupported transform orientation: {orientation}"
+            )
+        self.transform_orientation = normalized
+        self.requestUpdate()
+
+    def set_transform_snapping(
+        self,
+        enabled: bool,
+        step_mm: float | None = None,
+    ) -> None:
+        self.snap_enabled = bool(enabled)
+        if step_mm is not None:
+            self.snap_step_mm = max(0.001, float(step_mm))
+
     def toggle_stock(self) -> None:
         self.show_stock = not self.show_stock
         self.requestUpdate()
@@ -471,6 +585,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._selection_drag_start_screen = None
         self._selection_drag_current_screen = None
         self._active_gizmo_axis = None
+        self._gizmo_drag_origin_translation = None
+        self._gizmo_drag_axis_world = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
         self._update_interaction_cursor()
@@ -674,8 +791,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         minimum = np.array((0.0, 0.0, -stock.thickness_mm), dtype=float)
         maximum = np.array((stock.width_mm, stock.height_mm, 0.0), dtype=float)
 
-        for item in self.project.items:
-            if not item.visible or item.mesh is None:
+        for index, item in enumerate(self.project.items):
+            if not self._item_viewport_visible(index, item):
                 continue
             item_bounds = self._item_bounds_mm(item)
             minimum = np.minimum(minimum, item_bounds[0])
@@ -1344,7 +1461,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         # viewport interaction skipped the upload path and the model appeared.
         render_items: list[tuple[int, ProjectItem, _GpuMesh]] = []
         for item_index, item in enumerate(self.project.items):
-            if not item.visible or item.mesh is None:
+            if not self._item_viewport_visible(item_index, item):
                 continue
             gpu_mesh = self._gpu_mesh_for_item(item)
             if gpu_mesh is not None:
@@ -1463,7 +1580,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         best_index: int | None = None
         best_distance = float("inf")
         for index, item in enumerate(self.project.items):
-            if not item.visible or item.mesh is None:
+            if not self._item_viewport_visible(index, item):
                 continue
             bounds = self._item_bounds_mm(item).copy()
             bounds[0] -= padding
@@ -1633,9 +1750,27 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not item.visible or item.mesh is None:
+        if not self._item_viewport_visible(self.selected_item_index, item):
             return None
         return self._item_bounds_mm(item).mean(axis=0)
+
+    def _gizmo_world_axis(self, axis: int) -> np.ndarray:
+        world_axis = np.eye(3, dtype=float)[axis]
+        if (
+            self.transform_orientation != "local"
+            or self.project is None
+            or self.selected_item_index is None
+            or not 0 <= self.selected_item_index < len(self.project.items)
+        ):
+            return world_axis
+
+        item = self.project.items[self.selected_item_index]
+        matrix = np.asarray(item.transform.matrix(), dtype=float)
+        local_axis = matrix[:3, axis]
+        length = float(np.linalg.norm(local_axis))
+        if length <= 1e-12:
+            return world_axis
+        return local_axis / length
 
     def _gizmo_visual_direction(
         self,
@@ -1652,7 +1787,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         changes only the requested world coordinate.
         """
 
-        world_axis = np.eye(3, dtype=float)[axis]
+        world_axis = self._gizmo_world_axis(axis)
         start = self._project_world_point(
             tuple(float(value) for value in pivot),
             view_projection,
@@ -1927,7 +2062,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not item.visible or item.mesh is None:
+        if not self._item_viewport_visible(self.selected_item_index, item):
             return None
         return self.selected_item_index, item
 
@@ -2195,7 +2330,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             if not 0 <= item_index < len(self.project.items):
                 continue
             item = self.project.items[item_index]
-            if not item.visible or item.mesh is None:
+            if not self._item_viewport_visible(item_index, item):
                 continue
             minimum, maximum = self._item_bounds_mm(item)
             corners = np.array(
@@ -2235,7 +2370,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         view_projection = projection * view_matrix
         selected: list[int] = []
         for index, item in enumerate(self.project.items):
-            if not item.visible or item.mesh is None:
+            if not self._item_viewport_visible(index, item):
                 continue
             corners = self._bounds_corners(self._item_bounds_mm(item))
             projected = [
@@ -2491,6 +2626,9 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._interaction_distance = 0.0
         self._object_drag_started = False
         self._active_gizmo_axis = None
+        self._gizmo_drag_origin_translation = None
+        self._gizmo_drag_axis_world = None
+        self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
 
@@ -2557,6 +2695,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             ):
                 self._press_item_index = self.selected_item_index
                 self._active_gizmo_axis = gizmo_axis
+                item = self.project.items[self.selected_item_index]
+                self._gizmo_drag_origin_translation = np.asarray(
+                    item.transform.translation_mm,
+                    dtype=float,
+                )
+                self._gizmo_drag_axis_world = self._gizmo_world_axis(gizmo_axis)
+                self._gizmo_drag_accumulated_delta = 0.0
                 self._interaction_mode = "gizmo"
                 self._transform_interaction_kind = "move"
                 self.requestUpdate()
@@ -2679,17 +2824,40 @@ class _NativeOpenGLViewport(QOpenGLWindow):
                 self._active_gizmo_axis,
                 delta,
             )
-            if axis_delta is not None and abs(axis_delta) > 1e-12:
-                if not self._object_drag_started:
-                    self._object_drag_started = True
-                    self.itemTransformStarted.emit(self._press_item_index)
+            if (
+                axis_delta is not None
+                and abs(axis_delta) > 1e-12
+                and self._gizmo_drag_origin_translation is not None
+                and self._gizmo_drag_axis_world is not None
+            ):
+                self._gizmo_drag_accumulated_delta += float(axis_delta)
+                distance = self._gizmo_drag_accumulated_delta
+                snap_active = self.snap_enabled or bool(
+                    event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                )
+                if snap_active:
+                    step = max(self.snap_step_mm, 0.001)
+                    distance = round(distance / step) * step
+
+                candidate = (
+                    self._gizmo_drag_origin_translation
+                    + self._gizmo_drag_axis_world * distance
+                )
                 item = self.project.items[self._press_item_index]
-                translation = list(item.transform.translation_mm)
-                translation[self._active_gizmo_axis] += float(axis_delta)
-                item.transform.translation_mm = tuple(translation)
-                self.itemTransformChanged.emit(self._press_item_index)
-                self.requestUpdate()
-                self.viewChanged.emit()
+                current = np.asarray(
+                    item.transform.translation_mm,
+                    dtype=float,
+                )
+                if not np.allclose(candidate, current, atol=1e-10):
+                    if not self._object_drag_started:
+                        self._object_drag_started = True
+                        self.itemTransformStarted.emit(self._press_item_index)
+                    item.transform.translation_mm = tuple(
+                        float(value) for value in candidate
+                    )
+                    self.itemTransformChanged.emit(self._press_item_index)
+                    self.requestUpdate()
+                    self.viewChanged.emit()
         elif (
             event.buttons() & Qt.MouseButton.LeftButton
             and self._interaction_mode == "orbit"
@@ -3254,6 +3422,22 @@ class MeshViewport(QWidget):
     def camera_control_mode(self) -> bool:
         return self._renderer.camera_control_mode
 
+    @property
+    def transform_orientation(self) -> str:
+        return self._renderer.transform_orientation
+
+    @property
+    def snap_enabled(self) -> bool:
+        return self._renderer.snap_enabled
+
+    @property
+    def snap_step_mm(self) -> float:
+        return self._renderer.snap_step_mm
+
+    @property
+    def isolated(self) -> bool:
+        return self._renderer.isolated
+
     def set_camera_control_mode(self, enabled: bool) -> None:
         self._renderer.set_camera_control_mode(enabled)
 
@@ -3354,6 +3538,25 @@ class MeshViewport(QWidget):
 
     def set_invert_vertical_drag(self, enabled: bool) -> None:
         self._renderer.set_invert_vertical_drag(enabled)
+
+    def set_transform_orientation(self, orientation: str) -> None:
+        self._renderer.set_transform_orientation(orientation)
+
+    def set_transform_snapping(
+        self,
+        enabled: bool,
+        step_mm: float | None = None,
+    ) -> None:
+        self._renderer.set_transform_snapping(enabled, step_mm)
+
+    def isolate_selected(self) -> bool:
+        return self._renderer.isolate_selected()
+
+    def show_all_items(self) -> None:
+        self._renderer.show_all_items()
+
+    def frame_selected(self) -> bool:
+        return self._renderer.frame_selected()
 
     def fit_view(self) -> None:
         self._renderer.fit_view()
