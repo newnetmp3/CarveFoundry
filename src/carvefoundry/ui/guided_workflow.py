@@ -126,6 +126,17 @@ class GuidedWorkflowMixin:
             ),
         )
 
+    def _start_guided_rest_cleanup(self) -> None:
+        """Take the operator straight to verified stock-aware rest settings."""
+        if not self.project.toolpaths:
+            self.statusBar().showMessage(
+                "Generate a roughing/finishing job before rest cleanup.",
+                7000,
+            )
+            return
+        self._select_cam_operation("rest")
+        self._calculate_toolpath()
+
     def _show_guided_workflow(self) -> None:
         existing = getattr(self, "_guided_workflow_dialog", None)
         if existing is not None:
@@ -190,6 +201,7 @@ class GuidedWorkflowMixin:
             ("Batch Copies", self._batch_layout),
             ("Two-Sided Setup", self._double_sided_setup),
             ("Preview Paths", self._preview_toolpaths),
+            ("Rest Cleanup", self._start_guided_rest_cleanup),
             ("Material Removal", self._simulate_stock_removal),
         ):
             button = QPushButton(text, body)

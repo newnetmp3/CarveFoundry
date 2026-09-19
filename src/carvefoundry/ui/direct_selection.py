@@ -291,10 +291,16 @@ class DirectSelectionMixin:
             if getattr(self, "_vector_node_dialog", None) is dialog:
                 self._vector_node_dialog = None
                 self._vector_nodes_table = None
-                self.viewport.set_node_edit_mode(False)
-                action = self._ui_actions.get("direct_select")
-                if action is not None:
-                    action.setChecked(False)
+                # Qt can destroy the native QOpenGLWindow before emitting
+                # WA_DeleteOnClose for this modeless dialog during app exit.
+                # Do not call into already-destroyed C++ widgets.
+                try:
+                    self.viewport.set_node_edit_mode(False)
+                    action = self._ui_actions.get("direct_select")
+                    if action is not None:
+                        action.setChecked(False)
+                except RuntimeError:
+                    pass
 
         dialog.destroyed.connect(closed)
         self._vector_node_dialog = dialog

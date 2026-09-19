@@ -31,6 +31,7 @@ def validate_job_order(paths: Sequence[Toolpath]) -> None:
     for operations in by_source.values():
         detached = False
         finished = False
+        preceding = False
         for path in operations:
             label = path.name.casefold()
             full_cutout = "full depth cutout" in label
@@ -39,13 +40,23 @@ def validate_job_order(paths: Sequence[Toolpath]) -> None:
                     f"{path.source_item_name or path.name}: no operations may follow "
                     "the final full-depth cutout of the same item."
                 )
-            if path.operation == "rough" and finished:
+            if path.operation == "3d_rest_raster" and not preceding:
+                raise ValueError(
+                    f"{path.source_item_name or path.name}: stock-aware rest "
+                    "requires a preceding cutter operation on the same item."
+                )
+            if path.operation in {"rough", "3d_rough_raster"} and finished:
                 raise ValueError(
                     f"{path.source_item_name or path.name}: roughing must precede "
                     "the finishing/detail operations of that item."
                 )
-            if path.operation in {"finish", "height_map", "waterline", "vcarve", "engrave"}:
+            if path.operation in {
+                "finish", "3d_finish", "3d_finish_raster",
+                "3d_rest_raster", "height_map", "waterline",
+                "3d_waterline", "vcarve", "engrave",
+            }:
                 finished = True
+            preceding = preceding or not full_cutout
             detached = detached or full_cutout
 
 

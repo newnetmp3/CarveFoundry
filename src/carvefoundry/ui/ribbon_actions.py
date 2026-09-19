@@ -1412,7 +1412,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         mark_custom: bool = True,
     ) -> None:
         detail = max(0, min(100, int(value)))
-        previous_detail = self._cam_detail
         self._cam_detail = detail
         self._settings.setValue("cam/design/detail", detail)
 
@@ -1440,8 +1439,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
 
         self._settings.sync()
         self._refresh_cam_detail_readouts()
-        if detail != previous_detail:
-            self._invalidate_toolpaths("Toolpath detail")
 
         fraction = detail_stepover_fraction(detail)
         cutter = (
@@ -1533,7 +1530,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             "3d_cut_style": "_cam_3d_cut_style",
         }
         attribute = attributes[key]
-        previous_value = getattr(self, attribute)
         setattr(self, attribute, value)
         self._settings.setValue(f"cam/design/{key}", value)
 
@@ -1576,8 +1572,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         if key == "direction":
             self._refresh_cam_detail_readouts()
 
-        if value != previous_value:
-            self._invalidate_toolpaths("Toolpath settings")
 
         self.statusBar().showMessage(
             f"Toolpath {key.replace('_', ' ')}: {value}",
@@ -1755,7 +1749,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             mark_custom=True,
         )
         self._settings.sync()
-        self._invalidate_toolpaths("Advanced toolpath settings")
         self.statusBar().showMessage("Advanced toolpath settings saved", 3000)
 
     def _quality_stepover_fraction(self) -> float:
@@ -1824,10 +1817,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         )
 
     def _select_cam_operation(self, operation: str) -> None:
-        previous_operation = self._active_cam_operation
         self._active_cam_operation = operation
-        if operation != previous_operation:
-            self._invalidate_toolpaths("Toolpath operation")
         labels = {
             "profile": "Profile",
             "silhouette": "Silhouette",
@@ -1923,7 +1913,6 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
     def _toggle_tabs_operation(self) -> None:
         self._tabs_enabled = not self._tabs_enabled
         self._settings.setValue("cam/tabs_enabled", self._tabs_enabled)
-        self._invalidate_toolpaths("Tab settings")
         self._settings.sync()
         if self._tabs_button is not None:
             self._tabs_button.setChecked(self._tabs_enabled)
@@ -2145,7 +2134,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             toolpath = geometry_pocket(mesh, cutter, settings)
         elif operation == "engrave":
             toolpath = geometry_engrave(mesh, cutter, settings)
-        elif operation in {"rough", "finish", "rest"}:
+        elif operation == "rest":
+            raise ValueError(
+                "Stock-aware rest needs previous job stages: use Generate "
+                "Toolpaths, then Append to existing machining job."
+            )
+        elif operation in {"rough", "finish"}:
             toolpath = finish_3d(
                 mesh,
                 cutter,
@@ -2286,7 +2280,16 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
                 type("_Bounds", (), {"bounds": bounds})(),
             )
 
-        append_to_job = bool(self._cam_append_to_job and self.project.toolpaths)
+        if operation == "rest" and not self.project.toolpaths:
+            self.statusBar().showMessage(
+                "Generate and append roughing/finishing before 3D Rest.", 7000
+            )
+            return False
+        append_to_job = bool(
+            self.project.toolpaths and (
+                operation == "rest" or self._cam_append_to_job
+            )
+        )
         self._cam_append_to_job = False
         request = CamRequest(
             operation=operation,
@@ -2300,6 +2303,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             silhouette_settings=silhouette_settings,
             previous_toolpaths=(
                 list(self.project.toolpaths) if append_to_job else None
+            ),
+            rest_min_remaining_mm=float(
+                self._settings.value("cam/rest_min_remaining_mm", 0.15)
+            ),
+            rest_grid_spacing_mm=float(
+                self._settings.value("cam/rest_grid_spacing_mm", 0.75)
             ),
         )
         self._toolpath_progress_last_value = -1

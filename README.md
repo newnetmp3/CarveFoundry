@@ -156,6 +156,31 @@ use mandatory CNC preflight for every cutter in the finished multi-tool job.
 X/Y Smart Value bindings must be removed from template objects so they cannot
 overwrite calculated batch positions.
 
+## Stock-aware rest machining
+
+After generating a 3D Rough or Finish operation, reopen **Generate
+Toolpaths → 3D Rest** (or **Guided CNC Job → Rest Cleanup**). This operation
+**requires and appends to the existing machining job**. CarveFoundry simulates
+stock after all prior cutter stages and generates cutter-contact-compensated
+serpentine cleanup **only where the new cutter is predicted to remove residual
+material above the selected threshold**. Typical workflow: rough with a
+1/4-inch bit, then rest cleanup with a smaller ball nose; inspect the
+completed path in Preview and rerun mandatory CNC preflight before export.
+The existing job remains unchanged if the model has no sampled leftover.
+
+Set **Minimum leftover height** (default 0.15 mm) to ignore negligible
+material, and **Stock simulation spacing** (default 0.75 mm) to determine
+the smallest leftover features the simulation can detect. This is sampled
+**2.5D** rest machining—not a live measurement of the actual workpiece.
+It cannot see cuts made outside CarveFoundry, real cutter deflection, the
+holder or unrecorded hold-downs. Increase simulation resolution for small
+features; the memory/sample caps reject overly fine setups instead of
+silently guessing. Each design object needs a preceding operation, and
+a detached part cannot be rest-machined after a full-depth cutout.
+New cutter stages remain separate GRBL programs requiring manual cutter
+change and stock-top Z re-probe; export still performs its own fixture-aware
+preflight.
+
 ## Sampled material-removal simulation
 
 Choose **Toolpaths → Simulate Material Removal…** after generating a machining
