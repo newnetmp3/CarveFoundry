@@ -8,9 +8,10 @@ from uuid import uuid4
 
 import numpy as np
 import trimesh
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -224,6 +225,9 @@ class RibbonActionsMixin:
         self._tool_option_text = "Text"
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
         self._cam_detail_widgets: list[object] = []
+        self._toolpath_dialog_progress = None
+        self._toolpath_progress_last_value = -1
+        self._toolpath_progress_last_text = ""
 
         def saved_choice(
             key: str,
@@ -1837,6 +1841,68 @@ class RibbonActionsMixin:
         }.get(operation, operation.replace("_", " ").title())
 
     @staticmethod
+    def _update_toolpath_progress(
+        self,
+        fraction: float,
+        status_text: str,
+    ) -> None:
+        """Update determinate CAM progress and keep the UI repainting."""
+
+        fraction = max(0.0, min(1.0, float(fraction)))
+        percent = int(round(fraction * 100.0))
+        text = str(status_text).strip() or "Generating toolpaths"
+
+        bars = [
+            getattr(self, "toolpath_progress", None),
+            self._toolpath_dialog_progress,
+        ]
+        changed = (
+            percent != self._toolpath_progress_last_value
+            or text != self._toolpath_progress_last_text
+        )
+        for bar in bars:
+            if bar is None:
+                continue
+            bar.setRange(0, 100)
+            bar.setValue(percent)
+            bar.setFormat(f"{text} · %p%")
+            bar.show()
+
+        self._toolpath_progress_last_value = percent
+        self._toolpath_progress_last_text = text
+        if changed:
+            self.statusBar().showMessage(f"{text} — {percent}%")
+            QApplication.processEvents(
+                QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+            )
+
+    def _finish_toolpath_progress(
+        self,
+        *,
+        success: bool,
+        message: str,
+    ) -> None:
+        bars = [
+            getattr(self, "toolpath_progress", None),
+            self._toolpath_dialog_progress,
+        ]
+        value = 100 if success else self._toolpath_progress_last_value
+        value = max(0, value)
+        for bar in bars:
+            if bar is None:
+                continue
+            bar.setRange(0, 100)
+            bar.setValue(value)
+            bar.setFormat(f"{message} · %p%")
+            bar.show()
+
+        QApplication.processEvents(
+            QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+        )
+        status_bar = getattr(self, "toolpath_progress", None)
+        if status_bar is not None:
+            QTimer.singleShot(1800, status_bar.hide)
+
     def _generation_double_spin(
         value: float,
         *,
