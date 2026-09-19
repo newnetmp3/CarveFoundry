@@ -34,19 +34,19 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
-from ..cam.gcode import write_grbl, write_grbl_program
+from ..cam.job_process import GcodeRequest
 from ..core.font_handler import describe_qt_font_face
 from ..core.mesh import mesh_asset_from_geometry
 from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
     PROJECT_SUFFIX,
-    ProjectFileError,
     load_project,
     save_project,
 )
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
+from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
 from .ribbon import Ribbon, _ribbon_icon
@@ -175,6 +175,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_thread: QThread | None = None
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
+        self._background_job: JobState | None = None
+        self._job_bridge: JobCallbacks | None = None
+        self._job_target_project: Project | None = None
+        self._job_action_states: dict[str, bool] = {}
+        self._job_rail_states: dict[str, bool] = {}
+        self._job_camera_was_active = True
+        self._job_draw_mode: str | None = None
+        self._job_sequence = 0
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
         self._history_action_buttons: dict[str, list[object]] = {
@@ -187,6 +195,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._calculate_button = None
         self.generate_toolpaths_button: QPushButton | None = None
         self._toolpaths_stale_reason: str | None = None
+        self._prepared_toolpath_geometry: dict[str, object] | None = None
+        self._prepared_toolpath_stats: dict[str, object] | None = None
         self._text_update_timer = QTimer(self)
         self._text_update_timer.setSingleShot(True)
         self._text_update_timer.setInterval(275)
@@ -222,8 +232,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         status = QStatusBar()
         self.import_progress = QProgressBar()
         self.import_progress.setObjectName("ImportProgress")
-        self.import_progress.setFixedWidth(220)
-        self.import_progress.setTextVisible(False)
+        self.import_progress.setFixedWidth(300)
+        self.import_progress.setTextVisible(True)
+        self.import_progress.setFormat("Import · %p%")
         self.import_progress.hide()
         status.addPermanentWidget(self.import_progress)
 
@@ -236,6 +247,19 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.toolpath_progress.setFormat("Toolpath generation · %p%")
         self.toolpath_progress.hide()
         status.addPermanentWidget(self.toolpath_progress)
+
+        self.job_progress = QProgressBar()
+        self.job_progress.setObjectName("BackgroundJobProgress")
+        self.job_progress.setFixedWidth(320)
+        self.job_progress.setTextVisible(True)
+        self.job_progress.hide()
+        status.addPermanentWidget(self.job_progress)
+
+        self.cancel_job_button = QPushButton("Cancel")
+        self.cancel_job_button.setObjectName("CancelBackgroundJob")
+        self.cancel_job_button.clicked.connect(self._cancel_background_job)
+        self.cancel_job_button.hide()
+        status.addPermanentWidget(self.cancel_job_button)
 
         status.showMessage("Ready — no machine connected")
         self.setStatusBar(status)
@@ -3408,6 +3432,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             return False
 
         self.project.toolpaths.clear()
+        self._prepared_toolpath_geometry = None
+        self._prepared_toolpath_stats = None
         self._toolpaths_stale_reason = reason
 
         if self._simulation_timer.isActive():
@@ -5684,10 +5710,195 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.project = project
         self.project_path = project_path
         self._toolpaths_stale_reason = None
+        self._prepared_toolpath_geometry = None
+        self._prepared_toolpath_stats = None
         self.project_title_label.setText(f"  •  {project.name} Project")
         self.viewport.set_project(project)
         self._refresh_project_list(selected_row)
         self._sync_toolpath_state_from_project()
+
+    def _start_background_job(
+        self,
+        title: str,
+        *,
+        task=None,
+        request=None,
+        on_done=None,
+        on_failed=None,
+        cam_progress: bool = False,
+        indeterminate: bool = False,
+    ) -> bool:
+        """Run one costly operation off the GUI thread with reusable progress UI."""
+
+        if self._background_job is not None or (
+            self._import_thread is not None and self._import_thread.isRunning()
+        ):
+            self.statusBar().showMessage("Another operation is already running", 4000)
+            return False
+        worker = BackgroundWorker(task, process_request=request)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        state = JobState(worker, thread)
+        self._background_job = state
+        self._job_target_project = self.project
+        self._job_sequence += 1
+        job_id = self._job_sequence
+        self._job_action_states = {
+            key: action.isEnabled()
+            for key, action in self._ui_actions.items()
+        }
+        # Camera, view and selection remain usable. Design and machine commands
+        # are disabled to keep the snapshot stable until the worker completes.
+        safe_actions = {
+            "camera", "view_fit", "frame_selected", "view_2d",
+            "perspective", "orthographic", "isometric", "view_top",
+            "view_bottom", "view_front", "view_back", "view_left",
+            "view_right", "stock", "grid", "rulers", "toolpaths",
+            "rapids", "layers", "inspector", "status_bar",
+            "view_controls", "reverse_horizontal", "invert_vertical",
+        }
+        for key, action in self._ui_actions.items():
+            if key not in safe_actions:
+                action.setEnabled(False)
+        if self.generate_toolpaths_button is not None:
+            self.generate_toolpaths_button.setEnabled(False)
+        # Protect the job snapshot without blocking navigation or repaints.
+        self._job_camera_was_active = self.viewport.camera_control_mode
+        self._job_draw_mode = self.viewport.shape_draw_mode
+        self.viewport.set_shape_draw_mode(None)
+        self.viewport.set_camera_control_mode(True)
+        self.tool_rail.set_active_tool("camera")
+        self._job_rail_states = {
+            key: button.isEnabled()
+            for key, button in self.tool_rail.buttons.items()
+        }
+        for key, button in self.tool_rail.buttons.items():
+            if key not in {"camera", "view"}:
+                button.setEnabled(False)
+        self.properties_panel.setEnabled(False)
+        self.tool_combo.setEnabled(False)
+        self.job_progress.setRange(0, 0 if indeterminate else 100)
+        self.job_progress.setValue(0)
+        self.job_progress.setFormat(title if indeterminate else f"{title} · %p%")
+        self.job_progress.show()
+        self.cancel_job_button.setEnabled(True)
+        self.cancel_job_button.setVisible(request is not None)
+        self.statusBar().showMessage(f"{title}…")
+
+        def progress(fraction: float, status: str) -> None:
+            if job_id != self._job_sequence:
+                return
+            value = max(0, min(100, round(fraction * 100)))
+            if not indeterminate:
+                self.job_progress.setValue(value)
+            self.job_progress.setFormat(
+                status if indeterminate else f"{status} · %p%"
+            )
+            self.statusBar().showMessage(
+                f"{title}: {status}" if indeterminate
+                else f"{title}: {status} — {value}%"
+            )
+            if cam_progress:
+                self._update_toolpath_progress(fraction, status)
+
+        def completed(result: object) -> None:
+            if self.project is not self._job_target_project:
+                self.statusBar().showMessage(
+                    f"{title}: project changed; result discarded", 7000
+                )
+                return
+            try:
+                if on_done is not None:
+                    on_done(result)
+                self.job_progress.setRange(0, 100)
+                self.job_progress.setValue(100)
+                self.job_progress.setFormat(f"{title} complete · %p%")
+            except Exception as exc:  # noqa: BLE001 - always clean up the worker
+                failed(f"{type(exc).__name__}: {exc}")
+
+        def failed(message: str) -> None:
+            if on_failed is not None:
+                on_failed(message)
+            else:
+                self._set_activity_info(f"{title} failed\n{message}")
+                self.statusBar().showMessage(f"{title} failed: {message}", 9000)
+            self.job_progress.setFormat(f"{title} failed")
+
+        def cancelled() -> None:
+            self.job_progress.setFormat(f"{title} canceled")
+            self.statusBar().showMessage(f"{title} canceled", 5000)
+            if cam_progress:
+                self._finish_toolpath_progress(
+                    success=False, message="Generation canceled"
+                )
+
+        def cleaned_up() -> None:
+            if job_id != self._job_sequence:
+                return
+            self._background_job = None
+            self._job_bridge = None
+            self._job_target_project = None
+            self.cancel_job_button.hide()
+            for key, was_enabled in self._job_action_states.items():
+                action = self._ui_actions.get(key)
+                if action is not None:
+                    action.setEnabled(was_enabled)
+            self._job_action_states = {}
+            for key, was_enabled in self._job_rail_states.items():
+                button = self.tool_rail.buttons.get(key)
+                if button is not None:
+                    button.setEnabled(was_enabled)
+            self._job_rail_states = {}
+            self.properties_panel.setEnabled(True)
+            self.tool_combo.setEnabled(True)
+            self.viewport.set_camera_control_mode(self._job_camera_was_active)
+            if not self._job_camera_was_active:
+                self.viewport.set_shape_draw_mode(self._job_draw_mode)
+                self.tool_rail.set_active_tool(
+                    self._job_draw_mode or "select"
+                )
+            else:
+                self.tool_rail.set_active_tool("camera")
+            self._sync_toolpath_output_state()
+            self._sync_selection_action_state()
+            if self.generate_toolpaths_button is not None:
+                self.generate_toolpaths_button.setEnabled(True)
+            QTimer.singleShot(
+                1800,
+                lambda bar=self.job_progress: (
+                    bar.hide() if self._background_job is None else None
+                ),
+            )
+
+        bridge = JobCallbacks(
+            self,
+            progress=progress,
+            completed=completed,
+            failed=failed,
+            cancelled=cancelled,
+            cleaned_up=cleaned_up,
+        )
+        self._job_bridge = bridge
+        thread.started.connect(worker.run)
+        worker.progress.connect(bridge.on_progress)
+        worker.completed.connect(bridge.on_completed)
+        worker.failed.connect(bridge.on_failed)
+        worker.cancelled.connect(bridge.on_cancelled)
+        for signal in (worker.completed, worker.failed, worker.cancelled):
+            signal.connect(thread.quit)
+            signal.connect(worker.deleteLater)
+        thread.finished.connect(bridge.on_cleaned_up)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+        return True
+
+    def _cancel_background_job(self) -> None:
+        state = self._background_job
+        if state is None:
+            return
+        self.cancel_job_button.setEnabled(False)
+        self.statusBar().showMessage("Cancelling operation…")
+        state.worker.cancel()
 
     def _undo(self) -> None:
         self.statusBar().showMessage("Nothing to undo", 3000)
@@ -5697,6 +5908,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.statusBar().showMessage("New project created", 3000)
 
     def _open_project(self) -> None:
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open CarveFoundry Project",
@@ -5706,14 +5920,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if not path:
             return
         project_path = Path(path)
-        try:
+
+        def load(progress):
+            progress(0.05, "Reading project and embedded assets")
             project = load_project(project_path)
-        except ProjectFileError as exc:
-            self._set_activity_info(f"Project open failed\n{exc}")
-            self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
-            return
-        self._set_project(project, project_path=project_path)
-        self.statusBar().showMessage(f"Opened {project_path.name}", 5000)
+            progress(0.95, "Project loaded")
+            return project
+
+        def done(result):
+            self._set_project(result, project_path=project_path)
+            self.statusBar().showMessage(f"Opened {project_path.name}", 5000)
+
+        self._start_background_job(
+            "Open project", task=load, on_done=done,
+            indeterminate=True,
+        )
 
     def _save_project(self) -> None:
         if self.project_path is None:
@@ -5738,81 +5959,79 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._save_project_to(Path(path))
 
     def _save_project_to(self, path: Path) -> None:
-        if self.project.name == "Untitled":
-            self.project.name = path.stem
-        try:
-            saved_path = save_project(self.project, path)
-        except ProjectFileError as exc:
-            self._set_activity_info(f"Project save failed\n{exc}")
-            self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
             return
-        self.project_path = saved_path
-        self.project_title_label.setText(f"  •  {self.project.name} Project")
-        self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+        project = self.project
+        if project.name == "Untitled":
+            project.name = path.stem
+
+        def save(progress):
+            progress(0.05, "Compressing project and embedded assets")
+            saved = save_project(project, path)
+            progress(0.95, "Project written")
+            return saved
+
+        def done(saved_path):
+            self.project_path = saved_path
+            self.project_title_label.setText(f"  •  {project.name} Project")
+            self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+
+        self._start_background_job(
+            "Save project", task=save, on_done=done,
+            indeterminate=True,
+        )
 
     def _export_gcode(self) -> None:
         toolpaths = self.project.toolpaths
         if not toolpaths:
-            self._set_activity_info(
-                "No calculated toolpaths to export.\n\n"
-                "Calculate a toolpath first, then return to Export G-code."
+            self.statusBar().showMessage(
+                "No calculated toolpaths to export", 5000
             )
-            self.statusBar().showMessage("No calculated toolpaths to export", 5000)
             return
-
-        toolpath = toolpaths[0]
         base_directory = self.project_path.parent if self.project_path else Path.home()
-        project_name = self.project.name if self.project.name != "Untitled" else toolpath.name
+        toolpath = toolpaths[0]
+        project_name = (
+            self.project.name if self.project.name != "Untitled"
+            else toolpath.name
+        )
         suggested = base_directory / f"{project_name}.nc"
         path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export G-code",
-            str(suggested),
+            self, "Export G-code", str(suggested),
             "G-code (*.nc *.gcode *.tap *.cnc);;All files (*)",
         )
         if not path:
             self.statusBar().showMessage("G-code export canceled", 3000)
             return
-
-        try:
-            if len(toolpaths) == 1:
-                output_path = write_grbl(
-                    toolpath,
-                    Path(path),
-                    self._grbl_post_settings(),
-                )
-            else:
-                output_path = write_grbl_program(
-                    toolpaths,
-                    Path(path),
-                    self._grbl_post_settings(),
-                )
-        except (OSError, ValueError) as exc:
-            self._set_activity_info(f"G-code export failed\n{exc}")
-            self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
-            return
-
-        total_moves = sum(len(path.moves) for path in toolpaths)
-        total_minutes = sum(
-            path.estimated_cutting_minutes for path in toolpaths
+        request = GcodeRequest(
+            toolpaths=list(toolpaths),
+            path=path,
+            settings=self._grbl_post_settings(),
         )
-        operation_names = " + ".join(path.name for path in toolpaths)
-        source_names = self._toolpath_source_names(toolpaths)
-        source_text = ", ".join(source_names) if source_names else "Unknown"
-        self._set_activity_info(
-            f"G-code exported\n{output_path}\n\n"
-            f"Operations: {operation_names}\n"
-            f"Source: {source_text}\n"
-            f"Cutter: {toolpath.cutter.name}\n"
-            f"Moves: {total_moves:,}\n"
-            f"Estimated cutting time: {total_minutes:.1f} min "
-            "(rapids excluded)"
+
+        def done(result):
+            output_path = Path(result["files"][0])
+            self._set_activity_info(
+                f"G-code exported\n{output_path}\n\n"
+                f"Operations: {result['summary']}\n"
+                f"Cutter: {toolpath.cutter.name}\n"
+                f"Moves: {result['moves']:,}\n"
+                f"Estimated cutting: {result['minutes']:.1f} min "
+                "(rapids excluded)"
+            )
+            self.statusBar().showMessage(
+                f"Exported {output_path.name}", 5000
+            )
+
+        self._start_background_job(
+            "Export G-code", request=request, on_done=done,
         )
-        self.statusBar().showMessage(f"Exported {output_path.name}", 5000)
 
     def _import_file(self, kind: str | None = None) -> None:
-        if self._import_thread is not None and self._import_thread.isRunning():
-            self.statusBar().showMessage("An import is already in progress", 3000)
+        if self._background_job is not None or (
+            self._import_thread is not None and self._import_thread.isRunning()
+        ):
+            self.statusBar().showMessage("Another operation is running", 3000)
             return
 
         filters = {
@@ -5876,12 +6095,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         thread.start()
 
     def _import_progress_changed(self, index: int, total: int, name: str) -> None:
-        if total <= 1:
+        if index > total:
+            self.import_progress.setRange(0, max(1, total))
+            self.import_progress.setValue(max(1, total))
+            self.import_progress.setFormat("Import ready · %p%")
+            self.statusBar().showMessage("Finalizing imported items…")
+        elif total <= 1:
             self.import_progress.setRange(0, 0)
+            self.import_progress.setFormat(f"Loading {name}…")
+            self.statusBar().showMessage(f"Loading {name}…")
         else:
             self.import_progress.setRange(0, total)
             self.import_progress.setValue(max(0, index - 1))
-        self.statusBar().showMessage(f"Loading {name} ({index}/{total})…")
+            self.import_progress.setFormat(f"{name} · %p%")
+            self.statusBar().showMessage(
+                f"Loading {name} ({index}/{total})…"
+            )
 
     def _import_completed(self, infos: object, failures: object) -> None:
         if self.project is not self._import_target_project:
@@ -5977,9 +6206,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_target_project = None
 
     def closeEvent(self, event) -> None:
-        if self._import_thread is not None and self._import_thread.isRunning():
+        if (
+            self._background_job is not None
+            or (self._import_thread is not None and self._import_thread.isRunning())
+        ):
             self.statusBar().showMessage(
-                "Please wait for the current import to finish before closing",
+                "Finish or cancel the current operation before closing",
                 5000,
             )
             event.ignore()

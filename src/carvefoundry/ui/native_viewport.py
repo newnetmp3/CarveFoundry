@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from carvefoundry.cam.toolpath import MoveKind
+from carvefoundry.cam.render_geometry import build_render_geometry
 
 from .gpu_geometry import expand_triangle_positions
 
@@ -523,136 +523,36 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self._toolpath_gpu_key = None
             return self._toolpath_render_cache
 
-        cut_chunks: list[np.ndarray] = []
-        rapid_chunks: list[np.ndarray] = []
-        point_chunks: list[np.ndarray] = []
-        rapid_flag_chunks: list[np.ndarray] = []
-        segment_count = 0
-
-        for toolpath in toolpaths:
-            moves = toolpath.moves
-            move_count = len(moves)
-            if move_count == 0:
-                continue
-
-            coords = np.fromiter(
-                (
-                    coordinate
-                    for move in moves
-                    for coordinate in move.xyz
-                ),
-                dtype=np.float32,
-                count=move_count * 3,
-            ).reshape((-1, 3))
-            point_chunks.append(coords)
-            if move_count < 2:
-                continue
-
-            rapid_flags = np.fromiter(
-                (
-                    move.kind is MoveKind.RAPID
-                    for move in moves[1:]
-                ),
-                dtype=np.bool_,
-                count=move_count - 1,
-            )
-            segments = np.empty(
-                (move_count - 1, 2, 3),
-                dtype=np.float32,
-            )
-            segments[:, 0, :] = coords[:-1]
-            segments[:, 1, :] = coords[1:]
-            if np.any(~rapid_flags):
-                cut_chunks.append(
-                    segments[~rapid_flags].reshape((-1, 3))
-                )
-            if np.any(rapid_flags):
-                rapid_chunks.append(
-                    segments[rapid_flags].reshape((-1, 3))
-                )
-            rapid_flag_chunks.append(rapid_flags)
-            segment_count += move_count - 1
-
-        empty = np.empty((0, 3), dtype=np.float32)
-        cut_vertices = (
-            np.concatenate(cut_chunks, axis=0)
-            if cut_chunks
-            else empty.copy()
+        # Rare fallback: imported/replaced toolpaths without prebuilt geometry.
+        # Calculated paths have this cache installed by the background worker.
+        prepared = build_render_geometry(
+            toolpaths,
+            segment_budget=self.TOOLPATH_INTERACTIVE_SEGMENT_BUDGET,
         )
-        rapid_vertices = (
-            np.concatenate(rapid_chunks, axis=0)
-            if rapid_chunks
-            else empty.copy()
-        )
-        points = (
-            np.concatenate(point_chunks, axis=0)
-            if point_chunks
-            else empty.copy()
-        )
-
-        if rapid_flag_chunks:
-            rapid_flags = np.concatenate(rapid_flag_chunks)
-            rapid_prefix = np.empty(
-                len(rapid_flags) + 1,
-                dtype=np.uint32,
-            )
-            rapid_prefix[0] = 0
-            np.cumsum(
-                rapid_flags,
-                dtype=np.uint32,
-                out=rapid_prefix[1:],
-            )
-        else:
-            rapid_prefix = np.zeros(1, dtype=np.uint32)
-
-        lod_stride = max(
-            1,
-            int(
-                np.ceil(
-                    segment_count
-                    / self.TOOLPATH_INTERACTIVE_SEGMENT_BUDGET
-                )
-            ),
-        )
-
-        def decimate(vertices: np.ndarray) -> np.ndarray:
-            if lod_stride <= 1 or len(vertices) <= 2:
-                return vertices
-            segments = vertices.reshape((-1, 2, 3))
-            return np.ascontiguousarray(
-                segments[::lod_stride].reshape((-1, 3)),
-                dtype=np.float32,
-            )
-
-        bounds = None
-        if len(points):
-            bounds = np.vstack(
-                (
-                    np.min(points, axis=0),
-                    np.max(points, axis=0),
-                )
-            ).astype(float)
-
-        self._toolpath_render_cache = _ToolpathRenderCache(
-            key=key,
-            cut_vertices=np.ascontiguousarray(
-                cut_vertices,
-                dtype=np.float32,
-            ),
-            rapid_vertices=np.ascontiguousarray(
-                rapid_vertices,
-                dtype=np.float32,
-            ),
-            cut_lod_vertices=decimate(cut_vertices),
-            rapid_lod_vertices=decimate(rapid_vertices),
-            rapid_prefix=rapid_prefix,
-            points=np.ascontiguousarray(points, dtype=np.float32),
-            bounds=bounds,
-            segment_count=segment_count,
-            lod_stride=lod_stride,
-        )
+        self._toolpath_render_cache = _ToolpathRenderCache(key=key, **prepared)
         self._toolpath_gpu_key = None
         return self._toolpath_render_cache
+
+    def prepare_toolpath_render_cache(
+        self,
+        toolpaths: list,
+        prepared: dict[str, object],
+    ) -> bool:
+        """Install CPU geometry built by the worker without touching OpenGL.
+
+        Cache keys use the actual unpickled path identities in this process,
+        so a stale completion cannot install geometry for a different project.
+        """
+        current_key = self._toolpath_cache_key(self._visible_toolpaths())
+        if current_key != self._toolpath_cache_key(toolpaths):
+            return False
+        self._toolpath_render_cache = _ToolpathRenderCache(
+            key=current_key,
+            **prepared,
+        )
+        self._toolpath_gpu_key = None
+        self.requestUpdate()
+        return True
 
     @property
     def isolated(self) -> bool:
@@ -3929,6 +3829,13 @@ class MeshViewport(QWidget):
             vertex_bytes,
             vertex_count,
         )
+
+    def prepare_toolpath_render_cache(
+        self,
+        toolpaths: list,
+        prepared: dict[str, object],
+    ) -> bool:
+        return self._renderer.prepare_toolpath_render_cache(toolpaths, prepared)
 
     def set_toolpaths_visible(self, visible: bool) -> None:
         self._renderer.set_toolpaths_visible(visible)

@@ -8,11 +8,9 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-import trimesh
-from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -49,23 +47,20 @@ from carvefoundry.cam.basic_ops import (
     finish_3d,
     waterline_3d,
 )
-from carvefoundry.cam.gcode import GrblPostSettings, write_grbl_program
+from carvefoundry.cam.gcode import GrblPostSettings
+from carvefoundry.cam.job_process import CamRequest, GcodeRequest
 from carvefoundry.cam.job_workflows import (
     TilingSettings,
     find_safe_resume_index,
     plan_tiles,
-    resume_toolpath,
-    tile_program,
 )
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
     geometry_engrave,
-    geometry_face,
     geometry_pocket,
     geometry_profile,
-    geometry_silhouette,
     geometry_vcarve,
 )
 from carvefoundry.core.machine_profiles import (
@@ -1197,13 +1192,12 @@ class RibbonActionsMixin:
         )
         if not path:
             return
-        image = QImage(path)
-        if image.isNull():
-            self.statusBar().showMessage("Could not load image", 5000)
-            return
 
         form = _ActionForm(self, "Trace Image")
-        form.add_int("threshold", "Dark threshold (0-255)", 150, minimum=0, maximum=255)
+        form.add_int(
+            "threshold", "Dark threshold (0-255)", 150,
+            minimum=0, maximum=255,
+        )
         form.add_double(
             "width",
             "Output width",
@@ -1216,39 +1210,57 @@ class RibbonActionsMixin:
         if form.exec() != QDialog.DialogCode.Accepted:
             return
 
-        max_dimension = 96
-        if max(image.width(), image.height()) > max_dimension:
-            image = image.scaled(
-                max_dimension,
-                max_dimension,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-
-        mask = np.zeros((image.height(), image.width()), dtype=bool)
+        # Capture every setting on the GUI thread. Image decoding, pixel
+        # conversion and mesh construction happen in the background worker.
         threshold = int(form.value("threshold"))
         invert = bool(form.value("invert"))
-        for y in range(image.height()):
-            for x in range(image.width()):
-                color = QColor(image.pixel(x, y))
-                luminance = (
-                    0.2126 * color.red()
-                    + 0.7152 * color.green()
-                    + 0.0722 * color.blue()
-                )
-                active = color.alpha() > 16 and luminance <= threshold
-                mask[y, x] = not active if invert and color.alpha() > 16 else active
+        width_mm = float(form.value("width"))
+        depth_mm = float(form.value("depth"))
+        name = Path(path).stem + " trace"
 
-        try:
+        def trace(progress):
+            progress(0.03, "Loading image")
+            image = QImage(path)
+            if image.isNull():
+                raise ValueError("Could not load image.")
+            max_dimension = 96
+            if max(image.width(), image.height()) > max_dimension:
+                image = image.scaled(
+                    max_dimension,
+                    max_dimension,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            mask = np.zeros((image.height(), image.width()), dtype=bool)
+            for y in range(image.height()):
+                for x in range(image.width()):
+                    color = QColor(image.pixel(x, y))
+                    luminance = (
+                        0.2126 * color.red()
+                        + 0.7152 * color.green()
+                        + 0.0722 * color.blue()
+                    )
+                    active = color.alpha() > 16 and luminance <= threshold
+                    mask[y, x] = (
+                        not active if invert and color.alpha() > 16 else active
+                    )
+                if y % 4 == 0:
+                    progress(
+                        0.15 + 0.60 * (y + 1) / max(1, image.height()),
+                        f"Tracing row {y + 1} / {image.height()}",
+                    )
+            progress(0.78, "Building relief mesh")
             mesh = bitmap_runs_mesh(
-                mask,
-                width_mm=form.value("width"),
-                depth_mm=form.value("depth"),
+                mask, width_mm=width_mm, depth_mm=depth_mm
             )
-        except ValueError as exc:
-            self.statusBar().showMessage(f"Trace failed: {exc}", 5000)
-            return
-        self._add_generated_item(Path(path).stem + " trace", "trace", mesh)
+            progress(0.98, "Trace ready")
+            return mesh
+
+        self._start_background_job(
+            "Trace image",
+            task=trace,
+            on_done=lambda mesh: self._add_generated_item(name, "trace", mesh),
+        )
 
     # ------------------------------------------------------------------
     # Toolpaths / CAM
@@ -1888,9 +1900,6 @@ class RibbonActionsMixin:
         self._toolpath_progress_last_text = text
         if changed:
             self.statusBar().showMessage(f"{text} — {percent}%")
-            QApplication.processEvents(
-                QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
-            )
 
     def _finish_toolpath_progress(
         self,
@@ -1912,9 +1921,6 @@ class RibbonActionsMixin:
             bar.setFormat(f"{message} · %p%")
             bar.show()
 
-        QApplication.processEvents(
-            QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
-        )
         status_bar = getattr(self, "toolpath_progress", None)
         if status_bar is not None and success:
             QTimer.singleShot(
@@ -3175,20 +3181,12 @@ class RibbonActionsMixin:
                 self._tabs_button.setChecked(self._tabs_enabled)
             self._settings.sync()
 
-            generation_progress.setValue(0)
-            generation_progress.setFormat("Preparing toolpath generation · %p%")
-            generation_progress.show()
-            buttons.setEnabled(False)
-            self._toolpath_dialog_progress = generation_progress
-            try:
-                success = self._calculate_toolpath_now()
-            finally:
-                self._toolpath_dialog_progress = None
-
-            if success:
+            # Close the modal configuration dialog as soon as the worker is
+            # submitted; progress/cancellation are in the status bar, and
+            # viewport navigation stays accessible throughout calculation.
+            if self._calculate_toolpath_now():
                 dialog.accept()
             else:
-                buttons.setEnabled(True)
                 update_relevance_and_readiness()
 
         def uses_tabs_for_current() -> bool:
@@ -3408,11 +3406,12 @@ class RibbonActionsMixin:
         return generated_toolpaths
 
     def _calculate_toolpath_now(self) -> bool:
-        items = [
-            item
-            for item in self.project.items
-            if item.mesh is not None
-        ]
+        """Submit CAM to a separate Python process; never block the Qt loop."""
+
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
+            return False
+        items = [item for item in self.project.items if item.mesh is not None]
         cutter = self.tool_combo.currentData()
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
@@ -3421,314 +3420,124 @@ class RibbonActionsMixin:
         operation = self._active_cam_operation
         if not items and operation != "surface":
             self.statusBar().showMessage(
-                "Add a mesh or created shape before generating this operation",
-                4000,
+                "Add geometry before generating this operation", 4000
             )
             return False
 
-        target_description = (
-            "stock"
-            if operation == "surface"
-            else (
-                f"{len(items)} object{'s' if len(items) != 1 else ''}"
+        # Only small bounds and QSettings are read on the GUI thread. Mesh
+        # transforms, geometry, CAM and path ordering happen in the process.
+        specs = []
+        for item in items:
+            bounds = item.transformed_bounds_mm()
+            if bounds is None:
+                continue
+            settings = self._cam_settings(
+                bounds,
+                type("_Bounds", (), {"bounds": bounds})(),
             )
+            specs.append((item, settings))
+
+        stock = self.project.stock
+        stock_bounds = np.array(
+            ((0.0, 0.0, -stock.thickness_mm),
+             (stock.width_mm, stock.height_mm, 0.0)),
+            dtype=float,
         )
-        self.statusBar().showMessage(
-            f"Calculating {operation} toolpaths for {target_description}…"
+        stock_settings = None
+        silhouette_settings = None
+        if operation == "surface":
+            stock_settings = self._cam_settings(
+                stock_bounds,
+                type("_Bounds", (), {"bounds": stock_bounds})(),
+            )
+        if operation == "silhouette" and specs:
+            bounds = np.vstack(
+                (
+                    np.vstack([item.transformed_bounds_mm()[0] for item, _ in specs]).min(axis=0),
+                    np.vstack([item.transformed_bounds_mm()[1] for item, _ in specs]).max(axis=0),
+                )
+            )
+            silhouette_settings = self._cam_settings(
+                bounds,
+                type("_Bounds", (), {"bounds": bounds})(),
+            )
+
+        request = CamRequest(
+            operation=operation,
+            cutter=cutter,
+            cut_type=self._cam_cut_type,
+            thickness_mm=stock.thickness_mm,
+            stock_width_mm=stock.width_mm,
+            stock_height_mm=stock.height_mm,
+            settings_by_item=specs,
+            stock_settings=stock_settings,
+            silhouette_settings=silhouette_settings,
         )
         self._toolpath_progress_last_value = -1
         self._toolpath_progress_last_text = ""
         self._update_toolpath_progress(
-            0.0,
-            f"Preparing {self._cam_operation_title(operation)}",
+            0, f"Preparing {self._cam_operation_title(operation)}"
         )
 
-        generated_toolpaths = []
-        item = None
-        try:
-            if operation == "surface":
-                self._update_toolpath_progress(0.08, "Preparing stock surface")
-                stock = self.project.stock
-                if items:
-                    reference_mesh = items[0].transformed_mesh()
-                    assert reference_mesh is not None
-                else:
-                    reference_mesh = trimesh.creation.box(
-                        extents=(
-                            stock.width_mm,
-                            stock.height_mm,
-                            max(stock.thickness_mm, 0.1),
-                        )
-                    )
-                    reference_mesh.apply_translation(
-                        (
-                            stock.width_mm / 2.0,
-                            stock.height_mm / 2.0,
-                            -stock.thickness_mm / 2.0,
-                        )
-                    )
-                stock_bounds = np.array(
-                    (
-                        (0.0, 0.0, -stock.thickness_mm),
-                        (stock.width_mm, stock.height_mm, 0.0),
-                    ),
-                    dtype=float,
-                )
-                settings = self._cam_settings(
-                    stock_bounds,
-                    reference_mesh,
-                )
-                toolpath = geometry_face(
-                    stock.width_mm,
-                    stock.height_mm,
-                    cutter,
-                    settings,
-                    name="Surface",
-                )
-                toolpath.source_item_id = "stock"
-                toolpath.source_item_name = "Stock"
-                generated_toolpaths.append(toolpath)
-                self._update_toolpath_progress(0.90, "Stock surface path ready")
-            elif operation == "silhouette":
-                self._update_toolpath_progress(
-                    0.08,
-                    "Combining project silhouette",
-                )
-                placed_meshes = [
-                    mesh
-                    for source_item in items
-                    if (mesh := source_item.transformed_mesh()) is not None
-                ]
-                if not placed_meshes:
-                    raise ValueError(
-                        "Project contains no geometry for a silhouette."
-                    )
-                minima = np.vstack(
-                    [
-                        np.asarray(mesh.bounds, dtype=float)[0]
-                        for mesh in placed_meshes
-                    ]
-                ).min(axis=0)
-                maxima = np.vstack(
-                    [
-                        np.asarray(mesh.bounds, dtype=float)[1]
-                        for mesh in placed_meshes
-                    ]
-                ).max(axis=0)
-                settings = self._cam_settings(
-                    np.vstack((minima, maxima)),
-                    placed_meshes[0],
-                )
-                toolpath = geometry_silhouette(
-                    placed_meshes,
-                    cutter,
-                    settings,
-                )
-                toolpath.source_item_id = "project-silhouette"
-                toolpath.source_item_name = "All design objects"
-                generated_toolpaths.append(toolpath)
-                self._update_toolpath_progress(
-                    0.90,
-                    "Combined silhouette path ready",
-                )
-            else:
-                groups: list[list] = []
-                item_count = max(1, len(items))
-                for item_index, item in enumerate(items):
-                    segment_start = 0.05 + 0.85 * item_index / item_count
-                    segment_end = 0.05 + 0.85 * (item_index + 1) / item_count
-                    segment_span = segment_end - segment_start
+        def finished(payload: object) -> None:
+            if not isinstance(payload, dict):
+                raise TypeError("Invalid CAM worker result.")
+            paths = payload["toolpaths"]
+            if self._simulation_timer.isActive():
+                self._simulation_timer.stop()
+            if self._simulation_button is not None:
+                self._simulation_button.setChecked(False)
+            preview = self._toolpath_preview_window
+            if preview is not None:
+                preview.close()
+                self._toolpath_preview_window = None
 
-                    def item_progress(
-                        fraction: float,
-                        status: str,
-                        *,
-                        start: float = segment_start,
-                        span: float = segment_span,
-                        item_name: str = item.name,
-                    ) -> None:
-                        self._update_toolpath_progress(
-                            start + span * max(
-                                0.0,
-                                min(1.0, float(fraction)),
-                            ),
-                            f"{item_name}: {status}",
-                        )
-
-                    group = self._generate_toolpaths_for_item(
-                        item,
-                        cutter,
-                        operation,
-                        progress=item_progress,
-                    )
-                    if group:
-                        groups.append(group)
-
-                # Keep each object's internal operation order intact (for
-                # example Finish before Cutout), but visit object groups by
-                # nearest next start to reduce non-cutting XY travel.
-                self._update_toolpath_progress(
-                    0.92,
-                    "Optimizing multi-object cutting order",
-                )
-                current_xy = np.array((0.0, 0.0), dtype=float)
-                remaining = list(groups)
-                while remaining:
-                    best_index = 0
-                    best_distance = float("inf")
-                    for index, group in enumerate(remaining):
-                        first_moves = [
-                            path.moves[0]
-                            for path in group
-                            if path.moves
-                        ]
-                        if not first_moves:
-                            continue
-                        first = first_moves[0]
-                        distance = float(
-                            np.linalg.norm(
-                                np.array((first.x_mm, first.y_mm))
-                                - current_xy
-                            )
-                        )
-                        if distance < best_distance:
-                            best_index = index
-                            best_distance = distance
-                    group = remaining.pop(best_index)
-                    generated_toolpaths.extend(group)
-                    for path in reversed(group):
-                        if path.moves:
-                            last = path.moves[-1]
-                            current_xy = np.array(
-                                (last.x_mm, last.y_mm),
-                                dtype=float,
-                            )
-                            break
-        except ModuleNotFoundError as exc:
-            missing = exc.name or "required Python package"
-            message = (
-                f"Toolpath generation requires the missing dependency "
-                f"'{missing}'. Reinstall CarveFoundry dependencies."
+            self._before_ribbon_mutation(f"calculate {operation}")
+            self.project.toolpaths = paths
+            self._toolpaths_stale_reason = None
+            self._prepared_toolpath_geometry = payload["render_geometry"]
+            self._prepared_toolpath_stats = payload
+            self.viewport.prepare_toolpath_render_cache(
+                paths, self._prepared_toolpath_geometry
             )
+            self.viewport.set_toolpaths_visible(True)
+            self.viewport.set_simulation_fraction(1.0)
+            self.viewport.update()
+            self._after_ribbon_mutation(f"calculate {operation}", True)
+
+            count = int(payload["object_count"])
             self._set_activity_info(
-                f"Toolpath calculation failed\n{message}"
+                f"Toolpaths ready\n{payload['summary']}\n\n"
+                f"Objects: {count}\n"
+                f"Cutter: {cutter.name}\n"
+                f"Paths: {len(paths):,}\n"
+                f"Moves: {int(payload['moves']):,}\n"
+                f"Cut distance: {float(payload['cut_mm']):.1f} mm\n"
+                f"Rapid distance: {float(payload['rapid_mm']):.1f} mm\n"
+                f"Estimated cutting: {float(payload['minutes']):.1f} min"
             )
+            self._sync_toolpath_output_state()
             self._finish_toolpath_progress(
-                success=False,
-                message="Generation failed",
-            )
-            self.statusBar().showMessage(message, 10000)
-            return False
-        except (RuntimeError, ValueError) as exc:
-            failed_item = (
-                item.name
-                if item is not None
-                else self._cam_operation_title(operation)
-            )
-            message = f"{failed_item}: {exc}"
-            self._set_activity_info(
-                f"Toolpath calculation failed\n{message}"
-            )
-            self._finish_toolpath_progress(
-                success=False,
-                message="Generation failed",
+                success=True, message="Toolpaths ready"
             )
             self.statusBar().showMessage(
-                f"Toolpath failed: {message}",
-                10000,
+                f"Generated {len(paths)} toolpaths", 6000
             )
-            return False
 
-        if not generated_toolpaths:
+        def failed(message: str) -> None:
+            self._set_activity_info(f"Toolpath calculation failed\n{message}")
             self._finish_toolpath_progress(
-                success=False,
-                message="No toolpaths generated",
+                success=False, message="Generation failed"
             )
-            self.statusBar().showMessage(
-                "The project geometry produced no toolpaths",
-                5000,
-            )
-            return False
+            self.statusBar().showMessage(f"Toolpath failed: {message}", 9000)
 
-        if self._simulation_timer.isActive():
-            self._simulation_timer.stop()
-        if self._simulation_button is not None:
-            self._simulation_button.setChecked(False)
-        preview = self._toolpath_preview_window
-        if preview is not None:
-            preview.close()
-            self._toolpath_preview_window = None
-
-        self._update_toolpath_progress(
-            0.96,
-            "Committing generated toolpaths",
+        return self._start_background_job(
+            f"{self._cam_operation_title(operation)} toolpaths",
+            request=request,
+            on_done=finished,
+            on_failed=failed,
+            cam_progress=True,
         )
-        self._before_ribbon_mutation(f"calculate {operation}")
-        self.project.toolpaths = generated_toolpaths
-        self._toolpaths_stale_reason = None
-        self.viewport.set_toolpaths_visible(True)
-        self.viewport.set_simulation_fraction(1.0)
-        self.viewport.update()
-        self._after_ribbon_mutation(f"calculate {operation}", True)
-
-        total_moves = sum(len(path.moves) for path in generated_toolpaths)
-        total_cut = sum(path.cutting_distance_mm for path in generated_toolpaths)
-        total_rapid = sum(path.rapid_distance_mm for path in generated_toolpaths)
-        total_minutes = sum(
-            path.estimated_cutting_minutes for path in generated_toolpaths
-        )
-        object_count = len(
-            {
-                path.source_item_id
-                for path in generated_toolpaths
-                if path.source_item_id
-                not in {None, "stock", "project-silhouette"}
-            }
-        )
-        if operation == "silhouette":
-            object_count = len(items)
-        elif operation == "surface":
-            object_count = 0
-        operation_names = sorted({path.name for path in generated_toolpaths})
-        operation_summary = " + ".join(operation_names)
-        source_summary = (
-            "Source: Stock\n"
-            if operation == "surface"
-            else f"Objects: {object_count}\n"
-        )
-        self._update_toolpath_progress(
-            0.99,
-            "Updating preview and runtime estimates",
-        )
-        self._set_activity_info(
-            f"Toolpaths ready\n{operation_summary}\n\n"
-            f"{source_summary}"
-            f"Cutter: {cutter.name}\n"
-            f"Paths: {len(generated_toolpaths):,}\n"
-            f"Moves: {total_moves:,}\n"
-            f"Cut distance: {total_cut:.1f} mm\n"
-            f"Rapid distance: {total_rapid:.1f} mm\n"
-            f"Estimated cutting: {total_minutes:.1f} min"
-        )
-        self._sync_toolpath_output_state()
-        self.statusBar().showMessage(
-            f"Generated {len(generated_toolpaths)} toolpath"
-            f"{'s' if len(generated_toolpaths) != 1 else ''} for "
-            + (
-                "stock"
-                if operation == "surface"
-                else (
-                    f"{object_count} object"
-                    f"{'s' if object_count != 1 else ''}"
-                )
-            ),
-            6000,
-        )
-        self._finish_toolpath_progress(
-            success=True,
-            message="Toolpaths ready",
-        )
-        return True
 
     def _preview_toolpaths(self) -> None:
         if not self.project.toolpaths:
@@ -3747,6 +3556,12 @@ class RibbonActionsMixin:
             stock=self.project.stock,
             post_settings=self._grbl_post_settings(),
             source_names=self._toolpath_source_names(self.project.toolpaths),
+            render_geometry_data=self._prepared_toolpath_geometry,
+            estimated_minutes=(
+                float(self._prepared_toolpath_stats["minutes"])
+                if self._prepared_toolpath_stats is not None
+                else None
+            ),
             parent=self,
         )
         window.destroyed.connect(
@@ -4982,16 +4797,7 @@ class RibbonActionsMixin:
             return
 
         path_index, move_index = locate(slider.value())
-        try:
-            resumed = resume_toolpath(
-                toolpaths[path_index],
-                move_index,
-                safe_rewind=safe_rewind.isChecked(),
-            )
-        except (IndexError, ValueError) as exc:
-            QMessageBox.warning(self, "Resume Carve", str(exc))
-            return
-        remaining_paths = [resumed, *toolpaths[path_index + 1 :]]
+        rewind = safe_rewind.isChecked()
 
         base_directory = (
             self.project_path.parent if self.project_path else Path.home()
@@ -5009,18 +4815,24 @@ class RibbonActionsMixin:
         )
         if not output:
             return
-        try:
-            written = write_grbl_program(
-                remaining_paths,
-                Path(output),
-                self._grbl_post_settings(),
+        request = GcodeRequest(
+            toolpaths=toolpaths,
+            path=output,
+            settings=self._grbl_post_settings(),
+            mode="resume",
+            resume_path_index=path_index,
+            resume_move_index=move_index,
+            resume_rewind=rewind,
+        )
+
+        def done(result):
+            written = Path(result["files"][0])
+            self.statusBar().showMessage(
+                f"Resume G-code exported: {written.name}", 5000
             )
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Resume Carve", str(exc))
-            return
-        self.statusBar().showMessage(
-            f"Resume G-code exported: {written.name}",
-            5000,
+
+        self._start_background_job(
+            "Export resume G-code", request=request, on_done=done
         )
 
     def _export_tiled_gcode(self) -> None:
@@ -5074,7 +4886,7 @@ class RibbonActionsMixin:
             rebase_each_tile=bool(form.value("rebase")),
         )
         try:
-            tiles = plan_tiles(
+            plan_tiles(
                 stock.width_mm,
                 stock.height_mm,
                 settings,
@@ -5100,67 +4912,31 @@ class RibbonActionsMixin:
         if not output:
             return
 
-        base_path = Path(output)
-        suffix = (
-            base_path.suffix
-            if base_path.suffix.lower() in {".nc", ".gcode", ".tap", ".cnc"}
-            else ".nc"
+        request = GcodeRequest(
+            toolpaths=toolpaths,
+            path=output,
+            settings=self._grbl_post_settings(),
+            mode="tiles",
+            tile_settings=settings,
+            stock_width_mm=stock.width_mm,
+            stock_height_mm=stock.height_mm,
+            xy_zero=stock.xy_zero,
         )
-        stem = base_path.stem
-        written: list[Path] = []
-        base_options = self._grbl_post_settings()
 
-        try:
-            for tile in tiles:
-                tiled = tile_program(
-                    toolpaths,
-                    tile,
-                    rebase=settings.rebase_each_tile,
-                )
-                if not tiled:
-                    continue
-
-                options = base_options
-                if settings.rebase_each_tile:
-                    options = replace(
-                        base_options,
-                        x_offset_mm=(
-                            -tile.width_mm / 2.0
-                            if stock.xy_zero == "center"
-                            else 0.0
-                        ),
-                        y_offset_mm=(
-                            -tile.height_mm / 2.0
-                            if stock.xy_zero == "center"
-                            else 0.0
-                        ),
-                    )
-                tile_path = base_path.with_name(
-                    f"{stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
-                )
-                written.append(
-                    write_grbl_program(tiled, tile_path, options)
-                )
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Large Material Tiling", str(exc))
-            return
-
-        if not written:
-            QMessageBox.warning(
-                self,
-                "Large Material Tiling",
-                "No cutting moves intersect the requested tiles.",
+        def done(result):
+            written = [Path(path) for path in result["files"]]
+            self._set_activity_info(
+                "Tiled G-code exported\n"
+                f"Files: {len(written)}\n"
+                f"Tile size: {settings.tile_width_mm:g} × "
+                f"{settings.tile_height_mm:g} mm\n"
+                f"Overlap: {settings.overlap_mm:g} mm\n"
+                + "\n".join(path.name for path in written[:12])
             )
-            return
-        self._set_activity_info(
-            "Tiled G-code exported\n"
-            f"Files: {len(written)}\n"
-            f"Tile size: {settings.tile_width_mm:g} × "
-            f"{settings.tile_height_mm:g} mm\n"
-            f"Overlap: {settings.overlap_mm:g} mm\n"
-            + "\n".join(path.name for path in written[:12])
-        )
-        self.statusBar().showMessage(
-            f"Exported {len(written)} tiled G-code files",
-            5000,
+            self.statusBar().showMessage(
+                f"Exported {len(written)} tiled G-code files", 5000
+            )
+
+        self._start_background_job(
+            "Export tiled G-code", request=request, on_done=done
         )

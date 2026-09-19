@@ -79,4 +79,5 @@ class ImportWorker(QObject):
             if executor is not None:
                 executor.shutdown(wait=True, cancel_futures=True)
 
+        self.progress.emit(total + 1, total, "Finalizing import")
         self.finished.emit(prepared, failures)
