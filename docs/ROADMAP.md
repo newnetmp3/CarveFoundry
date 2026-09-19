@@ -42,8 +42,13 @@ It must not be described as a guarantee of physical safety.
    dependency generation and stock-aware sequencing remain future work.
 5. **V-carve inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
    and fit/tolerance validation.
-6. **Stock-aware rest machining/adaptive clearing/feed optimization:** use
-   actual remaining material and cutter engagement, with validated limits.
+6. **Beyond sampled stock-aware rest:** 3D Rest now simulates all previously
+   generated cutter stages and retains only selected-cutter cleanup passes at
+   sample centres with residual material above an operator-set threshold.
+   It appends to the existing ordered job, refuses no-op rest, and requires
+   actual preceding operations for each model. Exact volumetric stock-aware
+   clearing, variable cutter-engagement feeds and collision/holder simulation
+   remain future work.
 7. **Extended vector editing, group cutouts and text-on-path:** Direct
    Selection now edits newly drawn Pen/Line XY control points, with viewport
    handles, exact coordinate controls, midpoint insertion/deletion, real mesh
