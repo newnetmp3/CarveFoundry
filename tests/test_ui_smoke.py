@@ -1836,7 +1836,7 @@ def test_fixture_editor_and_preflight_are_real_commands_with_viewport_keepouts()
         edges = window.viewport._renderer._fixture_outline_geometry()
         assert edges.shape == (24, 3)
         assert edges[:, 0].min() == -23
-        assert edges[:, 2].max() == 3.6
+        assert edges[:, 2].max() == pytest.approx(3.6)
         assert not window._ui_actions["preflight"].isEnabled()
     finally:
         window.close()
