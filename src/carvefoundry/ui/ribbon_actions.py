@@ -692,6 +692,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Activate dedicated arcball-style viewport camera control."""
 
         self._camera_tool_active = True
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_shape_draw_mode(None)
         self.viewport.set_camera_control_mode(True)
         if self._camera_tool_button is not None:
@@ -718,6 +719,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Return the viewport to object selection / marquee mode."""
 
         self._camera_tool_active = False
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_camera_control_mode(False)
         self.viewport.set_shape_draw_mode(None)
         if self._camera_tool_button is not None:
@@ -920,6 +922,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Activate one paint-style shape tool in the viewport."""
 
         self._camera_tool_active = False
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_camera_control_mode(False)
         if self._camera_tool_button is not None:
             self._camera_tool_button.blockSignals(True)
