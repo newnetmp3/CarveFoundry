@@ -4,7 +4,6 @@ from __future__ import annotations
 from time import monotonic, sleep
 from uuid import uuid4
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
