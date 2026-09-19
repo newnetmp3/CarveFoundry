@@ -1989,7 +1989,7 @@ class RibbonActionsMixin:
                     "geometry is included. Surface / Face is the exception: it can "
                     "run from the stock even when the project contains no design "
                     "geometry. Hiding, selecting, or isolating an object in the "
-                    "viewport does not remove it from generation.",
+                    "viewport does not remove it from generation."
                 ),
             ),
             "operation": (
@@ -2021,7 +2021,7 @@ class RibbonActionsMixin:
                     "bitmap height-map importer.\n\n"
                     "3D Rest — runs the 3D rest/cleanup strategy for model detail.\n\n"
                     "3D Waterline — creates constant-Z contour passes around the "
-                    "3D model at successive levels.",
+                    "3D model at successive levels."
                 ),
             ),
             "stock": (
@@ -2031,7 +2031,7 @@ class RibbonActionsMixin:
                     "millimeters. Toolpaths, Safe Z, cut depth, cutouts, and stock "
                     "surfacing are evaluated against this stock definition. Change "
                     "the stock from Stock Setup before opening this dialog if these "
-                    "dimensions are wrong.",
+                    "dimensions are wrong."
                 ),
             ),
             "cutter": (
@@ -2043,7 +2043,7 @@ class RibbonActionsMixin:
                     "Diameter, tool type, included angle, and tip diameter can all "
                     "change the resulting path. V-Carve requires a V-bit or "
                     "engraving cone with a valid included angle. The tool must "
-                    "match the cutter actually installed in the machine.",
+                    "match the cutter actually installed in the machine."
                 ),
             ),
             "cutter_details": (
@@ -2053,7 +2053,7 @@ class RibbonActionsMixin:
                     "type, diameter, and angle/tip diameter when applicable. Use "
                     "this line as a final sanity check before generating. Incorrect "
                     "cutter geometry produces incorrect cutter compensation even "
-                    "when every other CAM setting is correct.",
+                    "when every other CAM setting is correct."
                 ),
             ),
             "cut_type": (
@@ -2069,7 +2069,7 @@ class RibbonActionsMixin:
                     "Outside — offset the cutter centerline outward by its radius "
                     "so the model boundary is preserved on the inside.\n"
                     "Inside — offset inward by the cutter radius so the outside "
-                    "boundary is preserved.",
+                    "boundary is preserved."
                 ),
             ),
             "3d_style": (
@@ -2082,7 +2082,7 @@ class RibbonActionsMixin:
                     "envelope rather than only the projected silhouette.\n"
                     "Full Depth Cutout — finish the 3D model and also generate an "
                     "outside profile through the stock so the part can be freed. "
-                    "Holding tabs become available for this mode.",
+                    "Holding tabs become available for this mode."
                 ),
             ),
             "direction": (
@@ -2099,7 +2099,7 @@ class RibbonActionsMixin:
                     "Raster 135° — opposite diagonal raster at 135 degrees.\n\n"
                     "The most efficient direction depends on model shape, grain, "
                     "clamping, cutter, and the surface detail you are trying to "
-                    "preserve.",
+                    "preserve."
                 ),
             ),
             "detail": (
@@ -2111,7 +2111,7 @@ class RibbonActionsMixin:
                     "surface smoothness at the cost of more G-code and longer run "
                     "time. Lower values generate fewer passes and run faster. "
                     "Changing Detail does not make a cutter physically capable of "
-                    "reaching features smaller than its geometry.",
+                    "reaching features smaller than its geometry."
                 ),
             ),
             "pocket_stepover": (
@@ -2123,7 +2123,7 @@ class RibbonActionsMixin:
                     "Lower percentages overlap more, usually leaving a smoother "
                     "surface but increasing run time. Higher percentages remove "
                     "material faster but can leave larger scallops or uncut areas "
-                    "with unsuitable tool/geometry combinations.",
+                    "with unsuitable tool/geometry combinations."
                 ),
             ),
             "padding": (
@@ -2134,7 +2134,7 @@ class RibbonActionsMixin:
                     "boundary directly. Positive padding expands the machining "
                     "envelope, which can be useful for clearing beyond an edge or "
                     "giving a finishing cutter room to reach the model boundary. "
-                    "Verify clamp and stock-edge clearance before increasing it.",
+                    "Verify clamp and stock-edge clearance before increasing it."
                 ),
             ),
             "cut_depth": (
@@ -2145,7 +2145,7 @@ class RibbonActionsMixin:
                     "instead of forcing an override. A positive value overrides the "
                     "normal model depth for operations that use this setting. The "
                     "requested depth is also checked against Usable Bit Length when "
-                    "that limit is enabled.",
+                    "that limit is enabled."
                 ),
             ),
             "stepdown": (
@@ -2156,7 +2156,7 @@ class RibbonActionsMixin:
                     "hard material, or less rigid machines, but create more passes. "
                     "Larger values reduce pass count but increase cutting load. "
                     "CarveFoundry divides the requested total depth into passes that "
-                    "do not exceed this value.",
+                    "do not exceed this value."
                 ),
             ),
             "bit_length": (
@@ -2166,7 +2166,7 @@ class RibbonActionsMixin:
                     "check. A positive value represents the cutting length you are "
                     "willing to use below the tool/holder and blocks a requested "
                     "overall depth that exceeds it. This is a validation aid, not a "
-                    "complete holder/clamp collision simulation.",
+                    "complete holder/clamp collision simulation."
                 ),
             ),
             "safe_z": (
@@ -2177,7 +2177,7 @@ class RibbonActionsMixin:
                     "Full Retract linking, and transitions that cannot be proven "
                     "safe at a lower height. Keep it high enough to clear the stock, "
                     "fixtures, fences, and clamps that the tool may cross. A larger "
-                    "value is safer but increases non-cutting travel time.",
+                    "value is safer but increases non-cutting travel time."
                 ),
             ),
             "feed": (
@@ -2187,7 +2187,7 @@ class RibbonActionsMixin:
                     "cutting moves. It must be appropriate for cutter diameter, "
                     "flute geometry, spindle/router speed, material, depth per pass, "
                     "and machine rigidity. This field does not automatically "
-                    "guarantee a safe chip load.",
+                    "guarantee a safe chip load."
                 ),
             ),
             "plunge": (
@@ -2197,7 +2197,7 @@ class RibbonActionsMixin:
                     "moves usually need to be slower than lateral cutting because "
                     "many cutters evacuate chips less effectively at the center. "
                     "Ramp entries can reduce the amount of straight-down plunging "
-                    "for operations that support them.",
+                    "for operations that support them."
                 ),
             ),
             "entry": (
@@ -2212,7 +2212,7 @@ class RibbonActionsMixin:
                     "Custom Ramp — use the angle entered in Custom Ramp.\n\n"
                     "Shallower ramps generally reduce axial shock but require more "
                     "room. The control is disabled for operations whose current "
-                    "generator does not use entry ramps.",
+                    "generator does not use entry ramps."
                 ),
             ),
             "ramp_angle": (
@@ -2222,7 +2222,7 @@ class RibbonActionsMixin:
                     "produce a long, gentle entry; large angles are shorter and "
                     "closer to a plunge. The valid range stays below 90 degrees. "
                     "Make sure the model/pocket has enough travel length for the "
-                    "chosen angle and depth.",
+                    "chosen angle and depth."
                 ),
             ),
             "milling": (
@@ -2237,7 +2237,7 @@ class RibbonActionsMixin:
                     "direction.\n\n"
                     "Actual cutting forces also depend on whether a contour is "
                     "inside or outside. Use the direction appropriate for your "
-                    "machine, workholding, cutter, and material.",
+                    "machine, workholding, cutter, and material."
                 ),
             ),
             "linking": (
@@ -2252,7 +2252,7 @@ class RibbonActionsMixin:
                     "Local Lift — use short local-clearance transitions instead of "
                     "direct cutting-depth links where possible.\n"
                     "Full Retract — retract to Safe Z between separate path "
-                    "segments. This is slowest but most conservative.",
+                    "segments. This is slowest but most conservative."
                 ),
             ),
             "local_clearance": (
@@ -2263,7 +2263,7 @@ class RibbonActionsMixin:
                     "CarveFoundry raises the cutter above the highest required "
                     "surface along a connected transition corridor by this amount, "
                     "without exceeding full Safe Z. Increase it for more margin; "
-                    "decrease it to reduce air time only when setup accuracy allows.",
+                    "decrease it to reduce air time only when setup accuracy allows."
                 ),
             ),
             "link_tolerance": (
@@ -2274,7 +2274,7 @@ class RibbonActionsMixin:
                     "The contact-map samples along the corridor must stay within "
                     "this allowed surface/clearance difference. A smaller value is "
                     "more conservative and causes more local lifts; a larger value "
-                    "permits more direct links. 0 requires the strictest match.",
+                    "permits more direct links. 0 requires the strictest match."
                 ),
             ),
             "tabs_enabled": (
@@ -2285,7 +2285,7 @@ class RibbonActionsMixin:
                     "available for Profile, Silhouette, and 3D Finish when Full "
                     "Depth Cutout is selected. Turn them off only when another "
                     "workholding method safely prevents the finished part from "
-                    "moving into the cutter.",
+                    "moving into the cutter."
                 ),
             ),
             "tab_height": (
@@ -2295,7 +2295,7 @@ class RibbonActionsMixin:
                     "height makes tabs stronger but requires more cleanup after the "
                     "cut. Too little height can allow the part to break free before "
                     "the profile completes. This value is only used when holding "
-                    "tabs are enabled.",
+                    "tabs are enabled."
                 ),
             ),
             "tab_width": (
@@ -2304,7 +2304,7 @@ class RibbonActionsMixin:
                     "Length of each holding bridge measured along the cut path. "
                     "Wider tabs hold more strongly but take more effort to remove "
                     "and clean up. This value is only used when holding tabs are "
-                    "enabled.",
+                    "enabled."
                 ),
             ),
             "tab_count": (
@@ -2314,7 +2314,7 @@ class RibbonActionsMixin:
                     "More tabs improve restraint on large or flexible parts but add "
                     "cleanup. Use enough tabs to resist cutting forces without "
                     "placing them where they interfere with important finished "
-                    "details.",
+                    "details."
                 ),
             ),
             "readiness": (
@@ -2326,7 +2326,7 @@ class RibbonActionsMixin:
                     "checklist verifies basic geometry, cutter compatibility, stock "
                     "dimensions, feeds/depth settings, usable bit length, and tabs "
                     "when applicable; it does not replace a physical setup and "
-                    "collision check at the machine.",
+                    "collision check at the machine."
                 ),
             ),
         }
