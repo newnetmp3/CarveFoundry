@@ -220,6 +220,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
     def _init_ribbon_action_state(self) -> None:
         self._clipboard_items: list[ProjectItem] = []
         self._active_cam_operation = "finish"
+        self._cam_append_to_job = False
         self._tabs_enabled = False
         self._active_shape_tool: str | None = None
         self._camera_tool_active = True
@@ -357,7 +358,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         normalized = label.strip().lower()
         if normalized in {"group", "ungroup"}:
             return
-        if normalized.startswith("calculate "):
+        if normalized.startswith("calculate ") or normalized == "reorder machining job":
             return
         self._invalidate_toolpaths("Project geometry")
 
@@ -2263,6 +2264,8 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
                 type("_Bounds", (), {"bounds": bounds})(),
             )
 
+        append_to_job = bool(self._cam_append_to_job and self.project.toolpaths)
+        self._cam_append_to_job = False
         request = CamRequest(
             operation=operation,
             cutter=cutter,
@@ -2273,6 +2276,9 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             settings_by_item=specs,
             stock_settings=stock_settings,
             silhouette_settings=silhouette_settings,
+            previous_toolpaths=(
+                list(self.project.toolpaths) if append_to_job else None
+            ),
         )
         self._toolpath_progress_last_value = -1
         self._toolpath_progress_last_text = ""

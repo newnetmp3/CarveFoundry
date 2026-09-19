@@ -61,6 +61,8 @@ class WorkspaceCommandsMixin:
             ("export_resume", "Export Resume G-code…", self._export_resume_gcode),
             ("export_tiled", "Export Tiled G-code…", self._export_tiled_gcode),
             ("fixtures", "Clamps and Fences…", self._fixture_editor),
+            ("two_sided", "Double-Sided Stock Setup…", self._double_sided_setup),
+            ("batch_layout", "Batch Production Grid…", self._batch_layout),
             ("preflight", "CNC Preflight…", self._preflight_toolpaths),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
@@ -126,6 +128,7 @@ class WorkspaceCommandsMixin:
             ("calculator", "Feeds && Speeds Calculator", self._feeds_speeds_calculator),
             ("advanced_cam", "Advanced CAM…", self._toolpath_design_advanced),
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
+            ("job_planner", "Machining Job Planner…", self._show_job_planner),
             ("preview", "Preview", self._preview_toolpaths),
             ("export_toolpath", "Export G-code", self._export_gcode),
             ("machine_profile", "Edit Machine Profile…", self._machine_profile),
@@ -442,7 +445,8 @@ class WorkspaceCommandsMixin:
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
             project_menu,
-            ("stock_setup", "work_zero", "fixtures", "smart_values", "smart_bindings"),
+            ("stock_setup", "work_zero", "fixtures", "two_sided",
+             "smart_values", "smart_bindings"),
         )
 
         edit_menu = bar.addMenu("Edit")
@@ -480,7 +484,7 @@ class WorkspaceCommandsMixin:
         arrange_menu = design_menu.addMenu("Arrange")
         self._add_menu_actions(
             arrange_menu,
-            ("align", "center", "group", "ungroup", "duplicate"),
+            ("align", "center", "group", "ungroup", "duplicate", "batch_layout"),
         )
         design_menu.addSeparator()
         self._add_menu_actions(design_menu, ("layers", "move_up", "move_down"))
@@ -629,6 +633,7 @@ class WorkspaceCommandsMixin:
             toolpaths_menu,
             (
                 "calculate",
+                "job_planner",
                 "preview",
                 "simulate",
                 "preflight",
@@ -1322,7 +1327,7 @@ class WorkspaceCommandsMixin:
         model_menu = QMenu(rail)
         self._add_menu_actions(
             model_menu,
-            ("stock_setup", "work_zero", "fixtures",
+            ("stock_setup", "work_zero", "fixtures", "two_sided", "batch_layout",
              "smart_values", "smart_bindings", "fit_view"),
         )
         transform_menu = model_menu.addMenu("Transform")
@@ -1418,6 +1423,7 @@ class WorkspaceCommandsMixin:
             (
                 "advanced_cam",
                 "calculate",
+                "job_planner",
                 "preview",
                 "simulate",
                 "preflight",

@@ -94,6 +94,68 @@ For proposed features that do **not** yet exist, see
 [`docs/ROADMAP.md`](docs/ROADMAP.md). CarveFoundry does not expose fake
 controls for those proposals.
 
+## Double-sided stock setup (front/back)
+
+Choose **Project → Double-Sided Stock Setup…** (also in the Position flyout).
+Assign the visible model objects for each face and choose the **physical**
+turnover of the stock. Left/right turnover reverses X:
+`X_back = stock_width - X_front`; top/bottom turnover reverses Y:
+`Y_back = stock_height - Y_front`. Both resulting projects use the machine's
+stock-bottom-left XY0 and **the exposed face's stock-top Z0**. The physical
+stock thickness is unchanged in software. Geometry must fit the full stock
+XY area and depth on each face; the wizard rejects an ambiguous/unsafe layout
+rather than clipping it.
+
+Select a parent directory and a **new** setup folder. CarveFoundry builds and
+reload-validates `front.cf3d`, `back.cf3d`, and `SETUP_INSTRUCTIONS.txt`
+in the background. The source project is not modified, and existing setup
+folders are not overwritten. Back meshes have the reflection baked in;
+edit the source project and repeat setup to change the back design. Fixture
+rectangles remain in MACHINE coordinates (fixed fences are not mirrored).
+
+**Operator steps:** Open each generated CF3D independently, generate that
+face's toolpaths, preview, run fixture-aware CNC preflight and export. Machine
+the front, stop and physically turn the wood against the registration stops,
+secure it, confirm fence heights/clearances and work offsets, **re-probe the
+newly exposed stock face as Z0**, then run the back setup. The wizard does not
+control the machine, measure a physical turnover or guarantee alignment.
+
+## Session multi-cutter machining job
+
+In **Generate Toolpaths**, check **Append to existing machining job** when
+adding rough, finish, detail or cutout passes. The CPU worker generates the
+new operation, validates rough-before-finish and cutout-last dependencies,
+and builds the complete combined preview. Failure leaves the previous job
+untouched.
+
+Use **Toolpaths → Machining Job Planner…** to inspect each actual operation,
+its cutter, source part, estimated feed-only cutting time and move count;
+reorder and remove operations. The existing GRBL export groups consecutive
+same-cutter operations into separate numbered files when a cutter change
+occurs. Re-probe Z after changing cutters. Mandatory preflight remains in
+force for the entire exported plan.
+
+**The generated paths/job order are session-owned; they are not yet persisted
+inside .cf3d.** Regenerate toolpaths after reopening, and keep separate
+front/back projects from two-sided setup.
+
+## Batch production grid
+
+Select a part or multiple component objects, then choose **Design → Arrange →
+Batch Production Grid…** (also in the Position flyout). Specify copy count,
+columns, gap and stock margin. The operation checks the full combined template
+footprint against the stock and recorded clamp/fence rectangles using the
+**currently selected cutter's radius**, then generates independently editable
+stock-relative copies in a background worker. Originals are hidden, not
+destroyed, and Undo/Redo restores them. Copies of multiple components are
+grouped by finished part.
+
+This is regular row/column layout, **not** irregular nesting or automatic
+optimization of rotation/grain. The chosen cutter checks initial clearance;
+use mandatory CNC preflight for every cutter in the finished multi-tool job.
+X/Y Smart Value bindings must be removed from template objects so they cannot
+overwrite calculated batch positions.
+
 ## Native CAM core
 
 The CPU-heavy mesh rasterization and cutter-contact calculations are implemented in Rust and exposed to the Python application through PyO3. The PySide6 UI, project model, cutter definitions, and orchestration remain Python.

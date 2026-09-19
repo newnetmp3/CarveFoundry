@@ -43,13 +43,16 @@ from ..core.project_file import (
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
+from .batch_layout import BatchLayoutMixin
 from .import_worker import ImportWorker
 from .interface_settings import InterfaceSettingsMixin
+from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .text_editor import TextEditorMixin
+from .two_sided_setup import TwoSidedSetupMixin
 from .viewport import MeshViewport
 from .workspace_commands import WorkspaceCommandsMixin
 
@@ -93,7 +96,10 @@ class Panel(QFrame):
 
 class MainWindow(
     WorkspaceCommandsMixin,
+    BatchLayoutMixin,
     TextEditorMixin,
+    TwoSidedSetupMixin,
+    JobPlannerMixin,
     InterfaceSettingsMixin,
     PlanarOperationsMixin,
     RibbonActionsMixin,

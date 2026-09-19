@@ -23,6 +23,7 @@ from carvefoundry.cam.gcode import (
     render_grbl_program,
     write_grbl_program,
 )
+from carvefoundry.cam.job_plan import validate_job_order
 from carvefoundry.cam.job_workflows import (
     TilingSettings,
     offset_toolpath_xy,
@@ -74,6 +75,7 @@ class CamRequest:
     settings_by_item: list[tuple[ProjectItem, BasicCamSettings]]
     stock_settings: BasicCamSettings | None = None
     silhouette_settings: BasicCamSettings | None = None
+    previous_toolpaths: list[Any] | None = None
 
 
 @dataclass(slots=True)
@@ -287,6 +289,9 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
                     break
     if not generated:
         raise ValueError("The geometry produced no toolpaths.")
+    if job.previous_toolpaths:
+        generated = [*job.previous_toolpaths, *generated]
+    validate_job_order(generated)
     report(0.94, "Estimating runtime", force=True)
     render_geometry = build_render_geometry(generated)
     report(0.96, "Preview geometry ready", force=True)
