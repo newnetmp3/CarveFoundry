@@ -30,17 +30,14 @@ pub(crate) fn compensate_height_field<'py>(
     let height = source_view.nrows();
     let width = source_view.ncols();
     if height == 0 || width == 0 {
-        return Err(PyValueError::new_err(
-            "source height field cannot be empty",
-        ));
+        return Err(PyValueError::new_err("source height field cannot be empty"));
     }
 
     // Detach only after copying Python-owned memory. The numeric kernel itself
     // contains no Python objects and can safely use Rayon worker threads.
     let source: Vec<f64> = source_view.iter().copied().collect();
-    let result = py.detach(move || {
-        compensate_height_field_impl(&source, height, width, &footprint)
-    });
+    let result =
+        py.detach(move || compensate_height_field_impl(&source, height, width, &footprint));
     let result = Array2::from_shape_vec((height, width), result)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
 
@@ -99,11 +96,7 @@ mod tests {
 
     #[test]
     fn flat_footprint_uses_local_maximum() {
-        let source = [
-            0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0,
-        ];
+        let source = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
         let footprint = [
             (0, 0, 0.0),
             (-1, 0, 0.0),
