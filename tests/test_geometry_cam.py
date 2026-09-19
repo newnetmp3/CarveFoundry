@@ -232,7 +232,6 @@ def test_drill_refuses_non_circular_placeholder_center() -> None:
         geometry_drill(mesh, cutter, _settings())
 
 
-
 def test_silhouette_follows_combined_outer_project_shape() -> None:
     meshes = [
         _extrude(box(0, 0, 10, 10)),
