@@ -224,6 +224,45 @@ def test_generation_dialog_has_verbose_help_for_every_option() -> None:
         window.close()
 
 
+def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
+    window = MainWindow()
+    try:
+        item = ProjectItem(
+            "Progress Panel",
+            kind="rectangle",
+            mesh=rectangle_mesh(20.0, 15.0, 2.0),
+        )
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        dialog = window._build_toolpath_generation_dialog()
+
+        assert dialog.generation_progress.minimum() == 0
+        assert dialog.generation_progress.maximum() == 100
+        assert dialog.generation_progress.isHidden()
+        assert window.toolpath_progress.minimum() == 0
+        assert window.toolpath_progress.maximum() == 100
+
+        window._toolpath_dialog_progress = dialog.generation_progress
+        window._update_toolpath_progress(0.42, "Building test path")
+        assert dialog.generation_progress.value() == 42
+        assert window.toolpath_progress.value() == 42
+        assert "Building test path" in dialog.generation_progress.format()
+        assert not dialog.generation_progress.isHidden()
+        window._toolpath_dialog_progress = None
+
+        window._select_cam_operation("profile")
+        assert window._calculate_toolpath_now()
+        assert window.toolpath_progress.value() == 100
+        assert "Toolpaths ready" in window.toolpath_progress.format()
+        assert window.project.toolpaths
+        dialog.close()
+    finally:
+        window.close()
+
+
 def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
     window = MainWindow()
     try:
