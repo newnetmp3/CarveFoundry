@@ -37,6 +37,9 @@ class CamSettingsLike(Protocol):
     tabs_enabled: bool
     milling_direction: object
     pocket_strategy: object
+    raster_link_mode: object
+    local_link_clearance_mm: float
+    direct_link_tolerance_mm: float
     ramp_angle_deg: float | None
 
 
@@ -235,9 +238,10 @@ def geometry_silhouette(
         )
 
     moves: list[ToolpathMove] = []
-    previous_depth = 0.0
-    for depth in _depth_passes(target_z, settings.max_stepdown_mm):
-        for points, exterior in _order_tagged_paths(rings):
+    depths = _depth_passes(target_z, settings.max_stepdown_mm)
+    for points, exterior in _order_tagged_paths(rings):
+        previous_depth = 0.0
+        for depth in depths:
             start_index = _enter_depth(
                 moves,
                 points,
@@ -255,9 +259,8 @@ def geometry_silhouette(
             else:
                 for point in points[start_index:]:
                     _cut(moves, point[0], point[1], depth, settings)
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
-        previous_depth = depth
+            previous_depth = depth
+    _final_retract(moves, settings)
 
     return Toolpath(
         name=name,
@@ -349,9 +352,7 @@ def geometry_face(
                     current_point,
                 )
 
-        if moves:
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+    _final_retract(moves, settings)
 
     if not moves:
         raise ValueError("Surfacing produced no toolpath.")
@@ -456,6 +457,50 @@ def _cut(
     )
 
 
+def _link_mode(settings: CamSettingsLike) -> str:
+    return _settings_value(getattr(settings, "raster_link_mode", "smart"))
+
+
+def _transition_clearance_z(settings: CamSettingsLike) -> float:
+    if _link_mode(settings) == "full_retract":
+        return float(settings.safe_z_mm)
+    return min(
+        float(settings.safe_z_mm),
+        max(0.0, float(getattr(settings, "local_link_clearance_mm", 0.5))),
+    )
+
+
+def _position_above_start(
+    moves: list[ToolpathMove],
+    start: np.ndarray,
+    settings: CamSettingsLike,
+) -> None:
+    """Move to a path start with the least safe vertical motion."""
+
+    if not moves:
+        _rapid(moves, start[0], start[1], settings.safe_z_mm)
+        return
+
+    previous = moves[-1]
+    clearance = _transition_clearance_z(settings)
+    travel_z = max(float(previous.z_mm), clearance)
+    if previous.z_mm < travel_z - 1e-9:
+        _rapid(moves, previous.x_mm, previous.y_mm, travel_z)
+    if hypot(previous.x_mm - float(start[0]), previous.y_mm - float(start[1])) > _EPS:
+        _rapid(moves, start[0], start[1], travel_z)
+
+
+def _final_retract(
+    moves: list[ToolpathMove],
+    settings: CamSettingsLike,
+) -> None:
+    if not moves:
+        return
+    last = moves[-1]
+    if last.z_mm < settings.safe_z_mm - 1e-9:
+        _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+
+
 def _enter_depth(
     moves: list[ToolpathMove],
     points: np.ndarray,
@@ -464,19 +509,39 @@ def _enter_depth(
     settings: CamSettingsLike,
 ) -> int:
     start = points[0]
-    _rapid(moves, start[0], start[1], settings.safe_z_mm)
+    continuous = False
+    if moves:
+        previous = moves[-1]
+        continuous = (
+            hypot(
+                previous.x_mm - float(start[0]),
+                previous.y_mm - float(start[1]),
+            )
+            <= _EPS
+            and previous.z_mm <= 1e-9
+            and abs(previous.z_mm - previous_depth_z) <= 1e-7
+        )
+
+    if continuous:
+        entry_z = float(moves[-1].z_mm)
+    else:
+        _position_above_start(moves, start, settings)
+        entry_z = min(0.0, previous_depth_z)
+        if abs(moves[-1].z_mm - entry_z) > 1e-9:
+            _plunge(moves, start[0], start[1], entry_z, settings)
+
     if settings.ramp_angle_deg is None or len(points) < 2:
-        _plunge(moves, start[0], start[1], target_z, settings)
+        if abs(moves[-1].z_mm - target_z) > 1e-9:
+            _plunge(moves, start[0], start[1], target_z, settings)
         return 1
 
-    entry_z = min(0.0, previous_depth_z)
-    _plunge(moves, start[0], start[1], entry_z, settings)
     end = points[1]
     dx = float(end[0] - start[0])
     dy = float(end[1] - start[1])
     segment_length = hypot(dx, dy)
     if segment_length <= _EPS:
-        _plunge(moves, start[0], start[1], target_z, settings)
+        if abs(moves[-1].z_mm - target_z) > 1e-9:
+            _plunge(moves, start[0], start[1], target_z, settings)
         return 1
 
     required = abs(target_z - entry_z) / tan(radians(settings.ramp_angle_deg))
@@ -726,10 +791,14 @@ def geometry_profile(
         raise ValueError("Selected geometry produced no profile contours.")
     target_z = _target_depth(mesh, settings)
     moves: list[ToolpathMove] = []
-    previous_depth = 0.0
+    depths = _depth_passes(target_z, settings.max_stepdown_mm)
 
-    for depth in _depth_passes(target_z, settings.max_stepdown_mm):
-        for points, exterior in _order_tagged_paths(rings):
+    # Finish every depth of one contour before leaving it. Closed contours end
+    # where they start, so deeper passes can ramp/plunge immediately without an
+    # air move or retract.
+    for points, exterior in _order_tagged_paths(rings):
+        previous_depth = 0.0
+        for depth in depths:
             start_index = _enter_depth(
                 moves,
                 points,
@@ -747,10 +816,9 @@ def geometry_profile(
             else:
                 for point in points[start_index:]:
                     _cut(moves, point[0], point[1], depth, settings)
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
-        previous_depth = depth
+            previous_depth = depth
 
+    _final_retract(moves, settings)
     return Toolpath(
         name=name,
         operation="profile",
@@ -778,15 +846,17 @@ def _cut_path_with_smart_link(
     current: np.ndarray | None,
 ) -> np.ndarray:
     start = points[0]
-    if (
-        current is not None
+    direct = (
+        _link_mode(settings) == "smart"
+        and current is not None
         and abs(moves[-1].z_mm - depth) <= 1e-9
         and _link_is_safe(region, current, start)
-    ):
+    )
+    if direct:
         if float(np.linalg.norm(start - current)) > _EPS:
             _cut(moves, start[0], start[1], depth, settings)
     else:
-        _rapid(moves, start[0], start[1], settings.safe_z_mm)
+        _position_above_start(moves, start, settings)
         _plunge(moves, start[0], start[1], depth, settings)
 
     for point in points[1:]:
@@ -894,9 +964,7 @@ def geometry_pocket(
                     current_point,
                 )
 
-        if moves:
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
+    _final_retract(moves, settings)
 
     if not moves:
         raise ValueError("Selected geometry produced no pocket toolpath.")
@@ -933,9 +1001,16 @@ def geometry_engrave(
         )
 
     moves: list[ToolpathMove] = []
-    previous_depth = 0.0
-    for depth in _depth_passes(target_z, settings.max_stepdown_mm):
-        for points in paths:
+    depths = _depth_passes(target_z, settings.max_stepdown_mm)
+    for original_points in paths:
+        points = original_points
+        previous_depth = 0.0
+        for pass_index, depth in enumerate(depths):
+            # Open engrave paths alternate direction so each deeper pass starts
+            # exactly where the prior pass ended. This removes an entire
+            # retract/reposition cycle per depth.
+            if pass_index > 0 and not _closed(points):
+                points = points[::-1].copy()
             start_index = _enter_depth(
                 moves,
                 points,
@@ -945,10 +1020,9 @@ def geometry_engrave(
             )
             for point in points[start_index:]:
                 _cut(moves, point[0], point[1], depth, settings)
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
-        previous_depth = depth
+            previous_depth = depth
 
+    _final_retract(moves, settings)
     return Toolpath(
         name=name,
         operation="engrave",
@@ -1052,13 +1126,17 @@ def geometry_vcarve(
             for points, _exterior in _ring_paths(inset, settings)
         ]
         for points in _order_paths(paths):
-            _rapid(moves, points[0, 0], points[0, 1], settings.safe_z_mm)
-            _plunge(moves, points[0, 0], points[0, 1], -depth, settings)
-            for point in points[1:]:
+            start_index = _enter_depth(
+                moves,
+                points,
+                -depth,
+                0.0,
+                settings,
+            )
+            for point in points[start_index:]:
                 _cut(moves, point[0], point[1], -depth, settings)
-            last = moves[-1]
-            _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
 
+    _final_retract(moves, settings)
     if not moves:
         raise ValueError(
             "Selected regions are too narrow for the selected V-bit tip/angle."
