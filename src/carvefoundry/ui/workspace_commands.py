@@ -132,7 +132,7 @@ class WorkspaceCommandsMixin:
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
             ("job_planner", "Machining Job Planner…", self._show_job_planner),
             ("preview", "Preview", self._preview_toolpaths),
-            ("stock_simulation", "Simulate Material Removal…", self._simulate_stock_removal)
+            ("stock_simulation", "Simulate Material Removal…", self._simulate_stock_removal),
             ("export_toolpath", "Export G-code", self._export_gcode),
             ("machine_profile", "Edit Machine Profile…", self._machine_profile),
             (
