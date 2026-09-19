@@ -7,6 +7,74 @@ from math import ceil
 import numpy as np
 import trimesh
 
+from .native import rasterize_top_surface as _native_rasterize_top_surface
+
+
+def _rasterize_top_surface_python(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    x_axis: np.ndarray,
+    y_axis: np.ndarray,
+    *,
+    progress: Callable[[float], None] | None = None,
+) -> np.ndarray:
+    """Readable reference implementation for mesh-to-height-field rasterization."""
+
+    z_field = np.full((len(y_axis), len(x_axis)), -np.inf, dtype=float)
+    tolerance = 1e-10
+    face_count = len(faces)
+    progress_stride = max(1, face_count // 100)
+
+    for face_index, face in enumerate(faces):
+        triangle = vertices[face]
+        x0, y0, z0 = triangle[0]
+        x1, y1, z1 = triangle[1]
+        x2, y2, z2 = triangle[2]
+        denominator = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
+        if abs(denominator) <= tolerance:
+            continue
+
+        ix0 = max(0, int(np.searchsorted(x_axis, min(x0, x1, x2), side="left")))
+        ix1 = min(
+            len(x_axis) - 1,
+            int(np.searchsorted(x_axis, max(x0, x1, x2), side="right") - 1),
+        )
+        iy0 = max(0, int(np.searchsorted(y_axis, min(y0, y1, y2), side="left")))
+        iy1 = min(
+            len(y_axis) - 1,
+            int(np.searchsorted(y_axis, max(y0, y1, y2), side="right") - 1),
+        )
+        if ix1 < ix0 or iy1 < iy0:
+            continue
+
+        grid_x, grid_y = np.meshgrid(
+            x_axis[ix0 : ix1 + 1],
+            y_axis[iy0 : iy1 + 1],
+        )
+        weight0 = (
+            (y1 - y2) * (grid_x - x2) + (x2 - x1) * (grid_y - y2)
+        ) / denominator
+        weight1 = (
+            (y2 - y0) * (grid_x - x2) + (x0 - x2) * (grid_y - y2)
+        ) / denominator
+        weight2 = 1.0 - weight0 - weight1
+        inside = (
+            (weight0 >= -tolerance)
+            & (weight1 >= -tolerance)
+            & (weight2 >= -tolerance)
+        )
+        interpolated_z = weight0 * z0 + weight1 * z1 + weight2 * z2
+        target = z_field[iy0 : iy1 + 1, ix0 : ix1 + 1]
+        np.maximum(target, np.where(inside, interpolated_z, -np.inf), out=target)
+
+        if (
+            progress is not None
+            and (face_index % progress_stride == 0 or face_index == face_count - 1)
+        ):
+            progress((face_index + 1) / face_count)
+
+    return z_field
+
 
 @dataclass(frozen=True, slots=True)
 class HeightField:
@@ -69,11 +137,15 @@ class HeightField:
         fill_missing_z_mm: float | None = None,
         progress: Callable[[float], None] | None = None,
     ) -> HeightField:
-        """Rasterize the top-most Z surface of *mesh* onto a regular XY grid.
+        """Rasterize the top-most Z surface of mesh onto a regular XY grid.
 
         This is a top-down 3-axis representation: for overlapping/overhanging
         triangles, the highest Z at an XY sample wins. Nearly vertical triangles
         have no XY area and therefore do not directly contribute samples.
+
+        The compiled Rust kernel is used by default. The Python implementation
+        above remains intentionally complete as a readable reference and can be
+        forced with CARVEFOUNDRY_CAM_BACKEND=python.
         """
 
         if spacing_mm <= 0 or not np.isfinite(spacing_mm):
@@ -101,62 +173,20 @@ class HeightField:
         y_count = max(2, ceil(span_y / spacing_mm) + 1)
         x_axis = np.linspace(min_x, max_x, x_count, dtype=float)
         y_axis = np.linspace(min_y, max_y, y_count, dtype=float)
-        z_field = np.full((y_count, x_count), -np.inf, dtype=float)
 
-        tolerance = 1e-10
-        face_count = len(faces)
-        progress_stride = max(1, face_count // 100)
         if progress is not None:
             progress(0.0)
-        for face_index, face in enumerate(faces):
-            triangle = vertices[face]
-            x0, y0, z0 = triangle[0]
-            x1, y1, z1 = triangle[1]
-            x2, y2, z2 = triangle[2]
-            denominator = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
-            if abs(denominator) <= tolerance:
-                continue
-
-            ix0 = max(0, int(np.searchsorted(x_axis, min(x0, x1, x2), side="left")))
-            ix1 = min(
-                x_count - 1,
-                int(np.searchsorted(x_axis, max(x0, x1, x2), side="right") - 1),
+        z_field = _native_rasterize_top_surface(vertices, faces, x_axis, y_axis)
+        if z_field is None:
+            z_field = _rasterize_top_surface_python(
+                vertices,
+                faces,
+                x_axis,
+                y_axis,
+                progress=progress,
             )
-            iy0 = max(0, int(np.searchsorted(y_axis, min(y0, y1, y2), side="left")))
-            iy1 = min(
-                y_count - 1,
-                int(np.searchsorted(y_axis, max(y0, y1, y2), side="right") - 1),
-            )
-            if ix1 < ix0 or iy1 < iy0:
-                continue
-
-            grid_x, grid_y = np.meshgrid(
-                x_axis[ix0 : ix1 + 1],
-                y_axis[iy0 : iy1 + 1],
-            )
-            weight0 = (
-                (y1 - y2) * (grid_x - x2) + (x2 - x1) * (grid_y - y2)
-            ) / denominator
-            weight1 = (
-                (y2 - y0) * (grid_x - x2) + (x0 - x2) * (grid_y - y2)
-            ) / denominator
-            weight2 = 1.0 - weight0 - weight1
-            inside = (
-                (weight0 >= -tolerance)
-                & (weight1 >= -tolerance)
-                & (weight2 >= -tolerance)
-            )
-            interpolated_z = weight0 * z0 + weight1 * z1 + weight2 * z2
-            target = z_field[iy0 : iy1 + 1, ix0 : ix1 + 1]
-            np.maximum(target, np.where(inside, interpolated_z, -np.inf), out=target)
-            if (
-                progress is not None
-                and (
-                    face_index % progress_stride == 0
-                    or face_index == face_count - 1
-                )
-            ):
-                progress((face_index + 1) / face_count)
+        elif progress is not None:
+            progress(1.0)
 
         missing = ~np.isfinite(z_field)
         if fill_missing_z_mm is None:

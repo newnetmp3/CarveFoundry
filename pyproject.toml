@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "carvefoundry"
@@ -31,8 +31,12 @@ dev = [
 [project.scripts]
 carvefoundry = "carvefoundry.app:main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/carvefoundry"]
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+python-source = "src"
+module-name = "carvefoundry._native"
+editable-profile = "release"
+strip = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
