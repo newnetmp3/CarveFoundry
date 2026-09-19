@@ -4017,78 +4017,328 @@ class RibbonActionsMixin:
     # ------------------------------------------------------------------
     # Machine
     # ------------------------------------------------------------------
+    def _machine_profiles(self) -> tuple[list[MachineProfile], str]:
+        raw = str(self._settings.value("machine/profiles_v1", ""))
+        try:
+            profiles, active_name = profiles_from_json(raw)
+        except ValueError:
+            profiles, active_name = [], None
+
+        if not profiles:
+            legacy = MachineProfile(
+                name=str(
+                    self._settings.value(
+                        "machine/name",
+                        "Onefinity / GRBL",
+                    )
+                ),
+                port=str(self._settings.value("machine/port", "")),
+                baud_rate=int(self._settings.value("machine/baud", 115200)),
+                work_x_mm=float(
+                    self._settings.value("machine/work_x_mm", 816.0)
+                ),
+                work_y_mm=float(
+                    self._settings.value("machine/work_y_mm", 816.0)
+                ),
+                work_z_mm=float(
+                    self._settings.value("machine/work_z_mm", 133.0)
+                ),
+            )
+            profiles = [legacy]
+            active_name = legacy.name
+
+        names = {profile.name for profile in profiles}
+        if active_name not in names:
+            active_name = profiles[0].name
+        return profiles, active_name
+
+    def _save_machine_profiles(
+        self,
+        profiles: list[MachineProfile],
+        active_name: str,
+    ) -> None:
+        if not profiles:
+            raise ValueError("At least one machine profile is required.")
+        names = {profile.name for profile in profiles}
+        if active_name not in names:
+            raise ValueError("Active machine profile is missing.")
+
+        self._settings.setValue(
+            "machine/profiles_v1",
+            profiles_to_json(profiles, active_name=active_name),
+        )
+        active = next(
+            profile for profile in profiles if profile.name == active_name
+        )
+        # Mirror the active profile into the older keys for compatibility with
+        # existing installs and any external scripts reading these settings.
+        self._settings.setValue("machine/name", active.name)
+        self._settings.setValue("machine/port", active.port)
+        self._settings.setValue("machine/baud", active.baud_rate)
+        self._settings.setValue("machine/work_x_mm", active.work_x_mm)
+        self._settings.setValue("machine/work_y_mm", active.work_y_mm)
+        self._settings.setValue("machine/work_z_mm", active.work_z_mm)
+        self._settings.sync()
+
+    def _active_machine_profile(self) -> MachineProfile:
+        profiles, active_name = self._machine_profiles()
+        return next(
+            profile for profile in profiles if profile.name == active_name
+        )
+
+    def _select_machine_profile(self) -> None:
+        profiles, active_name = self._machine_profiles()
+        names = [profile.name for profile in profiles]
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Machine Profile",
+            "Active machine",
+            names,
+            names.index(active_name),
+            False,
+        )
+        if not accepted or not selected:
+            return
+        self._save_machine_profiles(profiles, str(selected))
+        self.statusBar().showMessage(
+            f"Active machine: {selected}",
+            3000,
+        )
+
+    def _delete_machine_profile(self) -> None:
+        profiles, active_name = self._machine_profiles()
+        if len(profiles) <= 1:
+            self.statusBar().showMessage(
+                "Keep at least one machine profile",
+                4000,
+            )
+            return
+        names = [profile.name for profile in profiles]
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Delete Machine Profile",
+            "Profile",
+            names,
+            names.index(active_name),
+            False,
+        )
+        if not accepted or not selected:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Machine Profile",
+            f"Delete machine profile {selected!r}?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        remaining = [
+            profile for profile in profiles if profile.name != selected
+        ]
+        new_active = (
+            active_name
+            if active_name != selected
+            else remaining[0].name
+        )
+        self._save_machine_profiles(remaining, new_active)
+        self.statusBar().showMessage(
+            f"Deleted machine profile: {selected}",
+            3000,
+        )
+
     def _machine_profile(self) -> None:
+        profiles, active_name = self._machine_profiles()
+        active = next(
+            profile for profile in profiles if profile.name == active_name
+        )
         ports = MachineController.available_ports()
         port_names = [name for name, _label in ports]
-        saved_port = str(self._settings.value("machine/port", ""))
-        choices = port_names or ([saved_port] if saved_port else [""])
-        if saved_port and saved_port not in choices:
-            choices.insert(0, saved_port)
+        choices = port_names or ([active.port] if active.port else [""])
+        if active.port and active.port not in choices:
+            choices.insert(0, active.port)
 
         form = _ActionForm(self, "Machine Profile")
-        form.add_line(
-            "name",
-            "Machine name",
-            str(self._settings.value("machine/name", "Onefinity / GRBL")),
-        )
+        form.add_line("name", "Profile name", active.name)
         form.add_combo(
             "port",
             "Serial port",
             choices,
-            saved_port,
+            active.port,
             editable=True,
         )
         form.add_int(
             "baud",
             "Baud rate",
-            int(self._settings.value("machine/baud", 115200)),
+            active.baud_rate,
             minimum=1200,
             maximum=2_000_000,
         )
+        form.add_double(
+            "work_x",
+            "X travel",
+            active.work_x_mm,
+            minimum=1.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "work_y",
+            "Y travel",
+            active.work_y_mm,
+            minimum=1.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "work_z",
+            "Z travel",
+            active.work_z_mm,
+            minimum=1.0,
+            suffix=" mm",
+        )
+        form.add_check(
+            "parking",
+            "Park after G-code",
+            active.parking_enabled,
+        )
+        form.add_double(
+            "park_x",
+            "Park X",
+            active.park_x_mm,
+            minimum=-100000.0,
+            maximum=100000.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "park_y",
+            "Park Y",
+            active.park_y_mm,
+            minimum=-100000.0,
+            maximum=100000.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "park_z",
+            "Park Z clearance",
+            active.park_z_mm,
+            minimum=0.0,
+            maximum=100000.0,
+            suffix=" mm",
+        )
         if form.exec() != QDialog.DialogCode.Accepted:
             return
-        self._settings.setValue("machine/name", str(form.value("name")))
-        self._settings.setValue("machine/port", str(form.value("port")).strip())
-        self._settings.setValue("machine/baud", int(form.value("baud")))
-        self._settings.sync()
-        self.statusBar().showMessage("Machine profile saved", 3000)
+
+        edited = MachineProfile(
+            name=str(form.value("name")).strip() or active.name,
+            port=str(form.value("port")).strip(),
+            baud_rate=int(form.value("baud")),
+            work_x_mm=float(form.value("work_x")),
+            work_y_mm=float(form.value("work_y")),
+            work_z_mm=float(form.value("work_z")),
+            parking_enabled=bool(form.value("parking")),
+            park_x_mm=float(form.value("park_x")),
+            park_y_mm=float(form.value("park_y")),
+            park_z_mm=float(form.value("park_z")),
+        )
+        try:
+            edited.validate()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Machine Profile", str(exc))
+            return
+
+        # Renaming creates/replaces a named profile without losing the others.
+        remaining = [
+            profile
+            for profile in profiles
+            if profile.name not in {active.name, edited.name}
+        ]
+        remaining.append(edited)
+        remaining.sort(key=lambda profile: profile.name.casefold())
+        self._save_machine_profiles(remaining, edited.name)
+        self.statusBar().showMessage(
+            f"Machine profile saved: {edited.name}",
+            3000,
+        )
 
     def _machine_work_area(self) -> None:
+        profile = self._active_machine_profile()
         form = _ActionForm(self, "Machine Work Area")
         form.add_double(
             "x",
             "X travel",
-            float(self._settings.value("machine/work_x_mm", 816.0)),
+            profile.work_x_mm,
             minimum=1.0,
             suffix=" mm",
         )
         form.add_double(
             "y",
             "Y travel",
-            float(self._settings.value("machine/work_y_mm", 816.0)),
+            profile.work_y_mm,
             minimum=1.0,
             suffix=" mm",
         )
         form.add_double(
             "z",
             "Z travel",
-            float(self._settings.value("machine/work_z_mm", 133.0)),
+            profile.work_z_mm,
             minimum=1.0,
             suffix=" mm",
         )
         if form.exec() != QDialog.DialogCode.Accepted:
             return
-        for key in ("x", "y", "z"):
-            self._settings.setValue(
-                f"machine/work_{key}_mm",
-                float(form.value(key)),
-            )
-        self._settings.sync()
+
+        profiles, active_name = self._machine_profiles()
+        updated = MachineProfile(
+            name=profile.name,
+            port=profile.port,
+            baud_rate=profile.baud_rate,
+            work_x_mm=float(form.value("x")),
+            work_y_mm=float(form.value("y")),
+            work_z_mm=float(form.value("z")),
+            parking_enabled=profile.parking_enabled,
+            park_x_mm=profile.park_x_mm,
+            park_y_mm=profile.park_y_mm,
+            park_z_mm=profile.park_z_mm,
+        )
+        profiles = [
+            updated if candidate.name == active_name else candidate
+            for candidate in profiles
+        ]
+        self._save_machine_profiles(profiles, active_name)
         self.statusBar().showMessage("Machine work area saved", 3000)
+
+    def _work_zero_mode(self) -> None:
+        form = _ActionForm(self, "XY Work Zero")
+        labels = ["Front Left Corner", "Center of Stock"]
+        current = (
+            "Center of Stock"
+            if self.project.stock.xy_zero == "center"
+            else "Front Left Corner"
+        )
+        form.add_combo("mode", "XY zero", labels, current)
+        if form.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        mode = (
+            "center"
+            if form.value("mode") == "Center of Stock"
+            else "bottom_left"
+        )
+        if mode == self.project.stock.xy_zero:
+            return
+        self._before_ribbon_mutation("change work zero")
+        self.project.stock.xy_zero = mode
+        self._after_ribbon_mutation("change work zero", True)
+        self.viewport.update()
+        self.statusBar().showMessage(
+            "XY work zero set to "
+            + ("stock center" if mode == "center" else "front-left corner"),
+            3500,
+        )
 
     def _machine_origin(self) -> None:
         if not self.machine_controller.connected:
-            self.statusBar().showMessage("Connect to the machine before setting origin", 5000)
+            self.statusBar().showMessage(
+                "Connect to the machine before setting origin",
+                5000,
+            )
             return
         form = _ActionForm(self, "Set Work Origin")
         form.add_check("x", "Set X = 0", True)
@@ -4109,6 +4359,51 @@ class RibbonActionsMixin:
                 f"Set work origin: {', '.join(axes)}",
                 4000,
             )
+
+    def _home_machine(self) -> None:
+        if not self.machine_controller.connected:
+            self.statusBar().showMessage(
+                "Connect to the machine before homing",
+                4000,
+            )
+            return
+        if self.machine_controller.send_line("$H"):
+            self.statusBar().showMessage("Machine homing started", 4000)
+
+    def _go_to_work_zero(self) -> None:
+        if not self.machine_controller.connected:
+            self.statusBar().showMessage(
+                "Connect to the machine before moving to work zero",
+                4000,
+            )
+            return
+        safe_z = float(self._settings.value("cam/safe_z_mm", 1.5))
+        self.machine_controller.send_line("G90")
+        self.machine_controller.send_line(f"G0 Z{safe_z:g}")
+        self.machine_controller.send_line("G0 X0 Y0")
+        self.statusBar().showMessage("Moving to XY work zero", 4000)
+
+    def _park_machine(self) -> None:
+        if not self.machine_controller.connected:
+            self.statusBar().showMessage(
+                "Connect to the machine before parking",
+                4000,
+            )
+            return
+        profile = self._active_machine_profile()
+        clearance = max(
+            profile.park_z_mm,
+            float(self._settings.value("cam/safe_z_mm", 1.5)),
+        )
+        self.machine_controller.send_line("G90")
+        self.machine_controller.send_line(f"G0 Z{clearance:g}")
+        self.machine_controller.send_line(
+            f"G0 X{profile.park_x_mm:g} Y{profile.park_y_mm:g}"
+        )
+        self.statusBar().showMessage(
+            f"Parking {profile.name}",
+            4000,
+        )
 
     def _postprocessor_settings_dialog(self) -> None:
         form = _ActionForm(self, "Postprocessor")
@@ -4139,11 +4434,27 @@ class RibbonActionsMixin:
         self.statusBar().showMessage("Postprocessor settings saved", 3000)
 
     def _grbl_post_settings(self) -> GrblPostSettings:
+        profile = self._active_machine_profile()
+        center_zero = self.project.stock.xy_zero == "center"
         return GrblPostSettings(
             decimals=int(self._settings.value("post/decimals", 3)),
             include_comments=bool(
                 self._settings.value("post/comments", True, type=bool)
             ),
+            x_offset_mm=(
+                -self.project.stock.width_mm / 2.0
+                if center_zero
+                else 0.0
+            ),
+            y_offset_mm=(
+                -self.project.stock.height_mm / 2.0
+                if center_zero
+                else 0.0
+            ),
+            park_enabled=profile.parking_enabled,
+            park_x_mm=profile.park_x_mm,
+            park_y_mm=profile.park_y_mm,
+            park_z_mm=profile.park_z_mm,
         )
 
     def _connect_machine(self) -> None:
@@ -4151,22 +4462,26 @@ class RibbonActionsMixin:
             self.machine_controller.disconnect()
             return
 
-        # A checkable ribbon button toggles before this callback runs.  Treat
-        # controller state as authoritative so canceled/failed attempts never
-        # leave the UI looking connected.
         if self._machine_connect_button is not None:
             self._machine_connect_button.setChecked(False)
 
-        port = str(self._settings.value("machine/port", "")).strip()
-        baud = int(self._settings.value("machine/baud", 115200))
-        if not port:
+        profile = self._active_machine_profile()
+        if not profile.port:
             self._machine_profile()
-            port = str(self._settings.value("machine/port", "")).strip()
-        if not port:
-            self.statusBar().showMessage("No machine serial port configured", 5000)
+            profile = self._active_machine_profile()
+        if not profile.port:
+            self.statusBar().showMessage(
+                "No serial port configured for the active machine",
+                5000,
+            )
             return
-        self.statusBar().showMessage(f"Connecting to {port}…")
-        if self.machine_controller.connect_serial(port, baud):
+        self.statusBar().showMessage(
+            f"Connecting {profile.name} on {profile.port}…"
+        )
+        if self.machine_controller.connect_serial(
+            profile.port,
+            profile.baud_rate,
+        ):
             self.machine_controller.send_line("?")
 
     def _machine_connection_changed(self, connected: bool, port: str) -> None:
