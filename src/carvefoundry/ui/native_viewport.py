@@ -6,7 +6,7 @@ from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PySide6.QtCore import QPoint, QPointF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QCursor,
@@ -831,6 +831,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
+        self._toolpath_interaction_lod_frames = 0
         self._update_interaction_cursor()
         self.requestUpdate()
 
@@ -3140,7 +3141,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._last_mouse_pos = event.position()
         self._interaction_distance += abs(delta.x()) + abs(delta.y())
         if self._interaction_mode in {"orbit", "pan"}:
-            self._toolpath_interaction_lod_frames = 2
+            self._toolpath_interaction_lod_frames = 1
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
@@ -3486,8 +3487,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.viewChanged.emit()
         event.accept()
 
+    def _restore_toolpath_full_detail(self) -> None:
+        self._toolpath_interaction_lod_frames = 0
+        self.requestUpdate()
+
     def wheelEvent(self, event: QWheelEvent) -> None:
-        self._toolpath_interaction_lod_frames = 2
+        self._toolpath_interaction_lod_frames = 1
+        QTimer.singleShot(60, self._restore_toolpath_full_detail)
         angle_steps = event.angleDelta().y() / 120.0
         steps = angle_steps if angle_steps else event.pixelDelta().y() / 120.0
         if steps:
