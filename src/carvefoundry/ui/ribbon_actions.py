@@ -4669,3 +4669,489 @@ class RibbonActionsMixin:
         self.statusBar().showMessage(
             f"Simulating toolpath… {fraction * 100:.0f}%"
         )
+
+
+    # ------------------------------------------------------------------
+    # Project automation / Easel-style workflows
+    # ------------------------------------------------------------------
+    def _smart_value_context(self) -> dict[str, float]:
+        stock = self.project.stock
+        return {
+            "stock_width": float(stock.width_mm),
+            "stock_height": float(stock.height_mm),
+            "stock_thickness": float(stock.thickness_mm),
+            "stock_center_x": float(stock.width_mm) / 2.0,
+            "stock_center_y": float(stock.height_mm) / 2.0,
+        }
+
+    def _resolve_item_smart_bindings(
+        self,
+        item: ProjectItem,
+        *,
+        values: SmartValues | None = None,
+    ) -> dict[str, float]:
+        table = values or self.project.smart_values
+        context = self._smart_value_context()
+        resolved = {
+            key: table.evaluate(expression, extra_values=context)
+            for key, expression in item.smart_bindings.items()
+            if expression.strip()
+        }
+        for key in ("size_x", "size_y", "size_z"):
+            if key in resolved and resolved[key] <= 0:
+                raise SmartValueError(
+                    f"{item.name}: {key.replace('_', ' ')} must be greater than zero."
+                )
+        return resolved
+
+    @staticmethod
+    def _apply_resolved_smart_bindings(
+        item: ProjectItem,
+        resolved: dict[str, float],
+    ) -> None:
+        tx, ty, tz = item.transform.translation_mm
+        item.transform.translation_mm = (
+            resolved.get("position_x", tx),
+            resolved.get("position_y", ty),
+            resolved.get("position_z", tz),
+        )
+
+        size = item.local_size_mm()
+        if size is None:
+            return
+        scale = list(item.transform.scale_xyz)
+        for axis, key in enumerate(("size_x", "size_y", "size_z")):
+            target = resolved.get(key)
+            if target is None:
+                continue
+            current = float(size[axis])
+            if current <= 1.0e-12:
+                raise SmartValueError(
+                    f"{item.name}: cannot bind {key.replace('_', ' ')} "
+                    "because the current model dimension is zero."
+                )
+            scale[axis] *= target / current
+        item.transform.scale_xyz = tuple(float(value) for value in scale)
+
+    def _smart_values_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Smart Values")
+        dialog.resize(620, 460)
+        layout = QVBoxLayout(dialog)
+
+        intro = QLabel(
+            "Define one reusable value per line as name = expression. "
+            "Values may reference each other, for example:\n"
+            "width = 120\nborder = 6\ninside = width - 2 * border"
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        editor = QPlainTextEdit()
+        editor.setPlainText(self.project.smart_values.to_lines())
+        editor.setPlaceholderText("width = 120\nheight = width / 2\nborder = 6")
+        layout.addWidget(editor, 1)
+
+        note = QLabel(
+            "Object bindings may also use stock_width, stock_height, "
+            "stock_thickness, stock_center_x, and stock_center_y."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("Muted")
+        layout.addWidget(note)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        while dialog.exec() == QDialog.DialogCode.Accepted:
+            try:
+                table = SmartValues.from_lines(editor.toPlainText())
+                resolved = [
+                    (item, self._resolve_item_smart_bindings(item, values=table))
+                    for item in self.project.items
+                    if item.smart_bindings
+                ]
+            except (SmartValueError, ZeroDivisionError) as exc:
+                QMessageBox.warning(self, "Smart Values", str(exc))
+                continue
+
+            self._before_ribbon_mutation("edit Smart Values")
+            self.project.smart_values = table
+            for item, item_values in resolved:
+                self._apply_resolved_smart_bindings(item, item_values)
+            if resolved:
+                self._refresh_project_list(self.project_list.currentRow())
+                self.viewport.update()
+                self._invalidate_toolpaths("Smart Values")
+            self._after_ribbon_mutation("edit Smart Values", True)
+            self.statusBar().showMessage(
+                f"Saved {len(table.expressions)} Smart Value"
+                f"{'s' if len(table.expressions) != 1 else ''}",
+                3500,
+            )
+            return
+
+    def _smart_bindings_dialog(self) -> None:
+        indices = self._selected_design_indices(expand_groups=True)
+        if not indices:
+            self.statusBar().showMessage(
+                "Select one or more design objects to bind",
+                4000,
+            )
+            return
+
+        items = [self.project.items[index] for index in indices]
+        keys = (
+            ("position_x", "Position X"),
+            ("position_y", "Position Y"),
+            ("position_z", "Position Z"),
+            ("size_x", "Size X"),
+            ("size_y", "Size Y"),
+            ("size_z", "Size Z"),
+        )
+        form = _ActionForm(self, "Smart Value Bindings")
+        for key, label in keys:
+            expressions = {
+                item.smart_bindings.get(key, "")
+                for item in items
+            }
+            initial = expressions.pop() if len(expressions) == 1 else ""
+            field = form.add_line(key, label, initial)
+            field.setPlaceholderText(
+                "Smart Value or expression; blank leaves this property unbound"
+            )
+
+        if form.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        bindings = {
+            key: str(form.value(key)).strip()
+            for key, _label in keys
+            if str(form.value(key)).strip()
+        }
+        try:
+            context = self._smart_value_context()
+            resolved_template = {
+                key: self.project.smart_values.evaluate(
+                    expression,
+                    extra_values=context,
+                )
+                for key, expression in bindings.items()
+            }
+            for key in ("size_x", "size_y", "size_z"):
+                if key in resolved_template and resolved_template[key] <= 0:
+                    raise SmartValueError(
+                        f"{key.replace('_', ' ')} must be greater than zero."
+                    )
+        except (SmartValueError, ZeroDivisionError) as exc:
+            QMessageBox.warning(self, "Smart Value Bindings", str(exc))
+            return
+
+        self._before_ribbon_mutation("bind Smart Values")
+        try:
+            for item in items:
+                item.smart_bindings = dict(bindings)
+                resolved = self._resolve_item_smart_bindings(item)
+                self._apply_resolved_smart_bindings(item, resolved)
+        except SmartValueError as exc:
+            QMessageBox.warning(self, "Smart Value Bindings", str(exc))
+            self._undo()
+            return
+
+        self._refresh_project_list(indices[-1] + 1)
+        self._select_project_indices(indices, primary=indices[-1])
+        self.viewport.update()
+        self._invalidate_toolpaths("Smart Value bindings")
+        self._after_ribbon_mutation("bind Smart Values", True)
+        self.statusBar().showMessage(
+            f"Updated Smart Value bindings for {len(items)} object"
+            f"{'s' if len(items) != 1 else ''}",
+            3500,
+        )
+
+    def _export_resume_gcode(self) -> None:
+        toolpaths = list(self.project.toolpaths)
+        if not toolpaths:
+            self.statusBar().showMessage(
+                "Calculate toolpaths before creating a resume file",
+                5000,
+            )
+            return
+
+        counts = [len(toolpath.moves) for toolpath in toolpaths]
+        total_moves = sum(counts)
+        if total_moves <= 0:
+            self.statusBar().showMessage("Toolpaths contain no moves", 4000)
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Resume Carve")
+        dialog.resize(620, 320)
+        layout = QVBoxLayout(dialog)
+        warning = QLabel(
+            "Choose approximately where the interruption occurred. "
+            "Safe restart rewinds to the beginning of that uninterrupted cutting "
+            "section and is recommended because it avoids a blind vertical entry "
+            "in the middle of a 3D pass."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(0, total_moves - 1)
+        spin = QSpinBox()
+        spin.setRange(0, total_moves - 1)
+        spin.setPrefix("Move ")
+        row = QHBoxLayout()
+        row.addWidget(slider, 1)
+        row.addWidget(spin)
+        layout.addLayout(row)
+
+        safe_rewind = QCheckBox("Rewind to safe section start")
+        safe_rewind.setChecked(True)
+        layout.addWidget(safe_rewind)
+
+        detail = QLabel()
+        detail.setObjectName("InspectorInfo")
+        detail.setWordWrap(True)
+        layout.addWidget(detail)
+
+        def locate(global_index: int) -> tuple[int, int]:
+            remaining = int(global_index)
+            for path_index, count in enumerate(counts):
+                if remaining < count:
+                    return path_index, remaining
+                remaining -= count
+            return len(counts) - 1, max(0, counts[-1] - 1)
+
+        def update_detail(value: int) -> None:
+            if spin.value() != value:
+                spin.blockSignals(True)
+                spin.setValue(value)
+                spin.blockSignals(False)
+            if slider.value() != value:
+                slider.blockSignals(True)
+                slider.setValue(value)
+                slider.blockSignals(False)
+            path_index, move_index = locate(value)
+            toolpath = toolpaths[path_index]
+            move = toolpath.moves[move_index]
+            safe_index = move_index
+            if safe_rewind.isChecked():
+                try:
+                    safe_index = find_safe_resume_index(toolpath, move_index)
+                except (IndexError, ValueError):
+                    safe_index = move_index
+            detail.setText(
+                f"Operation: {toolpath.name}\n"
+                f"Selected point: {move_index:,} / {len(toolpath.moves) - 1:,}\n"
+                f"XYZ: {move.x_mm:.3f}, {move.y_mm:.3f}, {move.z_mm:.3f} mm\n"
+                f"Move type: {move.kind.value}\n"
+                f"Actual restart point: {safe_index:,}"
+            )
+
+        slider.valueChanged.connect(update_detail)
+        spin.valueChanged.connect(update_detail)
+        safe_rewind.toggled.connect(
+            lambda _checked: update_detail(slider.value())
+        )
+        update_detail(0)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        path_index, move_index = locate(slider.value())
+        try:
+            resumed = resume_toolpath(
+                toolpaths[path_index],
+                move_index,
+                safe_rewind=safe_rewind.isChecked(),
+            )
+        except (IndexError, ValueError) as exc:
+            QMessageBox.warning(self, "Resume Carve", str(exc))
+            return
+        remaining_paths = [resumed, *toolpaths[path_index + 1 :]]
+
+        base_directory = (
+            self.project_path.parent if self.project_path else Path.home()
+        )
+        name = (
+            self.project.name
+            if self.project.name != "Untitled"
+            else "carve"
+        )
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Resume G-code",
+            str(base_directory / f"{name}_resume.nc"),
+            "G-code (*.nc *.gcode *.tap *.cnc);;All files (*)",
+        )
+        if not output:
+            return
+        try:
+            written = write_grbl_program(
+                remaining_paths,
+                Path(output),
+                self._grbl_post_settings(),
+            )
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Resume Carve", str(exc))
+            return
+        self.statusBar().showMessage(
+            f"Resume G-code exported: {written.name}",
+            5000,
+        )
+
+    def _export_tiled_gcode(self) -> None:
+        toolpaths = list(self.project.toolpaths)
+        if not toolpaths:
+            self.statusBar().showMessage(
+                "Calculate toolpaths before exporting tiles",
+                5000,
+            )
+            return
+
+        profile = self._active_machine_profile()
+        stock = self.project.stock
+        form = _ActionForm(self, "Large Material Tiling")
+        form.add_double(
+            "width",
+            "Tile width",
+            min(stock.width_mm, profile.work_x_mm),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "height",
+            "Tile height",
+            min(stock.height_mm, profile.work_y_mm),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm",
+        )
+        form.add_double(
+            "overlap",
+            "Tile overlap",
+            3.0,
+            minimum=0.0,
+            maximum=10000.0,
+            suffix=" mm",
+        )
+        form.add_check(
+            "rebase",
+            "Re-zero each shifted tile",
+            True,
+        )
+        if form.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        settings = TilingSettings(
+            tile_width_mm=float(form.value("width")),
+            tile_height_mm=float(form.value("height")),
+            overlap_mm=float(form.value("overlap")),
+            rebase_each_tile=bool(form.value("rebase")),
+        )
+        try:
+            tiles = plan_tiles(
+                stock.width_mm,
+                stock.height_mm,
+                settings,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Large Material Tiling", str(exc))
+            return
+
+        base_directory = (
+            self.project_path.parent if self.project_path else Path.home()
+        )
+        name = (
+            self.project.name
+            if self.project.name != "Untitled"
+            else "carve"
+        )
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Choose Tiled G-code Base Name",
+            str(base_directory / f"{name}_tiles.nc"),
+            "G-code (*.nc *.gcode *.tap *.cnc);;All files (*)",
+        )
+        if not output:
+            return
+
+        base_path = Path(output)
+        suffix = (
+            base_path.suffix
+            if base_path.suffix.lower() in {".nc", ".gcode", ".tap", ".cnc"}
+            else ".nc"
+        )
+        stem = base_path.stem
+        written: list[Path] = []
+        base_options = self._grbl_post_settings()
+
+        try:
+            for tile in tiles:
+                tiled = tile_program(
+                    toolpaths,
+                    tile,
+                    rebase=settings.rebase_each_tile,
+                )
+                if not tiled:
+                    continue
+
+                options = base_options
+                if settings.rebase_each_tile:
+                    options = replace(
+                        base_options,
+                        x_offset_mm=(
+                            -tile.width_mm / 2.0
+                            if stock.xy_zero == "center"
+                            else 0.0
+                        ),
+                        y_offset_mm=(
+                            -tile.height_mm / 2.0
+                            if stock.xy_zero == "center"
+                            else 0.0
+                        ),
+                    )
+                tile_path = base_path.with_name(
+                    f"{stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
+                )
+                written.append(
+                    write_grbl_program(tiled, tile_path, options)
+                )
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Large Material Tiling", str(exc))
+            return
+
+        if not written:
+            QMessageBox.warning(
+                self,
+                "Large Material Tiling",
+                "No cutting moves intersect the requested tiles.",
+            )
+            return
+        self._set_activity_info(
+            "Tiled G-code exported\n"
+            f"Files: {len(written)}\n"
+            f"Tile size: {settings.tile_width_mm:g} × "
+            f"{settings.tile_height_mm:g} mm\n"
+            f"Overlap: {settings.overlap_mm:g} mm\n"
+            + "\n".join(path.name for path in written[:12])
+        )
+        self.statusBar().showMessage(
+            f"Exported {len(written)} tiled G-code files",
+            5000,
+        )
