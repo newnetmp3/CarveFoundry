@@ -1329,11 +1329,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             vertices,
             dtype=np.float32,
         ).reshape((-1, 3))
+        geometry.vertex_count = len(line_vertices)
+        if geometry.vertex_count == 0:
+            return
         line_bytes = line_vertices.tobytes()
         geometry.vertex_buffer.bind()
         geometry.vertex_buffer.allocate(line_bytes, len(line_bytes))
         geometry.vertex_buffer.release()
-        geometry.vertex_count = len(line_vertices)
 
     def _ensure_toolpath_gpu_cache(
         self,
