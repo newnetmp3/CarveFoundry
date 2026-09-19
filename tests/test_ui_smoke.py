@@ -3,8 +3,8 @@ from time import monotonic, sleep
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QFont, QKeySequence
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QFont, QKeySequence, QMouseEvent
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.gcode import GrblPostSettings
@@ -1941,5 +1941,49 @@ def test_tool_rail_scrolls_without_hiding_tools_on_short_windows() -> None:
             window._ui_actions["calculate"]
         )
         assert not rail.buttons["preflight"].isEnabled()
+    finally:
+        window.close()
+
+
+def test_measure_and_fixture_actual_mouse_drag_flow(monkeypatch) -> None:
+    window = MainWindow()
+    renderer = window.viewport._renderer
+    monkeypatch.setattr(
+        renderer, "_stock_plane_point",
+        lambda point: np.array((point.x(), point.y(), 0.0)),
+    )
+
+    def drag(start: tuple[float, float], end: tuple[float, float]) -> None:
+        origin = QPointF(*start)
+        destination = QPointF(*end)
+        renderer.mousePressEvent(QMouseEvent(
+            QEvent.Type.MouseButtonPress, origin,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        renderer.mouseMoveEvent(QMouseEvent(
+            QEvent.Type.MouseMove, destination,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+        renderer.mouseReleaseEvent(QMouseEvent(
+            QEvent.Type.MouseButtonRelease, destination,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+
+    try:
+        window._activate_measure_tool()
+        drag((10, 20), (40, 60))
+        assert window._measurement.distance_mm == pytest.approx(50.0)
+        assert len(window.project.items) == 0
+
+        window._activate_fixture_tool()
+        window.tool_options_fixture_top_spin.setValue(3.6)
+        drag((10, 20), (40, 60))
+        assert len(window.project.fixtures) == 1
+        assert window.project.fixtures[0].top_z_mm == pytest.approx(3.6)
+        assert window.project.fixtures[0].x_max_mm == pytest.approx(40)
+        assert window.project.fixtures[0].y_max_mm == pytest.approx(60)
     finally:
         window.close()
