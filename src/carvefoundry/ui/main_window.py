@@ -49,8 +49,10 @@ from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
+from .project_recovery import ProjectRecoveryMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
+from .stock_simulation import StockSimulationMixin
 from .text_editor import TextEditorMixin
 from .two_sided_setup import TwoSidedSetupMixin
 from .viewport import MeshViewport
@@ -97,6 +99,8 @@ class Panel(QFrame):
 class MainWindow(
     WorkspaceCommandsMixin,
     BatchLayoutMixin,
+    StockSimulationMixin,
+    ProjectRecoveryMixin,
     TextEditorMixin,
     TwoSidedSetupMixin,
     JobPlannerMixin,
@@ -2794,6 +2798,7 @@ class MainWindow(
         on_failed=None,
         cam_progress: bool = False,
         indeterminate: bool = False,
+        cancelable: bool = False,
     ) -> bool:
         """Run one costly operation off the GUI thread with reusable progress UI."""
 
@@ -2849,7 +2854,7 @@ class MainWindow(
         self.job_progress.setFormat(title if indeterminate else f"{title} · %p%")
         self.job_progress.show()
         self.cancel_job_button.setEnabled(True)
-        self.cancel_job_button.setVisible(request is not None)
+        self.cancel_job_button.setVisible(request is not None or cancelable)
         self.statusBar().showMessage(f"{title}…")
 
         def progress(fraction: float, status: str) -> None:

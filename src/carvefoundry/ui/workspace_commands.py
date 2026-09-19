@@ -51,6 +51,8 @@ class WorkspaceCommandsMixin:
             ("open", "Open", self._open_project),
             ("save", "Save", self._save_project),
             ("save_as", "Save As", self._save_project_as),
+            ("recover", "Recover Autosave…", self._show_recovery_dialog),
+            ("recovery_snapshot", "Save Recovery Checkpoint", self._manual_recovery_checkpoint),
             ("import", "Import…", self._import_file),
             ("import_stl", "STL", lambda: self._import_file("STL")),
             ("import_svg", "SVG", lambda: self._import_file("SVG")),
@@ -130,6 +132,7 @@ class WorkspaceCommandsMixin:
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
             ("job_planner", "Machining Job Planner…", self._show_job_planner),
             ("preview", "Preview", self._preview_toolpaths),
+            ("stock_simulation", "Simulate Material Removal…", self._simulate_stock_removal),
             ("export_toolpath", "Export G-code", self._export_gcode),
             ("machine_profile", "Edit Machine Profile…", self._machine_profile),
             (
@@ -165,6 +168,15 @@ class WorkspaceCommandsMixin:
         )
         for key, text, callback in specs:
             self._new_ui_action(key, text, callback)
+
+        self._new_ui_action(
+            "recovery_enabled",
+            "Automatic Recovery Checkpoints",
+            lambda: self._set_recovery_enabled(not self._recovery_enabled()),
+            checkable=True,
+            checked=self._recovery_enabled(),
+            tooltip="Save a separate complete CF3D checkpoint after one minute of idle edits.",
+        )
 
         self._new_ui_action(
             "transform_global",
@@ -362,6 +374,7 @@ class WorkspaceCommandsMixin:
             for name in (
                 "preview",
                 "simulate",
+                "stock_simulation",
                 "preflight",
                 "export_toolpath",
                 "toolpaths",
@@ -426,6 +439,10 @@ class WorkspaceCommandsMixin:
 
         file_menu = bar.addMenu("File")
         self._add_menu_actions(file_menu, ("new", "open", "save", "save_as"))
+        file_menu.addSeparator()
+        self._add_menu_actions(
+            file_menu, ("recover", "recovery_snapshot", "recovery_enabled"),
+        )
         file_menu.addSeparator()
         import_menu = file_menu.addMenu("Import")
         self._add_menu_actions(
@@ -636,6 +653,7 @@ class WorkspaceCommandsMixin:
                 "job_planner",
                 "preview",
                 "simulate",
+                "stock_simulation",
                 "preflight",
                 "export_toolpath",
                 "export_resume",
@@ -1426,6 +1444,7 @@ class WorkspaceCommandsMixin:
                 "job_planner",
                 "preview",
                 "simulate",
+                "stock_simulation",
                 "preflight",
                 "export_toolpath",
                 "export_resume",

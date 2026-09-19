@@ -63,6 +63,7 @@ class MainWindow(_BaseMainWindow):
             str,
         ] | None = None
         super().__init__()
+        self._init_project_recovery()
         self._update_project_title()
         self._sync_history_action_state()
 
@@ -103,6 +104,8 @@ class MainWindow(_BaseMainWindow):
             self._history_next_id += 1
         self._project_dirty = True
         self._update_project_title()
+        if hasattr(self, "_recovery_timer"):
+            self._queue_autosave_recovery()
 
     def _mark_project_clean(self) -> None:
         self._saved_state_id = self._history_state_id
@@ -146,6 +149,8 @@ class MainWindow(_BaseMainWindow):
         self._project_dirty = self._history_state_id != self._saved_state_id
         self._update_project_title()
         self._sync_history_action_state()
+        if hasattr(self, "_recovery_timer"):
+            self._queue_autosave_recovery()
 
     def _undo(self) -> None:
         if not self._undo_stack:
@@ -174,6 +179,9 @@ class MainWindow(_BaseMainWindow):
         self._sync_toolpath_state_from_project()
         self._sync_history_action_state()
         self.statusBar().showMessage(f"Undo: {entry.label}", 3000)
+        self._queue_autosave_recovery()
+        if not self._project_dirty:
+            self._clear_recovery_checkpoint()
 
     def _redo(self) -> None:
         if not self._redo_stack:
@@ -202,6 +210,9 @@ class MainWindow(_BaseMainWindow):
         self._sync_toolpath_state_from_project()
         self._sync_history_action_state()
         self.statusBar().showMessage(f"Redo: {entry.label}", 3000)
+        self._queue_autosave_recovery()
+        if not self._project_dirty:
+            self._clear_recovery_checkpoint()
 
     def _set_project(
         self,
@@ -210,11 +221,16 @@ class MainWindow(_BaseMainWindow):
         project_path: Path | None,
         selected_row: int = 0,
     ) -> None:
+        if hasattr(self, "_recovery_timer"):
+            self._recovery_timer.stop()
         super()._set_project(
             project,
             project_path=project_path,
             selected_row=selected_row,
         )
+        if hasattr(self, "_recovery_key"):
+            from uuid import uuid4
+            self._recovery_key = uuid4().hex
         self._reset_undo_history()
         self._mark_project_clean()
 
@@ -293,6 +309,7 @@ class MainWindow(_BaseMainWindow):
             self.project_path = saved_path
             if self._history_state_id == saved_state:
                 self._mark_project_clean()
+                self._clear_recovery_checkpoint()
             else:
                 self._update_project_title()
             self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
@@ -354,6 +371,8 @@ class MainWindow(_BaseMainWindow):
             if self._after_save_action is None:
                 self.statusBar().showMessage("New project canceled", 3000)
             return
+        if self._project_dirty:
+            self._clear_recovery_checkpoint()
         self._set_project(Project(), project_path=None)
         self.statusBar().showMessage("New project created", 3000)
 
@@ -409,6 +428,9 @@ class MainWindow(_BaseMainWindow):
         self._open_project_path(target)
 
     def _open_project_path(self, target: Path) -> None:
+        old_key = self._recovery_key
+        old_dirty = self._project_dirty
+
         def load(progress):
             progress(0.03, "Reading project and embedded assets")
             loaded = load_project(target)
@@ -416,6 +438,8 @@ class MainWindow(_BaseMainWindow):
             return loaded
 
         def done(loaded):
+            if old_dirty:
+                self._clear_recovery_checkpoint(key=old_key)
             self._set_project(loaded, project_path=target)
             self.statusBar().showMessage(f"Opened {target.name}", 5000)
 
@@ -699,6 +723,7 @@ class MainWindow(_BaseMainWindow):
         dialog.setDefaultButton(QMessageBox.StandardButton.Save)
         answer = dialog.exec()
         if answer == QMessageBox.StandardButton.Discard:
+            self._clear_recovery_checkpoint()
             super().closeEvent(event)
         elif answer == QMessageBox.StandardButton.Save:
             self._after_save_action = self.close
