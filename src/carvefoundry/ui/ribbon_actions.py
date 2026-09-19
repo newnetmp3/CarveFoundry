@@ -63,6 +63,7 @@ from carvefoundry.cam.vector_ops import (
     geometry_profile,
     geometry_vcarve,
 )
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.machine_profiles import (
     MachineProfile,
     profiles_from_json,
@@ -4698,6 +4699,170 @@ class RibbonActionsMixin:
             3500,
         )
 
+    def _fixture_editor(self) -> None:
+        """Edit persistent keep-out volumes, including off-stock fences."""
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Clamps and Fences — Fixture Keep-Outs")
+        dialog.resize(630, 435)
+        layout = QVBoxLayout(dialog)
+        explanation = QLabel(
+            "Fixture XY is measured from the stock bottom-left corner. "
+            "Top Z is relative to the stock top (Z0); a 23 mm fence "
+            "measured from the bed has Top Z = 23 - stock thickness. "
+            "Keep-out clearance applies beyond the cutter radius."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        listing = QListWidget()
+        listing.setObjectName("FixtureKeepOutList")
+        layout.addWidget(listing, 1)
+        controls = QHBoxLayout()
+        add_button = QPushButton("Add")
+        edit_button = QPushButton("Edit")
+        remove_button = QPushButton("Remove")
+        for button in (add_button, edit_button, remove_button):
+            controls.addWidget(button)
+        controls.addStretch()
+        layout.addLayout(controls)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        entries = list(self.project.fixtures)
+
+        def refresh() -> None:
+            selected = listing.currentRow()
+            listing.clear()
+            for fixture in entries:
+                listing.addItem(
+                    f"{fixture.name}  ·  X {fixture.x_min_mm:g}…"
+                    f"{fixture.x_max_mm:g}, Y {fixture.y_min_mm:g}…"
+                    f"{fixture.y_max_mm:g}, top Z {fixture.top_z_mm:g}, "
+                    f"margin {fixture.clearance_mm:g} mm"
+                )
+            if entries:
+                listing.setCurrentRow(max(0, min(selected, len(entries) - 1)))
+
+        def edit_fixture(current: Fixture | None) -> Fixture | None:
+            defaults = current or Fixture(
+                "Left fence", -23.0, 0.0, -1.0,
+                self.project.stock.height_mm,
+                23.0 - self.project.stock.thickness_mm, 2.0,
+            )
+            while True:
+                form = _ActionForm(dialog, "Add Fixture" if current is None else "Edit Fixture")
+                form.add_line("name", "Name", defaults.name)
+                for key, title, value in (
+                    ("x0", "Minimum X", defaults.x_min_mm),
+                    ("y0", "Minimum Y", defaults.y_min_mm),
+                    ("x1", "Maximum X", defaults.x_max_mm),
+                    ("y1", "Maximum Y", defaults.y_max_mm),
+                    ("top", "Top Z", defaults.top_z_mm),
+                    ("margin", "Additional clearance", defaults.clearance_mm),
+                ):
+                    form.add_double(
+                        key, title, value, suffix=" mm",
+                        minimum=0.0 if key == "margin" else -100000.0,
+                    )
+                if form.exec() != QDialog.DialogCode.Accepted:
+                    return None
+                candidate = Fixture(
+                    str(form.value("name")).strip(),
+                    float(form.value("x0")),
+                    float(form.value("y0")),
+                    float(form.value("x1")),
+                    float(form.value("y1")),
+                    float(form.value("top")),
+                    float(form.value("margin")),
+                )
+                try:
+                    candidate.validate()
+                except ValueError as exc:
+                    QMessageBox.warning(form, "Invalid fixture", str(exc))
+                    defaults = candidate
+                    continue
+                return candidate
+
+        def add() -> None:
+            fixture = edit_fixture(None)
+            if fixture is not None:
+                entries.append(fixture)
+                refresh()
+                listing.setCurrentRow(len(entries) - 1)
+
+        def edit() -> None:
+            index = listing.currentRow()
+            if 0 <= index < len(entries):
+                fixture = edit_fixture(entries[index])
+                if fixture is not None:
+                    entries[index] = fixture
+                    refresh()
+
+        def remove() -> None:
+            index = listing.currentRow()
+            if 0 <= index < len(entries):
+                entries.pop(index)
+                refresh()
+
+        add_button.clicked.connect(add)
+        edit_button.clicked.connect(edit)
+        remove_button.clicked.connect(remove)
+        listing.itemDoubleClicked.connect(lambda _item: edit())
+        refresh()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if entries != self.project.fixtures:
+            self._before_ribbon_mutation("edit fixtures")
+            self.project.fixtures = entries
+            self.viewport.update()
+            self._after_ribbon_mutation("edit fixtures", True)
+            self.statusBar().showMessage(
+                f"Saved {len(entries)} fixture keep-out(s)", 4500
+            )
+
+    def _preflight_toolpaths(self) -> None:
+        paths = list(self.project.toolpaths)
+        if not paths:
+            self.statusBar().showMessage(
+                "Generate toolpaths before running preflight", 4000
+            )
+            return
+        request = GcodeRequest(
+            toolpaths=paths,
+            path="",
+            settings=self._grbl_post_settings(),
+            mode="preflight",
+            stock=self.project.stock,
+            machine_profile=self._active_machine_profile(),
+            fixtures=tuple(self.project.fixtures),
+        )
+
+        def done(payload: object) -> None:
+            report = str(payload["report"])
+            self._set_activity_info(report)
+            display = QMessageBox(self)
+            display.setWindowTitle("CNC Preflight")
+            display.setIcon(
+                QMessageBox.Icon.Information
+                if payload["safe_to_export"] else QMessageBox.Icon.Warning
+            )
+            display.setText(
+                "Preflight passed (with noted warnings)."
+                if payload["safe_to_export"] else
+                "Preflight blocked export until errors are corrected."
+            )
+            display.setDetailedText(report)
+            display.setStandardButtons(QMessageBox.StandardButton.Ok)
+            display.exec()
+
+        self._start_background_job(
+            "CNC preflight", request=request, on_done=done
+        )
+
     def _export_resume_gcode(self) -> None:
         toolpaths = list(self.project.toolpaths)
         if not toolpaths:
@@ -4819,6 +4984,9 @@ class RibbonActionsMixin:
             toolpaths=toolpaths,
             path=output,
             settings=self._grbl_post_settings(),
+            stock=self.project.stock,
+            machine_profile=self._active_machine_profile(),
+            fixtures=tuple(self.project.fixtures),
             mode="resume",
             resume_path_index=path_index,
             resume_move_index=move_index,
@@ -4916,6 +5084,9 @@ class RibbonActionsMixin:
             toolpaths=toolpaths,
             path=output,
             settings=self._grbl_post_settings(),
+            stock=self.project.stock,
+            machine_profile=self._active_machine_profile(),
+            fixtures=tuple(self.project.fixtures),
             mode="tiles",
             tile_settings=settings,
             stock_width_mm=stock.width_mm,

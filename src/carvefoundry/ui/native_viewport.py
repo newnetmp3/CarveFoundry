@@ -1719,6 +1719,30 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             color=QVector4D(0.62, 0.66, 0.74, 0.88),
         )
 
+    def _fixture_outline_geometry(self) -> np.ndarray:
+        """12 wireframe edges of each physical keep-out in world coordinates."""
+
+        if self.project is None:
+            return np.empty((0, 3), dtype=np.float32)
+        vertices: list[tuple[float, float, float]] = []
+        bed_z = -float(self.project.stock.thickness_mm)
+        for fixture in self.project.fixtures:
+            low = min(bed_z, fixture.top_z_mm)
+            high = fixture.top_z_mm
+            corners = [
+                (x, y, z)
+                for z in (low, high)
+                for y in (fixture.y_min_mm, fixture.y_max_mm)
+                for x in (fixture.x_min_mm, fixture.x_max_mm)
+            ]
+            for a, b in (
+                (0, 1), (1, 3), (3, 2), (2, 0),
+                (4, 5), (5, 7), (7, 6), (6, 4),
+                (0, 4), (1, 5), (2, 6), (3, 7),
+            ):
+                vertices.extend((corners[a], corners[b]))
+        return np.asarray(vertices, dtype=np.float32).reshape((-1, 3))
+
     def _draw_meshes(self, view_projection: QMatrix4x4) -> None:
         if (
             self.project is None
@@ -2880,6 +2904,12 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         view_projection = projection * view_matrix
         self._draw_stock(view_projection, world_per_pixel)
         self._draw_meshes(view_projection)
+        self._draw_lines(
+            self._fixture_outline_geometry(),
+            view_projection=view_projection,
+            color=QVector4D(1.0, 0.55, 0.22, 1.0),
+            line_width=2.0,
+        )
         self._draw_lines(
             self._selected_bounds_geometry(),
             view_projection=view_projection,

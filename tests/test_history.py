@@ -2,9 +2,11 @@ from pathlib import Path
 
 import trimesh
 
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
+from carvefoundry.core.smart_values import SmartValues
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 
@@ -91,3 +93,28 @@ def test_workspace_snapshot_restores_text_properties() -> None:
     restore_workspace(project, snapshot)
 
     assert project.items[0].text_properties == original
+
+
+def test_undo_snapshot_preserves_fixtures_zero_and_smart_bindings() -> None:
+    clamp = Fixture("Clamp", 50, 30, 55, 40, 6, 1)
+    project = Project(
+        stock=Stock(100, 80, 19, xy_zero="center"),
+        fixtures=[clamp],
+        smart_values=SmartValues.from_lines("gap = 4"),
+        items=[
+            ProjectItem(
+                "Object",
+                smart_bindings={"size_x": "gap"},
+            )
+        ],
+    )
+    previous = capture_workspace(project)
+    project.stock.xy_zero = "bottom_left"
+    project.fixtures.clear()
+    project.smart_values.set("gap", "10")
+    project.items[0].smart_bindings.clear()
+    restore_workspace(project, previous)
+    assert project.stock.xy_zero == "center"
+    assert project.fixtures == [clamp]
+    assert project.smart_values.resolve("gap") == 4
+    assert project.items[0].smart_bindings == {"size_x": "gap"}

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
 from carvefoundry.core.tools import Cutter, ToolType
@@ -1817,5 +1818,25 @@ def test_easel_style_workflows_are_exposed_in_desktop_ui() -> None:
             for action in window.main_menu_bar.actions()
         )
         assert window._active_machine_profile().name
+    finally:
+        window.close()
+
+
+def test_fixture_editor_and_preflight_are_real_commands_with_viewport_keepouts() -> None:
+    window = MainWindow()
+    try:
+        assert "fixtures" in window._ui_actions
+        assert "preflight" in window._ui_actions
+        project = Project(
+            fixtures=[
+                Fixture("Left fence", -23, 0, -1, 100, 3.6, 2)
+            ],
+        )
+        window._set_project(project, project_path=None)
+        edges = window.viewport._renderer._fixture_outline_geometry()
+        assert edges.shape == (24, 3)
+        assert edges[:, 0].min() == -23
+        assert edges[:, 2].max() == pytest.approx(3.6)
+        assert not window._ui_actions["preflight"].isEnabled()
     finally:
         window.close()

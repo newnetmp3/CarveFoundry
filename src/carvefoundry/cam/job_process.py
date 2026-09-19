@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import re
 import sys
 import time
 import traceback
@@ -20,10 +21,16 @@ from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d,
 from carvefoundry.cam.gcode import (
     GrblPostSettings,
     render_grbl_program,
-    write_grbl,
     write_grbl_program,
 )
-from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program
+from carvefoundry.cam.job_workflows import (
+    TilingSettings,
+    offset_toolpath_xy,
+    plan_tiles,
+    resume_toolpath,
+    tile_program,
+)
+from carvefoundry.cam.preflight import check_preflight
 from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
@@ -35,7 +42,9 @@ from carvefoundry.cam.vector_ops import (
     geometry_silhouette,
     geometry_vcarve,
 )
-from carvefoundry.core.project import ProjectItem
+from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.machine_profiles import MachineProfile
+from carvefoundry.core.project import ProjectItem, Stock
 from carvefoundry.core.tools import Cutter
 
 _LAST_UPDATE = 0.0
@@ -80,6 +89,39 @@ class GcodeRequest:
     stock_width_mm: float = 0.0
     stock_height_mm: float = 0.0
     xy_zero: str = "bottom_left"
+    stock: Stock | None = None
+    machine_profile: MachineProfile | None = None
+    fixtures: tuple[Fixture, ...] = ()
+
+
+def _require_preflight(request: GcodeRequest, paths: list[Any]) -> str:
+    if request.stock is None or request.machine_profile is None:
+        raise ValueError("Preflight needs stock dimensions and a machine profile.")
+    reports = []
+    for index, stage in enumerate(_tool_stages(paths), start=1):
+        outcome = check_preflight(
+            stage, request.stock, request.machine_profile,
+            request.fixtures, request.settings,
+        )
+        report(0.07 + 0.05 * index / max(1, len(paths)),
+               "Checking cutter stage", force=True)
+        if not outcome.safe_to_export:
+            raise ValueError(
+                f"Cutter stage {index} ({stage[0].cutter.name}):\n"
+                + outcome.format_report()
+            )
+        reports.append(outcome.format_report())
+    return "\n\n".join(reports)
+
+
+def _local_fixture(fixture: Fixture, dx: float, dy: float) -> Fixture:
+    return replace(
+        fixture,
+        x_min_mm=fixture.x_min_mm + dx,
+        x_max_mm=fixture.x_max_mm + dx,
+        y_min_mm=fixture.y_min_mm + dy,
+        y_max_mm=fixture.y_max_mm + dy,
+    )
 
 
 def _generate_item(
@@ -265,6 +307,71 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
     }
 
 
+def _tool_stages(toolpaths: list[Any]) -> list[list[Any]]:
+    """Consecutive same-cutter operations; never emit a silent tool swap."""
+
+    stages: list[list[Any]] = []
+    for path in toolpaths:
+        if not stages or path.cutter != stages[-1][-1].cutter:
+            stages.append([path])
+        else:
+            stages[-1].append(path)
+    return stages
+
+
+def _write_tool_stages(
+    toolpaths: list[Any],
+    output: Path,
+    settings: GrblPostSettings,
+    *,
+    start_fraction: float,
+    span_fraction: float,
+) -> list[str]:
+    stages = _tool_stages(toolpaths)
+    total_moves = sum(len(path.moves) for path in toolpaths)
+    completed = 0
+    written: list[str] = []
+    for number, stage in enumerate(stages, start=1):
+        if len(stages) == 1:
+            destination = output
+        else:
+            slug = re.sub(
+                r"[^a-z0-9]+", "_", stage[0].cutter.name.lower()
+            ).strip("_")[:36] or "cutter"
+            suffix = output.suffix if output.suffix.lower() in {
+                ".nc", ".gcode", ".tap", ".cnc"
+            } else ".nc"
+            destination = output.with_name(
+                f"{output.stem}_tool{number:02d}_{slug}{suffix}"
+            )
+        count = sum(len(path.moves) for path in stage)
+        stage_start = completed
+
+        cutter_name = stage[0].cutter.name
+
+        def stage_progress(
+            value: float,
+            *,
+            path_start: int = stage_start,
+            path_count: int = count,
+            stage_number: int = number,
+            tool_name: str = cutter_name,
+        ) -> None:
+            report(
+                start_fraction
+                + span_fraction * (path_start + value * path_count)
+                / max(1, total_moves),
+                f"Writing cutter stage {stage_number}/{len(stages)}: "
+                f"{tool_name}",
+            )
+
+        written.append(str(write_grbl_program(
+            stage, destination, settings, progress=stage_progress,
+        )))
+        completed += count
+    return written
+
+
 def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     toolpaths = request.toolpaths
     settings = request.settings
@@ -302,6 +409,24 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 "Preparing viewer references",
             )
         return {"code_lines": lines, "move_code_lines": offsets}
+    if request.mode == "preflight":
+        if request.stock is None or request.machine_profile is None:
+            raise ValueError("Preflight needs stock and machine profile.")
+        outcomes = [
+            check_preflight(
+                stage, request.stock, request.machine_profile,
+                request.fixtures, settings,
+            )
+            for stage in _tool_stages(toolpaths)
+        ]
+        return {
+            "report": "\n\n".join(
+                f"Cutter stage {index + 1}:\n" + result.format_report()
+                for index, result in enumerate(outcomes)
+            ),
+            "safe_to_export": all(result.safe_to_export for result in outcomes),
+            "files": [],
+        }
     if request.mode == "resume":
         toolpaths = [
             resume_toolpath(
@@ -324,11 +449,14 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
         suffix = output.suffix if output.suffix.lower() in {
             ".nc", ".gcode", ".tap", ".cnc"
         } else ".nc"
-        paths: list[str] = []
+        jobs: list[tuple[Path, list[Any], GrblPostSettings]] = []
         tile_count = len(tiles)
         for index, tile in enumerate(tiles):
-            report(0.05 + 0.9 * index / max(1, len(tiles)),
-                   f"Exporting tile {index + 1} / {len(tiles)}", force=True)
+            report(
+                0.05 + 0.35 * index / max(1, tile_count),
+                f"Checking tile {index + 1} / {tile_count}",
+                force=True,
+            )
             clipped = tile_program(toolpaths, tile, rebase=tile_settings.rebase_each_tile)
             if not clipped:
                 continue
@@ -346,15 +474,48 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             tiled_path = output.with_name(
                 f"{output.stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
             )
-            paths.append(str(write_grbl_program(
-                clipped,
-                tiled_path,
-                options,
-                progress=lambda fraction, tile_index=index, count=tile_count: report(
-                    0.05 + 0.9 * (tile_index + fraction) / max(1, count),
-                    f"Writing tile {tile_index + 1} / {count}",
-                ),
-            )))
+            if request.machine_profile is None:
+                raise ValueError("Tiling requires a machine profile for preflight.")
+            # Every tile is checked in its *local* work envelope even if the
+            # exported G-code keeps absolute global coordinates.
+            local_paths = (
+                clipped if tile_settings.rebase_each_tile else [
+                    offset_toolpath_xy(path, -tile.x0_mm, -tile.y0_mm)
+                    for path in clipped
+                ]
+            )
+            local_fixtures = tuple(
+                _local_fixture(f, -tile.x0_mm, -tile.y0_mm)
+                for f in request.fixtures
+            )
+            tile_stock = Stock(
+                tile.width_mm, tile.height_mm,
+                request.stock.thickness_mm if request.stock is not None else 19.0,
+                request.xy_zero,
+            )
+            for stage in _tool_stages(local_paths):
+                result = check_preflight(
+                    stage, tile_stock, request.machine_profile,
+                    local_fixtures, options,
+                )
+                if not result.safe_to_export:
+                    raise ValueError(
+                        f"Tile row {tile.row + 1} column {tile.column + 1}, "
+                        f"cutter {stage[0].cutter.name}:\n"
+                        + result.format_report()
+                    )
+            jobs.append((tiled_path, clipped, options))
+        if not jobs:
+            raise ValueError("No cutting moves intersect these tiles.")
+        # Validate ALL tiles before writing ANY output files.
+        paths: list[str] = []
+        job_count = len(jobs)
+        for index, (tiled_path, clipped, options) in enumerate(jobs):
+            paths.extend(_write_tool_stages(
+                clipped, tiled_path, options,
+                start_fraction=0.45 + 0.50 * index / job_count,
+                span_fraction=0.50 / job_count,
+            ))
         if not paths:
             raise ValueError("No cutting moves intersect these tiles.")
         return {
@@ -363,28 +524,17 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             "moves": sum(len(path.moves) for path in toolpaths),
             "minutes": sum(path.estimated_cutting_minutes for path in toolpaths),
         }
-    report(0.15, "Writing G-code", force=True)
-    if len(toolpaths) == 1 and request.mode == "export":
-        saved = write_grbl(
-            toolpaths[0],
-            request.path,
-            settings,
-            progress=lambda fraction: report(
-                0.15 + 0.72 * fraction, "Writing G-code"
-            ),
-        )
-    else:
-        saved = write_grbl_program(
-            toolpaths,
-            request.path,
-            settings,
-            progress=lambda fraction: report(
-                0.15 + 0.72 * fraction, "Writing G-code"
-            ),
-        )
+    _require_preflight(request, toolpaths)
+    # Every different cutter starts a separate GRBL program. Comments alone
+    # do not constitute a safe tool-change command or tool re-probe.
+    report(0.15, "Writing cutter stages", force=True)
+    saved_files = _write_tool_stages(
+        toolpaths, Path(request.path), settings,
+        start_fraction=0.15, span_fraction=0.72,
+    )
     report(0.95, "G-code written", force=True)
     return {
-        "files": [str(saved)],
+        "files": saved_files,
         "summary": " + ".join(path.name for path in toolpaths),
         "moves": sum(len(path.moves) for path in toolpaths),
         "minutes": sum(path.estimated_cutting_minutes for path in toolpaths),

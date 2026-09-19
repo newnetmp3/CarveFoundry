@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Keep only the newest run per branch/event while preserving main builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest

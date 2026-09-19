@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMenuBar,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -379,6 +380,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("export_gcode", "Export G-code", self._export_gcode),
             ("export_resume", "Export Resume G-code…", self._export_resume_gcode),
             ("export_tiled", "Export Tiled G-code…", self._export_tiled_gcode),
+            ("fixtures", "Clamps and Fences…", self._fixture_editor),
+            ("preflight", "CNC Preflight…", self._preflight_toolpaths),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
             ("cut", "Cut", self._cut_selected_items),
@@ -666,6 +669,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             for name in (
                 "preview",
                 "simulate",
+                "preflight",
                 "export_toolpath",
                 "toolpaths",
                 "rapids",
@@ -748,7 +752,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
             project_menu,
-            ("stock_setup", "work_zero", "smart_values", "smart_bindings"),
+            ("stock_setup", "work_zero", "fixtures", "smart_values", "smart_bindings"),
         )
 
         edit_menu = bar.addMenu("Edit")
@@ -928,6 +932,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "calculate",
                 "preview",
                 "simulate",
+                "preflight",
                 "export_toolpath",
                 "export_resume",
                 "export_tiled",
@@ -942,6 +947,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "machine_profile",
                 "delete_machine_profile",
                 "work_area",
+                "fixtures",
                 "postprocessor",
             ),
         )
@@ -2376,7 +2382,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 (
                     "fc-list",
                     "-f",
-                    "%{family[0]}\\t%{style[0]}\\t%{fullname[0]}\\n",
+                    "%{family[0]}\\t%{style[0]}\\t%{fullname[0]}\n",
                 ),
                 check=False,
                 capture_output=True,
@@ -5861,6 +5867,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 self.tool_rail.set_active_tool("camera")
             self._sync_toolpath_output_state()
             self._sync_selection_action_state()
+            if hasattr(self, "_sync_history_action_state"):
+                self._sync_history_action_state()
             if self.generate_toolpaths_button is not None:
                 self.generate_toolpaths_button.setEnabled(True)
             QTimer.singleShot(
@@ -6007,24 +6015,40 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             toolpaths=list(toolpaths),
             path=path,
             settings=self._grbl_post_settings(),
+            stock=self.project.stock,
+            machine_profile=self._active_machine_profile(),
+            fixtures=tuple(self.project.fixtures),
         )
 
         def done(result):
-            output_path = Path(result["files"][0])
+            output_files = [Path(name) for name in result["files"]]
             self._set_activity_info(
-                f"G-code exported\n{output_path}\n\n"
-                f"Operations: {result['summary']}\n"
-                f"Cutter: {toolpath.cutter.name}\n"
-                f"Moves: {result['moves']:,}\n"
-                f"Estimated cutting: {result['minutes']:.1f} min "
-                "(rapids excluded)"
+                f"G-code exported\nFiles: {len(output_files)}\n"
+                + "\n".join(str(file) for file in output_files)
+                + f"\n\nOperations: {result['summary']}\n"
+                + f"Moves: {result['moves']:,}\n"
+                + f"Estimated cutting: {result['minutes']:.1f} min "
+                "(rapids excluded)\n"
+                + (
+                    "One program per cutter stage. Stop, change and "
+                    "re-probe the cutter before running the next file."
+                    if len(output_files) > 1 else ""
+                )
             )
             self.statusBar().showMessage(
-                f"Exported {output_path.name}", 5000
+                f"Exported {len(output_files)} G-code file(s)", 5000
             )
+
+        def failed(message: str) -> None:
+            self._set_activity_info(f"G-code export blocked/failed\n{message}")
+            QMessageBox.warning(
+                self, "G-code export blocked by preflight", message
+            )
+            self.statusBar().showMessage("G-code export blocked", 8000)
 
         self._start_background_job(
             "Export G-code", request=request, on_done=done,
+            on_failed=failed,
         )
 
     def _import_file(self, kind: str | None = None) -> None:

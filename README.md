@@ -1,6 +1,6 @@
 # CarveFoundry
 
-CarveFoundry is a native Linux CNC design and CAM application with an approachable, ribbon-based workflow. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
+CarveFoundry is a native Linux CNC design and CAM application with a compact Photopea-style menu and tool rail. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
 
 ## Project direction
 
@@ -21,6 +21,33 @@ Planned and current areas include:
 ## Cutter geometry
 
 CarveFoundry is not designed around a ball-nose-only 3D finishing assumption. Cutter definitions model the actual cutter profile so flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and future custom revolved profiles can be handled by the CAM engine.
+
+## Workshop preflight and cutter stages
+
+CarveFoundry stores clamps and fences as project fixture keep-out zones.
+Open **Project → Clamps and Fences** to record the fixture XY footprint and
+its top Z relative to the **stock top Z0**. For example, a 23 mm high left
+fence measured from the *machine bed* alongside 19.4 mm thick stock has
+top Z = 23 − 19.4 = **+3.6 mm**, not +23 mm. Fixture clearance is an extra
+margin around the nominal cutter radius.
+
+**Toolpaths → CNC Preflight** checks fixture collision, cutter travel, depth
+and configured work-envelope limits. The same checks run automatically
+before normal, resume and tiled G-code export; known errors block export.
+Tiled programs are checked tile-by-tile in their own local work envelopes.
+
+Multi-tool output is split into one G-code file per consecutive cutter stage.
+Run these files in the numbered order, stop the machine between stages,
+change the cutter and re-probe the new tool's Z before proceeding.
+
+These are **offline checks**. CarveFoundry cannot determine actual
+work-zero calibration, an unrecorded clamp, cutter holder collisions,
+or where the machine is currently positioned. Always verify the program
+and the physical setup before starting your CNC.
+
+For proposed features that do **not** yet exist, see
+[`docs/ROADMAP.md`](docs/ROADMAP.md). CarveFoundry does not expose fake
+controls for those proposals.
 
 ## Native CAM core
 
