@@ -160,8 +160,6 @@ def test_text_effects_are_part_of_cnc_geometry() -> None:
     assert decorated.volume > plain.volume
 
 
-
-
 def test_font_handler_verifies_exact_installed_face() -> None:
     family = _test_font_family()
     styles = list(QFontDatabase.styles(family))
