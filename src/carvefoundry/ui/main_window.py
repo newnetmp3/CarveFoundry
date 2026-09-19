@@ -46,7 +46,7 @@ from ..core.project_file import (
 )
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
-from .background_jobs import BackgroundWorker, JobState
+from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .import_worker import ImportWorker
 from .layers_popup import LayersPopup
 from .ribbon import Ribbon, _ribbon_icon
@@ -176,6 +176,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
         self._background_job: JobState | None = None
+        self._job_bridge: JobCallbacks | None = None
         self._job_target_project: Project | None = None
         self._job_action_states: dict[str, bool] = {}
         self._job_rail_states: dict[str, bool] = {}
@@ -5828,6 +5829,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             if job_id != self._job_sequence:
                 return
             self._background_job = None
+            self._job_bridge = None
             self._job_target_project = None
             self.cancel_job_button.hide()
             for key, was_enabled in self._job_action_states.items():
@@ -5861,15 +5863,24 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 ),
             )
 
+        bridge = JobCallbacks(
+            self,
+            progress=progress,
+            completed=completed,
+            failed=failed,
+            cancelled=cancelled,
+            cleaned_up=cleaned_up,
+        )
+        self._job_bridge = bridge
         thread.started.connect(worker.run)
-        worker.progress.connect(progress)
-        worker.completed.connect(completed)
-        worker.failed.connect(failed)
-        worker.cancelled.connect(cancelled)
+        worker.progress.connect(bridge.on_progress)
+        worker.completed.connect(bridge.on_completed)
+        worker.failed.connect(bridge.on_failed)
+        worker.cancelled.connect(bridge.on_cancelled)
         for signal in (worker.completed, worker.failed, worker.cancelled):
             signal.connect(thread.quit)
             signal.connect(worker.deleteLater)
-        thread.finished.connect(cleaned_up)
+        thread.finished.connect(bridge.on_cleaned_up)
         thread.finished.connect(thread.deleteLater)
         thread.start()
         return True
