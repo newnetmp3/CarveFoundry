@@ -1266,6 +1266,16 @@ class WorkspaceCommandsMixin:
             ),
         )
 
+        rail.add_action_tool(
+            "direct_select",
+            self._ui_actions["direct_select"],
+            tooltip=(
+                "Direct Selection / Nodes — select a Pen Stroke, drag green "
+                "viewport knots or edit exact XY; real CNC geometry changes "
+                "support Undo/Redo and invalidate stale paths."
+            ),
+        )
+
         rail.add_flyout(
             "shapes",
             "Rectangle",
