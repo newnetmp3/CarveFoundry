@@ -97,14 +97,21 @@ class GcodeRequest:
 def _require_preflight(request: GcodeRequest, paths: list[Any]) -> str:
     if request.stock is None or request.machine_profile is None:
         raise ValueError("Preflight needs stock dimensions and a machine profile.")
-    outcome = check_preflight(
-        paths, request.stock, request.machine_profile,
-        request.fixtures, request.settings,
-    )
-    report(0.12, "Preflight checked", force=True)
-    if not outcome.safe_to_export:
-        raise ValueError(outcome.format_report())
-    return outcome.format_report()
+    reports = []
+    for index, stage in enumerate(_tool_stages(paths), start=1):
+        outcome = check_preflight(
+            stage, request.stock, request.machine_profile,
+            request.fixtures, request.settings,
+        )
+        report(0.07 + 0.05 * index / max(1, len(paths)),
+               "Checking cutter stage", force=True)
+        if not outcome.safe_to_export:
+            raise ValueError(
+                f"Cutter stage {index} ({stage[0].cutter.name}):\\n"
+                + outcome.format_report()
+            )
+        reports.append(outcome.format_report())
+    return "\\n\\n".join(reports)
 
 
 def _local_fixture(fixture: Fixture, dx: float, dy: float) -> Fixture:
@@ -395,13 +402,19 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     if request.mode == "preflight":
         if request.stock is None or request.machine_profile is None:
             raise ValueError("Preflight needs stock and machine profile.")
-        outcome = check_preflight(
-            toolpaths, request.stock, request.machine_profile,
-            request.fixtures, settings,
-        )
+        outcomes = [
+            check_preflight(
+                stage, request.stock, request.machine_profile,
+                request.fixtures, settings,
+            )
+            for stage in _tool_stages(toolpaths)
+        ]
         return {
-            "report": outcome.format_report(),
-            "safe_to_export": outcome.safe_to_export,
+            "report": "\\n\\n".join(
+                f"Cutter stage {index + 1}:\\n" + result.format_report()
+                for index, result in enumerate(outcomes)
+            ),
+            "safe_to_export": all(result.safe_to_export for result in outcomes),
             "files": [],
         }
     if request.mode == "resume":
@@ -470,15 +483,17 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 request.stock.thickness_mm if request.stock is not None else 19.0,
                 request.xy_zero,
             )
-            result = check_preflight(
-                local_paths, tile_stock, request.machine_profile,
-                local_fixtures, options,
-            )
-            if not result.safe_to_export:
-                raise ValueError(
-                    f"Tile row {tile.row + 1} column {tile.column + 1}:\\n"
-                    + result.format_report()
+            for stage in _tool_stages(local_paths):
+                result = check_preflight(
+                    stage, tile_stock, request.machine_profile,
+                    local_fixtures, options,
                 )
+                if not result.safe_to_export:
+                    raise ValueError(
+                        f"Tile row {tile.row + 1} column {tile.column + 1}, "
+                        f"cutter {stage[0].cutter.name}:\\n"
+                        + result.format_report()
+                    )
             jobs.append((tiled_path, clipped, options))
         if not jobs:
             raise ValueError("No cutting moves intersect these tiles.")
