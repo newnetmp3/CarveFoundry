@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from math import ceil, hypot, isfinite
+from math import ceil, hypot, isfinite, radians, tan
 
 import numpy as np
 
@@ -17,7 +17,7 @@ from carvefoundry.cam.heightfield import _rasterize_top_surface_python
 from carvefoundry.cam.native import rasterize_top_surface as _native_rasterize_top_surface
 from carvefoundry.cam.toolpath import MoveKind, Toolpath
 from carvefoundry.core.project import Project, Stock
-from carvefoundry.core.tools import Cutter
+from carvefoundry.core.tools import Cutter, ToolType
 
 MAX_GRID_CELLS = 600_000
 MAX_PATH_SAMPLES = 2_000_000
@@ -150,12 +150,29 @@ def _tool_sample(
     # The cutter may be tapered, conical, spherical, flat, or a custom
     # rotational profile. Only distances within the cutter's stated radius
     # are passed to the authoritative cutter geometry function.
-    profiles = np.zeros_like(distances)
-    for radial in np.unique(np.round(distances[inside], 8)):
-        radial_mask = inside & (np.abs(distances - radial) < 1e-8)
-        profiles[radial_mask] = cutter.profile_height_mm(
-            min(float(radial), radius)
+    radial = np.minimum(distances, radius)
+    kind = cutter.tool_type
+    if kind is ToolType.FLAT_END_MILL:
+        profiles = np.zeros_like(radial)
+    elif kind is ToolType.BALL_NOSE:
+        profiles = radius - np.sqrt(
+            np.maximum(0.0, radius * radius - radial * radial)
         )
+    elif kind in (ToolType.V_BIT, ToolType.ENGRAVING_CONE):
+        tip = cutter.tip_diameter_mm / 2.0
+        profiles = np.maximum(0.0, radial - tip) / tan(
+            radians(float(cutter.angle_deg) / 2.0)
+        )
+    elif kind is ToolType.TAPERED_BALL_NOSE:
+        ball = float(cutter.ball_radius_mm)
+        curve = ball - np.sqrt(np.maximum(0.0, ball * ball - radial * radial))
+        taper = ball + (radial - ball) / tan(radians(float(cutter.taper_angle_deg)))
+        profiles = np.where(radial <= ball, curve, taper)
+    elif kind is ToolType.CUSTOM and cutter.profile_points is not None:
+        radii, heights = zip(*cutter.profile_points, strict=True)
+        profiles = np.interp(radial, radii, heights)
+    else:
+        raise ValueError(f"{cutter.name}: simulation needs a defined cutter profile.")
     target = surface[iy0:iy1, ix0:ix1]
     new_z = np.maximum(tip_z + profiles, stock_bottom)
     updated = inside & (new_z < target - 1e-9)
