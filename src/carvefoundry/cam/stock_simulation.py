@@ -232,6 +232,11 @@ def simulate_stock_removal(
                         "grid spacing or simulate a smaller machining job."
                     )
                 for step in range(samples + 1):
+                    if progress is not None and step % 512 == 0:
+                        progress(
+                            0.75 * (seen + step / (samples + 1)) / total_moves,
+                            f"Simulating swept cutter volume: {path.name}",
+                        )
                     t = step / samples
                     changed_cells += _tool_sample(
                         height, x, y, path.cutter,
