@@ -359,6 +359,12 @@ def test_font_variant_fallback_understands_common_abbreviations() -> None:
     assert MainWindow._font_family_variant_candidate(
         "RobotoMono Nerd Font Mono SmBd"
     ) == ("RobotoMono Nerd Font", "Monospaced SemiBold")
+    assert MainWindow._font_family_variant_candidate(
+        "RobotoMono Nerd Font Mono SmBd [GOOG]"
+    ) == (
+        "RobotoMono Nerd Font [GOOG]",
+        "Monospaced SemiBold",
+    )
 
 
 def test_text_font_selector_previews_grouped_families_and_variants() -> None:
