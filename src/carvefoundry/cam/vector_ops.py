@@ -527,13 +527,14 @@ def _enter_depth(
     else:
         _position_above_start(moves, start, settings)
         entry_z = min(0.0, previous_depth_z)
-        if abs(moves[-1].z_mm - entry_z) > 1e-9:
-            _plunge(moves, start[0], start[1], entry_z, settings)
 
     if settings.ramp_angle_deg is None or len(points) < 2:
         if abs(moves[-1].z_mm - target_z) > 1e-9:
             _plunge(moves, start[0], start[1], target_z, settings)
         return 1
+
+    if abs(moves[-1].z_mm - entry_z) > 1e-9:
+        _plunge(moves, start[0], start[1], entry_z, settings)
 
     end = points[1]
     dx = float(end[0] - start[0])
