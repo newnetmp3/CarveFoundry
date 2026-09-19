@@ -270,7 +270,14 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     settings = request.settings
     report(0.05, "Preparing G-code", force=True)
     if request.mode == "preview_code":
-        program = render_grbl_program(toolpaths, settings)
+        program = render_grbl_program(
+            toolpaths,
+            settings,
+            progress=lambda fraction: report(
+                0.05 + 0.62 * fraction,
+                "Rendering viewer G-code",
+            ),
+        )
         report(0.70, "Indexing move references", force=True)
         lines = program.rstrip("\n").splitlines()
         commands = [
@@ -338,7 +345,15 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             tiled_path = output.with_name(
                 f"{output.stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
             )
-            paths.append(str(write_grbl_program(clipped, tiled_path, options)))
+            paths.append(str(write_grbl_program(
+                clipped,
+                tiled_path,
+                options,
+                progress=lambda fraction: report(
+                    0.05 + 0.9 * (index + fraction) / max(1, len(tiles)),
+                    f"Writing tile {index + 1} / {len(tiles)}",
+                ),
+            )))
         if not paths:
             raise ValueError("No cutting moves intersect these tiles.")
         return {
@@ -349,9 +364,23 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
         }
     report(0.15, "Writing G-code", force=True)
     if len(toolpaths) == 1 and request.mode == "export":
-        saved = write_grbl(toolpaths[0], request.path, settings)
+        saved = write_grbl(
+            toolpaths[0],
+            request.path,
+            settings,
+            progress=lambda fraction: report(
+                0.15 + 0.72 * fraction, "Writing G-code"
+            ),
+        )
     else:
-        saved = write_grbl_program(toolpaths, request.path, settings)
+        saved = write_grbl_program(
+            toolpaths,
+            request.path,
+            settings,
+            progress=lambda fraction: report(
+                0.15 + 0.72 * fraction, "Writing G-code"
+            ),
+        )
     report(0.95, "G-code written", force=True)
     return {
         "files": [str(saved)],
