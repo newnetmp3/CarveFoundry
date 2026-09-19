@@ -100,6 +100,15 @@ def test_union_via_worker_is_undoable_persisted_and_hides_inputs(tmp_path: Path)
         window._redo()
         assert len(window.project.items) == 3
         assert [x.visible for x in window.project.items] == [False, False, True]
+
+        # The composite replaces its hidden inputs for actual CNC generation,
+        # not just for drawing or the Layers panel.
+        window._select_cam_operation("profile")
+        assert window._calculate_toolpath_now()
+        _pump_job(window)
+        assert {path.source_item_name for path in window.project.toolpaths} == {
+            window.project.items[-1].name
+        }
     finally:
         if window._background_job is not None:
             _pump_job(window)
