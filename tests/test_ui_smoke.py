@@ -31,6 +31,7 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             for action in window.main_menu_bar.actions()
         ] == [
             "File",
+            "Project",
             "Edit",
             "Design",
             "Model",
@@ -1699,5 +1700,32 @@ def test_text_edit_updates_geometry_preserves_placement_and_invalidates_cam() ->
         assert redone.text_properties == edited_properties
         assert redone.transform.translation_mm == before_translation
         assert window.project.toolpaths == []
+    finally:
+        window.close()
+
+
+def test_easel_style_workflows_are_exposed_in_desktop_ui() -> None:
+    window = MainWindow()
+    try:
+        for key in (
+            "smart_values",
+            "smart_bindings",
+            "work_zero",
+            "export_resume",
+            "export_tiled",
+            "select_machine_profile",
+            "machine_profile",
+            "delete_machine_profile",
+            "home_machine",
+            "go_work_zero",
+            "park_machine",
+        ):
+            assert key in window._ui_actions
+
+        assert any(
+            action.text() == "Project"
+            for action in window.main_menu_bar.actions()
+        )
+        assert window._active_machine_profile().name
     finally:
         window.close()
