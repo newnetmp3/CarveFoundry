@@ -209,6 +209,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.toolpath_marker_xyz: tuple[float, float, float] | None = None
         self.reverse_horizontal_drag = False
         self.invert_vertical_drag = False
+        self._camera_control_mode = True
 
         self._last_mouse_pos: QPointF | None = None
         self._press_pos: QPointF | None = None
@@ -422,6 +423,28 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     def shape_draw_mode(self) -> str | None:
         return self._shape_draw_mode
 
+    def _update_interaction_cursor(self) -> None:
+        if self._camera_control_mode:
+            shape = Qt.CursorShape.OpenHandCursor
+        elif self._shape_draw_mode is not None:
+            shape = Qt.CursorShape.CrossCursor
+        else:
+            shape = Qt.CursorShape.ArrowCursor
+        self.setCursor(QCursor(shape))
+
+    @property
+    def camera_control_mode(self) -> bool:
+        return self._camera_control_mode
+
+    def set_camera_control_mode(self, enabled: bool) -> None:
+        self._camera_control_mode = bool(enabled)
+        self._interaction_mode = None
+        self._selection_drag_start_screen = None
+        self._selection_drag_current_screen = None
+        self._active_gizmo_axis = None
+        self._update_interaction_cursor()
+        self.requestUpdate()
+
     def set_shape_draw_mode(self, mode: str | None) -> None:
         normalized = mode.lower() if mode else None
         allowed = {"rectangle", "ellipse", "polygon", "line", "text"}
@@ -432,13 +455,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._shape_drag_start_world = None
         self._shape_drag_current_world = None
         self._interaction_mode = None
-        self.setCursor(
-            QCursor(
-                Qt.CursorShape.CrossCursor
-                if normalized is not None
-                else Qt.CursorShape.ArrowCursor
-            )
-        )
+        self._update_interaction_cursor()
         self.shapeDrawModeChanged.emit(normalized or "")
         self.requestUpdate()
 
@@ -2168,6 +2185,15 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             event.button() == Qt.MouseButton.LeftButton
+            and self._camera_control_mode
+        ):
+            self._interaction_mode = "orbit"
+            self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+            event.accept()
+            return
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
             and self._shape_draw_mode is not None
             and not (
                 event.modifiers() & Qt.KeyboardModifier.AltModifier
@@ -2411,6 +2437,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._selection_drag_current_screen = None
         self._object_drag_started = False
         self._active_gizmo_axis = None
+        self._update_interaction_cursor()
         self.requestUpdate()
         event.accept()
 
@@ -2784,6 +2811,13 @@ class MeshViewport(QWidget):
     @property
     def shape_draw_mode(self) -> str | None:
         return self._renderer.shape_draw_mode
+
+    @property
+    def camera_control_mode(self) -> bool:
+        return self._renderer.camera_control_mode
+
+    def set_camera_control_mode(self, enabled: bool) -> None:
+        self._renderer.set_camera_control_mode(enabled)
 
     def set_shape_draw_mode(self, mode: str | None) -> None:
         self._renderer.set_shape_draw_mode(mode)
