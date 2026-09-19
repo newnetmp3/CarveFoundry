@@ -353,6 +353,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("import_image", "Image", lambda: self._import_file("Image")),
             ("import_gcode", "G-code", lambda: self._import_file("G-code")),
             ("export_gcode", "Export G-code", self._export_gcode),
+            ("export_resume", "Export Resume G-code…", self._export_resume_gcode),
+            ("export_tiled", "Export Tiled G-code…", self._export_tiled_gcode),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
             ("cut", "Cut", self._cut_selected_items),
@@ -378,6 +380,13 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("move_up", "Move Up", lambda: self._move_selected_item(-1)),
             ("move_down", "Move Down", lambda: self._move_selected_item(1)),
             ("stock_setup", "Stock Setup", self._focus_stock_section),
+            ("work_zero", "XY Work Zero…", self._work_zero_mode),
+            ("smart_values", "Smart Values…", self._smart_values_dialog),
+            (
+                "smart_bindings",
+                "Bind Smart Values…",
+                self._smart_bindings_dialog,
+            ),
             ("fit_view", "Fit View", self._fit_view),
             ("position", "Position", lambda: self._focus_transform_section("position")),
             ("rotate", "Rotate", lambda: self._focus_transform_section("rotation")),
@@ -404,9 +413,22 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
             ("preview", "Preview", self._preview_toolpaths),
             ("export_toolpath", "Export G-code", self._export_gcode),
-            ("machine_profile", "Machine Profile", self._machine_profile),
+            ("machine_profile", "Edit Machine Profile…", self._machine_profile),
+            (
+                "select_machine_profile",
+                "Select Machine Profile…",
+                self._select_machine_profile,
+            ),
+            (
+                "delete_machine_profile",
+                "Delete Machine Profile…",
+                self._delete_machine_profile,
+            ),
             ("work_area", "Work Area", self._machine_work_area),
-            ("origin", "Origin", self._machine_origin),
+            ("origin", "Set Work Origin", self._machine_origin),
+            ("home_machine", "Home Machine", self._home_machine),
+            ("go_work_zero", "Go to Work Zero", self._go_to_work_zero),
+            ("park_machine", "Park Machine", self._park_machine),
             ("postprocessor", "Postprocessor", self._postprocessor_settings_dialog),
             ("probe", "Probe", self._probe_machine),
             ("jog", "Jog", self._show_jog_controls),
@@ -699,6 +721,12 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self._ui_actions["export_gcode"])
 
+        project_menu = bar.addMenu("Project")
+        self._add_menu_actions(
+            project_menu,
+            ("stock_setup", "work_zero", "smart_values", "smart_bindings"),
+        )
+
         edit_menu = bar.addMenu("Edit")
         self._add_menu_actions(edit_menu, ("undo", "redo"))
         edit_menu.addSeparator()
@@ -872,18 +900,39 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         toolpaths_menu.addSeparator()
         self._add_menu_actions(
             toolpaths_menu,
-            ("calculate", "preview", "simulate", "export_toolpath"),
+            (
+                "calculate",
+                "preview",
+                "simulate",
+                "export_toolpath",
+                "export_resume",
+                "export_tiled",
+            ),
         )
 
         machine_menu = bar.addMenu("Machine")
         self._add_menu_actions(
             machine_menu,
-            ("machine_profile", "work_area", "origin", "postprocessor"),
+            (
+                "select_machine_profile",
+                "machine_profile",
+                "delete_machine_profile",
+                "work_area",
+                "postprocessor",
+            ),
         )
         machine_menu.addSeparator()
         self._add_menu_actions(
             machine_menu,
-            ("machine_connect", "probe", "jog"),
+            (
+                "machine_connect",
+                "home_machine",
+                "origin",
+                "go_work_zero",
+                "park_machine",
+                "probe",
+                "jog",
+            ),
         )
 
         view_menu = bar.addMenu("View")
@@ -1530,7 +1579,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ),
         )
         file_menu.addSeparator()
-        file_menu.addAction(self._ui_actions["export_gcode"])
+        self._add_menu_actions(
+            file_menu,
+            ("export_gcode", "export_resume", "export_tiled"),
+        )
         rail.add_menu(
             "file",
             "Open",
@@ -1582,7 +1634,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
 
         model_menu = QMenu(rail)
-        self._add_menu_actions(model_menu, ("stock_setup", "fit_view"))
+        self._add_menu_actions(
+            model_menu,
+            ("stock_setup", "work_zero", "smart_values", "smart_bindings", "fit_view"),
+        )
         transform_menu = model_menu.addMenu("Transform")
         self._add_menu_actions(
             transform_menu,
@@ -1673,7 +1728,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         cam_menu.addSeparator()
         self._add_menu_actions(
             cam_menu,
-            ("advanced_cam", "calculate", "preview", "simulate", "export_toolpath"),
+            (
+                "advanced_cam",
+                "calculate",
+                "preview",
+                "simulate",
+                "export_toolpath",
+                "export_resume",
+                "export_tiled",
+            ),
         )
         rail.add_menu(
             "cam",
@@ -1706,12 +1769,26 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         machine_menu = QMenu(rail)
         self._add_menu_actions(
             machine_menu,
-            ("machine_profile", "work_area", "origin", "postprocessor"),
+            (
+                "select_machine_profile",
+                "machine_profile",
+                "delete_machine_profile",
+                "work_area",
+                "postprocessor",
+            ),
         )
         machine_menu.addSeparator()
         self._add_menu_actions(
             machine_menu,
-            ("machine_connect", "probe", "jog"),
+            (
+                "machine_connect",
+                "home_machine",
+                "origin",
+                "go_work_zero",
+                "park_machine",
+                "probe",
+                "jog",
+            ),
         )
         rail.add_menu(
             "machine",
