@@ -102,10 +102,10 @@ class CamGenerationDialogMixin:
                 (
                     "Generate Toolpaths works from the project, not the current "
                     "viewport selection. Every design object containing mesh "
-                    "geometry is included. Surface / Face is the exception: it can "
-                    "run from the stock even when the project contains no design "
-                    "geometry. Hiding, selecting, or isolating an object in the "
-                    "viewport does not remove it from generation."
+                    "geometry is included ONLY if visible. Surface / Face is "
+                    "the exception: it can run from the stock even when the "
+                    "project has no geometry. Hide a model in Layers to exclude "
+                    "it; selecting or isolating does not change the source set."
                 ),
             ),
             "operation": (
@@ -1050,6 +1050,20 @@ class CamGenerationDialogMixin:
         generation_progress.hide()
         outer.addWidget(generation_progress)
 
+        append_job = QCheckBox(
+            f"Append to existing machining job ({len(self.project.toolpaths)} "
+            "operations) instead of replacing it"
+        )
+        append_job.setObjectName("AppendCamJobCheck")
+        append_job.setEnabled(bool(self.project.toolpaths))
+        append_job.setToolTip(
+            "Build all old and new toolpaths into one ordered job, including "
+            "preview and per-cutter GRBL exports. Paths remain session-owned; "
+            "regenerate after reopening a .cf3d project."
+        )
+        fields["append_job"] = append_job
+        outer.addWidget(append_job)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         generate_button = buttons.addButton(
             "Generate Toolpaths",
@@ -1276,6 +1290,9 @@ class CamGenerationDialogMixin:
                 self._tabs_button.setChecked(self._tabs_enabled)
             self._settings.sync()
 
+            # The worker process combines old/new paths and preview geometry.
+            # Do not clear the previous job if generation/validation fails.
+            self._cam_append_to_job = append_job.isChecked()
             # Close the modal configuration dialog as soon as the worker is
             # submitted; progress/cancellation are in the status bar, and
             # viewport navigation stays accessible throughout calculation.
