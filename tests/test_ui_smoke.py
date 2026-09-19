@@ -33,6 +33,7 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             "View",
         ]
         assert {
+            "camera",
             "select",
             "shapes",
             "line",
@@ -47,10 +48,23 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             "machine",
             "view",
         }.issubset(window.tool_rail.buttons)
-        assert window.tool_rail.buttons["select"].isChecked()
+        assert (
+            window.tool_rail._layout.itemAt(0).widget()
+            is window.tool_rail.buttons["camera"]
+        )
+        assert window.tool_rail.buttons["camera"].isChecked()
+        assert not window.tool_rail.buttons["camera"].icon().isNull()
+        assert not window.tool_rail.buttons["select"].isChecked()
+        assert window.viewport.camera_control_mode
         assert len(window.tool_rail.buttons["shapes"].menu().actions()) == 3
 
+        window._activate_navigation_tool()
+        assert not window.viewport.camera_control_mode
+        assert window.tool_rail.buttons["select"].isChecked()
+        assert not window.tool_rail.buttons["camera"].isChecked()
+
         window._set_shape_tool("ellipse")
+        assert not window.viewport.camera_control_mode
         assert window.viewport.shape_draw_mode == "ellipse"
         assert window.tool_rail.buttons["shapes"].isChecked()
         assert (
@@ -58,9 +72,11 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             == "ellipse"
         )
 
-        window._activate_navigation_tool()
+        window._activate_camera_tool()
         assert window.viewport.shape_draw_mode is None
-        assert window.tool_rail.buttons["select"].isChecked()
+        assert window.viewport.camera_control_mode
+        assert window.tool_rail.buttons["camera"].isChecked()
+        assert not window.tool_rail.buttons["select"].isChecked()
     finally:
         window.close()
 
