@@ -60,12 +60,12 @@ def profiles_from_json(text: str) -> tuple[list[MachineProfile], str | None]:
     except json.JSONDecodeError as exc:
         raise ValueError("Saved machine profiles are not valid JSON.") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), list):
-        raise ValueError("Saved machine profile data has an invalid structure.")
+        raise TypeError("Saved machine profile data has an invalid structure.")
 
     profiles: list[MachineProfile] = []
     for value in payload["profiles"]:
         if not isinstance(value, dict):
-            raise ValueError("Saved machine profile entry is invalid.")
+            raise TypeError("Saved machine profile entry is invalid.")
         profile = MachineProfile(
             name=str(value.get("name", "Machine")),
             port=str(value.get("port", "")),
