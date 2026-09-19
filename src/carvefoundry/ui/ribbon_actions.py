@@ -4021,7 +4021,7 @@ class RibbonActionsMixin:
         raw = str(self._settings.value("machine/profiles_v1", ""))
         try:
             profiles, active_name = profiles_from_json(raw)
-        except ValueError:
+        except (TypeError, ValueError):
             profiles, active_name = [], None
 
         if not profiles:
