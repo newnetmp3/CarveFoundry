@@ -60,9 +60,8 @@ pub(crate) fn rasterize_top_surface<'py>(
 
     let x_count = x_data.len();
     let y_count = y_data.len();
-    let z_data = py.detach(move || {
-        rasterize_top_surface_impl(&vertex_data, &face_data, &x_data, &y_data)
-    });
+    let z_data =
+        py.detach(move || rasterize_top_surface_impl(&vertex_data, &face_data, &x_data, &y_data));
     let z_field = Array2::from_shape_vec((y_count, x_count), z_data)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
 
@@ -105,11 +104,9 @@ fn rasterize_top_surface_impl(
         for (iy, grid_y) in y_axis.iter().enumerate().take(iy1).skip(iy0) {
             for (ix, grid_x) in x_axis.iter().enumerate().take(ix1).skip(ix0) {
                 let weight0 =
-                    ((y1 - y2) * (*grid_x - x2) + (x2 - x1) * (*grid_y - y2))
-                        / denominator;
+                    ((y1 - y2) * (*grid_x - x2) + (x2 - x1) * (*grid_y - y2)) / denominator;
                 let weight1 =
-                    ((y2 - y0) * (*grid_x - x2) + (x0 - x2) * (*grid_y - y2))
-                        / denominator;
+                    ((y2 - y0) * (*grid_x - x2) + (x0 - x2) * (*grid_y - y2)) / denominator;
                 let weight2 = 1.0 - weight0 - weight1;
 
                 if weight0 < -BARYCENTRIC_TOLERANCE
