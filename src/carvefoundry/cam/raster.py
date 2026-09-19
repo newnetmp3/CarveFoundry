@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from math import floor, isfinite, sqrt
+from typing import Callable
 
 import numpy as np
 
@@ -336,6 +337,7 @@ def generate_raster_finishing(
     settings: RasterFinishingSettings,
     *,
     name: str = "3D Finish",
+    progress: Callable[[float], None] | None = None,
 ) -> Toolpath:
     """Build a fast, cutter-safe serpentine finishing path.
 
@@ -355,12 +357,18 @@ def generate_raster_finishing(
             f"safe_z_mm must be above the highest cutting Z ({highest_tip:.3f} mm)."
         )
 
+    grid_lines = _grid_lines(contact, settings)
     ordered_runs: list[np.ndarray] = []
-    for line_number, line in enumerate(_grid_lines(contact, settings)):
+    if progress is not None:
+        progress(0.0)
+    line_count = max(1, len(grid_lines))
+    for line_number, line in enumerate(grid_lines):
         runs = _split_valid_runs(contact, line)
         if line_number % 2 == 1:
             runs = [run[::-1] for run in reversed(runs)]
         ordered_runs.extend(runs)
+        if progress is not None:
+            progress(0.30 * (line_number + 1) / line_count)
 
     if not ordered_runs:
         raise ValueError("No raster moves could be generated from the contact map.")
@@ -368,7 +376,9 @@ def generate_raster_finishing(
     moves: list[ToolpathMove] = []
     previous_index: np.ndarray | None = None
 
-    for run in ordered_runs:
+    run_count = len(ordered_runs)
+    progress_stride = max(1, run_count // 100)
+    for run_index, run in enumerate(ordered_runs):
         first_index = run[0]
         first = _grid_point(contact, first_index)
 
@@ -409,6 +419,14 @@ def generate_raster_finishing(
             )
 
         previous_index = run[-1]
+        if (
+            progress is not None
+            and (
+                run_index % progress_stride == 0
+                or run_index == run_count - 1
+            )
+        ):
+            progress(0.30 + 0.70 * (run_index + 1) / run_count)
 
     last = moves[-1]
     if last.z_mm < settings.safe_z_mm - 1e-9:
