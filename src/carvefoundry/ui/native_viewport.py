@@ -185,7 +185,7 @@ class _ToolpathRenderCache:
     def empty(
         cls,
         key: tuple[tuple[int, int, int], ...] = (),
-    ) -> "_ToolpathRenderCache":
+    ) -> _ToolpathRenderCache:
         vertices = np.empty((0, 3), dtype=np.float32)
         return cls(
             key=key,
