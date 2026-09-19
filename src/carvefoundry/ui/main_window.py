@@ -2714,7 +2714,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         note = QLabel(
             "Font geometry comes from the exact installed system font face. "
             "CarveFoundry refuses silent Qt font substitution when regenerating "
-            "text so CNC geometry cannot quietly change typefaces."
+            "text so CNC geometry cannot quietly change typefaces. Drag a corner "
+            "handle around selected text in the viewport to resize it live; text "
+            "depth stays unchanged."
         )
         note.setObjectName("Muted")
         note.setWordWrap(True)
