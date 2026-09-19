@@ -23,9 +23,15 @@ from carvefoundry.cam.gcode import (
     write_grbl,
     write_grbl_program,
 )
-from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program, offset_toolpath_xy
-from carvefoundry.cam.render_geometry import build_render_geometry
+from carvefoundry.cam.job_workflows import (
+    TilingSettings,
+    offset_toolpath_xy,
+    plan_tiles,
+    resume_toolpath,
+    tile_program,
+)
 from carvefoundry.cam.preflight import check_preflight
+from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
@@ -36,9 +42,9 @@ from carvefoundry.cam.vector_ops import (
     geometry_silhouette,
     geometry_vcarve,
 )
-from carvefoundry.core.project import ProjectItem, Stock
-from carvefoundry.core.machine_profiles import MachineProfile
 from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.machine_profiles import MachineProfile
+from carvefoundry.core.project import ProjectItem, Stock
 from carvefoundry.core.tools import Cutter
 
 _LAST_UPDATE = 0.0
@@ -423,10 +429,11 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             raise ValueError("No cutting moves intersect these tiles.")
         # Validate ALL tiles before writing ANY output files.
         paths: list[str] = []
+        job_count = len(jobs)
         for index, (tiled_path, clipped, options) in enumerate(jobs):
             paths.append(str(write_grbl_program(
                 clipped, tiled_path, options,
-                progress=lambda fraction, tile_index=index, count=len(jobs): report(
+                progress=lambda fraction, tile_index=index, count=job_count: report(
                     0.45 + 0.50 * (tile_index + fraction) / count,
                     f"Writing tile {tile_index + 1} / {count}",
                 ),
