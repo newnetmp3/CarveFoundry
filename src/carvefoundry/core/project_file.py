@@ -4,8 +4,8 @@ import hashlib
 import json
 import struct
 import tempfile
-from pathlib import Path, PurePosixPath
 from dataclasses import asdict
+from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 import zstandard as zstd
