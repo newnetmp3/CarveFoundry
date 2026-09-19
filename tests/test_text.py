@@ -198,3 +198,19 @@ def test_text_mesh_refuses_silent_missing_font_substitution() -> None:
 
     with pytest.raises(ValueError, match="not installed"):
         text_mesh(properties=properties)
+
+
+
+def test_blank_font_family_resolves_to_concrete_system_default() -> None:
+    asset = text_mesh(
+        properties=TextProperties(
+            content="CNC",
+            font_family="",
+            font_style="Regular",
+            size_pt=36.0,
+            depth_mm=1.0,
+        )
+    )
+
+    assert asset.mesh.is_watertight
+    assert asset.mesh.extents[0] > 0
