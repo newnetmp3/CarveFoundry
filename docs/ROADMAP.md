@@ -55,8 +55,11 @@ It must not be described as a guarantee of physical safety.
    Each face must separately generate, preflight and export G-code. Live fixture
    detection, physical registration testing, machine-aware flip verification,
    and automatic multi-face G-code execution are NOT implemented.
-10. **Batch production and nesting:** generate multiple positioned copies with
-    registration margin, clamp area and machine travel checks.
+10. **Optimized batch production/nesting:** Editable regular-grid duplication
+    now supports selected multi-part templates, cutter-radius stock margins,
+    recorded fixture clearance, hidden originals and Undo/Redo. Irregular
+    silhouette nesting, optional grain rotation, serial text and automatic
+    global multi-tool optimization remain future additions.
 11. **Spoilboard mapping and probe-backed height compensation** with verified
     source/units and explicit controller dependencies.
 12. **Material presets, first-run machine wizard and packaged Linux releases.**
