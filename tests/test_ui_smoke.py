@@ -452,9 +452,9 @@ def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
         assert window._background_job is not None
         assert window.job_progress.isVisible() or not window.job_progress.isHidden()
         _finish_background_job(window)
-        assert window.toolpath_progress.value() == 100
+        assert window.toolpath_progress.value() == 100, window.activity_info.text()
         assert "Toolpaths ready" in window.toolpath_progress.format()
-        assert window.project.toolpaths
+        assert window.project.toolpaths, window.activity_info.text()
         dialog.close()
     finally:
         window.close()
@@ -493,7 +493,7 @@ def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
         window._select_cam_operation("profile")
         assert window._calculate_toolpath_now()
         _finish_background_job(window)
-        assert len(window.project.toolpaths) == 2
+        assert len(window.project.toolpaths) == 2, window.activity_info.text()
         assert {
             path.source_item_name
             for path in window.project.toolpaths
@@ -599,7 +599,7 @@ def test_surface_can_generate_from_stock_without_design_geometry() -> None:
         window._settings.setValue("cam/stepdown_mm", 1.0)
         assert window._calculate_toolpath_now()
         _finish_background_job(window)
-        assert len(window.project.toolpaths) == 1
+        assert len(window.project.toolpaths) == 1, window.activity_info.text()
         path = window.project.toolpaths[0]
         assert path.operation == "surface"
         assert path.source_item_name == "Stock"
