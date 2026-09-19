@@ -109,3 +109,29 @@ def test_real_job_planner_reorders_paths_and_keeps_machining_sequence_valid():
         assert window.project.toolpaths == [rough, finish]
     finally:
         window.close()
+
+
+def test_batch_grid_ui_commits_all_copies_and_undo_restores_templates():
+    window = MainWindow()
+    try:
+        items = _models()
+        window._set_project(
+            Project(name="Batch", stock=Stock(100, 100, 19.4), items=items),
+            project_path=None,
+        )
+        window._select_project_indices([0, 1])
+        assert window._ui_actions["batch_layout"].text() == "Batch Production Grid…"
+        assert window._run_batch_layout(
+            copies=4, columns=2, gap_mm=5, margin_mm=8
+        )
+        _finish(window)
+        assert len(window.project.items) == 10
+        assert not window.project.items[0].visible
+        assert not window.project.items[1].visible
+        assert all(item.visible for item in window.project.items[2:])
+        assert len({item.item_id for item in window.project.items}) == 10
+        window._undo()
+        assert len(window.project.items) == 2
+        assert all(item.visible for item in window.project.items)
+    finally:
+        window.close()
