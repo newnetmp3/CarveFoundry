@@ -2,8 +2,8 @@ from pathlib import Path
 
 import trimesh
 
-from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
 from carvefoundry.core.smart_values import SmartValues
