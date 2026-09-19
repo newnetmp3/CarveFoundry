@@ -390,6 +390,13 @@ class ToolpathPreviewWindow(QMainWindow):
         self._code_lines, self._move_code_lines = self._render_program()
         self._load_code()
         self._code_loaded = True
+        if self._moves and hasattr(self, "_slider"):
+            index = max(
+                0,
+                min(self._slider.value(), len(self._move_code_lines) - 1),
+            )
+            if self._move_code_lines:
+                self._highlight_code_line(self._move_code_lines[index])
 
     def _load_code(self) -> None:
         numbered = "\n".join(
