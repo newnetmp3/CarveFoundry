@@ -386,12 +386,12 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             # exported G-code keeps absolute global coordinates.
             local_paths = (
                 clipped if tile_settings.rebase_each_tile else [
-                    offset_toolpath_xy(path, -tile.x_min_mm, -tile.y_min_mm)
+                    offset_toolpath_xy(path, -tile.x0_mm, -tile.y0_mm)
                     for path in clipped
                 ]
             )
             local_fixtures = tuple(
-                _local_fixture(f, -tile.x_min_mm, -tile.y_min_mm)
+                _local_fixture(f, -tile.x0_mm, -tile.y0_mm)
                 for f in request.fixtures
             )
             tile_stock = Stock(
