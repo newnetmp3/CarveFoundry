@@ -1,0 +1,20 @@
+[package]
+name = "carvefoundry-native"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+description = "Native CAM kernels for CarveFoundry"
+license = "MIT"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+numpy = "0.29.0"
+pyo3 = "0.29.2"
+rayon = "1.11"
+
+[profile.release]
+# Preserve useful native stack traces without giving up optimized CAM kernels.
+debug = 1
