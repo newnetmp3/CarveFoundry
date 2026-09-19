@@ -66,6 +66,7 @@ class WorkspaceCommandsMixin:
             ("two_sided", "Double-Sided Stock Setup…", self._double_sided_setup),
             ("batch_layout", "Batch Production Grid…", self._batch_layout),
             ("preflight", "CNC Preflight…", self._preflight_toolpaths),
+            ("guided_workflow", "Guided CNC Workflow…", self._show_guided_workflow),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
             ("cut", "Cut", self._cut_selected_items),
@@ -75,6 +76,7 @@ class WorkspaceCommandsMixin:
             ("duplicate", "Duplicate", self._duplicate_selected_item),
             ("select_all", "Select All", self._select_all_design_items),
             ("camera", "Camera Orbit", self._activate_camera_tool),
+            ("direct_select", "Direct Selection — Pen Nodes", self._activate_direct_selection),
             ("select", "Select / Marquee", self._activate_navigation_tool),
             ("rectangle", "Rectangle", self._create_rectangle),
             ("ellipse", "Ellipse", self._create_ellipse),
@@ -168,6 +170,7 @@ class WorkspaceCommandsMixin:
         )
         for key, text, callback in specs:
             self._new_ui_action(key, text, callback)
+        self._ui_actions["direct_select"].setCheckable(True)
 
         self._new_ui_action(
             "recovery_enabled",
@@ -462,7 +465,7 @@ class WorkspaceCommandsMixin:
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
             project_menu,
-            ("stock_setup", "work_zero", "fixtures", "two_sided",
+            ("stock_setup", "work_zero", "fixtures", "two_sided", "guided_workflow",
              "smart_values", "smart_bindings"),
         )
 
@@ -485,10 +488,10 @@ class WorkspaceCommandsMixin:
         draw_menu = design_menu.addMenu("Draw")
         self._add_menu_actions(
             draw_menu,
-            ("select", "rectangle", "ellipse", "polygon", "line", "text"),
+            ("select", "direct_select", "rectangle", "ellipse", "polygon", "line", "text"),
         )
         vector_menu = design_menu.addMenu("Vector")
-        self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        self._add_menu_actions(vector_menu, ("direct_select", "pen", "trace_image"))
         vector_menu.addSeparator()
         self._add_menu_actions(
             vector_menu,
@@ -649,6 +652,7 @@ class WorkspaceCommandsMixin:
         self._add_menu_actions(
             toolpaths_menu,
             (
+                "guided_workflow",
                 "calculate",
                 "job_planner",
                 "preview",
@@ -1262,6 +1266,16 @@ class WorkspaceCommandsMixin:
             ),
         )
 
+        rail.add_action_tool(
+            "direct_select",
+            self._ui_actions["direct_select"],
+            tooltip=(
+                "Direct Selection / Nodes — select a Pen Stroke, drag green "
+                "viewport knots or edit exact XY; real CNC geometry changes "
+                "support Undo/Redo and invalidate stale paths."
+            ),
+        )
+
         rail.add_flyout(
             "shapes",
             "Rectangle",
@@ -1300,7 +1314,7 @@ class WorkspaceCommandsMixin:
         )
 
         vector_menu = QMenu(rail)
-        self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        self._add_menu_actions(vector_menu, ("direct_select", "pen", "trace_image"))
         vector_menu.addSeparator()
         self._add_menu_actions(
             vector_menu,
@@ -1345,7 +1359,7 @@ class WorkspaceCommandsMixin:
         model_menu = QMenu(rail)
         self._add_menu_actions(
             model_menu,
-            ("stock_setup", "work_zero", "fixtures", "two_sided", "batch_layout",
+            ("stock_setup", "work_zero", "fixtures", "two_sided", "guided_workflow", "batch_layout",
              "smart_values", "smart_bindings", "fit_view"),
         )
         transform_menu = model_menu.addMenu("Transform")
@@ -1440,6 +1454,7 @@ class WorkspaceCommandsMixin:
             cam_menu,
             (
                 "advanced_cam",
+                "guided_workflow",
                 "calculate",
                 "job_planner",
                 "preview",

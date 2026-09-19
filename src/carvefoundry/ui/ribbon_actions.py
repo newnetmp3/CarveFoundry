@@ -71,7 +71,6 @@ from carvefoundry.core.primitives import (
     ellipse_mesh,
     line_mesh,
     polygon_mesh,
-    polyline_mesh,
     rectangle_mesh,
     text_mesh,
 )
@@ -80,6 +79,7 @@ from carvefoundry.core.smart_values import SmartValueError, SmartValues
 from carvefoundry.core.tools import DEFAULT_TOOLS, Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
+from carvefoundry.core.vector_path import VectorPath
 
 from .cam_generation_dialog import CamGenerationDialogMixin
 from .machine_control import MachineController
@@ -425,6 +425,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             group_id=group_id,
             text_properties=item.text_properties,
             smart_bindings=dict(item.smart_bindings),
+            vector_path=item.vector_path,
         )
 
     def _unique_item_name(self, stem: str) -> str:
@@ -690,6 +691,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Activate dedicated arcball-style viewport camera control."""
 
         self._camera_tool_active = True
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_shape_draw_mode(None)
         self.viewport.set_camera_control_mode(True)
         if self._camera_tool_button is not None:
@@ -716,6 +718,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Return the viewport to object selection / marquee mode."""
 
         self._camera_tool_active = False
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_camera_control_mode(False)
         self.viewport.set_shape_draw_mode(None)
         if self._camera_tool_button is not None:
@@ -918,6 +921,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         """Activate one paint-style shape tool in the viewport."""
 
         self._camera_tool_active = False
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_camera_control_mode(False)
         if self._camera_tool_button is not None:
             self._camera_tool_button.blockSignals(True)
@@ -1010,6 +1014,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         transform: Transform3D,
         *,
         text_properties: TextProperties | None = None,
+        vector_path: VectorPath | None = None,
     ) -> ProjectItem:
         item = ProjectItem(
             name=self._unique_item_name(name),
@@ -1018,6 +1023,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             transform=transform,
             source_units=ModelUnits.MILLIMETERS,
             text_properties=text_properties,
+            vector_path=vector_path,
         )
         self._before_ribbon_mutation(f"draw {kind}")
         self.project.items.append(item)
@@ -1151,7 +1157,14 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
                 ),
                 rotation_deg=(0.0, 0.0, degrees(atan2(dy, dx))),
             )
-            self._add_drawn_item("Line", "line", mesh, transform)
+            self._add_drawn_item(
+                "Line", "line", mesh, transform,
+                vector_path=VectorPath(
+                    points_xy=((-length / 2.0, 0.0), (length / 2.0, 0.0)),
+                    width_mm=self._tool_option_line_width_mm,
+                    depth_mm=depth,
+                ),
+            )
             return
 
         if tool == "text":
@@ -1277,12 +1290,20 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         ):
             captured.append(captured[0])
 
+        path = VectorPath(
+            points_xy=tuple(
+                captured[:-1] if (
+                    len(captured) >= 3 and captured[0] == captured[-1]
+                ) else captured
+            ),
+            width_mm=self._tool_option_pen_width_mm,
+            depth_mm=self._tool_option_depth_mm,
+            closed=bool(
+                len(captured) >= 3 and captured[0] == captured[-1]
+            ),
+        )
         try:
-            mesh = polyline_mesh(
-                captured,
-                width_mm=self._tool_option_pen_width_mm,
-                depth_mm=self._tool_option_depth_mm,
-            )
+            mesh = path.mesh_asset()
         except ValueError as exc:
             self.statusBar().showMessage(f"Pen stroke failed: {exc}", 5000)
             return
@@ -1292,6 +1313,7 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             "pen",
             mesh,
             Transform3D(),
+            vector_path=path,
         )
 
     def _trace_image(self) -> None:
@@ -3632,6 +3654,8 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
 
     def _preflight_toolpaths(self) -> None:
         paths = list(self.project.toolpaths)
+        guided_fingerprint = self._guided_job_fingerprint()
+        self._guided_preflight_pass = None
         if not paths:
             self.statusBar().showMessage(
                 "Generate toolpaths before running preflight", 4000
@@ -3648,6 +3672,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         )
 
         def done(payload: object) -> None:
+            self._guided_preflight_pass = (
+                guided_fingerprint if payload["safe_to_export"]
+                and self._guided_job_fingerprint() == guided_fingerprint
+                else None
+            )
+            self._refresh_guided_workflow()
             report = str(payload["report"])
             self._set_activity_info(report)
             display = QMessageBox(self)

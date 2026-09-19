@@ -44,6 +44,8 @@ from ..core.transform import Transform3D
 from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .batch_layout import BatchLayoutMixin
+from .direct_selection import DirectSelectionMixin
+from .guided_workflow import GuidedWorkflowMixin
 from .import_worker import ImportWorker
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
@@ -98,6 +100,8 @@ class Panel(QFrame):
 
 class MainWindow(
     WorkspaceCommandsMixin,
+    DirectSelectionMixin,
+    GuidedWorkflowMixin,
     BatchLayoutMixin,
     StockSimulationMixin,
     ProjectRecoveryMixin,
@@ -232,6 +236,8 @@ class MainWindow(
         self.viewport.freehandStrokeRequested.connect(
             self._freehand_pen_drawn
         )
+        self.viewport.nodeMoveRequested.connect(self._node_drag_finished)
+        self.viewport.nodeEditModeChanged.connect(self._node_edit_mode_changed)
         self.viewport.shapeDrawModeChanged.connect(
             self._shape_draw_mode_changed
         )
@@ -270,6 +276,15 @@ class MainWindow(
             key = title.lower()
             if key in self._history_action_buttons:
                 self._history_action_buttons[key].append(button)
+
+        guide_button = QPushButton("Guided CNC Job")
+        guide_button.setObjectName("TitleQuickButton")
+        guide_button.setToolTip(
+            "Step-by-step stock, machine, fixtures, toolpaths, "
+            "simulation, CNC preflight and export."
+        )
+        guide_button.clicked.connect(self._show_guided_workflow)
+        line.addWidget(guide_button)
 
         self.machine_status_label = QLabel("OFFLINE")
         self.machine_status_label.setObjectName("MachineStatus")
@@ -2773,6 +2788,7 @@ class MainWindow(
         project_path: Path | None,
         selected_row: int = 0,
     ) -> None:
+        self.viewport.set_node_edit_mode(False)
         self.project = project
         self.project_path = project_path
         self._toolpaths_stale_reason = None
@@ -2837,6 +2853,7 @@ class MainWindow(
         # Protect the job snapshot without blocking navigation or repaints.
         self._job_camera_was_active = self.viewport.camera_control_mode
         self._job_draw_mode = self.viewport.shape_draw_mode
+        self.viewport.set_node_edit_mode(False)
         self.viewport.set_shape_draw_mode(None)
         self.viewport.set_camera_control_mode(True)
         self.tool_rail.set_active_tool("camera")

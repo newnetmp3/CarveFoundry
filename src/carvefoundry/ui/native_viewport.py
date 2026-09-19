@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.render_geometry import build_render_geometry
+from carvefoundry.core.vector_path import node_world_points
 
 from .gpu_geometry import expand_triangle_positions
 
@@ -230,6 +231,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
+    nodeMoveRequested = Signal(int, int, float, float)
+    nodeEditModeChanged = Signal(bool)
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -267,6 +270,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.snap_step_mm = 1.0
         self._isolated_item_indices: set[int] | None = None
         self._camera_control_mode = True
+        self._node_edit_mode = False
+        self._node_drag_index: int | None = None
+        self._node_drag_world: np.ndarray | None = None
+        self._node_drag_item: int | None = None
 
         self._last_mouse_pos: QPointF | None = None
         self._press_pos: QPointF | None = None
@@ -744,6 +751,77 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._toolpath_lod_restore_timer.stop()
         self._update_interaction_cursor()
         self.requestUpdate()
+
+    def set_node_edit_mode(self, enabled: bool) -> None:
+        changed = self._node_edit_mode != bool(enabled)
+        self._node_edit_mode = bool(enabled)
+        self._node_drag_index = None
+        self._node_drag_world = None
+        self._node_drag_item = None
+        if enabled:
+            self._camera_control_mode = False
+            self._shape_draw_mode = None
+        self._update_interaction_cursor()
+        self.requestUpdate()
+        if changed:
+            self.nodeEditModeChanged.emit(self._node_edit_mode)
+
+    def _editable_node_points(self) -> np.ndarray | None:
+        if (
+            not self._node_edit_mode or self.project is None
+            or self.selected_item_index is None
+            or len(self.selected_item_indices) != 1
+        ):
+            return None
+        item = self.project.items[self.selected_item_index]
+        if not item.visible or item.vector_path is None:
+            return None
+        return node_world_points(item)
+
+    def _pick_vector_node(self, position: QPointF) -> int | None:
+        points = self._editable_node_points()
+        if points is None:
+            return None
+        projection, view, _pixel = self._camera_geometry()
+        matrix = projection * view
+        best = (12.0, None)
+        for index, point in enumerate(points):
+            projected = self._project_world_point(tuple(point), matrix)
+            if projected is None:
+                continue
+            distance = float(np.hypot(
+                projected.x() - position.x(),
+                projected.y() - position.y(),
+            ))
+            if distance < best[0]:
+                best = (distance, index)
+        return best[1]
+
+    def _draw_vector_nodes(
+        self, matrix: QMatrix4x4, world_per_pixel: float,
+    ) -> None:
+        points = self._editable_node_points()
+        if points is None:
+            return
+        radius = min(100.0, max(0.05, world_per_pixel * 6.0))
+        lines: list[list[float]] = []
+        for index, source in enumerate(points):
+            point = (
+                self._node_drag_world if self._node_drag_index == index
+                and self._node_drag_world is not None else source
+            )
+            x, y, z = (float(value) for value in point)
+            z += 0.1
+            lines.extend([
+                [x - radius, y, z], [x + radius, y, z],
+                [x, y - radius, z], [x, y + radius, z],
+            ])
+        self._draw_lines(
+            np.asarray(lines, dtype=np.float32),
+            view_projection=matrix,
+            color=QVector4D(0.25, 0.99, 0.49, 1.0),
+            line_width=3.5,
+        )
 
     def set_pen_sample_spacing(self, spacing_mm: float) -> None:
         self._pen_sample_spacing_mm = max(0.02, float(spacing_mm))
@@ -2940,6 +3018,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         )
         self._draw_toolpath_preview(view_projection, world_per_pixel)
         self._draw_shape_preview(view_projection)
+        self._draw_vector_nodes(view_projection, world_per_pixel)
         self._draw_lines(
             self._measurement_geometry(),
             view_projection=view_projection,
@@ -2984,6 +3063,21 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._node_edit_mode
+            and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+        ):
+            picked = self._pick_vector_node(event.position())
+            if picked is not None:
+                self._node_drag_index = picked
+                self._node_drag_item = self.selected_item_index
+                self._node_drag_world = self._editable_node_points()[picked].copy()
+                self._interaction_mode = "node-drag"
+                self.requestUpdate()
+                event.accept()
+                return
 
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -3144,6 +3238,18 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
+            and self._interaction_mode == "node-drag"
+            and self._node_drag_world is not None
+        ):
+            point = self._stock_plane_point(event.position())
+            if point is not None:
+                self._node_drag_world[:2] = point[:2]
+                self.requestUpdate()
+            event.accept()
+            return
+
+        if (
+            event.buttons() & Qt.MouseButton.LeftButton
             and self._interaction_mode == "marquee"
         ):
             self._selection_drag_current_screen = event.position()
@@ -3263,6 +3369,25 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "node-drag"
+        ):
+            point = self._stock_plane_point(event.position())
+            if point is not None and self._node_drag_index is not None and (
+                self._node_drag_item is not None
+            ):
+                self.nodeMoveRequested.emit(
+                    self._node_drag_item, self._node_drag_index,
+                    float(point[0]), float(point[1]),
+                )
+            self._node_drag_index = None
+            self._node_drag_item = None
+            self._node_drag_world = None
+            self._interaction_mode = None
+            self.requestUpdate()
+            event.accept()
+            return
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._interaction_mode == "shape-draw"
@@ -3406,6 +3531,10 @@ class _NativeOpenGLViewport(QOpenGLWindow):
 
     def keyPressEvent(self, event) -> None:
         """Handle drawing-mode cancellation or nudge the selected object."""
+        if event.key() == Qt.Key.Key_Escape and self._node_edit_mode:
+            self.set_node_edit_mode(False)
+            event.accept()
+            return
 
         if (
             event.key() == Qt.Key.Key_Escape
@@ -3619,6 +3748,8 @@ class MeshViewport(QWidget):
     shapeDragUpdated = Signal(str, float, float, float, float)
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
+    nodeMoveRequested = Signal(int, int, float, float)
+    nodeEditModeChanged = Signal(bool)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968
 
@@ -3662,6 +3793,8 @@ class MeshViewport(QWidget):
         self._renderer.shapeDrawModeChanged.connect(
             self.shapeDrawModeChanged.emit
         )
+        self._renderer.nodeMoveRequested.connect(self.nodeMoveRequested.emit)
+        self._renderer.nodeEditModeChanged.connect(self.nodeEditModeChanged.emit)
 
         self._container = QWidget.createWindowContainer(self._renderer, self)
         self._container.setObjectName("NativeViewportContainer")
@@ -3833,6 +3966,9 @@ class MeshViewport(QWidget):
 
     def set_shape_draw_mode(self, mode: str | None) -> None:
         self._renderer.set_shape_draw_mode(mode)
+
+    def set_node_edit_mode(self, enabled: bool) -> None:
+        self._renderer.set_node_edit_mode(enabled)
 
     def set_pen_sample_spacing(self, spacing_mm: float) -> None:
         self._renderer.set_pen_sample_spacing(spacing_mm)

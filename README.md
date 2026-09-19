@@ -197,6 +197,43 @@ session's recovery checkpoint. The checkpoint preserves the same design,
 stock, fixture and mesh information as a normal CF3D Save; session-owned
 generated toolpaths and machining-job order must be regenerated after restore.
 
+## Direct Selection — real editable pen/line nodes
+
+Newly drawn **Pen Strokes and Lines** now retain editable centerline XY knots
+alongside the cutter-facing 3D mesh. Select ONE eligible object, then use the
+new **Direct Selection** tool in the left rail or **Design → Draw/Vector →
+Direct Selection**. Green knot crosses appear in the OpenGL viewport. Drag a
+knot on the stock plane (Top view recommended); a modeless inspector also
+allows exact XY coordinates, midpoint insertion and node deletion. All edits
+rebuild actual mesh geometry, invalidate stale CAM paths, support Undo/Redo,
+and persist the knot data inside normal CF3D files. Duplication, copy/paste
+and the batch grid retain the independent vector metadata.
+
+This feature does **not** pretend that arbitrary imported STL, raster traces
+or baked silhouette/Boolean meshes contain editable vector control points.
+Existing projects whose strokes were saved before this update lack retained
+nodes; newly drawn Pen/Line objects have them. Paths with X/Y tilt must be
+untilted before XY knot editing. Edited Line end caps become rounded like
+other polyline strokes.
+
+## Guided CNC workflow
+
+Use the new **Guided CNC Job** button next to Save/Undo, or select
+**Project → Guided CNC Workflow…**. The modeless eight-step guide follows:
+stock and work zero, machine profile, physical fences/clamps, design objects,
+CAM generation, job/preview review, **actual mandatory CNC preflight**, then
+per-cutter G-code export. Every button launches the existing real command.
+Its step statuses update from the current stock, fixture, machine and generated
+toolpaths. Preflight completion is linked to the *exact current setup*;
+changing stock, fixtures, machine settings or toolpaths invalidates the
+guide's green preflight status. Export remains protected by the independent
+fixture-aware preflight that already runs during export.
+
+The guide is an aid for human setup, not automatic physical verification:
+check the actual stock registration, Makita/Onefinity holder and fences,
+re-probe stock-top Z0 after tool changes, and repeat the full guide separately
+on each side of a double-sided project.
+
 ## Native CAM core
 
 The CPU-heavy mesh rasterization and cutter-contact calculations are implemented in Rust and exposed to the Python application through PyO3. The PySide6 UI, project model, cutter definitions, and orchestration remain Python.

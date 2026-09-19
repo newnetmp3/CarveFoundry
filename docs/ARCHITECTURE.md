@@ -21,6 +21,8 @@ background-job lifecycle. It **composes** the following functional mixins:
 | `ui/stock_simulation.py` / `cam/stock_simulation.py` | Off-thread sampled 2.5D remaining-stock simulation, cutter-profile sweep, per-stage estimates and target-surface display. |
 | `ui/project_recovery.py` / `core/recovery.py` | Separate atomic CF3D idle checkpoints with checksum verification, startup restore and cleanup on explicit Save/Discard. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
+| `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves; immutable knot data, fresh mesh regeneration, history and CF3D persistence. |
+| `ui/guided_workflow.py` | Modeless guided design-to-CAM workflow; derived live statuses and preflight fingerprint, not a second independent CAM state. |
 | `ui/text_editor.py` | Editable text Inspector, installed-font grouping, font-face validation, typography-to-mesh updates. |
 | `ui/interface_settings.py` | Load/save/migrate persistent layout and viewport preferences, display toggles, navigation defaults. |
 | `ui/planar_operations_actions.py` | Background task orchestration and commit of selected vector-outline Boolean/Offset results. |
