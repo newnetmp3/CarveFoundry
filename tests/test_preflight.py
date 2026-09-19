@@ -49,7 +49,7 @@ def test_fixture_cut_crossing_is_a_hard_error() -> None:
 
 
 def test_fixture_collision_considers_cutter_radius_and_clearance() -> None:
-    adjacent = Fixture("Nearby fence", 30, 12.6, 35, 15, 4, 1)
+    adjacent = Fixture("Nearby fence", 30, 12.4, 35, 15, 4, 1)
     result = check_preflight(
         [_path()], Stock(80, 40, 18), _profile(),
         [adjacent],
