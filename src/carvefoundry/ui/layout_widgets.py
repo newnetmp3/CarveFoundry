@@ -1,9 +1,12 @@
 """Reusable compact, accessible workspace section controls."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QTimer, Qt
 from PySide6.QtWidgets import (
     QFrame,
+    QLabel,
+    QPushButton,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -76,3 +79,82 @@ class InspectorSection(QFrame):
 
     def isExpanded(self) -> bool:
         return self.header.isChecked()
+
+
+class CamSectionNavigator(QFrame):
+    """Fixed step rail for the long CAM form; retains the full editable form.
+
+    This only changes UI navigation. No CAM controls are moved, cloned or
+    replaced, and the existing readiness and G-code checks remain authoritative.
+    """
+
+    def __init__(self, scroll: QScrollArea, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("CamSectionNavigator")
+        self._scroll = scroll
+        self._sections: dict[str, tuple[QPushButton, QWidget]] = {}
+        self._active: str | None = None
+        self.setFixedWidth(166)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 8, 6, 8)
+        layout.setSpacing(5)
+        heading = QLabel("JOB STEPS", self)
+        heading.setObjectName("CamStepHeading")
+        layout.addWidget(heading)
+        self._layout = layout
+        layout.addStretch(1)
+
+    def add_section(self, key: str, title: str, widget: QWidget) -> None:
+        if key in self._sections:
+            raise ValueError(f"Duplicate CAM section: {key}")
+        button = QPushButton(title, self)
+        button.setObjectName("CamStepButton")
+        button.setCheckable(True)
+        button.setToolTip(f"Jump to {title}")
+        button.setAccessibleName(f"Jump to CAM section {title}")
+        button.setProperty("state", "pending")
+        button.clicked.connect(
+            lambda _checked=False, name=key: self.navigate(name)
+        )
+        self._layout.insertWidget(self._layout.count() - 1, button)
+        self._sections[key] = (button, widget)
+        if self._active is None:
+            self._active = key
+            button.setChecked(True)
+
+    def navigate(self, key: str) -> None:
+        if key not in self._sections:
+            raise KeyError(key)
+        button, widget = self._sections[key]
+        if not button.isEnabled() or widget.isHidden():
+            return
+        self._active = key
+        for name, (candidate, _widget) in self._sections.items():
+            candidate.setChecked(name == key)
+
+        def scroll_to() -> None:
+            if not widget.isVisibleTo(self._scroll):
+                return
+            y = widget.mapTo(self._scroll.widget(), QPoint(0, 0)).y()
+            self._scroll.verticalScrollBar().setValue(max(0, y - 6))
+
+        QTimer.singleShot(0, scroll_to)
+
+    def set_available(self, key: str, enabled: bool) -> None:
+        button, _widget = self._sections[key]
+        button.setEnabled(enabled)
+        if not enabled and self._active == key:
+            self.navigate("source")
+
+    def set_ready(self, key: str, ready: bool) -> None:
+        button, _widget = self._sections[key]
+        state = "ready" if ready else "pending"
+        if button.property("state") == state:
+            return
+        button.setProperty("state", state)
+        button.style().unpolish(button)
+        button.style().polish(button)
+
+    @property
+    def buttons(self) -> dict[str, QPushButton]:
+        return {key: value[0] for key, value in self._sections.items()}
