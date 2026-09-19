@@ -127,6 +127,7 @@ class WorkspaceCommandsMixin:
             ("calculator", "Feeds && Speeds Calculator", self._feeds_speeds_calculator),
             ("advanced_cam", "Advanced CAM…", self._toolpath_design_advanced),
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
+            ("job_planner", "Machining Job Planner…", self._show_job_planner),
             ("preview", "Preview", self._preview_toolpaths),
             ("export_toolpath", "Export G-code", self._export_gcode),
             ("machine_profile", "Edit Machine Profile…", self._machine_profile),
@@ -631,6 +632,7 @@ class WorkspaceCommandsMixin:
             toolpaths_menu,
             (
                 "calculate",
+                "job_planner",
                 "preview",
                 "simulate",
                 "preflight",
@@ -1420,6 +1422,7 @@ class WorkspaceCommandsMixin:
             (
                 "advanced_cam",
                 "calculate",
+                "job_planner",
                 "preview",
                 "simulate",
                 "preflight",
