@@ -283,6 +283,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self._viewport_transform_finished
         )
         self.viewport.shapeDrawRequested.connect(self._shape_drawn)
+        self.viewport.shapeDragUpdated.connect(self._shape_drag_updated)
         self.viewport.freehandStrokeRequested.connect(
             self._freehand_pen_drawn
         )
@@ -2098,6 +2099,14 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             self.tool_options_fixture_clearance_spin
         )
 
+        self.tool_options_fixture_size_label = QLabel(
+            "Drag a rectangle on the stock to place a fixture"
+        )
+        self.tool_options_fixture_size_label.setObjectName(
+            "ToolFixtureSize"
+        )
+        tool_options_layout.addWidget(self.tool_options_fixture_size_label)
+
         self.tool_options_measure_label = QLabel(
             "Drag two points on stock top (XY · Z0)"
         )
@@ -2157,6 +2166,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.tool_options_fixture_top_spin.hide()
         self.tool_options_fixture_clearance_label.hide()
         self.tool_options_fixture_clearance_spin.hide()
+        self.tool_options_fixture_size_label.hide()
         self.tool_options_measure_label.hide()
         self.tool_options_measure_clear.hide()
         canvas_layout.addWidget(self.tool_options_bar)
