@@ -220,3 +220,21 @@ def test_adjacent_operations_with_same_cutter_share_one_file(tmp_path: Path) -> 
     assert result["files"] == [str(tmp_path / "same-cutter.nc")]
     assert "(Operation 1: Detail)" in (tmp_path / "same-cutter.nc").read_text()
     assert "(Operation 2: Finish detail)" in (tmp_path / "same-cutter.nc").read_text()
+
+
+def test_park_collision_uses_postprocessor_work_zero_offsets() -> None:
+    # G-code park X-40 with X offset -40 corresponds to stock X0,
+    # so a fixture entirely at negative stock X is not crossed.
+    fixture = Fixture("Outside fence", -15, 8, -10, 12, 5, 1)
+    options = GrblPostSettings(
+        x_offset_mm=-40,
+        park_enabled=True,
+        park_x_mm=-40,
+        park_y_mm=10,
+        park_z_mm=3,
+    )
+    result = check_preflight(
+        [_path()], Stock(80, 40, 18), _profile(),
+        [fixture], options,
+    )
+    assert result.safe_to_export
