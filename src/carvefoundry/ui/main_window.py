@@ -782,6 +782,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         vector_menu = design_menu.addMenu("Vector")
         self._add_menu_actions(vector_menu, ("pen", "trace_image"))
+        workshop_menu = design_menu.addMenu("Workshop")
+        self._add_menu_actions(
+            workshop_menu, ("measure", "fixture_draw", "fixtures")
+        )
         arrange_menu = design_menu.addMenu("Arrange")
         self._add_menu_actions(
             arrange_menu,
@@ -5708,6 +5712,11 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._prepared_toolpath_stats = None
         self.project_title_label.setText(f"  •  {project.name} Project")
         self.viewport.set_project(project)
+        self._measurement = None
+        if hasattr(self, "tool_options_measure_label"):
+            self.tool_options_measure_label.setText(
+                "Drag two points on stock top (XY · Z0)"
+            )
         self._refresh_project_list(selected_row)
         self._sync_toolpath_state_from_project()
 
