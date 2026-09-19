@@ -11,6 +11,7 @@ from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
 from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
+from carvefoundry.core.units import ModelUnits
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
 
