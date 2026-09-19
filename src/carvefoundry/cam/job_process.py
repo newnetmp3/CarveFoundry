@@ -23,8 +23,9 @@ from carvefoundry.cam.gcode import (
     write_grbl,
     write_grbl_program,
 )
-from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program
+from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program, offset_toolpath_xy
 from carvefoundry.cam.render_geometry import build_render_geometry
+from carvefoundry.cam.preflight import check_preflight
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
@@ -35,7 +36,9 @@ from carvefoundry.cam.vector_ops import (
     geometry_silhouette,
     geometry_vcarve,
 )
-from carvefoundry.core.project import ProjectItem
+from carvefoundry.core.project import ProjectItem, Stock
+from carvefoundry.core.machine_profiles import MachineProfile
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.tools import Cutter
 
 _LAST_UPDATE = 0.0
@@ -80,6 +83,32 @@ class GcodeRequest:
     stock_width_mm: float = 0.0
     stock_height_mm: float = 0.0
     xy_zero: str = "bottom_left"
+    stock: Stock | None = None
+    machine_profile: MachineProfile | None = None
+    fixtures: tuple[Fixture, ...] = ()
+
+
+def _require_preflight(request: GcodeRequest, paths: list[Any]) -> str:
+    if request.stock is None or request.machine_profile is None:
+        raise ValueError("Preflight needs stock dimensions and a machine profile.")
+    outcome = check_preflight(
+        paths, request.stock, request.machine_profile,
+        request.fixtures, request.settings,
+    )
+    report(0.12, "Preflight checked", force=True)
+    if not outcome.safe_to_export:
+        raise ValueError(outcome.format_report())
+    return outcome.format_report()
+
+
+def _local_fixture(fixture: Fixture, dx: float, dy: float) -> Fixture:
+    return replace(
+        fixture,
+        x_min_mm=fixture.x_min_mm + dx,
+        x_max_mm=fixture.x_max_mm + dx,
+        y_min_mm=fixture.y_min_mm + dy,
+        y_max_mm=fixture.y_max_mm + dy,
+    )
 
 
 def _generate_item(
@@ -302,6 +331,8 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                 "Preparing viewer references",
             )
         return {"code_lines": lines, "move_code_lines": offsets}
+    if request.mode == "preflight":
+        return {"report": _require_preflight(request, toolpaths), "files": []}
     if request.mode == "resume":
         toolpaths = [
             resume_toolpath(
@@ -324,11 +355,14 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
         suffix = output.suffix if output.suffix.lower() in {
             ".nc", ".gcode", ".tap", ".cnc"
         } else ".nc"
-        paths: list[str] = []
+        jobs: list[tuple[Path, list[Any], GrblPostSettings]] = []
         tile_count = len(tiles)
         for index, tile in enumerate(tiles):
-            report(0.05 + 0.9 * index / max(1, len(tiles)),
-                   f"Exporting tile {index + 1} / {len(tiles)}", force=True)
+            report(
+                0.05 + 0.35 * index / max(1, tile_count),
+                f"Checking tile {index + 1} / {tile_count}",
+                force=True,
+            )
             clipped = tile_program(toolpaths, tile, rebase=tile_settings.rebase_each_tile)
             if not clipped:
                 continue
@@ -346,12 +380,44 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             tiled_path = output.with_name(
                 f"{output.stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
             )
+            if request.machine_profile is None:
+                raise ValueError("Tiling requires a machine profile for preflight.")
+            # Every tile is checked in its *local* work envelope even if the
+            # exported G-code keeps absolute global coordinates.
+            local_paths = (
+                clipped if tile_settings.rebase_each_tile else [
+                    offset_toolpath_xy(path, -tile.x_min_mm, -tile.y_min_mm)
+                    for path in clipped
+                ]
+            )
+            local_fixtures = tuple(
+                _local_fixture(f, -tile.x_min_mm, -tile.y_min_mm)
+                for f in request.fixtures
+            )
+            tile_stock = Stock(
+                tile.width_mm, tile.height_mm,
+                request.stock.thickness_mm if request.stock is not None else 19.0,
+                request.xy_zero,
+            )
+            result = check_preflight(
+                local_paths, tile_stock, request.machine_profile,
+                local_fixtures, options,
+            )
+            if not result.safe_to_export:
+                raise ValueError(
+                    f"Tile row {tile.row + 1} column {tile.column + 1}:\\n"
+                    + result.format_report()
+                )
+            jobs.append((tiled_path, clipped, options))
+        if not jobs:
+            raise ValueError("No cutting moves intersect these tiles.")
+        # Validate ALL tiles before writing ANY output files.
+        paths: list[str] = []
+        for index, (tiled_path, clipped, options) in enumerate(jobs):
             paths.append(str(write_grbl_program(
-                clipped,
-                tiled_path,
-                options,
-                progress=lambda fraction, tile_index=index, count=tile_count: report(
-                    0.05 + 0.9 * (tile_index + fraction) / max(1, count),
+                clipped, tiled_path, options,
+                progress=lambda fraction, tile_index=index, count=len(jobs): report(
+                    0.45 + 0.50 * (tile_index + fraction) / count,
                     f"Writing tile {tile_index + 1} / {count}",
                 ),
             )))
@@ -363,6 +429,7 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             "moves": sum(len(path.moves) for path in toolpaths),
             "minutes": sum(path.estimated_cutting_minutes for path in toolpaths),
         }
+    _require_preflight(request, toolpaths)
     report(0.15, "Writing G-code", force=True)
     if len(toolpaths) == 1 and request.mode == "export":
         saved = write_grbl(
