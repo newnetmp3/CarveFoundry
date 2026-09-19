@@ -306,6 +306,63 @@ def test_font_family_grouping_separates_common_variants() -> None:
     ]
 
 
+def test_fontconfig_aliases_collapse_full_face_names_into_styles() -> None:
+    families = [
+        "FiraCode Nerd Font",
+        "FiraCode Nerd Font Med",
+        "FiraCode Nerd Font Mono",
+        "FiraCode Nerd Font Mono SemBd",
+        "FiraCode Nerd Font Propo",
+    ]
+    aliases = MainWindow._parse_fontconfig_text_font_aliases(
+        (
+            "FiraCode Nerd Font\tMedium\tFiraCode Nerd Font Med\n"
+            "FiraCode Nerd Font Mono\tSemiBold\t"
+            "FiraCode Nerd Font Mono SemBd"
+        ),
+        families,
+    )
+
+    assert aliases["firacode nerd font med"] == (
+        "FiraCode Nerd Font",
+        "Medium",
+    )
+    assert aliases["firacode nerd font mono sembd"] == (
+        "FiraCode Nerd Font Mono",
+        "SemiBold",
+    )
+
+    selectable = [
+        family
+        for family in families
+        if family.casefold() not in aliases
+    ]
+    groups = MainWindow._group_text_font_families(selectable)
+    assert groups["FiraCode Nerd Font"] == [
+        ("Regular", "FiraCode Nerd Font"),
+        ("Monospaced", "FiraCode Nerd Font Mono"),
+        ("Proportional", "FiraCode Nerd Font Propo"),
+    ]
+
+
+def test_font_variant_fallback_understands_common_abbreviations() -> None:
+    assert MainWindow._font_family_variant_candidate(
+        "3270 Nerd Font Mono SemCond"
+    ) == ("3270 Nerd Font", "Monospaced Semi Condensed")
+    assert MainWindow._font_family_variant_candidate(
+        "FiraCode Nerd Font Propo Med"
+    ) == ("FiraCode Nerd Font", "Proportional Medium")
+    assert MainWindow._font_family_variant_candidate(
+        "RobotoMono Nerd Font Mono SmBd"
+    ) == ("RobotoMono Nerd Font", "Monospaced SemiBold")
+    assert MainWindow._font_family_variant_candidate(
+        "RobotoMono Nerd Font Mono SmBd [GOOG]"
+    ) == (
+        "RobotoMono Nerd Font [GOOG]",
+        "Monospaced SemiBold",
+    )
+
+
 def test_text_font_selector_previews_grouped_families_and_variants() -> None:
     window = MainWindow()
     try:
