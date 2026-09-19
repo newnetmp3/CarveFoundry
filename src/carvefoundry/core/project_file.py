@@ -690,14 +690,14 @@ def _load_native_item(
                 raise ValueError("Vector points must be numbers.")
             closed = vector_value.get("closed", False)
             if not isinstance(closed, bool):
-                raise ValueError("Closed state must be boolean.")
+                raise TypeError("Closed state must be boolean.")
             width = vector_value["width_mm"]
             depth = vector_value["depth_mm"]
             if (
                 isinstance(width, bool) or not isinstance(width, (int, float))
                 or isinstance(depth, bool) or not isinstance(depth, (int, float))
             ):
-                raise ValueError("Width/depth must be numbers.")
+                raise TypeError("Width/depth must be numbers.")
             vector_path = VectorPath(
                 points_xy=tuple(tuple(float(v) for v in pair) for pair in raw_points),
                 width_mm=float(width),
