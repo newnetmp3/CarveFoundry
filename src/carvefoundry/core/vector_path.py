@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import hypot, isfinite
+from itertools import pairwise
 
 import numpy as np
 
@@ -37,7 +38,7 @@ class VectorPath:
             raise ValueError("Vector stroke depth must be positive and finite.")
         if not all(isfinite(v) for pair in points for v in pair):
             raise ValueError("Vector node coordinates must be finite.")
-        segments = list(zip(points, points[1:], strict=False))
+        segments = list(pairwise(points) )
         if self.closed:
             segments.append((points[-1], points[0]))
         if not any(hypot(a[0] - b[0], a[1] - b[1]) > 1e-9
