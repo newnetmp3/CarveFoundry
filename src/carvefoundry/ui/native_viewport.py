@@ -232,6 +232,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
+    nodeEditModeChanged = Signal(bool)
 
     MIN_ZOOM = 0.01
     MAX_ZOOM = 100_000.0
@@ -752,6 +753,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.requestUpdate()
 
     def set_node_edit_mode(self, enabled: bool) -> None:
+        changed = self._node_edit_mode != bool(enabled)
         self._node_edit_mode = bool(enabled)
         self._node_drag_index = None
         self._node_drag_world = None
@@ -761,6 +763,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             self._shape_draw_mode = None
         self._update_interaction_cursor()
         self.requestUpdate()
+        if changed:
+            self.nodeEditModeChanged.emit(self._node_edit_mode)
 
     def _editable_node_points(self) -> np.ndarray | None:
         if (
@@ -3745,6 +3749,7 @@ class MeshViewport(QWidget):
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
+    nodeEditModeChanged = Signal(bool)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968
 
@@ -3789,6 +3794,7 @@ class MeshViewport(QWidget):
             self.shapeDrawModeChanged.emit
         )
         self._renderer.nodeMoveRequested.connect(self.nodeMoveRequested.emit)
+        self._renderer.nodeEditModeChanged.connect(self.nodeEditModeChanged.emit)
 
         self._container = QWidget.createWindowContainer(self._renderer, self)
         self._container.setObjectName("NativeViewportContainer")
