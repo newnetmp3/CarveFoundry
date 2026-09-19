@@ -234,6 +234,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._prepared_mesh_uploads: dict[int, tuple[object, bytes, int]] = {}
         self._renderer_description = "Native OpenGL initializing…"
         self._gl_error: str | None = None
+        self._update_interaction_cursor()
 
     @property
     def yaw_deg(self) -> float:
