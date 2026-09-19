@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -153,7 +152,7 @@ class BackgroundWorker(QObject):
                 self.completed.emit(result)
         except JobCancelled:
             self.cancelled.emit()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - worker boundary must report/quit
             if self._cancel.is_set():
                 self.cancelled.emit()
             else:
