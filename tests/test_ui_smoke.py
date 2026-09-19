@@ -8,8 +8,8 @@ from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.gcode import GrblPostSettings
-from carvefoundry.core.fixtures import Fixture
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.primitives import rectangle_mesh, text_mesh
 from carvefoundry.core.project import Project, ProjectItem, TextProperties
 from carvefoundry.core.tools import Cutter, ToolType
