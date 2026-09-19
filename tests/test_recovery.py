@@ -102,7 +102,6 @@ def test_retention_keeps_newest_and_never_touches_source_document(tmp_path):
     doc = save_project(_project("Original"), tmp_path / "source.cf3d")
     first = save_recovery(_project("Old"), root, key=uuid4().hex,
                           state_id=1, original_path=doc)
-    import os
     # Fake timestamp using manifest field, not platform clock resolution.
     payload = json.loads(first.metadata_file.read_text())
     payload["timestamp_utc"] = "2020-01-01T00:00:00+00:00"
