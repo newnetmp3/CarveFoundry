@@ -619,4 +619,101 @@ QProgressBar#ImportProgress::chunk {
     border-radius: 4px;
 }
 QStatusBar { background: #0e1425; color: #8792a8; border-top: 1px solid #1c2436; }
+
+/* Compact CAD Inspector and guided CAM layout. */
+QFrame#InspectorSection {
+    background: #101829;
+    border: 1px solid #273149;
+    border-radius: 5px;
+}
+QToolButton#InspectorSectionToggle {
+    background: #141d30;
+    border: 0;
+    color: #c9d4e4;
+    font-weight: 700;
+    padding: 5px 7px;
+    text-align: left;
+}
+QToolButton#InspectorSectionToggle:hover,
+QToolButton#InspectorSectionToggle:checked {
+    color: #c8ff3d;
+    background: #1b2940;
+}
+QWidget#InspectorSectionBody { background: transparent; }
+QFrame#CamSectionNavigator {
+    background: #101829;
+    border: 1px solid #273149;
+    border-radius: 7px;
+}
+QLabel#CamStepHeading {
+    color: #c8ff3d;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 4px 9px 4px;
+}
+QPushButton#CamStepButton {
+    text-align: left;
+    background: transparent;
+    color: #b2bed0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 9px 7px;
+    font-weight: 600;
+}
+QPushButton#CamStepButton:hover {
+    background: #202a40;
+    color: #ffffff;
+}
+QPushButton#CamStepButton:checked {
+    background: #25344a;
+    color: #c8ff3d;
+    border-left: 3px solid #c8ff3d;
+}
+QPushButton#CamStepButton[state="ready"]:!checked { color: #a5e782; }
+QPushButton#CamStepButton:disabled {
+    color: #5c6a81;
+    background: transparent;
+}
+QLabel#CamContextSummary {
+    background: #172337;
+    color: #d6e7f5;
+    border: 1px solid #334661;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-weight: 650;
+}
+QPushButton#CamStepsToggle {
+    padding: 5px 8px;
+}
+QProgressBar#GuidedWorkflowProgress {
+    border: 1px solid #34425b;
+    border-radius: 5px;
+    background: #0f1626;
+    text-align: center;
+    color: #edf1f7;
+}
+QProgressBar#GuidedWorkflowProgress::chunk {
+    background: #588d32;
+    border-radius: 4px;
+}
+QLabel#GuidedWorkflowNext {
+    background: #182439;
+    color: #c9d4e4;
+    border-left: 3px solid #c8ff3d;
+    padding: 6px 9px;
+}
+QToolButton#ViewportOverflowButton {
+    background: #192337;
+    border: 1px solid #35415a;
+    border-radius: 5px;
+    font-weight: 900;
+    font-size: 17px;
+    min-width: 28px;
+    max-width: 36px;
+    padding: 3px;
+}
+QToolButton#ViewportOverflowButton:hover {
+    background: #c8ff3d;
+    color: #0b1020;
+}
 """
