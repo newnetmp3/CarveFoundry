@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
+from unicodedata import normalize
 
 from .toolpath import MoveKind, Toolpath
 
@@ -47,7 +48,21 @@ def _number(value: float, decimals: int) -> str:
 
 
 def _comment(text: str) -> str:
-    return text.replace("(", "[").replace(")", "]").replace("\n", " ")
+    """Keep human-readable operation names in safe ASCII GRBL comments."""
+
+    sanitized = (
+        text.replace("(", "[")
+        .replace(")", "]")
+        .replace("\\n", " ")
+        .replace("·", "-")
+        .replace("°", " deg")
+        .replace("×", "x")
+        .replace("–", "-")
+        .replace("—", "-")
+    )
+    return normalize("NFKD", sanitized).encode(
+        "ascii", errors="replace"
+    ).decode("ascii")
 
 
 def _xy(
