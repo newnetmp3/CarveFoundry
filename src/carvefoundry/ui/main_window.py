@@ -50,8 +50,9 @@ from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
 from .text_editor import TextEditorMixin
-from .workspace_commands import WorkspaceCommandsMixin
 from .viewport import MeshViewport
+from .workspace_commands import WorkspaceCommandsMixin
+
 
 class Panel(QFrame):
     def __init__(self, title: str):
