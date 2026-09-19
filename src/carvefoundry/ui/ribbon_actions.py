@@ -1192,13 +1192,12 @@ class RibbonActionsMixin:
         )
         if not path:
             return
-        image = QImage(path)
-        if image.isNull():
-            self.statusBar().showMessage("Could not load image", 5000)
-            return
 
         form = _ActionForm(self, "Trace Image")
-        form.add_int("threshold", "Dark threshold (0-255)", 150, minimum=0, maximum=255)
+        form.add_int(
+            "threshold", "Dark threshold (0-255)", 150,
+            minimum=0, maximum=255,
+        )
         form.add_double(
             "width",
             "Output width",
@@ -1211,39 +1210,57 @@ class RibbonActionsMixin:
         if form.exec() != QDialog.DialogCode.Accepted:
             return
 
-        max_dimension = 96
-        if max(image.width(), image.height()) > max_dimension:
-            image = image.scaled(
-                max_dimension,
-                max_dimension,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-
-        mask = np.zeros((image.height(), image.width()), dtype=bool)
+        # Capture every setting on the GUI thread. Image decoding, pixel
+        # conversion and mesh construction happen in the background worker.
         threshold = int(form.value("threshold"))
         invert = bool(form.value("invert"))
-        for y in range(image.height()):
-            for x in range(image.width()):
-                color = QColor(image.pixel(x, y))
-                luminance = (
-                    0.2126 * color.red()
-                    + 0.7152 * color.green()
-                    + 0.0722 * color.blue()
-                )
-                active = color.alpha() > 16 and luminance <= threshold
-                mask[y, x] = not active if invert and color.alpha() > 16 else active
+        width_mm = float(form.value("width"))
+        depth_mm = float(form.value("depth"))
+        name = Path(path).stem + " trace"
 
-        try:
+        def trace(progress):
+            progress(0.03, "Loading image")
+            image = QImage(path)
+            if image.isNull():
+                raise ValueError("Could not load image.")
+            max_dimension = 96
+            if max(image.width(), image.height()) > max_dimension:
+                image = image.scaled(
+                    max_dimension,
+                    max_dimension,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            mask = np.zeros((image.height(), image.width()), dtype=bool)
+            for y in range(image.height()):
+                for x in range(image.width()):
+                    color = QColor(image.pixel(x, y))
+                    luminance = (
+                        0.2126 * color.red()
+                        + 0.7152 * color.green()
+                        + 0.0722 * color.blue()
+                    )
+                    active = color.alpha() > 16 and luminance <= threshold
+                    mask[y, x] = (
+                        not active if invert and color.alpha() > 16 else active
+                    )
+                if y % 4 == 0:
+                    progress(
+                        0.15 + 0.60 * (y + 1) / max(1, image.height()),
+                        f"Tracing row {y + 1} / {image.height()}",
+                    )
+            progress(0.78, "Building relief mesh")
             mesh = bitmap_runs_mesh(
-                mask,
-                width_mm=form.value("width"),
-                depth_mm=form.value("depth"),
+                mask, width_mm=width_mm, depth_mm=depth_mm
             )
-        except ValueError as exc:
-            self.statusBar().showMessage(f"Trace failed: {exc}", 5000)
-            return
-        self._add_generated_item(Path(path).stem + " trace", "trace", mesh)
+            progress(0.98, "Trace ready")
+            return mesh
+
+        self._start_background_job(
+            "Trace image",
+            task=trace,
+            on_done=lambda mesh: self._add_generated_item(name, "trace", mesh),
+        )
 
     # ------------------------------------------------------------------
     # Toolpaths / CAM
