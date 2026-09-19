@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
 from pathlib import Path
@@ -80,7 +81,12 @@ def _append_parking(
     )
 
 
-def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) -> str:
+def render_grbl(
+    toolpath: Toolpath,
+    settings: GrblPostSettings | None = None,
+    *,
+    progress: Callable[[float], None] | None = None,
+) -> str:
     """Render a metric absolute-coordinate program suitable for GRBL/Onefinity workflows."""
 
     options = settings or GrblPostSettings()
@@ -101,7 +107,10 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
     lines.append(f"G0 Z{safe_z}")
 
     last_feed: float | None = None
-    for move in toolpath.moves:
+    move_count = len(toolpath.moves)
+    for index, move in enumerate(toolpath.moves):
+        if progress is not None and index % 8192 == 0:
+            progress(index / move_count)
         x, y = _xy(move.x_mm, move.y_mm, options)
         z = _number(move.z_mm, options.decimals)
         if move.kind is MoveKind.RAPID:
@@ -114,6 +123,8 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
             last_feed = move.feed_mm_min
         lines.append(command)
 
+    if progress is not None:
+        progress(1.0)
     lines.append(f"G0 Z{safe_z}")
     _append_parking(lines, options, safe_z_mm=toolpath.safe_z_mm)
     lines.append("M2")
@@ -123,6 +134,8 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
 def render_grbl_program(
     toolpaths: list[Toolpath] | tuple[Toolpath, ...],
     settings: GrblPostSettings | None = None,
+    *,
+    progress: Callable[[float], None] | None = None,
 ) -> str:
     """Render multiple operations as one metric absolute GRBL program."""
 
@@ -137,6 +150,8 @@ def render_grbl_program(
         lines.append("(CarveFoundry)")
     lines.extend(("G90", "G21", "G17", "G94"))
 
+    total_moves = sum(len(toolpath.moves) for toolpath in toolpaths)
+    completed_moves = 0
     for operation_index, toolpath in enumerate(toolpaths, start=1):
         if options.include_comments:
             lines.extend(
@@ -149,7 +164,9 @@ def render_grbl_program(
         lines.append(f"G0 Z{safe_z}")
 
         last_feed: float | None = None
-        for move in toolpath.moves:
+        for index, move in enumerate(toolpath.moves):
+            if progress is not None and (completed_moves + index) % 8192 == 0:
+                progress((completed_moves + index) / total_moves)
             x, y = _xy(move.x_mm, move.y_mm, options)
             z = _number(move.z_mm, options.decimals)
             if move.kind is MoveKind.RAPID:
@@ -166,6 +183,9 @@ def render_grbl_program(
             lines.append(command)
 
         lines.append(f"G0 Z{safe_z}")
+        completed_moves += len(toolpath.moves)
+        if progress is not None:
+            progress(completed_moves / total_moves)
 
     _append_parking(
         lines,
@@ -189,6 +209,8 @@ def write_grbl_program(
     toolpaths: list[Toolpath] | tuple[Toolpath, ...],
     path: str | Path,
     settings: GrblPostSettings | None = None,
+    *,
+    progress: Callable[[float], None] | None = None,
 ) -> Path:
     """Write a multi-operation GRBL program."""
 
@@ -197,7 +219,7 @@ def write_grbl_program(
     temporary = output_path.with_suffix(output_path.suffix + ".tmp")
     try:
         temporary.write_text(
-            render_grbl_program(toolpaths, settings),
+            render_grbl_program(toolpaths, settings, progress=progress),
             encoding="ascii",
         )
         temporary.replace(output_path)
@@ -211,6 +233,8 @@ def write_grbl(
     toolpath: Toolpath,
     path: str | Path,
     settings: GrblPostSettings | None = None,
+    *,
+    progress: Callable[[float], None] | None = None,
 ) -> Path:
     """Write GRBL G-code atomically enough for normal desktop export."""
 
@@ -218,7 +242,10 @@ def write_grbl(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_suffix(output_path.suffix + ".tmp")
     try:
-        temporary.write_text(render_grbl(toolpath, settings), encoding="ascii")
+        temporary.write_text(
+            render_grbl(toolpath, settings, progress=progress),
+            encoding="ascii",
+        )
         temporary.replace(output_path)
     except OSError:
         temporary.unlink(missing_ok=True)
