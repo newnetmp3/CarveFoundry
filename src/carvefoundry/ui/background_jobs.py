@@ -165,3 +165,50 @@ class JobState:
     def __init__(self, worker: BackgroundWorker, thread: object) -> None:
         self.worker = worker
         self.thread = thread
+
+
+class JobCallbacks(QObject):
+    """Own GUI-thread Qt slots for cross-thread progress/result delivery.
+
+    Connecting a worker signal directly to an ordinary Python closure can
+    execute that closure in the worker's thread with some PySide versions.
+    QObject slots are explicitly queued to this receiver's GUI thread.
+    """
+
+    def __init__(
+        self,
+        parent: QObject,
+        *,
+        progress: Callable[[float, str], None],
+        completed: Callable[[object], None],
+        failed: Callable[[str], None],
+        cancelled: Callable[[], None],
+        cleaned_up: Callable[[], None],
+    ) -> None:
+        super().__init__(parent)
+        self._progress = progress
+        self._completed = completed
+        self._failed = failed
+        self._cancelled = cancelled
+        self._cleaned_up = cleaned_up
+
+    @Slot(float, str)
+    def on_progress(self, value: float, message: str) -> None:
+        self._progress(value, message)
+
+    @Slot(object)
+    def on_completed(self, result: object) -> None:
+        self._completed(result)
+
+    @Slot(str)
+    def on_failed(self, message: str) -> None:
+        self._failed(message)
+
+    @Slot()
+    def on_cancelled(self) -> None:
+        self._cancelled()
+
+    @Slot()
+    def on_cleaned_up(self) -> None:
+        self._cleaned_up()
+        self.deleteLater()
