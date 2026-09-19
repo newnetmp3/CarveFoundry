@@ -477,8 +477,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         )
         for key, text, callback in specs:
             self._new_ui_action(key, text, callback)
-        for key in ("measure", "fixture_draw"):
-            self._ui_actions[key].setCheckable(True)
 
         self._new_ui_action(
             "transform_global",
@@ -609,8 +607,10 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "line",
                 "text",
                 "pen",
+                "measure",
             )
         }
+        self._shape_tool_buttons["fixture"] = self._ui_actions["fixture_draw"]
         for action in self._shape_tool_buttons.values():
             action.setCheckable(True)
 
