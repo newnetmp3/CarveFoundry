@@ -86,7 +86,11 @@ class DirectSelectionMixin:
                 dialog.close()
 
 
-    def _commit_vector_path(self, item_id: str, path, *, label: str) -> bool:
+    def _commit_vector_path(
+        self, item_id: str, path, *, label: str,
+        target_node: int | None = None,
+        target_world_xy: tuple[float, float] | None = None,
+    ) -> bool:
         indices = [
             index for index, item in enumerate(self.project.items)
             if item.item_id == item_id
@@ -105,6 +109,16 @@ class DirectSelectionMixin:
         self._before_ribbon_mutation(label)
         item.mesh = mesh
         item.vector_path = path
+        # Transform3D pivots about the *mesh bounds centre*. Editing a node
+        # may change that centre, so preserve the cursor's exact world XY.
+        if target_world_xy is not None and target_node is not None:
+            actual = node_world_points(item)[target_node]
+            tx, ty, tz = item.transform.translation_mm
+            item.transform.translation_mm = (
+                tx + target_world_xy[0] - float(actual[0]),
+                ty + target_world_xy[1] - float(actual[1]),
+                tz,
+            )
         self._after_ribbon_mutation(label, True)
         self.viewport.update()
         self._refresh_vector_node_inspector()
@@ -133,7 +147,10 @@ class DirectSelectionMixin:
         except (ValueError, IndexError) as exc:
             self.statusBar().showMessage(f"Vector drag rejected: {exc}", 7500)
             return
-        self._commit_vector_path(item.item_id, new, label="drag vector node")
+        self._commit_vector_path(
+            item.item_id, new, label="drag vector node",
+            target_node=node_index, target_world_xy=(x_mm, y_mm),
+        )
 
     def _refresh_vector_node_inspector(self) -> None:
         dialog = getattr(self, "_vector_node_dialog", None)
@@ -245,6 +262,10 @@ class DirectSelectionMixin:
                 return
             self._commit_vector_path(
                 selected.item_id, changed, label=f"{kind} vector node",
+                target_node=index if kind == "move" else None,
+                target_world_xy=(
+                    (x.value(), y.value()) if kind == "move" else None
+                ),
             )
             table.setCurrentCell(
                 min(index, table.rowCount() - 1), 0,
