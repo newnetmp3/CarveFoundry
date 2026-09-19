@@ -304,7 +304,13 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._toolpath_rapid_lod_gpu: _GpuLineGeometry | None = None
         self._toolpath_gpu_key: tuple[tuple[int, int, int], ...] | None = None
         self._toolpath_render_cache = _ToolpathRenderCache.empty()
-        self._toolpath_interaction_lod_frames = 0
+        self._toolpath_wheel_lod_active = False
+        self._toolpath_lod_restore_timer = QTimer(self)
+        self._toolpath_lod_restore_timer.setSingleShot(True)
+        self._toolpath_lod_restore_timer.setInterval(80)
+        self._toolpath_lod_restore_timer.timeout.connect(
+            self._restore_toolpath_full_detail
+        )
         self._mesh_cache: dict[int, _GpuMesh] = {}
         self._prepared_mesh_uploads: dict[int, tuple[object, bytes, int]] = {}
         self._renderer_description = "Native OpenGL initializing…"
@@ -831,7 +837,8 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self._gizmo_drag_accumulated_delta = 0.0
         self._active_resize_handle = None
         self._transform_interaction_kind = None
-        self._toolpath_interaction_lod_frames = 0
+        self._toolpath_wheel_lod_active = False
+        self._toolpath_lod_restore_timer.stop()
         self._update_interaction_cursor()
         self.requestUpdate()
 
@@ -2906,10 +2913,7 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         cut_count, rapid_count = self._toolpath_visible_vertex_counts(cache)
         use_lod = (
             cache.lod_stride > 1
-            and (
-                self._interaction_mode in {"orbit", "pan"}
-                or self._toolpath_interaction_lod_frames > 0
-            )
+            and self._toolpath_interactive_lod_active()
         )
         if use_lod:
             full_cut_segments = max(len(cache.cut_vertices) // 2, 1)
@@ -2992,9 +2996,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
             view_projection,
             world_per_pixel,
         )
-
-        if self._toolpath_interaction_lod_frames > 0:
-            self._toolpath_interaction_lod_frames -= 1
 
     def _pan_pixels(self, delta: QPointF) -> None:
         _projection, _view, world_per_pixel = self._camera_geometry()
@@ -3140,8 +3141,6 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         delta = event.position() - self._last_mouse_pos
         self._last_mouse_pos = event.position()
         self._interaction_distance += abs(delta.x()) + abs(delta.y())
-        if self._interaction_mode in {"orbit", "pan"}:
-            self._toolpath_interaction_lod_frames = 1
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
@@ -3487,13 +3486,28 @@ class _NativeOpenGLViewport(QOpenGLWindow):
         self.viewChanged.emit()
         event.accept()
 
+    def _toolpath_interactive_lod_active(self) -> bool:
+        """Return whether the temporary low-detail toolpath should be drawn.
+
+        Mouse orbit/pan is authoritative while the button is held. Wheel zoom
+        uses a short restartable idle timer because wheel events have no matching
+        release event. No frame-count state is used: that could leave the final
+        simplified frame on screen when no later repaint was scheduled.
+        """
+
+        return (
+            self._interaction_mode in {"orbit", "pan"}
+            or self._toolpath_wheel_lod_active
+        )
+
     def _restore_toolpath_full_detail(self) -> None:
-        self._toolpath_interaction_lod_frames = 0
+        self._toolpath_lod_restore_timer.stop()
+        self._toolpath_wheel_lod_active = False
         self.requestUpdate()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        self._toolpath_interaction_lod_frames = 1
-        QTimer.singleShot(60, self._restore_toolpath_full_detail)
+        self._toolpath_wheel_lod_active = True
+        self._toolpath_lod_restore_timer.start()
         angle_steps = event.angleDelta().y() / 120.0
         steps = angle_steps if angle_steps else event.pixelDelta().y() / 120.0
         if steps:
