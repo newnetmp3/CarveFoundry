@@ -2277,13 +2277,49 @@ class RibbonActionsMixin:
 
         def show_generation_help(help_key: str) -> None:
             title_text, help_text = generation_help[help_key]
-            message = QMessageBox(dialog)
-            message.setIcon(QMessageBox.Icon.Information)
-            message.setWindowTitle(f"{title_text} — Toolpath Help")
-            message.setText(f"<b>{title_text}</b>")
-            message.setInformativeText(help_text)
-            message.setStandardButtons(QMessageBox.StandardButton.Ok)
-            message.exec()
+            help_dialog = QDialog(dialog)
+            help_dialog.setObjectName("GenerationOptionHelpDialog")
+            help_dialog.setWindowTitle(f"{title_text} — Toolpath Help")
+            help_dialog.resize(640, 500)
+            help_dialog.setMinimumSize(480, 320)
+            help_dialog.setModal(True)
+
+            help_layout = QVBoxLayout(help_dialog)
+            help_layout.setContentsMargins(14, 14, 14, 12)
+            help_layout.setSpacing(10)
+
+            help_title = QLabel(title_text)
+            help_title.setObjectName("DialogTitle")
+            title_font = help_title.font()
+            title_font.setBold(True)
+            title_font.setPointSize(max(11, title_font.pointSize() + 2))
+            help_title.setFont(title_font)
+            help_layout.addWidget(help_title)
+
+            help_scroll = QScrollArea()
+            help_scroll.setFrameShape(QFrame.Shape.NoFrame)
+            help_scroll.setWidgetResizable(True)
+            help_body = QLabel(help_text)
+            help_body.setObjectName("GenerationOptionHelpText")
+            help_body.setWordWrap(True)
+            help_body.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+            )
+            help_body.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            help_scroll.setWidget(help_body)
+            help_layout.addWidget(help_scroll, 1)
+
+            help_buttons_box = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Close
+            )
+            help_buttons_box.rejected.connect(help_dialog.reject)
+            help_buttons_box.clicked.connect(
+                lambda _button: help_dialog.accept()
+            )
+            help_layout.addWidget(help_buttons_box)
+            help_dialog.exec()
 
         def help_row(help_key: str, widget: QWidget) -> QWidget:
             title_text, help_text = generation_help[help_key]
