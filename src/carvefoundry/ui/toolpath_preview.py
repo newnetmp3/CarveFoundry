@@ -47,6 +47,7 @@ class ToolpathPreviewWindow(QMainWindow):
         stock: Stock,
         post_settings: GrblPostSettings,
         source_names: list[str] | None = None,
+        render_geometry_data: dict[str, object] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -80,6 +81,10 @@ class ToolpathPreviewWindow(QMainWindow):
             toolpaths=list(toolpaths),
         )
         self.viewport = MeshViewport(preview_project)
+        if render_geometry_data is not None:
+            self.viewport.prepare_toolpath_render_cache(
+                self._toolpaths, render_geometry_data
+            )
         self.viewport.set_view_controls_visible(False)
         self.viewport.set_selected_item(None)
         self.viewport.set_toolpaths_visible(True)
