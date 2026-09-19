@@ -2145,7 +2145,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             toolpath = geometry_pocket(mesh, cutter, settings)
         elif operation == "engrave":
             toolpath = geometry_engrave(mesh, cutter, settings)
-        elif operation in {"rough", "finish", "rest"}:
+        elif operation == "rest":
+            raise ValueError(
+                "Stock-aware rest needs previous job stages: use Generate "
+                "Toolpaths, then Append to existing machining job."
+            )
+        elif operation in {"rough", "finish"}:
             toolpath = finish_3d(
                 mesh,
                 cutter,
@@ -2286,7 +2291,16 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
                 type("_Bounds", (), {"bounds": bounds})(),
             )
 
-        append_to_job = bool(self._cam_append_to_job and self.project.toolpaths)
+        if operation == "rest" and not self.project.toolpaths:
+            self.statusBar().showMessage(
+                "Generate and append roughing/finishing before 3D Rest.", 7000
+            )
+            return False
+        append_to_job = bool(
+            self.project.toolpaths and (
+                operation == "rest" or self._cam_append_to_job
+            )
+        )
         self._cam_append_to_job = False
         request = CamRequest(
             operation=operation,
@@ -2300,6 +2314,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
             silhouette_settings=silhouette_settings,
             previous_toolpaths=(
                 list(self.project.toolpaths) if append_to_job else None
+            ),
+            rest_min_remaining_mm=float(
+                self._settings.value("cam/rest_min_remaining_mm", 0.15)
+            ),
+            rest_grid_spacing_mm=float(
+                self._settings.value("cam/rest_grid_spacing_mm", 0.75)
             ),
         )
         self._toolpath_progress_last_value = -1
