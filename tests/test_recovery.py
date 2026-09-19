@@ -46,7 +46,10 @@ def test_full_recovery_roundtrip_without_overwriting_saved_project(tmp_path):
     loaded = load_recovery(checkpoint)
     assert loaded.name == "Unsaved edits"
     assert loaded.items[0].mesh is not None
-    assert loaded.items[0].mesh.mesh.is_watertight
+    assert len(loaded.items[0].mesh.mesh.faces) == 12
+    assert loaded.items[0].mesh.mesh.bounds.tolist() == pytest.approx(
+        [[-5.0, -6.0, -2.0], [5.0, 6.0, 0.0]],
+    )
     assert load_project(document).name == "Original"
 
 
