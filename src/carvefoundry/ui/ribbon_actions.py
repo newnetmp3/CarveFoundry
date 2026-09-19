@@ -2631,13 +2631,6 @@ class RibbonActionsMixin:
             for item in self.project.items
             if item.mesh is not None
         ]
-        if not items:
-            self.statusBar().showMessage(
-                "Add a mesh or created shape before generating toolpaths",
-                4000,
-            )
-            return
-
         cutter = self.tool_combo.currentData()
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
@@ -2741,14 +2734,52 @@ class RibbonActionsMixin:
                 toolpath.source_item_name = "All design objects"
                 generated_toolpaths.append(toolpath)
             else:
+                groups: list[list] = []
                 for item in items:
-                    generated_toolpaths.extend(
-                        self._generate_toolpaths_for_item(
-                            item,
-                            cutter,
-                            operation,
-                        )
+                    group = self._generate_toolpaths_for_item(
+                        item,
+                        cutter,
+                        operation,
                     )
+                    if group:
+                        groups.append(group)
+
+                # Keep each object's internal operation order intact (for
+                # example Finish before Cutout), but visit object groups by
+                # nearest next start to reduce non-cutting XY travel.
+                current_xy = np.array((0.0, 0.0), dtype=float)
+                remaining = list(groups)
+                while remaining:
+                    best_index = 0
+                    best_distance = float("inf")
+                    for index, group in enumerate(remaining):
+                        first_moves = [
+                            path.moves[0]
+                            for path in group
+                            if path.moves
+                        ]
+                        if not first_moves:
+                            continue
+                        first = first_moves[0]
+                        distance = float(
+                            np.linalg.norm(
+                                np.array((first.x_mm, first.y_mm))
+                                - current_xy
+                            )
+                        )
+                        if distance < best_distance:
+                            best_index = index
+                            best_distance = distance
+                    group = remaining.pop(best_index)
+                    generated_toolpaths.extend(group)
+                    for path in reversed(group):
+                        if path.moves:
+                            last = path.moves[-1]
+                            current_xy = np.array(
+                                (last.x_mm, last.y_mm),
+                                dtype=float,
+                            )
+                            break
         except ModuleNotFoundError as exc:
             missing = exc.name or "required Python package"
             message = (
