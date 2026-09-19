@@ -11,7 +11,6 @@ from carvefoundry.cam.job_plan import (
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.tools import Cutter, ToolType
 
-
 FLAT = Cutter("1/4 flat", ToolType.FLAT_END_MILL, 6.35)
 BALL = Cutter("3 mm ball", ToolType.BALL_NOSE, 3.0)
 
