@@ -38,7 +38,11 @@ It must not be described as a guarantee of physical safety.
    and fit/tolerance validation.
 6. **Stock-aware rest machining/adaptive clearing/feed optimization:** use
    actual remaining material and cutter engagement, with validated limits.
-7. **Vector node editor, Boolean paths, offsets, group cutouts, text-on-path.**
+7. **Direct Selection / editable vector nodes, group cutouts, text-on-path.**
+   Planar silhouette Union/Subtract/Intersect and signed Offset are implemented
+   separately: results are Z0-topped watertight extrusions, not 3D mesh
+   Booleans or editable source vector paths. Original shapes are hidden, not
+   destroyed; Undo/Redo and CF3D save/load preserve the outcome.
 8. **Multi-component 3D relief compositing and editable heightmap layers.**
 9. **Double-sided machining wizard:** choose actual physical flip axis, compute
    stock-relative registration, and validate front/back alignment across
