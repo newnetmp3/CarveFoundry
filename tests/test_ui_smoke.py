@@ -31,6 +31,7 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             for action in window.main_menu_bar.actions()
         ] == [
             "File",
+            "Project",
             "Edit",
             "Design",
             "Model",
@@ -1730,5 +1731,32 @@ def test_toolpath_lod_restores_full_detail_after_navigation_idle() -> None:
 
         assert not renderer._toolpath_interactive_lod_active()
         assert not renderer._toolpath_lod_restore_timer.isActive()
+    finally:
+        window.close()
+
+
+def test_easel_style_workflows_are_exposed_in_desktop_ui() -> None:
+    window = MainWindow()
+    try:
+        for key in (
+            "smart_values",
+            "smart_bindings",
+            "work_zero",
+            "export_resume",
+            "export_tiled",
+            "select_machine_profile",
+            "machine_profile",
+            "delete_machine_profile",
+            "home_machine",
+            "go_work_zero",
+            "park_machine",
+        ):
+            assert key in window._ui_actions
+
+        assert any(
+            action.text() == "Project"
+            for action in window.main_menu_bar.actions()
+        )
+        assert window._active_machine_profile().name
     finally:
         window.close()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 
 from .toolpath import MoveKind, Toolpath
@@ -14,10 +15,27 @@ class GrblPostSettings:
 
     decimals: int = 3
     include_comments: bool = True
+    x_offset_mm: float = 0.0
+    y_offset_mm: float = 0.0
+    park_enabled: bool = False
+    park_x_mm: float = 0.0
+    park_y_mm: float = 0.0
+    park_z_mm: float = 10.0
 
     def __post_init__(self) -> None:
         if not 0 <= self.decimals <= 6:
             raise ValueError("decimals must be between zero and six.")
+        values = (
+            self.x_offset_mm,
+            self.y_offset_mm,
+            self.park_x_mm,
+            self.park_y_mm,
+            self.park_z_mm,
+        )
+        if not all(isfinite(value) for value in values):
+            raise ValueError("G-code coordinate settings must be finite.")
+        if self.park_z_mm < 0:
+            raise ValueError("Parking Z must be at or above work Z0.")
 
 
 def _number(value: float, decimals: int) -> str:
@@ -29,6 +47,37 @@ def _number(value: float, decimals: int) -> str:
 
 def _comment(text: str) -> str:
     return text.replace("(", "[").replace(")", "]").replace("\n", " ")
+
+
+def _xy(
+    x_mm: float,
+    y_mm: float,
+    settings: GrblPostSettings,
+) -> tuple[str, str]:
+    return (
+        _number(x_mm + settings.x_offset_mm, settings.decimals),
+        _number(y_mm + settings.y_offset_mm, settings.decimals),
+    )
+
+
+def _append_parking(
+    lines: list[str],
+    settings: GrblPostSettings,
+    *,
+    safe_z_mm: float,
+) -> None:
+    if not settings.park_enabled:
+        return
+    clearance = max(float(safe_z_mm), settings.park_z_mm)
+    if settings.include_comments:
+        lines.append("(Park)")
+    lines.append(f"G0 Z{_number(clearance, settings.decimals)}")
+    lines.append(
+        "G0 X"
+        + _number(settings.park_x_mm, settings.decimals)
+        + " Y"
+        + _number(settings.park_y_mm, settings.decimals)
+    )
 
 
 def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) -> str:
@@ -53,8 +102,7 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
 
     last_feed: float | None = None
     for move in toolpath.moves:
-        x = _number(move.x_mm, options.decimals)
-        y = _number(move.y_mm, options.decimals)
+        x, y = _xy(move.x_mm, move.y_mm, options)
         z = _number(move.z_mm, options.decimals)
         if move.kind is MoveKind.RAPID:
             lines.append(f"G0 X{x} Y{y} Z{z}")
@@ -67,6 +115,7 @@ def render_grbl(toolpath: Toolpath, settings: GrblPostSettings | None = None) ->
         lines.append(command)
 
     lines.append(f"G0 Z{safe_z}")
+    _append_parking(lines, options, safe_z_mm=toolpath.safe_z_mm)
     lines.append("M2")
     return "\n".join(lines) + "\n"
 
@@ -101,8 +150,7 @@ def render_grbl_program(
 
         last_feed: float | None = None
         for move in toolpath.moves:
-            x = _number(move.x_mm, options.decimals)
-            y = _number(move.y_mm, options.decimals)
+            x, y = _xy(move.x_mm, move.y_mm, options)
             z = _number(move.z_mm, options.decimals)
             if move.kind is MoveKind.RAPID:
                 lines.append(f"G0 X{x} Y{y} Z{z}")
@@ -119,6 +167,11 @@ def render_grbl_program(
 
         lines.append(f"G0 Z{safe_z}")
 
+    _append_parking(
+        lines,
+        options,
+        safe_z_mm=max(toolpath.safe_z_mm for toolpath in toolpaths),
+    )
     lines.append("M2")
     return "\n".join(lines) + "\n"
 
