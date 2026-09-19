@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QMenu,
     QMenuBar,
     QPlainTextEdit,
@@ -379,6 +380,8 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             ("export_gcode", "Export G-code", self._export_gcode),
             ("export_resume", "Export Resume G-code…", self._export_resume_gcode),
             ("export_tiled", "Export Tiled G-code…", self._export_tiled_gcode),
+            ("fixtures", "Clamps and Fences…", self._fixture_editor),
+            ("preflight", "CNC Preflight…", self._preflight_toolpaths),
             ("undo", "Undo", self._undo),
             ("redo", "Redo", self._redo),
             ("cut", "Cut", self._cut_selected_items),
@@ -748,7 +751,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
             project_menu,
-            ("stock_setup", "work_zero", "smart_values", "smart_bindings"),
+            ("stock_setup", "work_zero", "fixtures", "smart_values", "smart_bindings"),
         )
 
         edit_menu = bar.addMenu("Edit")
@@ -928,6 +931,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "calculate",
                 "preview",
                 "simulate",
+                "preflight",
                 "export_toolpath",
                 "export_resume",
                 "export_tiled",
@@ -942,6 +946,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 "machine_profile",
                 "delete_machine_profile",
                 "work_area",
+                "fixtures",
                 "postprocessor",
             ),
         )
@@ -6007,6 +6012,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             toolpaths=list(toolpaths),
             path=path,
             settings=self._grbl_post_settings(),
+            stock=self.project.stock,
+            machine_profile=self._active_machine_profile(),
+            fixtures=tuple(self.project.fixtures),
         )
 
         def done(result):
@@ -6023,8 +6031,16 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 f"Exported {output_path.name}", 5000
             )
 
+        def failed(message: str) -> None:
+            self._set_activity_info(f"G-code export blocked/failed\\n{message}")
+            QMessageBox.warning(
+                self, "G-code export blocked by preflight", message
+            )
+            self.statusBar().showMessage("G-code export blocked", 8000)
+
         self._start_background_job(
             "Export G-code", request=request, on_done=done,
+            on_failed=failed,
         )
 
     def _import_file(self, kind: str | None = None) -> None:
