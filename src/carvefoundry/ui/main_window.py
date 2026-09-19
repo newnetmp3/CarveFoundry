@@ -45,6 +45,7 @@ from ..core.units import ModelUnits
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .import_worker import ImportWorker
 from .interface_settings import InterfaceSettingsMixin
+from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPopup
 from .planar_operations_actions import PlanarOperationsMixin
 from .ribbon import Ribbon
@@ -96,6 +97,7 @@ class MainWindow(
     WorkspaceCommandsMixin,
     TextEditorMixin,
     TwoSidedSetupMixin,
+    JobPlannerMixin,
     InterfaceSettingsMixin,
     PlanarOperationsMixin,
     RibbonActionsMixin,
