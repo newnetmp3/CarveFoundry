@@ -2951,10 +2951,6 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             and item is not None
             and item.mesh is not None
         )
-        has_any_mesh = any(
-            project_item.mesh is not None
-            for project_item in self.project.items
-        )
         has_grouped = any(
             self.project.items[index].group_id is not None
             for index in indices
