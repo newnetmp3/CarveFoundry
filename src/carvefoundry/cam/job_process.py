@@ -332,7 +332,17 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
             )
         return {"code_lines": lines, "move_code_lines": offsets}
     if request.mode == "preflight":
-        return {"report": _require_preflight(request, toolpaths), "files": []}
+        if request.stock is None or request.machine_profile is None:
+            raise ValueError("Preflight needs stock and machine profile.")
+        outcome = check_preflight(
+            toolpaths, request.stock, request.machine_profile,
+            request.fixtures, settings,
+        )
+        return {
+            "report": outcome.format_report(),
+            "safe_to_export": outcome.safe_to_export,
+            "files": [],
+        }
     if request.mode == "resume":
         toolpaths = [
             resume_toolpath(
