@@ -1,8 +1,8 @@
 """Real Direct Selection and the workshop's live guided production checklist."""
 from __future__ import annotations
 
-import pytest
 import numpy as np
+import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
