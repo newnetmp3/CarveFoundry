@@ -887,6 +887,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             (
                 "camera",
                 "view_fit",
+                "frame_selected",
                 "view_2d",
                 "perspective",
                 "orthographic",
@@ -1741,7 +1742,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         workspace_menu = view_menu.addMenu("Workspace")
         self._add_menu_actions(
             workspace_menu,
-            ("layers", "inspector", "status_bar", "view_controls", "reset_ui"),
+            (
+                "layers",
+                "inspector",
+                "isolate_selected",
+                "exit_isolate",
+                "status_bar",
+                "view_controls",
+                "reset_ui",
+            ),
         )
         navigation_menu = view_menu.addMenu("Navigation")
         self._add_menu_actions(
