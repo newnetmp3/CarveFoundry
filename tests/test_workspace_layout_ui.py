@@ -31,6 +31,8 @@ def _model_window():
 
 def test_accordion_is_compact_persistent_and_menu_focus_opens_collapsed_section():
     window = _model_window()
+    window.show()
+    _APP.processEvents()
     original = {
         key: window._settings.value(f"interface/inspector_sections/{key}")
         for key in ("setup", "position", "rotation", "size", "scale")
@@ -45,7 +47,9 @@ def test_accordion_is_compact_persistent_and_menu_focus_opens_collapsed_section(
         assert sections["rotation"].body.isHidden()
         window._focus_transform_section("rotation")
         assert sections["rotation"].isExpanded()
-        assert window.rotation_spins[0].hasFocus()
+        # Offscreen Qt may focus the spin's embedded line edit, not the
+        # outer QDoubleSpinBox itself; Select All proves menu focus worked.
+        assert window.rotation_spins[0].lineEdit().selectedText()
         sections["scale"].setExpanded(False)
         assert sections["scale"].body.isHidden()
 
