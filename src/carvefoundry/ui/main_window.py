@@ -41,7 +41,6 @@ from ..core.primitives import text_mesh
 from ..core.project import Project, ProjectItem, TextProperties
 from ..core.project_file import (
     PROJECT_SUFFIX,
-    ProjectFileError,
     load_project,
     save_project,
 )
@@ -5787,7 +5786,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 self.job_progress.setRange(0, 100)
                 self.job_progress.setValue(100)
                 self.job_progress.setFormat(f"{title} complete · %p%")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - always clean up the worker
                 failed(f"{type(exc).__name__}: {exc}")
 
         def failed(message: str) -> None:
