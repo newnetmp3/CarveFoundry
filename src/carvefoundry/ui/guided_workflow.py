@@ -174,6 +174,21 @@ class GuidedWorkflowMixin:
             row_layout.addWidget(detail_label)
             sections.addWidget(row)
             rows.append((title_label, detail_label, button))
+        shortcuts = QHBoxLayout()
+        extra_buttons = []
+        for text, callback in (
+            ("Batch Copies", self._batch_layout),
+            ("Two-Sided Setup", self._double_sided_setup),
+            ("Preview Paths", self._preview_toolpaths),
+            ("Material Removal", self._simulate_stock_removal),
+        ):
+            button = QPushButton(text, body)
+            button.clicked.connect(
+                lambda _checked=False, fn=callback: fn()
+            )
+            shortcuts.addWidget(button)
+            extra_buttons.append(button)
+        sections.addLayout(shortcuts)
         sections.addStretch()
         scroll.setWidget(body)
         layout.addWidget(scroll, 1)
@@ -198,6 +213,7 @@ class GuidedWorkflowMixin:
         )
         self._guided_workflow_dialog = dialog
         self._guided_workflow_rows = rows
+        self._guided_workflow_extras = extra_buttons
         self._guided_workflow_timer = refresh_timer
         self._refresh_guided_workflow()
         refresh_timer.start()
@@ -219,9 +235,18 @@ class GuidedWorkflowMixin:
             )
             detail.setText(description)
             button.setEnabled(allowed and not busy)
+        extra = getattr(self, "_guided_workflow_extras", None)
+        if extra:
+            for button in extra[:2]:
+                button.setEnabled(not busy)
+            for button in extra[2:]:
+                button.setEnabled(
+                    bool(self.project.toolpaths) and not busy
+                )
 
     def _guided_workflow_closed(self, dialog) -> None:
         if getattr(self, "_guided_workflow_dialog", None) is dialog:
             self._guided_workflow_dialog = None
             self._guided_workflow_rows = None
+            self._guided_workflow_extras = None
             self._guided_workflow_timer = None
