@@ -1820,8 +1820,8 @@ class RibbonActionsMixin:
     def _build_toolpath_generation_dialog(self) -> QDialog:
         """Build the all-in-one CAM generation dialog.
 
-        The dialog is intentionally complete enough to get from a selected
-        design object to a calculable toolpath without visiting other panels.
+        The dialog is intentionally complete enough to generate the chosen
+        operation for every design object without visiting other panels.
         """
 
         dialog = QDialog(self)
@@ -1876,20 +1876,29 @@ class RibbonActionsMixin:
             return box, form
 
         source_box, source_form = group("1. Source & Operation")
-        source_combo = QComboBox()
-        for index, project_item in enumerate(self.project.items):
-            if project_item.mesh is not None:
-                source_combo.addItem(
-                    f"{project_item.name}  ·  {project_item.kind.upper()}",
-                    index,
-                )
-        selected_index = self._selected_item_index()
-        if selected_index is not None:
-            combo_index = source_combo.findData(selected_index)
-            if combo_index >= 0:
-                source_combo.setCurrentIndex(combo_index)
-        fields["source"] = source_combo
-        source_form.addRow("Geometry", source_combo)
+        source_items = [
+            project_item
+            for project_item in self.project.items
+            if project_item.mesh is not None
+        ]
+        source_summary = QLabel()
+        source_summary.setWordWrap(True)
+        if source_items:
+            names = ", ".join(item.name for item in source_items[:8])
+            if len(source_items) > 8:
+                names += f", +{len(source_items) - 8} more"
+            source_summary.setText(
+                f"All {len(source_items)} design object"
+                f"{'s' if len(source_items) != 1 else ''}\n{names}"
+            )
+        else:
+            source_summary.setText("No design geometry in this project")
+        source_summary.setToolTip(
+            "Generate Toolpaths always processes every design object that "
+            "contains mesh geometry. The current selection is ignored."
+        )
+        fields["source_summary"] = source_summary
+        source_form.addRow("Objects", source_summary)
 
         operation_combo = QComboBox()
         for operation in (
@@ -2182,14 +2191,6 @@ class RibbonActionsMixin:
         buttons.rejected.connect(dialog.reject)
         outer.addWidget(buttons)
 
-        def selected_source() -> ProjectItem | None:
-            source_index = source_combo.currentData()
-            if not isinstance(source_index, int):
-                return None
-            if not 0 <= source_index < len(self.project.items):
-                return None
-            return self.project.items[source_index]
-
         def update_relevance_and_readiness() -> None:
             operation = str(operation_combo.currentData() or "")
             is_3d = operation in {"rough", "finish", "rest", "waterline"}
@@ -2233,11 +2234,15 @@ class RibbonActionsMixin:
                 cutter_details.setText("No valid cutter selected")
 
             checks: list[tuple[bool, str]] = []
-            item = selected_source()
             checks.append(
                 (
-                    item is not None and item.mesh is not None,
-                    "Source geometry selected",
+                    bool(source_items),
+                    (
+                        f"All {len(source_items)} design object"
+                        f"{'s' if len(source_items) != 1 else ''} will be generated"
+                        if source_items
+                        else "Project contains design geometry"
+                    ),
                 )
             )
             checks.append(
@@ -2317,13 +2322,6 @@ class RibbonActionsMixin:
             if not generate_button.isEnabled():
                 return
 
-            source_index = source_combo.currentData()
-            if isinstance(source_index, int):
-                self._select_project_indices(
-                    [source_index],
-                    primary=source_index,
-                )
-
             operation = str(operation_combo.currentData() or "finish")
             self._select_cam_operation(operation)
 
@@ -2389,7 +2387,6 @@ class RibbonActionsMixin:
         generate_button.clicked.connect(accept_and_generate)
 
         watched_widgets = (
-            source_combo,
             operation_combo,
             cutter_combo,
             cut_type,
