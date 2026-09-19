@@ -3645,6 +3645,8 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
 
     def _preflight_toolpaths(self) -> None:
         paths = list(self.project.toolpaths)
+        guided_fingerprint = self._guided_job_fingerprint()
+        self._guided_preflight_pass = None
         if not paths:
             self.statusBar().showMessage(
                 "Generate toolpaths before running preflight", 4000
@@ -3661,6 +3663,12 @@ class RibbonActionsMixin(CamGenerationDialogMixin):
         )
 
         def done(payload: object) -> None:
+            self._guided_preflight_pass = (
+                guided_fingerprint if payload["safe_to_export"]
+                and self._guided_job_fingerprint() == guided_fingerprint
+                else None
+            )
+            self._refresh_guided_workflow()
             report = str(payload["report"])
             self._set_activity_info(report)
             display = QMessageBox(self)
