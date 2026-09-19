@@ -264,7 +264,6 @@ def test_more_detail_generates_more_raster_cut_moves_for_same_tool() -> None:
     assert detail_cuts > fast_cuts
 
 
-
 def test_basic_profile_keeps_multipass_contour_connected() -> None:
     settings = BasicCamSettings(
         max_stepdown_mm=1.0,
