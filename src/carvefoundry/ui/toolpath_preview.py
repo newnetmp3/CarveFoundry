@@ -420,18 +420,143 @@ class ToolpathPreviewWindow(QMainWindow):
             self._splitter.setSizes([390, max(570, total - 390)])
 
     def _ensure_code_loaded(self) -> None:
-        if self._code_loaded:
+        if self._code_loaded or self._code_loading:
             return
+        if len(self._moves) > self.ASYNC_CODE_MOVE_THRESHOLD:
+            self._start_code_job()
+            return
+
         self._code_lines, self._move_code_lines = self._render_program()
         self._load_code()
         self._code_loaded = True
-        if self._moves and hasattr(self, "_slider"):
+        self._highlight_current_code_line()
+
+    def _highlight_current_code_line(self) -> None:
+        if self._moves and self._move_code_lines and hasattr(self, "_slider"):
             index = max(
                 0,
                 min(self._slider.value(), len(self._move_code_lines) - 1),
             )
-            if self._move_code_lines:
-                self._highlight_code_line(self._move_code_lines[index])
+            self._highlight_code_line(self._move_code_lines[index])
+
+    def _start_code_job(self) -> None:
+        """Backplot text generation runs in a cancellable child process."""
+
+        if self._code_loaded or self._code_loading:
+            return
+        self._code_loading = True
+        self._code_offset = 0
+        self._code_progress.setRange(0, 100)
+        self._code_progress.setValue(0)
+        self._code_progress.setFormat("Preparing G-code · %p%")
+        self._code_progress.show()
+        self.code_editor.setPlaceholderText("Preparing G-code in a worker…")
+        self._code_toggle.setEnabled(False)
+
+        request = GcodeRequest(
+            toolpaths=self._toolpaths,
+            path="",
+            settings=self._post_settings,
+            mode="preview_code",
+        )
+        worker = BackgroundWorker(process_request=request)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        self._code_worker = worker
+        self._code_thread = thread
+
+        def progress(fraction: float, status: str) -> None:
+            # Leave the final 10% for adding the numbered lines to Qt.
+            value = round(90 * max(0, min(1, fraction)))
+            self._code_progress.setValue(value)
+            self._code_progress.setFormat(f"{status} · %p%")
+
+        def done(result: object) -> None:
+            if not isinstance(result, dict):
+                failed("Invalid G-code viewer result")
+                return
+            self._code_lines = result["code_lines"]
+            self._move_code_lines = result["move_code_lines"]
+            self._code_offset = 0
+            self._code_progress.setValue(90)
+            self._code_progress.setFormat("Displaying G-code · %p%")
+            self.code_editor.clear()
+            self._code_append_timer.start()
+
+        def failed(message: str) -> None:
+            self._code_loading = False
+            self._code_progress.setFormat("G-code loading failed")
+            self.code_editor.setPlaceholderText(
+                f"Could not load G-code: {message}"
+            )
+            self._code_toggle.setEnabled(True)
+
+        def cancelled() -> None:
+            self._code_loading = False
+            self._code_progress.setFormat("G-code loading canceled")
+            self._code_toggle.setEnabled(True)
+
+        def cleaned_up() -> None:
+            self._code_worker = None
+            self._code_thread = None
+            self._code_bridge = None
+            if self._close_after_code:
+                self.close()
+
+        bridge = JobCallbacks(
+            self,
+            progress=progress,
+            completed=done,
+            failed=failed,
+            cancelled=cancelled,
+            cleaned_up=cleaned_up,
+        )
+        self._code_bridge = bridge
+        thread.started.connect(worker.run)
+        worker.progress.connect(bridge.on_progress)
+        worker.completed.connect(bridge.on_completed)
+        worker.failed.connect(bridge.on_failed)
+        worker.cancelled.connect(bridge.on_cancelled)
+        for signal in (worker.completed, worker.failed, worker.cancelled):
+            signal.connect(thread.quit)
+            signal.connect(worker.deleteLater)
+        thread.finished.connect(bridge.on_cleaned_up)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def _append_code_chunk(self) -> None:
+        """Incrementally populate the editor without monopolizing Qt events."""
+
+        total = len(self._code_lines)
+        start = self._code_offset
+        end = min(total, start + self.CODE_APPEND_CHUNK)
+        if end > start:
+            numbered = "\\n".join(
+                f"{index + 1:>6}  {self._code_lines[index]}"
+                for index in range(start, end)
+            )
+            self.code_editor.appendPlainText(numbered)
+            self._code_offset = end
+            self._code_progress.setValue(
+                min(100, 90 + round(10 * end / max(1, total)))
+            )
+        if self._code_offset >= total:
+            self._code_append_timer.stop()
+            self._code_loading = False
+            self._code_loaded = True
+            self._code_toggle.setEnabled(True)
+            self._code_progress.setRange(0, 100)
+            self._code_progress.setValue(100)
+            self._code_progress.setFormat("G-code ready · %p%")
+            self._highlight_current_code_line()
+            QTimer.singleShot(
+                1600,
+                lambda: (
+                    self._code_progress.hide()
+                    if self._code_loaded and not self._code_loading
+                    else None
+                ),
+            )
 
     def _load_code(self) -> None:
         numbered = "\n".join(
@@ -561,4 +686,13 @@ class ToolpathPreviewWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._timer.stop()
+        if self._code_thread is not None and self._code_thread.isRunning():
+            self._close_after_code = True
+            self._code_append_timer.stop()
+            if self._code_worker is not None:
+                self._code_worker.cancel()
+            self.hide()
+            event.ignore()
+            return
+        self._code_append_timer.stop()
         super().closeEvent(event)
