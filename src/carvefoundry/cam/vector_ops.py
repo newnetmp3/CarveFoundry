@@ -274,12 +274,12 @@ def geometry_face(
     cutter: Cutter,
     settings: CamSettingsLike,
     *,
-    name: str = "Face",
+    name: str = "Surface",
 ) -> Toolpath:
-    """Raster-face the full stock surface using the selected cutter."""
+    """Surface the full stock using raster or offset/spiral-style passes."""
 
     if width_mm <= 0 or height_mm <= 0:
-        raise ValueError("Facing requires positive stock width and height.")
+        raise ValueError("Surfacing requires positive stock width and height.")
     depth = (
         abs(float(settings.overall_depth_mm))
         if settings.overall_depth_mm is not None
@@ -290,7 +290,7 @@ def geometry_face(
         and depth > settings.usable_bit_length_mm + 1e-9
     ):
         raise ValueError(
-            f"Facing depth {depth:.3f} mm exceeds the usable bit length "
+            f"Surfacing depth {depth:.3f} mm exceeds the usable bit length "
             f"{settings.usable_bit_length_mm:.3f} mm."
         )
 
@@ -304,34 +304,60 @@ def geometry_face(
         )
     )
     if work.is_empty or work.area <= _EPS:
-        raise ValueError("Selected cutter is too large to face this stock.")
+        raise ValueError("Selected cutter is too large to surface this stock.")
 
     step = max(cutter.diameter_mm * settings.stepover_fraction, 0.05)
     strategy = _settings_value(settings.pocket_strategy)
-    axis_y = strategy == "raster_y"
-    paths = _scanline_segments(work, axis_y=axis_y, step=step)
     moves: list[ToolpathMove] = []
-    current_point: np.ndarray | None = None
+
     for cut_z in _depth_passes(-depth, settings.max_stepdown_mm):
-        current_point = None
-        for points in paths:
-            current_point = _cut_path_with_smart_link(
-                moves,
-                points,
-                cut_z,
-                work,
-                settings,
-                current_point,
-            )
+        current_point: np.ndarray | None = None
+        if strategy == "offset":
+            current_region: BaseGeometry = work
+            iteration = 0
+            while not current_region.is_empty:
+                rings = [
+                    points
+                    for points, _exterior in _ring_paths(
+                        current_region,
+                        settings,
+                    )
+                ]
+                for points in _order_paths(rings):
+                    current_point = _cut_path_with_smart_link(
+                        moves,
+                        points,
+                        cut_z,
+                        work,
+                        settings,
+                        current_point,
+                    )
+                current_region = current_region.buffer(-step, join_style=2)
+                iteration += 1
+                if iteration > 10000:
+                    raise RuntimeError("Surface offset generation did not converge.")
+        else:
+            axis_y = strategy == "raster_y"
+            paths = _scanline_segments(work, axis_y=axis_y, step=step)
+            for points in paths:
+                current_point = _cut_path_with_smart_link(
+                    moves,
+                    points,
+                    cut_z,
+                    work,
+                    settings,
+                    current_point,
+                )
+
         if moves:
             last = moves[-1]
             _rapid(moves, last.x_mm, last.y_mm, settings.safe_z_mm)
 
     if not moves:
-        raise ValueError("Facing produced no toolpath.")
+        raise ValueError("Surfacing produced no toolpath.")
     return Toolpath(
         name=name,
-        operation="face",
+        operation="surface",
         cutter=cutter,
         safe_z_mm=settings.safe_z_mm,
         moves=moves,
