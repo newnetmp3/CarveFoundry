@@ -71,7 +71,6 @@ from carvefoundry.core.primitives import (
     ellipse_mesh,
     line_mesh,
     polygon_mesh,
-    polyline_mesh,
     rectangle_mesh,
     text_mesh,
 )
