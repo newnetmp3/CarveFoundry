@@ -35,7 +35,6 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.render_geometry import build_render_geometry
-from carvefoundry.cam.toolpath import MoveKind
 
 from .gpu_geometry import expand_triangle_positions
 
