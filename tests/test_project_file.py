@@ -8,6 +8,7 @@ import trimesh
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
+from carvefoundry.core.smart_values import SmartValues
 from carvefoundry.core.project_file import (
     LEGACY_PROJECT_FILE_VERSION,
     PROJECT_FILE_MAGIC,
@@ -230,3 +231,35 @@ def test_editable_text_properties_round_trip(tmp_path: Path) -> None:
     loaded = load_project(path)
 
     assert loaded.items[0].text_properties == properties
+
+
+def test_smart_values_bindings_and_center_work_zero_round_trip(tmp_path: Path) -> None:
+    project = Project(
+        stock=Stock(
+            width_mm=220.0,
+            height_mm=140.0,
+            thickness_mm=19.0,
+            xy_zero="center",
+        ),
+        items=[
+            ProjectItem(
+                "Parametric rectangle",
+                kind="rectangle",
+                mesh=rectangle_mesh(30.0, 20.0, 2.0),
+                smart_bindings={
+                    "size_x": "width",
+                    "position_x": "stock_width / 2",
+                },
+            )
+        ],
+        smart_values=SmartValues.from_lines(
+            "width = 75\nmargin = 8\ninside = width - 2 * margin"
+        ),
+    )
+
+    path = save_project(project, tmp_path / "smart.cf3d")
+    loaded = load_project(path)
+
+    assert loaded.stock.xy_zero == "center"
+    assert loaded.smart_values.resolve("inside") == pytest.approx(59.0)
+    assert loaded.items[0].smart_bindings == project.items[0].smart_bindings
