@@ -23,6 +23,7 @@ def _window():
         ),
         project_path=None,
     )
+    window._tool_option_pen_smoothing = 0
     return window
 
 
@@ -74,9 +75,9 @@ def test_new_line_has_two_editable_endpoints_with_exact_world_positions():
         assert line.kind == "line"
         assert line.vector_path is not None
         assert len(line.vector_path.points_xy) == 2
-        assert node_world_points(line)[:, :2] == pytest.approx(
-            [[10, 15], [30, 15]]
-        )
+        world = node_world_points(line)
+        assert world[0, :2] == pytest.approx((10, 15))
+        assert world[1, :2] == pytest.approx((30, 15))
     finally:
         window.close()
 
