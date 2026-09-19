@@ -108,6 +108,7 @@ class DirectSelectionMixin:
             return False
         self._before_ribbon_mutation(label)
         item.mesh = mesh
+        item.source_path = None
         item.vector_path = path
         # Transform3D pivots about the *mesh bounds centre*. Editing a node
         # may change that centre, so preserve the cursor's exact world XY.
