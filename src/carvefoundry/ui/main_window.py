@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
-from ..cam.gcode import write_grbl, write_grbl_program
+from ..cam.job_process import GcodeRequest
 from ..core.font_handler import describe_qt_font_face
 from ..core.mesh import mesh_asset_from_geometry
 from ..core.primitives import text_mesh
@@ -5716,6 +5716,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         on_done=None,
         on_failed=None,
         cam_progress: bool = False,
+        indeterminate: bool = False,
     ) -> bool:
         """Run one costly operation off the GUI thread with reusable progress UI."""
 
@@ -5751,9 +5752,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
                 action.setEnabled(False)
         if self.generate_toolpaths_button is not None:
             self.generate_toolpaths_button.setEnabled(False)
-        self.job_progress.setRange(0, 100)
+        self.job_progress.setRange(0, 0 if indeterminate else 100)
         self.job_progress.setValue(0)
-        self.job_progress.setFormat(f"{title} · %p%")
+        self.job_progress.setFormat(title if indeterminate else f"{title} · %p%")
         self.job_progress.show()
         self.cancel_job_button.show()
         self.statusBar().showMessage(f"{title}…")
@@ -5762,9 +5763,15 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             if job_id != self._job_sequence:
                 return
             value = max(0, min(100, round(fraction * 100)))
-            self.job_progress.setValue(value)
-            self.job_progress.setFormat(f"{status} · %p%")
-            self.statusBar().showMessage(f"{title}: {status} — {value}%")
+            if not indeterminate:
+                self.job_progress.setValue(value)
+            self.job_progress.setFormat(
+                status if indeterminate else f"{status} · %p%"
+            )
+            self.statusBar().showMessage(
+                f"{title}: {status}" if indeterminate
+                else f"{title}: {status} — {value}%"
+            )
             if cam_progress:
                 self._update_toolpath_progress(fraction, status)
 
@@ -5777,6 +5784,7 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
             try:
                 if on_done is not None:
                     on_done(result)
+                self.job_progress.setRange(0, 100)
                 self.job_progress.setValue(100)
                 self.job_progress.setFormat(f"{title} complete · %p%")
             except Exception as exc:
@@ -5849,6 +5857,9 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self.statusBar().showMessage("New project created", 3000)
 
     def _open_project(self) -> None:
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open CarveFoundry Project",
@@ -5858,14 +5869,21 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         if not path:
             return
         project_path = Path(path)
-        try:
+
+        def load(progress):
+            progress(0.05, "Reading project and embedded assets")
             project = load_project(project_path)
-        except ProjectFileError as exc:
-            self._set_activity_info(f"Project open failed\n{exc}")
-            self.statusBar().showMessage(f"Could not open project: {exc}", 8000)
-            return
-        self._set_project(project, project_path=project_path)
-        self.statusBar().showMessage(f"Opened {project_path.name}", 5000)
+            progress(0.95, "Project loaded")
+            return project
+
+        def done(result):
+            self._set_project(result, project_path=project_path)
+            self.statusBar().showMessage(f"Opened {project_path.name}", 5000)
+
+        self._start_background_job(
+            "Open project", task=load, on_done=done,
+            indeterminate=True,
+        )
 
     def _save_project(self) -> None:
         if self.project_path is None:
@@ -5890,81 +5908,79 @@ class MainWindow(RibbonActionsMixin, QMainWindow):
         self._save_project_to(Path(path))
 
     def _save_project_to(self, path: Path) -> None:
-        if self.project.name == "Untitled":
-            self.project.name = path.stem
-        try:
-            saved_path = save_project(self.project, path)
-        except ProjectFileError as exc:
-            self._set_activity_info(f"Project save failed\n{exc}")
-            self.statusBar().showMessage(f"Could not save project: {exc}", 8000)
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
             return
-        self.project_path = saved_path
-        self.project_title_label.setText(f"  •  {self.project.name} Project")
-        self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+        project = self.project
+        if project.name == "Untitled":
+            project.name = path.stem
+
+        def save(progress):
+            progress(0.05, "Compressing project and embedded assets")
+            saved = save_project(project, path)
+            progress(0.95, "Project written")
+            return saved
+
+        def done(saved_path):
+            self.project_path = saved_path
+            self.project_title_label.setText(f"  •  {project.name} Project")
+            self.statusBar().showMessage(f"Saved {saved_path.name}", 5000)
+
+        self._start_background_job(
+            "Save project", task=save, on_done=done,
+            indeterminate=True,
+        )
 
     def _export_gcode(self) -> None:
         toolpaths = self.project.toolpaths
         if not toolpaths:
-            self._set_activity_info(
-                "No calculated toolpaths to export.\n\n"
-                "Calculate a toolpath first, then return to Export G-code."
+            self.statusBar().showMessage(
+                "No calculated toolpaths to export", 5000
             )
-            self.statusBar().showMessage("No calculated toolpaths to export", 5000)
             return
-
-        toolpath = toolpaths[0]
         base_directory = self.project_path.parent if self.project_path else Path.home()
-        project_name = self.project.name if self.project.name != "Untitled" else toolpath.name
+        toolpath = toolpaths[0]
+        project_name = (
+            self.project.name if self.project.name != "Untitled"
+            else toolpath.name
+        )
         suggested = base_directory / f"{project_name}.nc"
         path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export G-code",
-            str(suggested),
+            self, "Export G-code", str(suggested),
             "G-code (*.nc *.gcode *.tap *.cnc);;All files (*)",
         )
         if not path:
             self.statusBar().showMessage("G-code export canceled", 3000)
             return
-
-        try:
-            if len(toolpaths) == 1:
-                output_path = write_grbl(
-                    toolpath,
-                    Path(path),
-                    self._grbl_post_settings(),
-                )
-            else:
-                output_path = write_grbl_program(
-                    toolpaths,
-                    Path(path),
-                    self._grbl_post_settings(),
-                )
-        except (OSError, ValueError) as exc:
-            self._set_activity_info(f"G-code export failed\n{exc}")
-            self.statusBar().showMessage(f"Could not export G-code: {exc}", 8000)
-            return
-
-        total_moves = sum(len(path.moves) for path in toolpaths)
-        total_minutes = sum(
-            path.estimated_cutting_minutes for path in toolpaths
+        request = GcodeRequest(
+            toolpaths=list(toolpaths),
+            path=path,
+            settings=self._grbl_post_settings(),
         )
-        operation_names = " + ".join(path.name for path in toolpaths)
-        source_names = self._toolpath_source_names(toolpaths)
-        source_text = ", ".join(source_names) if source_names else "Unknown"
-        self._set_activity_info(
-            f"G-code exported\n{output_path}\n\n"
-            f"Operations: {operation_names}\n"
-            f"Source: {source_text}\n"
-            f"Cutter: {toolpath.cutter.name}\n"
-            f"Moves: {total_moves:,}\n"
-            f"Estimated cutting time: {total_minutes:.1f} min "
-            "(rapids excluded)"
+
+        def done(result):
+            output_path = Path(result["files"][0])
+            self._set_activity_info(
+                f"G-code exported\\n{output_path}\\n\\n"
+                f"Operations: {result['summary']}\\n"
+                f"Cutter: {toolpath.cutter.name}\\n"
+                f"Moves: {result['moves']:,}\\n"
+                f"Estimated cutting: {result['minutes']:.1f} min "
+                "(rapids excluded)"
+            )
+            self.statusBar().showMessage(
+                f"Exported {output_path.name}", 5000
+            )
+
+        self._start_background_job(
+            "Export G-code", request=request, on_done=done,
         )
-        self.statusBar().showMessage(f"Exported {output_path.name}", 5000)
 
     def _import_file(self, kind: str | None = None) -> None:
-        if self._import_thread is not None and self._import_thread.isRunning():
-            self.statusBar().showMessage("An import is already in progress", 3000)
+        if self._background_job is not None or (
+            self._import_thread is not None and self._import_thread.isRunning()
+        ):
+            self.statusBar().showMessage("Another operation is running", 3000)
             return
 
         filters = {
