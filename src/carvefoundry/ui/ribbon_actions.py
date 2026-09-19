@@ -4775,16 +4775,7 @@ class RibbonActionsMixin:
             return
 
         path_index, move_index = locate(slider.value())
-        try:
-            resumed = resume_toolpath(
-                toolpaths[path_index],
-                move_index,
-                safe_rewind=safe_rewind.isChecked(),
-            )
-        except (IndexError, ValueError) as exc:
-            QMessageBox.warning(self, "Resume Carve", str(exc))
-            return
-        remaining_paths = [resumed, *toolpaths[path_index + 1 :]]
+        rewind = safe_rewind.isChecked()
 
         base_directory = (
             self.project_path.parent if self.project_path else Path.home()
@@ -4802,18 +4793,24 @@ class RibbonActionsMixin:
         )
         if not output:
             return
-        try:
-            written = write_grbl_program(
-                remaining_paths,
-                Path(output),
-                self._grbl_post_settings(),
+        request = GcodeRequest(
+            toolpaths=toolpaths,
+            path=output,
+            settings=self._grbl_post_settings(),
+            mode="resume",
+            resume_path_index=path_index,
+            resume_move_index=move_index,
+            resume_rewind=rewind,
+        )
+
+        def done(result):
+            written = Path(result["files"][0])
+            self.statusBar().showMessage(
+                f"Resume G-code exported: {written.name}", 5000
             )
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Resume Carve", str(exc))
-            return
-        self.statusBar().showMessage(
-            f"Resume G-code exported: {written.name}",
-            5000,
+
+        self._start_background_job(
+            "Export resume G-code", request=request, on_done=done
         )
 
     def _export_tiled_gcode(self) -> None:
@@ -4893,67 +4890,31 @@ class RibbonActionsMixin:
         if not output:
             return
 
-        base_path = Path(output)
-        suffix = (
-            base_path.suffix
-            if base_path.suffix.lower() in {".nc", ".gcode", ".tap", ".cnc"}
-            else ".nc"
+        request = GcodeRequest(
+            toolpaths=toolpaths,
+            path=output,
+            settings=self._grbl_post_settings(),
+            mode="tiles",
+            tile_settings=settings,
+            stock_width_mm=stock.width_mm,
+            stock_height_mm=stock.height_mm,
+            xy_zero=stock.xy_zero,
         )
-        stem = base_path.stem
-        written: list[Path] = []
-        base_options = self._grbl_post_settings()
 
-        try:
-            for tile in tiles:
-                tiled = tile_program(
-                    toolpaths,
-                    tile,
-                    rebase=settings.rebase_each_tile,
-                )
-                if not tiled:
-                    continue
-
-                options = base_options
-                if settings.rebase_each_tile:
-                    options = replace(
-                        base_options,
-                        x_offset_mm=(
-                            -tile.width_mm / 2.0
-                            if stock.xy_zero == "center"
-                            else 0.0
-                        ),
-                        y_offset_mm=(
-                            -tile.height_mm / 2.0
-                            if stock.xy_zero == "center"
-                            else 0.0
-                        ),
-                    )
-                tile_path = base_path.with_name(
-                    f"{stem}_r{tile.row + 1}_c{tile.column + 1}{suffix}"
-                )
-                written.append(
-                    write_grbl_program(tiled, tile_path, options)
-                )
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Large Material Tiling", str(exc))
-            return
-
-        if not written:
-            QMessageBox.warning(
-                self,
-                "Large Material Tiling",
-                "No cutting moves intersect the requested tiles.",
+        def done(result):
+            written = [Path(path) for path in result["files"]]
+            self._set_activity_info(
+                "Tiled G-code exported\\n"
+                f"Files: {len(written)}\\n"
+                f"Tile size: {settings.tile_width_mm:g} × "
+                f"{settings.tile_height_mm:g} mm\\n"
+                f"Overlap: {settings.overlap_mm:g} mm\\n"
+                + "\\n".join(path.name for path in written[:12])
             )
-            return
-        self._set_activity_info(
-            "Tiled G-code exported\n"
-            f"Files: {len(written)}\n"
-            f"Tile size: {settings.tile_width_mm:g} × "
-            f"{settings.tile_height_mm:g} mm\n"
-            f"Overlap: {settings.overlap_mm:g} mm\n"
-            + "\n".join(path.name for path in written[:12])
-        )
-        self.statusBar().showMessage(
-            f"Exported {len(written)} tiled G-code files",
-            5000,
+            self.statusBar().showMessage(
+                f"Exported {len(written)} tiled G-code files", 5000
+            )
+
+        self._start_background_job(
+            "Export tiled G-code", request=request, on_done=done
         )
