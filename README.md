@@ -46,6 +46,27 @@ Generate Toolpaths, Preview, CNC Preflight and G-code Export are
 one-click buttons near the bottom of the scrollable rail. More advanced
 CAM, cutter and machine controls remain in their flyout menus.
 
+## Planar silhouette Union / Subtract / Intersect / Offset
+
+Select two or more drawn planar shapes, then choose **Design → Vector → Union
+Silhouettes**, **Subtract Silhouettes**, or **Intersect Silhouettes**. The
+same commands are available from the small arrow on the Pen/Vector rail tool.
+For Subtract, the first item in Layers order is kept and the other selected
+items are removed from its XY outline. Select exactly one planar shape for
+**Offset Silhouette**: a positive distance expands it and a negative distance
+contracts it. Round, mitre and bevel corner styles are available.
+
+The operation runs in a background worker and creates a new 2.5D shape, with
+the selected depth below **stock-top Z0**. It preserves cutouts and separate
+islands, hides the original objects without deleting them, and supports
+Undo/Redo and .cf3d save/load. Recalculate toolpaths after making an edit.
+
+**Scope:** these are XY-projected outline operations, not volumetric 3D
+Booleans or editable vector control points. STL reliefs and objects tilted
+out of the XY plane are not accepted. Source shapes that no longer overlap
+may produce an empty Intersect/Subtract result; the existing design is
+left untouched if a calculation fails.
+
 ## Workshop preflight and cutter stages
 
 CarveFoundry stores clamps and fences as project fixture keep-out zones.
