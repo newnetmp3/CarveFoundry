@@ -19,6 +19,7 @@ import numpy as np
 from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d, waterline_3d
 from carvefoundry.cam.gcode import GrblPostSettings, write_grbl, write_grbl_program
 from carvefoundry.cam.job_workflows import TilingSettings, plan_tiles, resume_toolpath, tile_program
+from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.vector_ops import (
     geometry_center_drill,
     geometry_drill,
@@ -240,7 +241,10 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
     if not generated:
         raise ValueError("The geometry produced no toolpaths.")
     report(0.94, "Estimating runtime", force=True)
+    render_geometry = build_render_geometry(generated)
+    report(0.96, "Preview geometry ready", force=True)
     return {
+        "render_geometry": render_geometry,
         "toolpaths": generated,
         "moves": sum(len(path.moves) for path in generated),
         "cut_mm": sum(path.cutting_distance_mm for path in generated),
