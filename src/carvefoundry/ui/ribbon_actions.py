@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -1687,7 +1690,7 @@ class RibbonActionsMixin:
         self._set_activity_info(
             f"Toolpath operation\n{labels.get(operation, operation)}\n\n"
             f"Cutter: {cutter_name}\n"
-            "Adjust Path Design or Motion as needed, then press Calculate."
+            "Review all generation requirements, then press Generate Toolpaths."
         )
         self._sync_cam_control_relevance()
         self.statusBar().showMessage(
@@ -1781,7 +1784,662 @@ class RibbonActionsMixin:
             ramp_angle_deg=self._ramp_angle(),
         )
 
+    @staticmethod
+    def _cam_operation_title(operation: str) -> str:
+        return {
+            "profile": "Profile",
+            "pocket": "Pocket",
+            "vcarve": "V-Carve",
+            "engrave": "Engrave",
+            "drill": "Drill",
+            "rough": "3D Rough",
+            "finish": "3D Finish",
+            "rest": "3D Rest",
+            "waterline": "3D Waterline",
+        }.get(operation, operation.replace("_", " ").title())
+
+    @staticmethod
+    def _generation_double_spin(
+        value: float,
+        *,
+        minimum: float,
+        maximum: float,
+        suffix: str = "",
+        decimals: int = 3,
+        step: float = 0.1,
+    ) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setRange(minimum, maximum)
+        spin.setDecimals(decimals)
+        spin.setSingleStep(step)
+        spin.setValue(float(value))
+        spin.setSuffix(suffix)
+        spin.setKeyboardTracking(False)
+        return spin
+
+    def _build_toolpath_generation_dialog(self) -> QDialog:
+        """Build the all-in-one CAM generation dialog.
+
+        The dialog is intentionally complete enough to get from a selected
+        design object to a calculable toolpath without visiting other panels.
+        """
+
+        dialog = QDialog(self)
+        dialog.setObjectName("ToolpathGenerationDialog")
+        dialog.setWindowTitle("Generate Toolpaths")
+        dialog.resize(860, 760)
+        dialog.setMinimumSize(720, 600)
+        dialog.setModal(True)
+
+        outer = QVBoxLayout(dialog)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(10)
+
+        title = QLabel("Generate Toolpaths")
+        title.setObjectName("DialogTitle")
+        title_font = title.font()
+        title_font.setPointSize(max(12, title_font.pointSize() + 3))
+        title_font.setBold(True)
+        title.setFont(title_font)
+        outer.addWidget(title)
+
+        intro = QLabel(
+            "Complete the required sections below. Options that do not apply "
+            "to the selected operation are disabled automatically."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("Muted")
+        outer.addWidget(intro)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        grid = QGridLayout(body)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        scroll.setWidget(body)
+        outer.addWidget(scroll, 1)
+
+        fields: dict[str, QWidget] = {}
+
+        def group(title_text: str) -> tuple[QGroupBox, QFormLayout]:
+            box = QGroupBox(title_text)
+            form = QFormLayout(box)
+            form.setFieldGrowthPolicy(
+                QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+            )
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            form.setHorizontalSpacing(10)
+            form.setVerticalSpacing(7)
+            return box, form
+
+        source_box, source_form = group("1. Source & Operation")
+        source_combo = QComboBox()
+        for index, project_item in enumerate(self.project.items):
+            if project_item.mesh is not None:
+                source_combo.addItem(
+                    f"{project_item.name}  ·  {project_item.kind.upper()}",
+                    index,
+                )
+        selected_index = self._selected_item_index()
+        if selected_index is not None:
+            combo_index = source_combo.findData(selected_index)
+            if combo_index >= 0:
+                source_combo.setCurrentIndex(combo_index)
+        fields["source"] = source_combo
+        source_form.addRow("Geometry", source_combo)
+
+        operation_combo = QComboBox()
+        for operation in (
+            "profile",
+            "pocket",
+            "vcarve",
+            "engrave",
+            "drill",
+            "rough",
+            "finish",
+            "rest",
+            "waterline",
+        ):
+            operation_combo.addItem(
+                self._cam_operation_title(operation),
+                operation,
+            )
+        op_index = operation_combo.findData(self._active_cam_operation)
+        operation_combo.setCurrentIndex(max(0, op_index))
+        fields["operation"] = operation_combo
+        source_form.addRow("Toolpath", operation_combo)
+
+        stock = self.project.stock
+        stock_label = QLabel(
+            f"{stock.width_mm:g} × {stock.height_mm:g} × "
+            f"{stock.thickness_mm:g} mm"
+        )
+        fields["stock"] = stock_label
+        source_form.addRow("Stock", stock_label)
+        grid.addWidget(source_box, 0, 0)
+
+        cutter_box, cutter_form = group("2. Cutter")
+        cutter_combo = QComboBox()
+        current_cutter = (
+            self.tool_combo.currentData()
+            if hasattr(self, "tool_combo")
+            else None
+        )
+        for index in range(self.tool_combo.count()):
+            cutter = self.tool_combo.itemData(index)
+            if not isinstance(cutter, Cutter):
+                continue
+            cutter_combo.addItem(cutter.name, cutter)
+            if (
+                isinstance(current_cutter, Cutter)
+                and cutter.name == current_cutter.name
+            ):
+                cutter_combo.setCurrentIndex(cutter_combo.count() - 1)
+        fields["cutter"] = cutter_combo
+        cutter_form.addRow("Selected cutter", cutter_combo)
+        cutter_details = QLabel()
+        cutter_details.setWordWrap(True)
+        cutter_details.setObjectName("Muted")
+        fields["cutter_details"] = cutter_details
+        cutter_form.addRow("Geometry", cutter_details)
+        grid.addWidget(cutter_box, 0, 1)
+
+        strategy_box, strategy_form = group("3. Geometry & Strategy")
+        cut_type = QComboBox()
+        cut_type.addItems(("Auto", "Pocket", "On Path", "Outside", "Inside"))
+        cut_type.setCurrentText(self._cam_cut_type)
+        fields["cut_type"] = cut_type
+        strategy_form.addRow("2D cut type", cut_type)
+
+        style_3d = QComboBox()
+        style_3d.addItems(
+            (
+                "Model Boundary Relief",
+                "Rectangle Relief",
+                "Full Depth Cutout",
+            )
+        )
+        style_3d.setCurrentText(self._cam_3d_cut_style)
+        fields["3d_style"] = style_3d
+        strategy_form.addRow("3D style", style_3d)
+
+        direction = QComboBox()
+        direction.addItems(
+            (
+                "Smart Serpentine",
+                "Offset",
+                "Raster X",
+                "Raster Y",
+                "Raster 45°",
+                "Raster 135°",
+            )
+        )
+        direction.setCurrentText(self._cam_direction)
+        fields["direction"] = direction
+        strategy_form.addRow("Direction", direction)
+
+        detail = QSpinBox()
+        detail.setRange(0, 100)
+        detail.setSuffix(" %")
+        detail.setValue(self._cam_detail)
+        fields["detail"] = detail
+        strategy_form.addRow("3D / V-Carve detail", detail)
+
+        pocket_stepover = self._generation_double_spin(
+            float(self._settings.value("cam/stepover_percent", 45.0)),
+            minimum=1.0,
+            maximum=100.0,
+            suffix=" %",
+            decimals=1,
+            step=1.0,
+        )
+        fields["pocket_stepover"] = pocket_stepover
+        strategy_form.addRow("2D pocket stepover", pocket_stepover)
+
+        padding = self._generation_double_spin(
+            float(self._settings.value("cam/padding_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            suffix=" mm",
+            step=0.25,
+        )
+        fields["padding"] = padding
+        strategy_form.addRow("Path / relief padding", padding)
+        grid.addWidget(strategy_box, 1, 0)
+
+        depth_box, depth_form = group("4. Depth Requirements")
+        cut_depth = self._generation_double_spin(
+            float(self._settings.value("cam/overall_depth_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            suffix=" mm",
+            step=0.25,
+        )
+        cut_depth.setToolTip(
+            "0 uses the design/model depth. A positive value overrides it."
+        )
+        fields["cut_depth"] = cut_depth
+        depth_form.addRow("Overall cut depth", cut_depth)
+
+        stepdown = self._generation_double_spin(
+            float(self._settings.value("cam/stepdown_mm", 2.0)),
+            minimum=0.05,
+            maximum=1000.0,
+            suffix=" mm",
+            step=0.25,
+        )
+        fields["stepdown"] = stepdown
+        depth_form.addRow("Depth per pass", stepdown)
+
+        bit_length = self._generation_double_spin(
+            float(self._settings.value("cam/usable_bit_length_mm", 0.0)),
+            minimum=0.0,
+            maximum=1000.0,
+            suffix=" mm",
+            step=0.5,
+        )
+        bit_length.setToolTip("0 disables usable-length enforcement.")
+        fields["bit_length"] = bit_length
+        depth_form.addRow("Usable bit length", bit_length)
+        grid.addWidget(depth_box, 1, 1)
+
+        motion_box, motion_form = group("5. Motion & Safety")
+        safe_z = self._generation_double_spin(
+            float(self._settings.value("cam/safe_z_mm", 1.5)),
+            minimum=0.05,
+            maximum=100.0,
+            suffix=" mm",
+            step=0.1,
+        )
+        fields["safe_z"] = safe_z
+        motion_form.addRow("Safe Z", safe_z)
+
+        feed = self._generation_double_spin(
+            float(self._settings.value("cam/feed_mm_min", 1000.0)),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm/min",
+            decimals=0,
+            step=50.0,
+        )
+        fields["feed"] = feed
+        motion_form.addRow("Cut feed", feed)
+
+        plunge = self._generation_double_spin(
+            float(self._settings.value("cam/plunge_mm_min", 300.0)),
+            minimum=1.0,
+            maximum=100000.0,
+            suffix=" mm/min",
+            decimals=0,
+            step=25.0,
+        )
+        fields["plunge"] = plunge
+        motion_form.addRow("Plunge feed", plunge)
+
+        entry = QComboBox()
+        entry.addItems(("Plunge", "Ramp 5°", "Ramp 20°", "Custom Ramp"))
+        entry.setCurrentText(self._cam_entry)
+        fields["entry"] = entry
+        motion_form.addRow("Entry", entry)
+
+        ramp_angle = self._generation_double_spin(
+            float(self._settings.value("cam/custom_ramp_angle_deg", 10.0)),
+            minimum=0.5,
+            maximum=89.0,
+            suffix="°",
+            decimals=1,
+            step=0.5,
+        )
+        fields["ramp_angle"] = ramp_angle
+        motion_form.addRow("Custom ramp", ramp_angle)
+
+        milling = QComboBox()
+        milling.addItems(("Default", "Climb (CCW)", "Conventional (CW)"))
+        milling.setCurrentText(self._cam_milling)
+        fields["milling"] = milling
+        motion_form.addRow("Milling direction", milling)
+
+        linking = QComboBox()
+        linking.addItems(("Smart Min-Lift", "Local Lift", "Full Retract"))
+        linking.setCurrentText(self._cam_linking)
+        fields["linking"] = linking
+        motion_form.addRow("3D linking", linking)
+
+        local_clearance = self._generation_double_spin(
+            float(self._settings.value("cam/local_link_clearance_mm", 0.5)),
+            minimum=0.05,
+            maximum=25.0,
+            suffix=" mm",
+            step=0.1,
+        )
+        fields["local_clearance"] = local_clearance
+        motion_form.addRow("Local lift clearance", local_clearance)
+
+        link_tolerance = self._generation_double_spin(
+            float(self._settings.value("cam/direct_link_tolerance_mm", 0.02)),
+            minimum=0.0,
+            maximum=5.0,
+            suffix=" mm",
+            step=0.01,
+        )
+        fields["link_tolerance"] = link_tolerance
+        motion_form.addRow("Direct-link tolerance", link_tolerance)
+        grid.addWidget(motion_box, 2, 0)
+
+        tabs_box, tabs_form = group("6. Tabs / Cutout Holding")
+        tabs_enabled = QCheckBox("Use holding tabs")
+        tabs_enabled.setChecked(self._tabs_enabled)
+        fields["tabs_enabled"] = tabs_enabled
+        tabs_form.addRow(tabs_enabled)
+
+        tab_height = self._generation_double_spin(
+            float(self._settings.value("cam/tab_height_mm", 2.0)),
+            minimum=0.1,
+            maximum=100.0,
+            suffix=" mm",
+            step=0.25,
+        )
+        fields["tab_height"] = tab_height
+        tabs_form.addRow("Tab height", tab_height)
+
+        tab_width = self._generation_double_spin(
+            float(self._settings.value("cam/tab_width_mm", 6.0)),
+            minimum=0.5,
+            maximum=100.0,
+            suffix=" mm",
+            step=0.5,
+        )
+        fields["tab_width"] = tab_width
+        tabs_form.addRow("Tab width", tab_width)
+
+        tab_count = QSpinBox()
+        tab_count.setRange(1, 32)
+        tab_count.setValue(int(self._settings.value("cam/tab_count", 4)))
+        fields["tab_count"] = tab_count
+        tabs_form.addRow("Tab count", tab_count)
+        grid.addWidget(tabs_box, 2, 1)
+
+        ready_box = QGroupBox("7. Generation Readiness")
+        ready_layout = QVBoxLayout(ready_box)
+        readiness = QLabel()
+        readiness.setWordWrap(True)
+        readiness.setTextFormat(Qt.TextFormat.RichText)
+        fields["readiness"] = readiness
+        ready_layout.addWidget(readiness)
+        grid.addWidget(ready_box, 3, 0, 1, 2)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        generate_button = buttons.addButton(
+            "Generate Toolpaths",
+            QDialogButtonBox.ButtonRole.AcceptRole,
+        )
+        generate_button.setObjectName("PrimaryButton")
+        generate_button.setDefault(True)
+        fields["generate"] = generate_button
+        buttons.rejected.connect(dialog.reject)
+        outer.addWidget(buttons)
+
+        def selected_source() -> ProjectItem | None:
+            source_index = source_combo.currentData()
+            if not isinstance(source_index, int):
+                return None
+            if not 0 <= source_index < len(self.project.items):
+                return None
+            return self.project.items[source_index]
+
+        def update_relevance_and_readiness() -> None:
+            operation = str(operation_combo.currentData() or "")
+            is_3d = operation in {"rough", "finish", "rest", "waterline"}
+            uses_cut_type = operation in {"profile", "pocket", "engrave"}
+            uses_detail = is_3d or operation == "vcarve"
+            uses_entry = not is_3d and operation != "drill"
+            uses_milling = operation in {"profile", "pocket", "engrave"}
+            uses_linking = is_3d
+            uses_tabs = operation == "profile" or (
+                operation == "finish"
+                and style_3d.currentText() == "Full Depth Cutout"
+            )
+
+            cut_type.setEnabled(uses_cut_type)
+            style_3d.setEnabled(is_3d)
+            direction.setEnabled(is_3d or operation == "pocket")
+            detail.setEnabled(uses_detail)
+            pocket_stepover.setEnabled(operation == "pocket")
+            entry.setEnabled(uses_entry)
+            ramp_angle.setEnabled(
+                uses_entry and entry.currentText() == "Custom Ramp"
+            )
+            milling.setEnabled(uses_milling)
+            linking.setEnabled(uses_linking)
+            local_clearance.setEnabled(uses_linking)
+            link_tolerance.setEnabled(uses_linking)
+            tabs_box.setEnabled(uses_tabs)
+
+            cutter = cutter_combo.currentData()
+            if isinstance(cutter, Cutter):
+                detail_text = (
+                    f"{cutter.tool_type.value.replace('_', ' ').title()} · "
+                    f"Ø {cutter.diameter_mm:g} mm"
+                )
+                if cutter.angle_deg is not None:
+                    detail_text += f" · {cutter.angle_deg:g}°"
+                if cutter.tip_diameter_mm:
+                    detail_text += f" · tip Ø {cutter.tip_diameter_mm:g} mm"
+                cutter_details.setText(detail_text)
+            else:
+                cutter_details.setText("No valid cutter selected")
+
+            checks: list[tuple[bool, str]] = []
+            item = selected_source()
+            checks.append(
+                (
+                    item is not None and item.mesh is not None,
+                    "Source geometry selected",
+                )
+            )
+            checks.append(
+                (
+                    isinstance(cutter, Cutter),
+                    "Valid cutter selected",
+                )
+            )
+            if operation == "vcarve":
+                checks.append(
+                    (
+                        isinstance(cutter, Cutter)
+                        and cutter.tool_type
+                        in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}
+                        and cutter.angle_deg is not None,
+                        "V-Carve cutter has a V/cone profile and included angle",
+                    )
+                )
+            checks.append(
+                (
+                    stock.width_mm > 0
+                    and stock.height_mm > 0
+                    and stock.thickness_mm > 0,
+                    "Stock dimensions are valid",
+                )
+            )
+            checks.append((safe_z.value() > 0, "Safe Z is positive"))
+            checks.append(
+                (
+                    feed.value() > 0
+                    and plunge.value() > 0
+                    and stepdown.value() > 0,
+                    "Feed, plunge, and depth-per-pass are valid",
+                )
+            )
+            requested_depth = cut_depth.value()
+            usable_length = bit_length.value()
+            checks.append(
+                (
+                    usable_length <= 0
+                    or requested_depth <= 0
+                    or requested_depth <= usable_length + 1e-9,
+                    "Requested depth fits the enforced usable bit length",
+                )
+            )
+            if uses_tabs and tabs_enabled.isChecked():
+                checks.append(
+                    (
+                        tab_height.value() > 0
+                        and tab_width.value() > 0
+                        and tab_count.value() > 0,
+                        "Holding-tab dimensions are valid",
+                    )
+                )
+
+            all_ready = all(ok for ok, _message in checks)
+            readiness.setText(
+                "<br>".join(
+                    (
+                        "<span style='color:#62d26f'>✓</span> "
+                        if ok
+                        else "<span style='color:#ff6b6b'>●</span> "
+                    )
+                    + message
+                    for ok, message in checks
+                )
+                + (
+                    "<br><br><b>Ready to generate.</b>"
+                    if all_ready
+                    else "<br><br><b>Resolve the red requirements to continue.</b>"
+                )
+            )
+            generate_button.setEnabled(all_ready)
+
+        def accept_and_generate() -> None:
+            update_relevance_and_readiness()
+            if not generate_button.isEnabled():
+                return
+
+            source_index = source_combo.currentData()
+            if isinstance(source_index, int):
+                self._select_project_indices(
+                    [source_index],
+                    primary=source_index,
+                )
+
+            operation = str(operation_combo.currentData() or "finish")
+            self._select_cam_operation(operation)
+
+            cutter = cutter_combo.currentData()
+            if isinstance(cutter, Cutter):
+                for index in range(self.tool_combo.count()):
+                    candidate = self.tool_combo.itemData(index)
+                    if (
+                        isinstance(candidate, Cutter)
+                        and candidate.name == cutter.name
+                    ):
+                        self.tool_combo.setCurrentIndex(index)
+                        break
+
+            for key, combo in (
+                ("cut_type", cut_type),
+                ("3d_cut_style", style_3d),
+                ("direction", direction),
+                ("entry", entry),
+                ("milling", milling),
+                ("linking", linking),
+            ):
+                self._set_cam_design_option(key, combo.currentText())
+            self._set_cam_detail(detail.value(), mark_custom=True)
+
+            values = {
+                "cam/safe_z_mm": safe_z.value(),
+                "cam/overall_depth_mm": cut_depth.value(),
+                "cam/feed_mm_min": feed.value(),
+                "cam/plunge_mm_min": plunge.value(),
+                "cam/stepdown_mm": stepdown.value(),
+                "cam/stepover_percent": pocket_stepover.value(),
+                "cam/padding_mm": padding.value(),
+                "cam/usable_bit_length_mm": bit_length.value(),
+                "cam/tab_height_mm": tab_height.value(),
+                "cam/tab_width_mm": tab_width.value(),
+                "cam/tab_count": tab_count.value(),
+                "cam/local_link_clearance_mm": local_clearance.value(),
+                "cam/direct_link_tolerance_mm": link_tolerance.value(),
+                "cam/custom_ramp_angle_deg": ramp_angle.value(),
+            }
+            for setting_key, setting_value in values.items():
+                self._settings.setValue(setting_key, setting_value)
+
+            self._tabs_enabled = (
+                tabs_enabled.isChecked() if uses_tabs_for_current() else False
+            )
+            self._settings.setValue("cam/tabs_enabled", self._tabs_enabled)
+            if self._tabs_button is not None:
+                self._tabs_button.setChecked(self._tabs_enabled)
+            self._settings.sync()
+
+            dialog.accept()
+            self._calculate_toolpath_now()
+
+        def uses_tabs_for_current() -> bool:
+            operation = str(operation_combo.currentData() or "")
+            return operation == "profile" or (
+                operation == "finish"
+                and style_3d.currentText() == "Full Depth Cutout"
+            )
+
+        generate_button.clicked.connect(accept_and_generate)
+
+        watched_widgets = (
+            source_combo,
+            operation_combo,
+            cutter_combo,
+            cut_type,
+            style_3d,
+            direction,
+            detail,
+            pocket_stepover,
+            padding,
+            cut_depth,
+            stepdown,
+            bit_length,
+            safe_z,
+            feed,
+            plunge,
+            entry,
+            ramp_angle,
+            milling,
+            linking,
+            local_clearance,
+            link_tolerance,
+            tabs_enabled,
+            tab_height,
+            tab_width,
+            tab_count,
+        )
+        for widget in watched_widgets:
+            if isinstance(widget, QComboBox):
+                widget.currentIndexChanged.connect(
+                    update_relevance_and_readiness
+                )
+            elif isinstance(widget, QCheckBox):
+                widget.toggled.connect(update_relevance_and_readiness)
+            else:
+                widget.valueChanged.connect(update_relevance_and_readiness)
+
+        dialog.generation_fields = fields
+        dialog.refresh_generation_readiness = update_relevance_and_readiness
+        update_relevance_and_readiness()
+        return dialog
+
+    def _show_toolpath_generation_dialog(self) -> None:
+        dialog = self._build_toolpath_generation_dialog()
+        dialog.exec()
+
     def _calculate_toolpath(self) -> None:
+        """Compatibility entry point: calculation now begins with review."""
+
+        self._show_toolpath_generation_dialog()
+
+    def _calculate_toolpath_now(self) -> None:
         item = self._selected_item()
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a mesh or created shape first", 4000)
