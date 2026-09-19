@@ -135,7 +135,9 @@ class CamGenerationDialogMixin:
                     "Height Map — uses CarveFoundry's high-detail 3D surface "
                     "finishing engine on model geometry. It is not a separate "
                     "bitmap height-map importer.\n\n"
-                    "3D Rest — runs the 3D rest/cleanup strategy for model detail.\n\n"
+                    "3D Rest — stock-aware cleanup after preceding generated cutter stages.\n"
+                    "Simulates remaining stock, then machines only cutter-contact\n"
+                    "samples where material remains above your tolerance.\n\n"
                     "3D Waterline — creates constant-Z contour passes around the "
                     "3D model at successive levels."
                 ),
@@ -562,7 +564,7 @@ class CamGenerationDialogMixin:
         source_items = [
             project_item
             for project_item in self.project.items
-            if project_item.mesh is not None
+            if project_item.mesh is not None and project_item.visible
         ]
         source_summary = QLabel()
         source_summary.setWordWrap(True)
@@ -642,7 +644,7 @@ class CamGenerationDialogMixin:
                 "Height Map": (
                     "Run high-detail 3D surface finishing on model geometry."
                 ),
-                "3D Rest": "Run the 3D rest/cleanup strategy.",
+                "3D Rest": "Requires existing cutter stages; cuts only sampled leftover stock.",
                 "3D Waterline": (
                     "Generate constant-Z contours at successive model levels."
                 ),
