@@ -249,7 +249,7 @@ def run_cam(job: CamRequest) -> dict[str, Any]:
     }
 
 
-def run_gcode(request: GcodeRequest) -> list[str]:
+def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     toolpaths = request.toolpaths
     settings = request.settings
     report(0.05, "Preparing G-code", force=True)
@@ -299,14 +299,24 @@ def run_gcode(request: GcodeRequest) -> list[str]:
             paths.append(str(write_grbl_program(clipped, tiled_path, options)))
         if not paths:
             raise ValueError("No cutting moves intersect these tiles.")
-        return paths
+        return {
+            "files": paths,
+            "summary": " + ".join(path.name for path in toolpaths),
+            "moves": sum(len(path.moves) for path in toolpaths),
+            "minutes": sum(path.estimated_cutting_minutes for path in toolpaths),
+        }
     report(0.15, "Writing G-code", force=True)
     if len(toolpaths) == 1 and request.mode == "export":
         saved = write_grbl(toolpaths[0], request.path, settings)
     else:
         saved = write_grbl_program(toolpaths, request.path, settings)
     report(0.95, "G-code written", force=True)
-    return [str(saved)]
+    return {
+        "files": [str(saved)],
+        "summary": " + ".join(path.name for path in toolpaths),
+        "moves": sum(len(path.moves) for path in toolpaths),
+        "minutes": sum(path.estimated_cutting_minutes for path in toolpaths),
+    }
 
 
 def main() -> int:
