@@ -347,12 +347,22 @@ def _write_tool_stages(
         count = sum(len(path.moves) for path in stage)
         stage_start = completed
 
-        def stage_progress(value: float) -> None:
+        cutter_name = stage[0].cutter.name
+
+        def stage_progress(
+            value: float,
+            *,
+            path_start: int = stage_start,
+            path_count: int = count,
+            stage_number: int = number,
+            tool_name: str = cutter_name,
+        ) -> None:
             report(
                 start_fraction
-                + span_fraction * (stage_start + value * count) / max(1, total_moves),
-                f"Writing cutter stage {number}/{len(stages)}: "
-                f"{stage[0].cutter.name}",
+                + span_fraction * (path_start + value * path_count)
+                / max(1, total_moves),
+                f"Writing cutter stage {stage_number}/{len(stages)}: "
+                f"{tool_name}",
             )
 
         written.append(str(write_grbl_program(
