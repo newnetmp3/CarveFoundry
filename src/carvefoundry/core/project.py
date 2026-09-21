@@ -98,6 +98,7 @@ class ProjectItem:
     source_path: Path | None = None
     kind: str = "shape"
     visible: bool = True
+    locked: bool = False
     mesh: MeshAsset | None = None
     transform: Transform3D = field(default_factory=Transform3D)
     source_units: ModelUnits = ModelUnits.MILLIMETERS
@@ -234,6 +235,7 @@ class Project:
             source_path=source.source_path,
             kind=source.kind,
             visible=source.visible,
+            locked=source.locked,
             mesh=source.mesh,
             transform=Transform3D(
                 translation_mm=tuple(source.transform.translation_mm),
