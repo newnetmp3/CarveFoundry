@@ -239,6 +239,7 @@ def _build_container(
                 "item_id": item.item_id,
                 "kind": item.kind,
                 "visible": item.visible,
+                "locked": item.locked,
                 "source_units": item.source_units.value,
                 "group_id": item.group_id,
                 "text_properties": _text_properties_to_dict(
@@ -423,6 +424,13 @@ def _validate_item_header(value: object) -> tuple[str, str, bool]:
     return name, kind, visible
 
 
+def _load_item_locked(value: dict, *, name: str) -> bool:
+    locked = value.get("locked", False)
+    if not isinstance(locked, bool):
+        raise ProjectFileError(f"Project item {name!r} has an invalid lock value.")
+    return locked
+
+
 def _legacy_source_path(value: object, project_path: Path) -> Path | None:
     if value is None:
         return None
@@ -461,6 +469,7 @@ def _load_legacy_item(value: object, project_path: Path) -> ProjectItem:
         source_path=source_path,
         kind=kind,
         visible=visible,
+        locked=_load_item_locked(value, name=name),
         mesh=mesh,
         transform=transform,
         source_units=source_units,
@@ -754,6 +763,7 @@ def _load_native_item(
         "source_path": source_path,
         "kind": kind,
         "visible": visible,
+        "locked": _load_item_locked(value, name=name),
         "mesh": mesh,
         "transform": transform,
         "source_units": source_units,
