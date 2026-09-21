@@ -155,6 +155,10 @@ class ProjectFileControllerMixin:
 
         def done(result):
             output_files = [Path(name) for name in result["files"]]
+            self._last_exported_programs = (
+                self._guided_job_fingerprint(),
+                tuple(str(file) for file in output_files),
+            )
             self._set_activity_info(
                 f"G-code exported\nFiles: {len(output_files)}\n"
                 + "\n".join(str(file) for file in output_files)
