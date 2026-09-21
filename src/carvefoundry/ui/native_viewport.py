@@ -772,7 +772,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not item.visible or item.vector_path is None:
+        if not item.visible or item.locked or item.vector_path is None:
             return None
         return node_world_points(item)
 
