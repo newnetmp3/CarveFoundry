@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from math import pi
 
 from PySide6.QtWidgets import (
@@ -24,7 +23,6 @@ from carvefoundry.core.machine_profiles import MachineProfile, profiles_from_jso
 from carvefoundry.core.tools import DEFAULT_TOOLS, Cutter, ToolType
 
 from .machine_control import MachineController
-
 from .ribbon_forms import _ActionForm
 
 
