@@ -41,7 +41,9 @@ class GrblPostSettings:
 
 
 def _number(value: float, decimals: int) -> str:
-    text = f"{value:.{decimals}f}".rstrip("0").rstrip(".")
+    text = f"{value:.{decimals}f}"
+    if decimals:
+        text = text.rstrip("0").rstrip(".")
     if text in {"", "-0"}:
         return "0"
     return text
