@@ -223,6 +223,7 @@ class BeginnerWorkflowMixin:
         no_machine = QPushButton("I don't have a CNC machine yet")
         def mark_no_machine() -> None:
             self._settings.setValue("onboarding/no_machine", True)
+            self._settings.setValue("onboarding/verified_machine", False)
             self._settings.sync()
             dialog.accept()
             self.statusBar().showMessage(
@@ -233,6 +234,7 @@ class BeginnerWorkflowMixin:
         ready = QPushButton("I have verified my machine profile")
         def mark_ready() -> None:
             self._settings.setValue("onboarding/no_machine", False)
+            self._settings.setValue("onboarding/verified_machine", True)
             self._settings.sync()
             dialog.accept()
         ready.clicked.connect(mark_ready)
@@ -410,7 +412,16 @@ class BeginnerWorkflowMixin:
         if target.suffix.lower() != ".pdf":
             target = target.with_suffix(".pdf")
         try:
-            html = job_sheet_html(self.project, self._active_machine_profile())
+            previous = getattr(self, "_last_exported_programs", None)
+            names = ()
+            if previous is not None and previous[0] == (
+                self._guided_job_fingerprint()
+            ):
+                names = previous[1]
+            html = job_sheet_html(
+                self.project, self._active_machine_profile(),
+                output_files=names,
+            )
             document = QTextDocument()
             document.setHtml(html)
             from PySide6.QtGui import QPageSize
