@@ -593,6 +593,13 @@ class ViewportInteractionMixin:
         event.accept()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        self.fitRequested.emit()
+        # Double-click is a convenient Fit View shortcut only on the empty
+        # black margin, never on a model or the stock work area. The hit check
+        # uses the native viewport's ray, not clamped drawing coordinates.
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._is_empty_viewport_background(event.position())
+        ):
+            self.fitRequested.emit()
         event.accept()
 
