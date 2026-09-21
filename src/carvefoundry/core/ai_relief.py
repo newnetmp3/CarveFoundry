@@ -92,6 +92,7 @@ def mesh_from_depth(
     heights = np.clip((values - low) / (high - low), 0, 1)
     if invert_depth:
         heights = 1 - heights
+    rows, cols = heights.shape
     if smoothing_px:
         # PIL's GaussianBlur does not support float-mode images. Keep full
         # floating-point depth precision instead of quantizing the CNC surface.
@@ -111,7 +112,6 @@ def mesh_from_depth(
             )
         heights = np.clip(heights, 0, 1)
 
-    rows, cols = heights.shape
     x = np.linspace(0, width_mm, cols, dtype=np.float32)
     y = np.linspace(height_mm, 0, rows, dtype=np.float32)
     xx, yy = np.meshgrid(x, y)
