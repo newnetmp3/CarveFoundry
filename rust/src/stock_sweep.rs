@@ -42,15 +42,16 @@ impl CutterProfile {
         let r = distance.min(self.radius);
         match self.kind {
             ProfileKind::Flat => 0.0,
-            ProfileKind::Ball => {
-                self.radius - (self.radius * self.radius - r * r).max(0.0).sqrt()
-            }
+            ProfileKind::Ball => self.radius - (self.radius * self.radius - r * r).max(0.0).sqrt(),
             ProfileKind::Cone => {
                 (r - self.tip_radius).max(0.0) / (self.angle_deg.to_radians() / 2.0).tan()
             }
             ProfileKind::TaperedBall => {
                 if r <= self.ball_radius {
-                    self.ball_radius - (self.ball_radius * self.ball_radius - r * r).max(0.0).sqrt()
+                    self.ball_radius
+                        - (self.ball_radius * self.ball_radius - r * r)
+                            .max(0.0)
+                            .sqrt()
                 } else {
                     self.ball_radius
                         + (r - self.ball_radius) / self.taper_angle_deg.to_radians().tan()
@@ -159,7 +160,9 @@ pub(crate) fn sweep_stock_segment<'py>(
         .as_slice()
         .map_err(|_| PyValueError::new_err("Y axis must be contiguous"))?;
     if x.len() < 2 || y.len() < 2 {
-        return Err(PyValueError::new_err("stock axes must have two or more samples"));
+        return Err(PyValueError::new_err(
+            "stock axes must have two or more samples",
+        ));
     }
     if surface.shape() != [y.len(), x.len()] {
         return Err(PyValueError::new_err("stock grid does not match XY axes"));
@@ -173,16 +176,25 @@ pub(crate) fn sweep_stock_segment<'py>(
         || [angle_deg, tip_diameter, taper_angle_deg, ball_radius]
             .iter()
             .any(|value| !value.is_finite())
-        || start.iter().chain(end.iter()).any(|value| !value.is_finite())
+        || start
+            .iter()
+            .chain(end.iter())
+            .any(|value| !value.is_finite())
     {
-        return Err(PyValueError::new_err("non-finite or invalid cutter/motion geometry"));
+        return Err(PyValueError::new_err(
+            "non-finite or invalid cutter/motion geometry",
+        ));
     }
-    if x.windows(2).any(|pair| pair[1] <= pair[0] || !pair[1].is_finite())
-        || y.windows(2).any(|pair| pair[1] <= pair[0] || !pair[1].is_finite())
+    if x.windows(2)
+        .any(|pair| pair[1] <= pair[0] || !pair[1].is_finite())
+        || y.windows(2)
+            .any(|pair| pair[1] <= pair[0] || !pair[1].is_finite())
         || !x[0].is_finite()
         || !y[0].is_finite()
     {
-        return Err(PyValueError::new_err("stock axes must increase and be finite"));
+        return Err(PyValueError::new_err(
+            "stock axes must increase and be finite",
+        ));
     }
     let kind = profile_kind(kind)?;
     let radius = diameter / 2.0;
@@ -215,7 +227,16 @@ pub(crate) fn sweep_stock_segment<'py>(
     let data = grid
         .as_slice_mut()
         .ok_or_else(|| PyValueError::new_err("stock grid must be contiguous"))?;
-    Ok(sweep_impl(data, x, y, start, end, samples, stock_bottom, &cutter))
+    Ok(sweep_impl(
+        data,
+        x,
+        y,
+        start,
+        end,
+        samples,
+        stock_bottom,
+        &cutter,
+    ))
 }
 
 #[cfg(test)]
