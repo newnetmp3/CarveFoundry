@@ -226,6 +226,17 @@ and configured work-envelope limits. The same checks run automatically
 before normal, resume and tiled G-code export; known errors block export.
 Tiled programs are checked tile-by-tile in their own local work envelopes.
 
+**Export now also verifies the actual NC text:** For each consecutive cutter
+stage, CarveFoundry renders the GRBL commands, independently decodes modal
+G0/G1 movements, checks posted XYZ and feeds against the planned cuts, and
+preflights the decoded retracts, rapids, parking and cutting motions. Unknown
+codes (including arcs, canned cycles or changed work offsets) fail closed;
+they are not approximated. Cutter-stage NC files are prepared temporarily
+before replacing their destination files, so a later stage's verification
+failure does not overwrite earlier files. Supported GRBL output uses
+G90/G91, G20/G21, G17, G94, F and M2/M30. This offline interpreter is not
+a substitute for inspecting the actual controller and installed work offset.
+
 Multi-tool output is split into one G-code file per consecutive cutter stage.
 Run these files in the numbered order, stop the machine between stages,
 change the cutter and re-probe the new tool's Z before proceeding.
@@ -367,6 +378,15 @@ surface: blue = remaining material above target, red = cut below target.
 Choose XY sample spacing before calculation; the application rejects overly
 large grids/sampling workloads instead of silently degrading resolution.
 Long simulations support cancellation.
+
+The **Verify and simulate posted G-code** box is on by default. It
+postprocesses each cutter stage, decodes and preflights the resulting NC
+against configured machine travel, stock and recorded fixtures, then runs
+material removal using those decoded NC motions (rather than trusting the
+unexported plan). Uncheck it only to compare against the original in-memory
+toolpaths. The stock viewer identifies which mode produced its result. The
+posted-code parser and geometric stock solver are separate parts; the latter
+is still sampled 2.5D rather than a second exact CSG implementation.
 
 **Scope:** This is sampled **2.5D material removal**, not exact continuous
 volumetric CSG. It cannot represent undercuts, physical holder contact,
