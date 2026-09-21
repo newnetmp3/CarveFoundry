@@ -231,3 +231,23 @@ def test_multiple_cutter_stages_are_verified_separately():
     assert len(result.stages) == 2
     assert result.stages[0].removed_volume_mm3 > 0
     assert result.cut_sample_count > 0
+
+
+def test_zero_decimal_output_does_not_truncate_100_to_1():
+    cutter = Cutter("flat", ToolType.FLAT_END_MILL, 3)
+    path = Toolpath(
+        "Integer posts", "engrave", cutter, 5,
+        [
+            ToolpathMove(100, 8, 5, MoveKind.RAPID),
+            ToolpathMove(100, 8, -2, MoveKind.PLUNGE, 100),
+            ToolpathMove(120, 8, -2, MoveKind.CUT, 500),
+        ],
+    )
+    stock = Stock(150, 30, 15)
+    machine = MachineProfile(work_x_mm=300, work_y_mm=300, work_z_mm=100)
+    settings = GrblPostSettings(decimals=0)
+    program = render_grbl_program([path], settings)
+    assert "X100 " in program
+    assert " F100" in program
+    assert " F500" in program
+    assert verify_grbl_export(program, [path], stock, machine, (), settings).safe_to_export
