@@ -39,8 +39,7 @@ bash scripts/run-carvework.sh
 ```
 
 The launcher points `CARVEFOUNDRY_REPO` at that checkout. If you already
-used `/home/scott/git/carve-work/data` and the new in-repository
-`tools/carve-work/data` directory does not exist, it automatically reuses
+used `/home/scott/git/carve-work/data` and its SQLite database exists, the launcher automatically reuses
 the existing data directory. Conversations, handovers, saved tasks and
 project context therefore remain available **without copying your database
 into Git**. To choose the data location explicitly, run:

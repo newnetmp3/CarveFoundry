@@ -88,7 +88,7 @@ bash scripts/run-carvework.sh
 Open `http://127.0.0.1:8765`. No separate ZIP or source checkout is needed.
 If an earlier CarveWork installation has chats under
 `$HOME/git/carve-work/data`, the launcher reuses them automatically when
-the new app has no `data/` directory; `CARVE_WORK_DATA` overrides this
+the original database exists; `CARVE_WORK_DATA` overrides this
 selection. **Chats, databases, `ai.key`, and other secrets stay local and are
 not tracked in Git.** See [CarveWork setup and security](tools/carve-work/README.md).
 
