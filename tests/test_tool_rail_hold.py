@@ -111,7 +111,11 @@ def test_corner_marker_is_part_of_active_tool_icon() -> None:
     assert result.height() == 28
     # Original tool icon is visible; the south-east marker occupies its corner.
     assert result.pixelColor(8, 8) == QColor("#526375")
-    assert result.pixelColor(24, 25) == QColor("#c8ff3d")
+    marker = result.pixelColor(24, 25)
+    assert marker.alpha() >= 245  # Qt antialiasing varies slightly by build.
+    assert abs(marker.red() - 200) <= 2
+    assert marker.green() == 255
+    assert abs(marker.blue() - 61) <= 2
 
 
 def test_main_window_cam_icon_tracks_chosen_active_operation() -> None:
