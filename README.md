@@ -368,7 +368,8 @@ preflight.
 ## Sampled material-removal simulation
 
 Choose **Toolpaths → Simulate Material Removal…** after generating a machining
-job. This is separate from the existing backplot/path animation. CarveFoundry
+job, or click **Virtual machining** in the standalone Toolpath Preview.
+This is separate from the existing backplot/path animation. CarveFoundry
 simulates each cutting/plunge move, in cutter-stage order, against a regular XY
 grid of remaining stock using the selected flat, ball, V/cone, tapered ball or
 custom radial cutter profile. G0 rapid moves are not treated as cuts. The
@@ -394,6 +395,17 @@ runout, machine acceleration, the actual work offset or fixtures not recorded
 in the project. Model comparison uses the *top surface* of visible 3D objects:
 intentional 2D pocket/cutout operations can be below that surface. Simulated
 volume is approximate. Always run mandatory CNC preflight before exporting.
+
+### Repeatable offline benchmark
+
+Run `python scripts/virtual_cam_benchmark.py --spacing-mm 1` from an
+installed CarveFoundry environment to produce JSON metrics for a synthetic
+three-cutter serpentine job: decoded NC move count, cutting and rapid
+distance, lateral retract travel, estimated material removed and simulation
+runtime. The benchmark is an explicitly **synthetic surrogate**, not the
+original CPO anchor, coin or plaque project. Original project assets must be
+checked in (with permission) before claiming those as reference fixtures.
+No simulation result is physical Onefinity validation.
 
 ## Automatic project recovery
 
