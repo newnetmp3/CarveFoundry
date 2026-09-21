@@ -28,7 +28,6 @@ from carvefoundry.core.vector_path import VectorPath
 
 from .contextual_tool_state import ToolOptionsState
 from .image_trace_dialog import ImageTraceDialog, qimage_rgba
-from .ribbon_forms import _ActionForm
 
 
 class RibbonDesignToolsMixin:
