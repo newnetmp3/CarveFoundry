@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Real Qt/Wayland input event recorder for CarveFoundry's native GL viewport.
 
 Run from an actual KDE Plasma Wayland graphical session (not XWayland,
