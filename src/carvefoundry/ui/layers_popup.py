@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
+    QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QToolTip,
@@ -60,7 +61,7 @@ class LayerRowDelegate(QStyledItemDelegate):
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if option.state & QStyleOptionViewItem.StateFlag.State_Selected:
+        if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(eye, option.palette.highlight())
             painter.fillRect(lock, option.palette.highlight())
         self._draw_eye(
@@ -75,14 +76,14 @@ class LayerRowDelegate(QStyledItemDelegate):
         center = area.center()
         x, y = float(center.x()), float(center.y())
         color = "#c8ff3d" if visible else "#7c8497"
-        painter.setPen(QPen(color, 1.6))
+        painter.setPen(QPen(QColor(color), 1.6))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         eye = QPainterPath(QPointF(x - 8, y))
         eye.cubicTo(x - 4, y - 6, x + 4, y - 6, x + 8, y)
         eye.cubicTo(x + 4, y + 6, x - 4, y + 6, x - 8, y)
         painter.drawPath(eye)
         if visible:
-            painter.setBrush(color)
+            painter.setBrush(QColor(color))
             painter.drawEllipse(QRectF(x - 2, y - 2, 4, 4))
         else:
             painter.drawLine(QPointF(x - 9, y + 7), QPointF(x + 9, y - 7))
@@ -92,7 +93,7 @@ class LayerRowDelegate(QStyledItemDelegate):
         center = area.center()
         x, y = float(center.x()), float(center.y())
         color = "#c8ff3d" if locked else "#7c8497"
-        painter.setPen(QPen(color, 1.6))
+        painter.setPen(QPen(QColor(color), 1.6))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         shackle = QPainterPath(QPointF(x - 4, y + 1))
         shackle.lineTo(x - 4, y - 4)
