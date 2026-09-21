@@ -171,3 +171,18 @@ def test_stock_has_no_eye_or_lock_controls() -> None:
         assert all(item.visible and not item.locked for item in window.project.items)
     finally:
         window.close()
+
+
+def test_rename_preserves_full_layer_tooltip_help() -> None:
+    window = _window()
+    try:
+        item = window.project_list.item(1)
+        item.setText("Relief Renamed")
+        window._project_item_changed(item)
+        assert window.project.items[0].name == "Relief Renamed"
+        tooltip = item.toolTip()
+        assert "Eye: show/hide" in tooltip
+        assert "Lock: protect from edits" in tooltip
+        assert "Double-click name or press F2 to rename." in tooltip
+    finally:
+        window.close()

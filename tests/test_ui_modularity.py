@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from carvefoundry.ui.import_controller import ImportControllerMixin
 from carvefoundry.ui.main_window import MainWindow
+from carvefoundry.ui.project_inspector_controller import ProjectInspectorControllerMixin
 from carvefoundry.ui.selection_transform_controller import SelectionTransformControllerMixin
 from carvefoundry.ui.toolpath_state_controller import ToolpathStateControllerMixin
 
@@ -47,3 +48,16 @@ def test_toolpath_state_domain_stays_out_of_main_window() -> None:
     assert owned <= ToolpathStateControllerMixin.__dict__.keys()
     assert owned.isdisjoint(MainWindow.__dict__.keys())
     assert ToolpathStateControllerMixin in MainWindow.__mro__
+
+
+def test_project_inspector_domain_stays_out_of_main_window() -> None:
+    owned = {
+        "_refresh_project_list",
+        "_project_item_changed",
+        "_sync_stock_controls",
+        "_stock_control_changed",
+        "_ensure_inspector_visible",
+    }
+    assert owned <= ProjectInspectorControllerMixin.__dict__.keys()
+    assert owned.isdisjoint(MainWindow.__dict__.keys())
+    assert ProjectInspectorControllerMixin in MainWindow.__mro__
