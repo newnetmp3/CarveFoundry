@@ -10,7 +10,6 @@ from carvefoundry.ui.contextual_tool_state import ToolOptionsState
 from carvefoundry.ui.job_utility_actions import JobUtilityActionsMixin
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.native_viewport import _NativeOpenGLViewport
-from carvefoundry.ui.viewport import MeshViewport as PublicMeshViewport
 from carvefoundry.ui.project_edit_actions import ProjectEditActionsMixin
 from carvefoundry.ui.ribbon_action_state import RibbonActionStateMixin
 from carvefoundry.ui.ribbon_actions import RibbonActionsMixin
@@ -23,6 +22,7 @@ from carvefoundry.ui.text_edit_behavior import TextEditBehaviorMixin
 from carvefoundry.ui.text_editor import TextEditorMixin
 from carvefoundry.ui.text_font_catalog import TextFontCatalogMixin
 from carvefoundry.ui.view_simulation_actions import ViewSimulationActionsMixin
+from carvefoundry.ui.viewport import MeshViewport as PublicMeshViewport
 from carvefoundry.ui.viewport_geometry import ViewportGeometryMixin
 from carvefoundry.ui.viewport_interactions import ViewportInteractionMixin
 from carvefoundry.ui.viewport_widget import MeshViewport
