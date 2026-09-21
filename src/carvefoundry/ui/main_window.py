@@ -28,6 +28,7 @@ from ..core.project import Project
 from .ai_relief import AiReliefMixin
 from .background_job_controller import BackgroundJobControllerMixin
 from .batch_layout import BatchLayoutMixin
+from .beginner_workflow import BeginnerWorkflowMixin
 from .direct_selection import DirectSelectionMixin
 from .guided_workflow import GuidedWorkflowMixin
 from .import_controller import ImportControllerMixin
@@ -97,6 +98,7 @@ class MainWindow(
     ImportControllerMixin,
     InspectorControlsMixin,
     BatchLayoutMixin,
+    BeginnerWorkflowMixin,
     StockSimulationMixin,
     ProjectFileControllerMixin,
     ProjectInspectorControllerMixin,
