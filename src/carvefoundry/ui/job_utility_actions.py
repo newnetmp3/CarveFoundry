@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.job_process import GcodeRequest
-from carvefoundry.core.beginner import explain_motion_preflight
 from carvefoundry.cam.job_workflows import TilingSettings, find_safe_resume_index, plan_tiles
+from carvefoundry.core.beginner import explain_motion_preflight
 from carvefoundry.core.fixtures import Fixture
 
 from .ribbon_forms import _ActionForm
