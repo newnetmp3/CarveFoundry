@@ -183,7 +183,7 @@ def _prompt_image(prompt: str, report: Progress):
             prompt=(
                 "Orthographic front view of a single sculpted bas-relief subject, "
                 "centered composition, simple clean background, directional "
-                "shading, no text, no frame, no perspective: " + prompt
+                "shading, no frame, no perspective; include requested lettering: " + prompt
             ),
             num_inference_steps=2,
             guidance_scale=0.0,
