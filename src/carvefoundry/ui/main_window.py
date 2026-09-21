@@ -19,13 +19,11 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
-    QStatusBar,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -43,7 +41,7 @@ from ..core.project_file import (
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
 from .ai_relief import AiReliefMixin
-from .background_jobs import BackgroundWorker, JobCallbacks, JobState
+from .background_job_controller import BackgroundJobControllerMixin
 from .batch_layout import BatchLayoutMixin
 from .direct_selection import DirectSelectionMixin
 from .guided_workflow import GuidedWorkflowMixin
@@ -102,6 +100,7 @@ class Panel(QFrame):
 
 class MainWindow(
     AiReliefMixin,
+    BackgroundJobControllerMixin,
     WorkspaceCommandsMixin,
     DirectSelectionMixin,
     GuidedWorkflowMixin,
@@ -129,14 +128,7 @@ class MainWindow(
         self._import_thread: QThread | None = None
         self._import_worker: ImportWorker | None = None
         self._import_target_project: Project | None = None
-        self._background_job: JobState | None = None
-        self._job_bridge: JobCallbacks | None = None
-        self._job_target_project: Project | None = None
-        self._job_action_states: dict[str, bool] = {}
-        self._job_rail_states: dict[str, bool] = {}
-        self._job_camera_was_active = True
-        self._job_draw_mode: str | None = None
-        self._job_sequence = 0
+        self._init_background_job_controller()
         self._settings = QSettings()
         self._option_buttons: dict[str, object] = {}
         self._history_action_buttons: dict[str, list[object]] = {
@@ -183,40 +175,7 @@ class MainWindow(
         layout.addWidget(self.main_menu_bar)
         layout.addWidget(self._build_workspace(), 1)
 
-        status = QStatusBar()
-        self.import_progress = QProgressBar()
-        self.import_progress.setObjectName("ImportProgress")
-        self.import_progress.setFixedWidth(300)
-        self.import_progress.setTextVisible(True)
-        self.import_progress.setFormat("Import · %p%")
-        self.import_progress.hide()
-        status.addPermanentWidget(self.import_progress)
-
-        self.toolpath_progress = QProgressBar()
-        self.toolpath_progress.setObjectName("ToolpathProgress")
-        self.toolpath_progress.setRange(0, 100)
-        self.toolpath_progress.setValue(0)
-        self.toolpath_progress.setFixedWidth(320)
-        self.toolpath_progress.setTextVisible(True)
-        self.toolpath_progress.setFormat("Toolpath generation · %p%")
-        self.toolpath_progress.hide()
-        status.addPermanentWidget(self.toolpath_progress)
-
-        self.job_progress = QProgressBar()
-        self.job_progress.setObjectName("BackgroundJobProgress")
-        self.job_progress.setFixedWidth(320)
-        self.job_progress.setTextVisible(True)
-        self.job_progress.hide()
-        status.addPermanentWidget(self.job_progress)
-
-        self.cancel_job_button = QPushButton("Cancel")
-        self.cancel_job_button.setObjectName("CancelBackgroundJob")
-        self.cancel_job_button.clicked.connect(self._cancel_background_job)
-        self.cancel_job_button.hide()
-        status.addPermanentWidget(self.cancel_job_button)
-
-        status.showMessage("Ready — no machine connected")
-        self.setStatusBar(status)
+        self.setStatusBar(self._build_status_bar())
         self._install_shortcuts()
 
         self.viewport.viewSettingsChanged.connect(self._save_viewport_mode)
@@ -2630,198 +2589,6 @@ class MainWindow(
             )
         self._refresh_project_list(selected_row)
         self._sync_toolpath_state_from_project()
-
-    def _start_background_job(
-        self,
-        title: str,
-        *,
-        task=None,
-        request=None,
-        on_done=None,
-        on_failed=None,
-        cam_progress: bool = False,
-        indeterminate: bool = False,
-        cancelable: bool = False,
-    ) -> bool:
-        """Run one costly operation off the GUI thread with reusable progress UI."""
-
-        if self._background_job is not None or (
-            self._import_thread is not None and self._import_thread.isRunning()
-        ):
-            self.statusBar().showMessage("Another operation is already running", 4000)
-            return False
-        worker = BackgroundWorker(task, process_request=request)
-        thread = QThread(self)
-        worker.moveToThread(thread)
-        state = JobState(worker, thread)
-        self._background_job = state
-        self._job_target_project = self.project
-        self._job_sequence += 1
-        job_id = self._job_sequence
-        # Record both sets of states BEFORE disabling any QAction. Buttons
-        # created with setDefaultAction share that action's enabled state:
-        # sampling the rail after disabling actions would incorrectly record
-        # Select and most other rail tools as already disabled, then leave
-        # them disabled permanently after the worker/AI STL import completes.
-        self._job_action_states = {
-            key: action.isEnabled()
-            for key, action in self._ui_actions.items()
-        }
-        self._job_rail_states = {
-            key: button.isEnabled()
-            for key, button in self.tool_rail.buttons.items()
-        }
-        # Camera, view and selection remain usable. Design and machine commands
-        # are disabled to keep the snapshot stable until the worker completes.
-        safe_actions = {
-            "camera", "view_fit", "frame_selected", "view_2d",
-            "perspective", "orthographic", "isometric", "view_top",
-            "view_bottom", "view_front", "view_back", "view_left",
-            "view_right", "stock", "grid", "rulers", "toolpaths",
-            "rapids", "layers", "inspector", "status_bar",
-            "view_controls", "reverse_horizontal", "invert_vertical",
-        }
-        for key, action in self._ui_actions.items():
-            if key not in safe_actions:
-                action.setEnabled(False)
-        if self.generate_toolpaths_button is not None:
-            self.generate_toolpaths_button.setEnabled(False)
-        # Protect the job snapshot without blocking navigation or repaints.
-        self._job_camera_was_active = self.viewport.camera_control_mode
-        self._job_draw_mode = self.viewport.shape_draw_mode
-        self.viewport.set_node_edit_mode(False)
-        self.viewport.set_shape_draw_mode(None)
-        self.viewport.set_camera_control_mode(True)
-        self.tool_rail.set_active_tool("camera")
-        for key, button in self.tool_rail.buttons.items():
-            if key not in {"camera", "view"}:
-                button.setEnabled(False)
-        self.properties_panel.setEnabled(False)
-        self.tool_combo.setEnabled(False)
-        self.job_progress.setRange(0, 0 if indeterminate else 100)
-        self.job_progress.setValue(0)
-        self.job_progress.setFormat(title if indeterminate else f"{title} · %p%")
-        self.job_progress.show()
-        self.cancel_job_button.setEnabled(True)
-        self.cancel_job_button.setVisible(request is not None or cancelable)
-        self.statusBar().showMessage(f"{title}…")
-
-        def progress(fraction: float, status: str) -> None:
-            if job_id != self._job_sequence:
-                return
-            value = max(0, min(100, round(fraction * 100)))
-            if not indeterminate:
-                self.job_progress.setValue(value)
-            self.job_progress.setFormat(
-                status if indeterminate else f"{status} · %p%"
-            )
-            self.statusBar().showMessage(
-                f"{title}: {status}" if indeterminate
-                else f"{title}: {status} — {value}%"
-            )
-            if cam_progress:
-                self._update_toolpath_progress(fraction, status)
-
-        def completed(result: object) -> None:
-            if self.project is not self._job_target_project:
-                self.statusBar().showMessage(
-                    f"{title}: project changed; result discarded", 7000
-                )
-                return
-            try:
-                if on_done is not None:
-                    on_done(result)
-                self.job_progress.setRange(0, 100)
-                self.job_progress.setValue(100)
-                self.job_progress.setFormat(f"{title} complete · %p%")
-            except Exception as exc:  # noqa: BLE001 - always clean up the worker
-                failed(f"{type(exc).__name__}: {exc}")
-
-        def failed(message: str) -> None:
-            if on_failed is not None:
-                on_failed(message)
-            else:
-                self._set_activity_info(f"{title} failed\n{message}")
-                self.statusBar().showMessage(f"{title} failed: {message}", 9000)
-            self.job_progress.setFormat(f"{title} failed")
-
-        def cancelled() -> None:
-            self.job_progress.setFormat(f"{title} canceled")
-            self.statusBar().showMessage(f"{title} canceled", 5000)
-            if cam_progress:
-                self._finish_toolpath_progress(
-                    success=False, message="Generation canceled"
-                )
-
-        def cleaned_up() -> None:
-            if job_id != self._job_sequence:
-                return
-            self._background_job = None
-            self._job_bridge = None
-            self._job_target_project = None
-            self.cancel_job_button.hide()
-            for key, was_enabled in self._job_action_states.items():
-                action = self._ui_actions.get(key)
-                if action is not None:
-                    action.setEnabled(was_enabled)
-            self._job_action_states = {}
-            for key, was_enabled in self._job_rail_states.items():
-                button = self.tool_rail.buttons.get(key)
-                if button is not None:
-                    button.setEnabled(was_enabled)
-            self._job_rail_states = {}
-            self.properties_panel.setEnabled(True)
-            self.tool_combo.setEnabled(True)
-            self.viewport.set_camera_control_mode(self._job_camera_was_active)
-            if not self._job_camera_was_active:
-                self.viewport.set_shape_draw_mode(self._job_draw_mode)
-                self.tool_rail.set_active_tool(
-                    self._job_draw_mode or "select"
-                )
-            else:
-                self.tool_rail.set_active_tool("camera")
-            self._sync_toolpath_output_state()
-            self._sync_selection_action_state()
-            if hasattr(self, "_sync_history_action_state"):
-                self._sync_history_action_state()
-            if self.generate_toolpaths_button is not None:
-                self.generate_toolpaths_button.setEnabled(True)
-            QTimer.singleShot(
-                1800,
-                lambda bar=self.job_progress: (
-                    bar.hide() if self._background_job is None else None
-                ),
-            )
-
-        bridge = JobCallbacks(
-            self,
-            progress=progress,
-            completed=completed,
-            failed=failed,
-            cancelled=cancelled,
-            cleaned_up=cleaned_up,
-        )
-        self._job_bridge = bridge
-        thread.started.connect(worker.run)
-        worker.progress.connect(bridge.on_progress)
-        worker.completed.connect(bridge.on_completed)
-        worker.failed.connect(bridge.on_failed)
-        worker.cancelled.connect(bridge.on_cancelled)
-        for signal in (worker.completed, worker.failed, worker.cancelled):
-            signal.connect(thread.quit)
-            signal.connect(worker.deleteLater)
-        thread.finished.connect(bridge.on_cleaned_up)
-        thread.finished.connect(thread.deleteLater)
-        thread.start()
-        return True
-
-    def _cancel_background_job(self) -> None:
-        state = self._background_job
-        if state is None:
-            return
-        self.cancel_job_button.setEnabled(False)
-        self.statusBar().showMessage("Cancelling operation…")
-        state.worker.cancel()
 
     def _undo(self) -> None:
         self.statusBar().showMessage("Nothing to undo", 3000)

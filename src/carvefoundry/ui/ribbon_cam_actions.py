@@ -4,7 +4,6 @@ from __future__ import annotations
 from math import ceil, sqrt
 
 import numpy as np
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QComboBox, QDialog
 
 from carvefoundry.cam.basic_ops import (
@@ -621,69 +620,6 @@ class RibbonCamActionsMixin:
             "waterline": "3D Waterline",
         }.get(operation, operation.replace("_", " ").title())
 
-    def _update_toolpath_progress(
-        self,
-        fraction: float,
-        status_text: str,
-    ) -> None:
-        """Update determinate CAM progress and keep the UI repainting."""
-
-        fraction = max(0.0, min(1.0, float(fraction)))
-        percent = round(fraction * 100.0)
-        text = str(status_text).strip() or "Generating toolpaths"
-
-        bars = [
-            getattr(self, "toolpath_progress", None),
-            self._toolpath_dialog_progress,
-        ]
-        changed = (
-            percent != self._toolpath_progress_last_value
-            or text != self._toolpath_progress_last_text
-        )
-        for bar in bars:
-            if bar is None:
-                continue
-            bar.setRange(0, 100)
-            bar.setValue(percent)
-            bar.setFormat(f"{text} · %p%")
-            bar.show()
-
-        self._toolpath_progress_last_value = percent
-        self._toolpath_progress_last_text = text
-        if changed:
-            self.statusBar().showMessage(f"{text} — {percent}%")
-
-    def _finish_toolpath_progress(
-        self,
-        *,
-        success: bool,
-        message: str,
-    ) -> None:
-        bars = [
-            getattr(self, "toolpath_progress", None),
-            self._toolpath_dialog_progress,
-        ]
-        value = 100 if success else self._toolpath_progress_last_value
-        value = max(0, value)
-        for bar in bars:
-            if bar is None:
-                continue
-            bar.setRange(0, 100)
-            bar.setValue(value)
-            bar.setFormat(f"{message} · %p%")
-            bar.show()
-
-        status_bar = getattr(self, "toolpath_progress", None)
-        if status_bar is not None and success:
-            QTimer.singleShot(
-                1800,
-                lambda bar=status_bar: (
-                    bar.hide()
-                    if bar.value() == 100
-                    else None
-                ),
-            )
-
     def _show_toolpath_generation_dialog(self) -> None:
         dialog = self._build_toolpath_generation_dialog()
         dialog.exec()
@@ -782,11 +718,6 @@ class RibbonCamActionsMixin:
                 self._settings.value("cam/rest_grid_spacing_mm", 0.75)
             ),
         )
-        self._toolpath_progress_last_value = -1
-        self._toolpath_progress_last_text = ""
-        self._update_toolpath_progress(
-            0, f"Preparing {self._cam_operation_title(operation)}"
-        )
 
         def finished(payload: object) -> None:
             if not isinstance(payload, dict):
@@ -826,18 +757,12 @@ class RibbonCamActionsMixin:
                 f"Estimated cutting: {float(payload['minutes']):.1f} min"
             )
             self._sync_toolpath_output_state()
-            self._finish_toolpath_progress(
-                success=True, message="Toolpaths ready"
-            )
             self.statusBar().showMessage(
                 f"Generated {len(paths)} toolpaths", 6000
             )
 
         def failed(message: str) -> None:
             self._set_activity_info(f"Toolpath calculation failed\n{message}")
-            self._finish_toolpath_progress(
-                success=False, message="Generation failed"
-            )
             self.statusBar().showMessage(f"Toolpath failed: {message}", 9000)
 
         return self._start_background_job(
@@ -845,7 +770,6 @@ class RibbonCamActionsMixin:
             request=request,
             on_done=finished,
             on_failed=failed,
-            cam_progress=True,
         )
 
     def _preview_toolpaths(self) -> None:

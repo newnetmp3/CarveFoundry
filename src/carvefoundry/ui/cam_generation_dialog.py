@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -786,14 +785,6 @@ class CamGenerationDialogMixin:
         ):
             navigator.add_section(key, heading, section)
 
-        generation_progress = QProgressBar()
-        generation_progress.setObjectName("ToolpathGenerationProgress")
-        generation_progress.setRange(0, 100)
-        generation_progress.setValue(0)
-        generation_progress.setTextVisible(True)
-        generation_progress.setFormat("Ready to generate · %p%")
-        generation_progress.hide()
-        outer.addWidget(generation_progress)
 
         append_job = QCheckBox(
             f"Append to existing machining job ({len(self.project.toolpaths)} "
@@ -1156,7 +1147,6 @@ class CamGenerationDialogMixin:
         dialog.generation_fields = fields
         dialog.generation_help_buttons = help_buttons
         dialog.generation_help_text = generation_help
-        dialog.generation_progress = generation_progress
         dialog.refresh_generation_readiness = update_relevance_and_readiness
         update_relevance_and_readiness()
         return dialog

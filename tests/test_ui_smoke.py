@@ -5,7 +5,13 @@ import numpy as np
 import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QFont, QKeySequence, QMouseEvent
-from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QSizePolicy
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QGroupBox,
+    QProgressBar,
+    QSizePolicy,
+)
 
 from carvefoundry.cam.gcode import GrblPostSettings
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
@@ -466,7 +472,7 @@ def test_large_preview_code_renders_without_blocking_qt(monkeypatch) -> None:
         preview.close()
 
 
-def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
+def test_toolpath_generation_uses_one_shared_status_progress_bar() -> None:
     window = MainWindow()
     try:
         item = ProjectItem(
@@ -479,34 +485,30 @@ def test_toolpath_generation_progress_is_determinate_and_shared() -> None:
             project_path=None,
             selected_row=1,
         )
-        dialog = window._build_toolpath_generation_dialog()
 
-        assert dialog.generation_progress.minimum() == 0
-        assert dialog.generation_progress.maximum() == 100
-        assert dialog.generation_progress.isHidden()
-        assert window.toolpath_progress.minimum() == 0
-        assert window.toolpath_progress.maximum() == 100
-
-        window._toolpath_dialog_progress = dialog.generation_progress
-        window._update_toolpath_progress(0.42, "Building test path")
-        assert dialog.generation_progress.value() == 42
-        assert window.toolpath_progress.value() == 42
-        assert "Building test path" in dialog.generation_progress.format()
-        assert not dialog.generation_progress.isHidden()
-        window._toolpath_dialog_progress = None
+        # Import has a separate streaming progress widget. Normal long-running
+        # jobs, including CAM generation, must use exactly one status-bar bar.
+        status_bars = window.statusBar().findChildren(QProgressBar)
+        assert {bar.objectName() for bar in status_bars} == {
+            "ImportProgress",
+            "BackgroundJobProgress",
+        }
+        assert not hasattr(window, "toolpath_progress")
 
         window._select_cam_operation("profile")
         assert window._calculate_toolpath_now()
         assert window._background_job is not None
-        assert window.job_progress.isVisible() or not window.job_progress.isHidden()
+        assert not window.job_progress.isHidden()
+        assert window.import_progress.isHidden()
+        visible = [bar for bar in status_bars if not bar.isHidden()]
+        assert visible == [window.job_progress]
+
         _finish_background_job(window)
-        assert window.toolpath_progress.value() == 100, window.activity_info.text()
-        assert "Toolpaths ready" in window.toolpath_progress.format()
+        assert window.job_progress.value() == 100, window.activity_info.text()
+        assert "complete" in window.job_progress.format().lower()
         assert window.project.toolpaths, window.activity_info.text()
-        dialog.close()
     finally:
         window.close()
-
 
 def test_generate_toolpaths_uses_all_objects_regardless_of_selection() -> None:
     window = MainWindow()
