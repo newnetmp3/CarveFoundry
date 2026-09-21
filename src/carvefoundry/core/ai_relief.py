@@ -111,6 +111,11 @@ def mesh_from_depth(
                 for index, weight in enumerate(kernel)
             )
         heights = np.clip(heights, 0, 1)
+        # Smoothing can shrink both extrema; retain the requested millimeter
+        # relief depth instead of silently making the finished carving shallower.
+        span = float(heights.max() - heights.min())
+        if span > 1e-8:
+            heights = (heights - heights.min()) / span
 
     x = np.linspace(0, width_mm, cols, dtype=np.float32)
     y = np.linspace(height_mm, 0, rows, dtype=np.float32)
