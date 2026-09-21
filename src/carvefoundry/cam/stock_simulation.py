@@ -15,6 +15,7 @@ import numpy as np
 
 from carvefoundry.cam.heightfield import _rasterize_top_surface_python
 from carvefoundry.cam.native import rasterize_top_surface as _native_rasterize_top_surface
+from carvefoundry.cam.native import sweep_stock_segment as _native_sweep_stock_segment
 from carvefoundry.cam.toolpath import MoveKind, Toolpath
 from carvefoundry.core.project import Project, Stock
 from carvefoundry.core.tools import Cutter, ToolType
@@ -231,20 +232,31 @@ def simulate_stock_removal(
                         "Simulation path sampling limit exceeded; increase "
                         "grid spacing or simulate a smaller machining job."
                     )
-                for step in range(samples + 1):
-                    if progress is not None and step % 512 == 0:
-                        progress(
-                            0.75 * (seen + step / (samples + 1)) / total_moves,
-                            f"Simulating swept cutter volume: {path.name}",
+                # Fast native path processes the whole cutting segment in
+                # Rust, avoiding Python allocation for every cutter sample.
+                # The Python reference retains identical grid semantics and
+                # can be forced with CARVEFOUNDRY_CAM_BACKEND=python.
+                native_changed = _native_sweep_stock_segment(
+                    height, x, y, path.cutter, previous.xyz, move.xyz,
+                    samples, -project.stock.thickness_mm,
+                )
+                if native_changed is not None:
+                    changed_cells += native_changed
+                else:
+                    for step in range(samples + 1):
+                        if progress is not None and step % 512 == 0:
+                            progress(
+                                0.75 * (seen + step / (samples + 1)) / total_moves,
+                                f"Simulating swept cutter volume: {path.name}",
+                            )
+                        t = step / samples
+                        changed_cells += _tool_sample(
+                            height, x, y, path.cutter,
+                            previous.x_mm + t * (move.x_mm - previous.x_mm),
+                            previous.y_mm + t * (move.y_mm - previous.y_mm),
+                            previous.z_mm + t * (move.z_mm - previous.z_mm),
+                            -project.stock.thickness_mm,
                         )
-                    t = step / samples
-                    changed_cells += _tool_sample(
-                        height, x, y, path.cutter,
-                        previous.x_mm + t * (move.x_mm - previous.x_mm),
-                        previous.y_mm + t * (move.y_mm - previous.y_mm),
-                        previous.z_mm + t * (move.z_mm - previous.z_mm),
-                        -project.stock.thickness_mm,
-                    )
                 count += samples + 1
             previous = move
             seen += 1
