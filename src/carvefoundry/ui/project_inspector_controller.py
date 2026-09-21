@@ -115,6 +115,28 @@ class ProjectInspectorControllerMixin:
                 preview = f' • “{first_line}”'
         return f"{item.name}  [{kind}]{group}{preview}"
 
+    @classmethod
+    def _item_tooltip(cls, item: ProjectItem) -> str:
+        kind = "STL" if item.kind.lower() == "stl" else item.kind.upper()
+        group_text = "\nGrouped object" if item.group_id else ""
+        source_size = cls._source_dimensions_text(item)
+        text_preview = ""
+        if item.kind.lower() == "text" and item.text_properties is not None:
+            content_preview = " ".join(
+                item.text_properties.content.splitlines()
+            ).strip()
+            if len(content_preview) > 90:
+                content_preview = content_preview[:87].rstrip() + "…"
+            if content_preview:
+                text_preview = f"\nContent: {content_preview}"
+        return (
+            f"{kind} • {item.name}{group_text}"
+            + text_preview
+            + (f"\nSource size: {source_size}" if source_size else "")
+            + "\nEye: show/hide • Lock: protect from edits"
+            + "\nDouble-click name or press F2 to rename."
+        )
+
     def _refresh_project_list(self, selected_row: int = 0) -> None:
         self._updating_project_list = True
         self._updating_object_selector = True
@@ -129,36 +151,7 @@ class ProjectInspectorControllerMixin:
 
             for project_item in self.project.items:
                 list_item = QListWidgetItem(project_item.name)
-                kind = (
-                    "STL"
-                    if project_item.kind.lower() == "stl"
-                    else project_item.kind.upper()
-                )
-                group_text = "\nGrouped object" if project_item.group_id else ""
-                source_size = self._source_dimensions_text(project_item)
-                text_preview = ""
-                if (
-                    project_item.kind.lower() == "text"
-                    and project_item.text_properties is not None
-                ):
-                    content_preview = " ".join(
-                        project_item.text_properties.content.splitlines()
-                    ).strip()
-                    if len(content_preview) > 90:
-                        content_preview = content_preview[:87].rstrip() + "…"
-                    if content_preview:
-                        text_preview = f"\nContent: {content_preview}"
-                list_item.setToolTip(
-                    f"{kind} • {project_item.name}{group_text}"
-                    + text_preview
-                    + (
-                        f"\nSource size: {source_size}"
-                        if source_size
-                        else ""
-                    )
-                    + "\nEye: show/hide • Lock: protect from edits"
-                    + "\nDouble-click name or press F2 to rename."
-                )
+                list_item.setToolTip(self._item_tooltip(project_item))
                 list_item.setFlags(
                     list_item.flags()
                     | Qt.ItemFlag.ItemIsUserCheckable
@@ -322,22 +315,7 @@ class ProjectInspectorControllerMixin:
             finally:
                 self.object_selector.blockSignals(False)
 
-            kind = (
-                "STL"
-                if project_item.kind.lower() == "stl"
-                else project_item.kind.upper()
-            )
-            group_text = "\nGrouped object" if project_item.group_id else ""
-            source_size = self._source_dimensions_text(project_item)
-            list_item.setToolTip(
-                f"{kind} • {project_item.name}{group_text}"
-                + (
-                    f"\nSource size: {source_size}"
-                    if source_size
-                    else ""
-                )
-                + "\nDouble-click or press F2 to rename."
-            )
+            list_item.setToolTip(self._item_tooltip(project_item))
             self.selection_info.setText(
                 self._mesh_properties_text(project_item)
             )
