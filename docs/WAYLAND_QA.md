@@ -12,7 +12,7 @@ Launch a KDE Plasma **Wayland** graphical session and run:
 cd /mnt/moar/Downloads/git/CarveFoundry
 git pull --ff-only
 source .venv/bin/activate
-env -u QT_QPA_PLATFORM python scripts/wayland_qa.py
+QT_QPA_PLATFORM=wayland python scripts/wayland_qa.py
 ```
 
 The script refuses X11/XWayland/offscreen, creates the *real* main window with
