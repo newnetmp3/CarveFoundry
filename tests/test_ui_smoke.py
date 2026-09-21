@@ -56,6 +56,7 @@ def test_photopea_menu_bar_replaces_visible_ribbon_and_full_rail() -> None:
             "Toolpaths",
             "Machine",
             "View",
+            "Help",
         ]
         assert {
             "camera",

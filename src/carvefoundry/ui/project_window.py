@@ -66,6 +66,7 @@ class MainWindow(_BaseMainWindow):
         self._init_project_recovery()
         self._update_project_title()
         self._sync_history_action_state()
+        QTimer.singleShot(1500, self._show_first_run_welcome)
 
     @staticmethod
     def _transform_signature(item: ProjectItem) -> tuple[object, ...]:

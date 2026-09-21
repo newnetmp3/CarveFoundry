@@ -44,6 +44,8 @@ class WorkspaceSnapshot:
     smart_values: tuple[tuple[str, str], ...]
     items: tuple[ProjectItemSnapshot, ...]
     toolpaths: tuple[Toolpath, ...]
+    material_name: str
+    notes: str
 
 
 def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
@@ -80,6 +82,8 @@ def capture_workspace(project: Project) -> WorkspaceSnapshot:
         smart_values=tuple(project.smart_values.expressions.items()),
         items=tuple(_snapshot_item(item) for item in project.items),
         toolpaths=tuple(project.toolpaths),
+        material_name=project.material_name,
+        notes=project.notes,
     )
 
 
@@ -118,3 +122,5 @@ def restore_workspace(project: Project, snapshot: WorkspaceSnapshot) -> None:
     project.smart_values = SmartValues(dict(snapshot.smart_values))
     project.items = [_restore_item(item) for item in snapshot.items]
     project.toolpaths = list(snapshot.toolpaths)
+    project.material_name = snapshot.material_name
+    project.notes = snapshot.notes
