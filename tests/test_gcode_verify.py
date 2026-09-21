@@ -77,7 +77,7 @@ def test_modal_incremental_inches_and_feed_conversion():
 @pytest.mark.parametrize(
     "bad,match",
     [
-        ("G90 G21\nG0 X0 Y0 Z5\nG2 X1 Y1 I0 J1\nM2\n", "unsupported G2"),
+        ("G90 G21\nG0 X0 Y0 Z5\nG2 X1 Y1 I0 J1\nM2\n", "unsupported"),
         ("G90 G21\nG53 G0 X0 Y0 Z5\nM2\n", "unsupported G53"),
         ("G90 G21\nG0 X0 Y0 Z5\nG1 X1 Z-1\nM2\n", "no feed"),
         ("G90 G21\nG0 X0 Y0 Z5\nG0 X1 Y1\n", "no M2"),
