@@ -45,21 +45,15 @@ class NativeInputRecorder(QObject):
         return False  # Never consume a real user event.
 
 
-def main() -> int:
-    app = QApplication(sys.argv)
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    platform = QGuiApplication.platformName().lower()
-    if session != "wayland" or platform != "wayland":
-        print(
-            "STOP: requires a real KDE Wayland session. "
-            f"XDG_SESSION_TYPE={session!r}; Qt platform={platform!r}. "
-            "Unset QT_QPA_PLATFORM=offscreen/xcb and run in KDE Plasma Wayland.",
-            file=sys.stderr,
-        )
-        return 2
+def attach_native_input_telemetry(
+    window: MainWindow, recorder: NativeInputRecorder,
+):
+    """Record real renderer events; MeshViewport does not forward orbitStarted.
 
-    window = MainWindow()
-    recorder = NativeInputRecorder()
+    Selection and item transform events are public MeshViewport signals, but
+    orbitStarted belongs to its native QOpenGLWindow child. Keep the same event
+    filter and diagnostics for the actual window receiving Wayland input.
+    """
     renderer = window.viewport._renderer
     renderer.installEventFilter(recorder)
     window.viewport.selectionRequested.connect(
@@ -72,10 +66,28 @@ def main() -> int:
             f"[gizmo/keyboard transform] object={index}", flush=True
         )
     )
-    window.viewport.orbitStarted.connect(
+    renderer.orbitStarted.connect(
         lambda: print("[camera] orbit started", flush=True)
     )
+    return renderer
 
+
+def main() -> int:
+    app = QApplication(sys.argv)
+    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    platform = QGuiApplication.platformName().lower()
+    if session != "wayland" or platform != "wayland":
+        print(
+            "STOP: requires a real KDE Wayland session. "
+            f"XDG_SESSION_TYPE={session!r}; Qt platform={platform!r}. "
+            "Run with QT_QPA_PLATFORM=wayland in KDE Plasma Wayland.",
+            file=sys.stderr,
+        )
+        return 2
+
+    window = MainWindow()
+    recorder = NativeInputRecorder()
+    renderer = attach_native_input_telemetry(window, recorder)
     window.show()
 
     def report_context() -> None:
