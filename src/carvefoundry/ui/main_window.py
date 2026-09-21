@@ -315,14 +315,18 @@ class MainWindow(
         splitter.setChildrenCollapsible(False)
         self.workspace_splitter = splitter
 
-        # Keep the existing QListWidget-based project selection model, but move
-        # it out of the permanent layout.  It now lives in an on-demand popup.
+        # Keep the existing QListWidget selection model. Layers now remains
+        # docked above Inspector rather than living in a temporary popup.
         self.layers_popup = LayersPopup(
             self,
             move_up=lambda: self._move_selected_item(-1),
             move_down=lambda: self._move_selected_item(1),
             duplicate=self._duplicate_selected_item,
             delete=self._delete_selected_item,
+            visible_at=lambda index: self.project.items[index].visible,
+            locked_at=lambda index: self.project.items[index].locked,
+            toggle_visibility=self._toggle_layer_visibility,
+            toggle_lock=self._toggle_layer_lock,
         )
         self.project_list = self.layers_popup.list_widget
 
@@ -359,7 +363,7 @@ class MainWindow(
 
         self.layers_button = QPushButton("Layers")
         self.layers_button.setToolTip(
-            "Open the object/layer manager for visibility, multi-select, and ordering."
+            "Expand and focus the docked Layers section above Inspector."
         )
         self.layers_button.clicked.connect(self._show_layers_popup)
         canvas_bar_layout.addWidget(self.layers_button)
@@ -737,8 +741,17 @@ class MainWindow(
         self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
 
+        self.inspector_sidebar = QWidget()
+        self.inspector_sidebar.setObjectName("InspectorSidebar")
+        self.inspector_sidebar.setMinimumWidth(260)
+        sidebar_layout = QVBoxLayout(self.inspector_sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(4)
+        sidebar_layout.addWidget(self.layers_popup)
+        sidebar_layout.addWidget(self.properties_panel, 1)
+
         splitter.addWidget(canvas)
-        splitter.addWidget(self.properties_panel)
+        splitter.addWidget(self.inspector_sidebar)
         splitter.setSizes(self._default_workspace_splitter_sizes(1500))
         splitter.setStretchFactor(0, 1)
         layout.addWidget(splitter, 1)
@@ -825,6 +838,9 @@ class MainWindow(
 
         item = self._selected_item()
         indices = self._selected_design_indices()
+        editable_selection = bool(indices) and all(
+            not self.project.items[index].locked for index in indices
+        )
         has_selection = bool(indices)
         selection_count = len(indices)
         has_mesh = bool(
@@ -853,7 +869,7 @@ class MainWindow(
             )
 
         for button in self._model_selection_buttons:
-            button.setEnabled(has_mesh)
+            button.setEnabled(has_mesh and editable_selection)
 
         has_bakeable_mesh = any(
             0 <= index < len(self.project.items)
@@ -873,18 +889,19 @@ class MainWindow(
                 action.setEnabled(enabled)
 
         enabled_by_action = {
-            "cut": has_selection,
+            "cut": editable_selection,
             "copy": has_selection,
             "paste": bool(self._clipboard_items),
-            "delete": has_selection,
-            "align": has_selection,
-            "center": has_selection,
-            "group": selection_count >= 2,
-            "ungroup": has_grouped,
+            "delete": editable_selection,
+            "align": editable_selection,
+            "center": editable_selection,
+            "group": editable_selection and selection_count >= 2,
+            "ungroup": editable_selection and has_grouped,
             "duplicate": has_selection,
-            "move_up": current_index is not None and current_index > 0,
+            "move_up": editable_selection and current_index is not None
+            and current_index > 0,
             "move_down": (
-                current_index is not None
+                editable_selection and current_index is not None
                 and current_index < len(self.project.items) - 1
             ),
         }
@@ -911,7 +928,7 @@ class MainWindow(
             self._ui_actions[key].setEnabled(enabled)
 
         if hasattr(self, "tool_rail"):
-            self.tool_rail.set_tool_enabled("arrange", has_selection)
+            self.tool_rail.set_tool_enabled("arrange", editable_selection)
             self.tool_rail.set_tool_enabled("cam", True)
 
     def _set_history_action_state(
@@ -1215,15 +1232,11 @@ class MainWindow(
                     )
                     + "\nDouble-click or press F2 to rename."
                 )
+                flags = list_item.flags()
                 list_item.setFlags(
-                    list_item.flags()
-                    | Qt.ItemFlag.ItemIsUserCheckable
-                    | Qt.ItemFlag.ItemIsEditable
-                )
-                list_item.setCheckState(
-                    Qt.CheckState.Checked
-                    if project_item.visible
-                    else Qt.CheckState.Unchecked
+                    flags & ~Qt.ItemFlag.ItemIsEditable
+                    if project_item.locked
+                    else flags | Qt.ItemFlag.ItemIsEditable
                 )
                 self.project_list.addItem(list_item)
                 self.object_selector.addItem(
@@ -1256,7 +1269,57 @@ class MainWindow(
     def _show_layers_popup(self) -> None:
         if not hasattr(self, "layers_popup"):
             return
+        self._ensure_inspector_visible()
         self.layers_popup.show_below(self.layers_button)
+
+    def _toggle_layer_visibility(self, index: int) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        item = self.project.items[index]
+        item.visible = not item.visible
+        self.project_list.viewport().update()
+        self.viewport.update()
+        self.statusBar().showMessage(
+            f"{item.name} {'visible' if item.visible else 'hidden'}", 2500
+        )
+
+    def _toggle_layer_lock(self, index: int) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        item = self.project.items[index]
+        item.locked = not item.locked
+        list_item = self.project_list.item(index + 1)
+        if list_item is not None:
+            flags = list_item.flags()
+            list_item.setFlags(
+                flags & ~Qt.ItemFlag.ItemIsEditable
+                if item.locked else flags | Qt.ItemFlag.ItemIsEditable
+            )
+        self.project_list.viewport().update()
+        self._update_properties(self.project_list.currentRow())
+        self.statusBar().showMessage(
+            f"{item.name} {'locked' if item.locked else 'unlocked'}", 2500
+        )
+
+    def _can_edit_layers(self, indices: list[int] | None = None) -> bool:
+        """Prevent mixed locked/unlocked selections from mutating partially."""
+        selected = (
+            self._selected_design_indices(expand_groups=True)
+            if indices is None else indices
+        )
+        locked = [
+            self.project.items[index].name
+            for index in selected
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].locked
+        ]
+        if locked:
+            self.statusBar().showMessage(
+                "Unlock layer(s) before editing: " + ", ".join(locked[:3]),
+                4500,
+            )
+            return False
+        return True
 
     def _active_cutter_changed(self, _index: int) -> None:
         cutter = self.tool_combo.currentData()
@@ -1274,6 +1337,7 @@ class MainWindow(
             self._update_text_cnc_hint()
 
     def _ensure_inspector_visible(self) -> None:
+        self.inspector_sidebar.show()
         self.properties_panel.show()
         self.inspector_button.setChecked(True)
         if hasattr(self, "tool_rail"):
@@ -1310,11 +1374,18 @@ class MainWindow(
             return
 
         project_item = self.project.items[index]
-        visible = list_item.checkState() == Qt.CheckState.Checked
-        visibility_changed = visible != project_item.visible
-        project_item.visible = visible
-
         requested_name = list_item.text().strip()
+        if project_item.locked:
+            if requested_name != project_item.name:
+                self._updating_project_list = True
+                try:
+                    list_item.setText(project_item.name)
+                finally:
+                    self._updating_project_list = False
+                self.statusBar().showMessage(
+                    "Unlock this layer before renaming it", 3000
+                )
+            return
         if not requested_name:
             requested_name = project_item.name
 
@@ -1380,13 +1451,6 @@ class MainWindow(
                 f"Renamed {old_name} → {unique_name}",
                 2500,
             )
-        elif visibility_changed:
-            state = "visible" if visible else "hidden"
-            self.statusBar().showMessage(
-                f"{project_item.name} {state}",
-                2000,
-            )
-
         self.viewport.update()
 
     def _sync_stock_controls(self) -> None:
@@ -1590,6 +1654,8 @@ class MainWindow(
         item = self._selected_item()
         if index is None or item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
+            return
+        if not self._can_edit_layers([index]):
             return
 
         self._before_context_transform(index, label)
@@ -1991,6 +2057,8 @@ class MainWindow(
         self._set_inspector_context_sections(
             text=is_text, transform=has_mesh,
         )
+        self.text_widget.setEnabled(not item.locked)
+        self.transform_widget.setEnabled(not item.locked)
         if is_text:
             self._sync_text_controls(item)
         if has_mesh:
@@ -2036,7 +2104,7 @@ class MainWindow(
         if self._updating_transform_controls:
             return
         item = self._selected_item()
-        if item is None or item.mesh is None:
+        if item is None or item.mesh is None or item.locked:
             return
         units = self.source_units_combo.currentData()
         if not isinstance(units, ModelUnits) or units is item.source_units:
@@ -2062,7 +2130,7 @@ class MainWindow(
             return
 
         item = self._selected_item()
-        if item is None or item.mesh is None:
+        if item is None or item.mesh is None or item.locked:
             return
 
         sender = self.sender()
@@ -2140,6 +2208,8 @@ class MainWindow(
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
+        if not self._can_edit_layers():
+            return
 
         transformed = item.transformed_mesh()
         assert transformed is not None
@@ -2178,6 +2248,8 @@ class MainWindow(
         item = self._selected_item()
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
+            return
+        if not self._can_edit_layers():
             return
 
         item.transform = self.project.default_transform_for_mesh(
@@ -2243,6 +2315,8 @@ class MainWindow(
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
+        if not self._can_edit_layers(indices):
+            return
 
         removed_names = [
             self.project.items[index].name
@@ -2266,6 +2340,8 @@ class MainWindow(
         index = self._selected_item_index()
         if index is None:
             self.statusBar().showMessage("Select a design item to reorder", 3000)
+            return
+        if not self._can_edit_layers([index]):
             return
         new_index = self.project.move_item(index, offset)
         self._refresh_project_list(new_index + 1)
@@ -2369,6 +2445,8 @@ class MainWindow(
                 "Select one or more mesh objects first",
                 3000,
             )
+            return
+        if not self._can_edit_layers(indices):
             return
 
         self._before_ribbon_mutation(label)

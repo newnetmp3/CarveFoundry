@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +27,73 @@ from .layout_widgets import InspectorSection
 
 
 class InspectorControlsMixin:
+    def _transform_slider_started(self) -> None:
+        """The project-history window snapshots one drag for Undo."""
+
+    def _transform_slider_finished(self) -> None:
+        """The project-history window commits one drag to Undo."""
+
+    def _transform_axis_input(
+        self, spin: QDoubleSpinBox, label: str,
+    ) -> QWidget:
+        """Precision number box with up/down arrows and a relative scrubber.
+
+        The slider is relative to the value at press, not a fixed coordinate
+        range. That keeps +/-100,000 mm Position precise and lets 0.001 mm
+        Size be adjusted without assigning an impossible global slider scale.
+        """
+        row = QWidget()
+        row.setMinimumWidth(0)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        spin.setMinimumWidth(100)
+        spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        spin.setAccessibleName(label + " numerical value")
+        spin.setToolTip(spin.toolTip() + "\nType precisely, click ▲/▼, or scrub.")
+        layout.addWidget(spin, 3)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setObjectName("TransformScrubSlider")
+        slider.setRange(-100, 100)
+        slider.setValue(0)
+        slider.setSingleStep(10)
+        slider.setPageStep(10)
+        slider.setMinimumWidth(55)
+        slider.setAccessibleName(label + " relative scrub slider")
+        slider.setToolTip(
+            "Drag left/right to change the value relative to its starting "
+            "point. Returns to center on release; precise numeric typing "
+            "and up/down arrows remain available."
+        )
+        layout.addWidget(slider, 2)
+        baseline = [spin.value()]
+
+        def begin() -> None:
+            baseline[0] = spin.value()
+            self._transform_slider_started()
+
+        def scrub(delta: int) -> None:
+            # At full travel apply ten spin increments in either direction.
+            spin.setValue(baseline[0] + delta * spin.singleStep() / 10.0)
+
+        def end() -> None:
+            slider.blockSignals(True)
+            try:
+                slider.setValue(0)
+            finally:
+                slider.blockSignals(False)
+            self._transform_slider_finished()
+
+        slider.sliderPressed.connect(begin)
+        slider.valueChanged.connect(scrub)
+        slider.sliderReleased.connect(end)
+        if not hasattr(self, "transform_scrub_sliders"):
+            self.transform_scrub_sliders = []
+        self.transform_scrub_sliders.append(slider)
+        return row
+
     def _set_inspector_context_sections(
         self, *, stock: bool = False, text: bool = False,
         transform: bool = False,
@@ -270,7 +339,9 @@ class InspectorControlsMixin:
             axis_form = QFormLayout()
             self._configure_inspector_form(axis_form)
             for axis, spin in zip(("X", "Y", "Z"), spins, strict=True):
-                axis_form.addRow(axis, spin)
+                axis_form.addRow(
+                    axis, self._transform_axis_input(spin, title + " " + axis)
+                )
                 spin.valueChanged.connect(self._transform_control_changed)
             section.content_layout.addLayout(axis_form)
             layout.addWidget(section)

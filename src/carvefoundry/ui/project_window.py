@@ -41,6 +41,9 @@ class MainWindow(_BaseMainWindow):
         self._history_state_id = 0
         self._history_next_id = 1
         self._saved_state_id = 0
+        self._pending_inspector_slider_undo: tuple[
+            WorkspaceSnapshot, int, str, tuple[object, ...],
+        ] | None = None
         self._pending_import_undo: tuple[WorkspaceSnapshot, int] | None = None
         self._pending_viewport_transform_undo: tuple[
             WorkspaceSnapshot,
@@ -119,6 +122,7 @@ class MainWindow(_BaseMainWindow):
         self._history_next_id = 1
         self._saved_state_id = 0
         self._pending_import_undo = None
+        self._pending_inspector_slider_undo = None
         self._pending_viewport_transform_undo = None
         self._pending_context_transform_undo = None
         self._pending_text_properties_undo = None
@@ -456,6 +460,42 @@ class MainWindow(_BaseMainWindow):
 
     # Mutating workspace actions mark the project as modified. Keeping this in
     # one lifecycle layer makes the dirty state reliable for New/Open/Close.
+    def _toggle_layer_visibility(self, index: int) -> None:
+        before = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
+        super()._toggle_layer_visibility(index)
+        if 0 <= index < len(self.project.items):
+            self._record_undo(before, selected_row, "layer visibility")
+
+    def _toggle_layer_lock(self, index: int) -> None:
+        before = capture_workspace(self.project)
+        selected_row = self.project_list.currentRow()
+        super()._toggle_layer_lock(index)
+        if 0 <= index < len(self.project.items):
+            self._record_undo(before, selected_row, "layer lock")
+
+    def _transform_slider_started(self) -> None:
+        item = self._selected_item()
+        if item is None or item.locked:
+            return
+        if self._pending_inspector_slider_undo is None:
+            self._pending_inspector_slider_undo = (
+                capture_workspace(self.project),
+                self.project_list.currentRow(), item.item_id,
+                self._transform_signature(item),
+            )
+
+    def _transform_slider_finished(self) -> None:
+        pending = self._pending_inspector_slider_undo
+        self._pending_inspector_slider_undo = None
+        if pending is None:
+            return
+        snapshot, row, item_id, before = pending
+        item = self._selected_item()
+        if item is not None and item.item_id == item_id:
+            if self._transform_signature(item) != before:
+                self._record_undo(snapshot, row, "scrub model transform")
+
     def _project_item_changed(self, list_item) -> None:
         snapshot = capture_workspace(self.project)
         selected_row = self.project_list.currentRow()
@@ -508,6 +548,9 @@ class MainWindow(_BaseMainWindow):
             self._record_undo(snapshot, selected_row, "model units")
 
     def _transform_control_changed(self, value: float) -> None:
+        if self._pending_inspector_slider_undo is not None:
+            super()._transform_control_changed(value)
+            return
         snapshot = capture_workspace(self.project)
         selected_row = self.project_list.currentRow()
         item = self._selected_item()

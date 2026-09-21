@@ -44,7 +44,7 @@ class InterfaceSettingsMixin:
             False,
         )
 
-        self.properties_panel.setVisible(inspector_visible)
+        self.inspector_sidebar.setVisible(inspector_visible)
         self.inspector_button.setChecked(inspector_visible)
         if hasattr(self, "tool_rail"):
             rail_button = self.tool_rail.buttons.get("inspector")
@@ -150,7 +150,7 @@ class InterfaceSettingsMixin:
     def _save_interface_options(self) -> None:
         self._settings.setValue(
             "interface/inspector_visible",
-            self.properties_panel.isVisible(),
+            self.inspector_sidebar.isVisible(),
         )
         self._settings.setValue(
             "interface/status_bar_visible",
@@ -194,13 +194,13 @@ class InterfaceSettingsMixin:
         self._settings.sync()
 
     def _toggle_project_panel_option(self) -> None:
-        """Compatibility alias: the former project pane is now the Layers popup."""
+        """Compatibility alias: open the docked Layers section."""
 
         self._show_layers_popup()
 
     def _toggle_properties_panel_option(self) -> None:
-        visible = not self.properties_panel.isVisible()
-        self.properties_panel.setVisible(visible)
+        visible = not self.inspector_sidebar.isVisible()
+        self.inspector_sidebar.setVisible(visible)
         self.inspector_button.setChecked(visible)
         if hasattr(self, "tool_rail"):
             rail_button = self.tool_rail.buttons.get("inspector")
