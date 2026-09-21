@@ -375,20 +375,23 @@ QScrollArea#InspectorScrollArea QScrollBar::add-page:vertical,
 QScrollArea#InspectorScrollArea QScrollBar::sub-page:vertical {
     background: transparent;
 }
-#LayersPopup {
-    background: #0e1425;
-    border: 1px solid #3a465f;
-    border-radius: 10px;
-}
-#LayersPopupTitle {
-    color: #ffffff;
-    font-size: 14px;
-    font-weight: 800;
+#LayersPanel {
+    background: transparent;
+    border-bottom: 1px solid #242e44;
 }
 QListWidget#LayersList {
     background: #0b1120;
     border: 1px solid #242e44;
-    border-radius: 8px;
+    border-radius: 6px;
+    outline: none;
+}
+QListWidget#LayersList::item {
+    min-height: 27px;
+    padding: 2px 4px;
+}
+QListWidget#LayersList::item:selected {
+    background: #273849;
+    color: #ffffff;
 }
 QComboBox#ObjectSelector {
     background: #0b1120;
