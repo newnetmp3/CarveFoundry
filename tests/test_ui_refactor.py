@@ -17,6 +17,10 @@ from carvefoundry.ui.ribbon_cam_actions import RibbonCamActionsMixin
 from carvefoundry.ui.ribbon_design_tools import RibbonDesignToolsMixin
 from carvefoundry.ui.ribbon_machine_actions import RibbonMachineActionsMixin
 from carvefoundry.ui.smart_value_actions import SmartValueActionsMixin
+from carvefoundry.ui.text_control_builder import TextControlBuilderMixin
+from carvefoundry.ui.text_edit_behavior import TextEditBehaviorMixin
+from carvefoundry.ui.text_editor import TextEditorMixin
+from carvefoundry.ui.text_font_catalog import TextFontCatalogMixin
 from carvefoundry.ui.view_simulation_actions import ViewSimulationActionsMixin
 from carvefoundry.ui.viewport_geometry import ViewportGeometryMixin
 from carvefoundry.ui.viewport_interactions import ViewportInteractionMixin
@@ -38,6 +42,11 @@ def test_split_modules_still_compose_one_authoritative_window_and_renderer() -> 
     assert "_export_tiled_gcode" not in RibbonActionsMixin.__dict__
     assert issubclass(_NativeOpenGLViewport, ViewportGeometryMixin)
     assert issubclass(_NativeOpenGLViewport, ViewportInteractionMixin)
+    assert issubclass(TextEditorMixin, TextFontCatalogMixin)
+    assert issubclass(TextEditorMixin, TextControlBuilderMixin)
+    assert issubclass(TextEditorMixin, TextEditBehaviorMixin)
+    assert "_build_text_controls" not in TextEditorMixin.__dict__
+    assert "_apply_text_properties_from_controls" not in TextEditorMixin.__dict__
 
     window = MainWindow()
     try:
