@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import pairwise
 from math import atan, cos, degrees, floor, log10, radians, sin, tan
 from typing import TYPE_CHECKING
 
@@ -11,12 +10,10 @@ from PySide6.QtGui import (
     QColor,
     QCursor,
     QMatrix4x4,
-    QMouseEvent,
     QPainter,
     QSurfaceFormat,
     QVector3D,
     QVector4D,
-    QWheelEvent,
 )
 from PySide6.QtOpenGL import (
     QOpenGLBuffer,
