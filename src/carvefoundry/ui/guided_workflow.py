@@ -237,6 +237,7 @@ class GuidedWorkflowMixin:
             ("Material Removal", self._simulate_stock_removal),
             ("Check Carve Quality", self._show_carving_quality_inspector),
             ("Job Setup Sheet", self._export_setup_sheet),
+            ("Carving Notes", self._show_project_notes),
         ):
             button = QPushButton(text, body)
             button.clicked.connect(
