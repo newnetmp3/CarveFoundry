@@ -2572,9 +2572,18 @@ class MainWindow(
         self._job_target_project = self.project
         self._job_sequence += 1
         job_id = self._job_sequence
+        # Record both sets of states BEFORE disabling any QAction. Buttons
+        # created with setDefaultAction share that action's enabled state:
+        # sampling the rail after disabling actions would incorrectly record
+        # Select and most other rail tools as already disabled, then leave
+        # them disabled permanently after the worker/AI STL import completes.
         self._job_action_states = {
             key: action.isEnabled()
             for key, action in self._ui_actions.items()
+        }
+        self._job_rail_states = {
+            key: button.isEnabled()
+            for key, button in self.tool_rail.buttons.items()
         }
         # Camera, view and selection remain usable. Design and machine commands
         # are disabled to keep the snapshot stable until the worker completes.
@@ -2598,10 +2607,6 @@ class MainWindow(
         self.viewport.set_shape_draw_mode(None)
         self.viewport.set_camera_control_mode(True)
         self.tool_rail.set_active_tool("camera")
-        self._job_rail_states = {
-            key: button.isEnabled()
-            for key, button in self.tool_rail.buttons.items()
-        }
         for key, button in self.tool_rail.buttons.items():
             if key not in {"camera", "view"}:
                 button.setEnabled(False)

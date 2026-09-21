@@ -255,3 +255,64 @@ def test_incompatible_torchvision_reports_matching_pytorch_builds(monkeypatch):
     assert "CUDA" in str(error.value)
     assert "ROCm" in str(error.value)
     assert "torchvision::nms" in str(error.value)
+
+
+
+def test_ai_stl_background_job_import_restores_select_and_object_workflow(tmp_path):
+    """Exercise BOTH async phases: generation completion hands off to STL import."""
+    from time import monotonic, sleep
+
+    from PySide6.QtWidgets import QApplication
+
+    from carvefoundry.ui.project_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+    stl_path = tmp_path / "ai_generated.stl"
+    trimesh.creation.box(extents=(24, 20, 3)).export(stl_path)
+    window = MainWindow()
+    imported = []
+    try:
+        assert window._ui_actions["select"].isEnabled()
+        assert window.tool_rail.buttons["select"].isEnabled()
+        assert window._start_background_job(
+            "Local AI bas-relief",
+            task=lambda progress: {"path": str(stl_path)},
+            on_done=lambda result: (
+                imported.append(result["path"]),
+                window._start_import([result["path"]], "STL"),
+            ),
+        )
+
+        deadline = monotonic() + 45.0
+        while (window._background_job is not None
+               or window._import_thread is not None) and monotonic() < deadline:
+            app.processEvents()
+            sleep(0.01)
+        app.processEvents()
+        assert window._background_job is None
+        assert window._import_thread is None
+        assert imported == [str(stl_path)]
+        assert len(window.project.items) == 1
+        assert window.project.items[0].mesh is not None
+        assert window.project_list.currentRow() == 1
+        assert window._ui_actions["select"].isEnabled()
+        assert window.tool_rail.buttons["select"].isEnabled()
+        assert window.tool_rail.buttons["direct_select"].isEnabled()
+        assert window.tool_rail.buttons["model"].isEnabled()
+        assert window.properties_panel.isEnabled()
+
+        # The generated mesh is actually selectable after import, not just
+        # highlighted in a disabled tool rail.
+        window.tool_rail.buttons["select"].click()
+        assert window.tool_rail.buttons["select"].isChecked()
+        assert not window.viewport.camera_control_mode
+        window._select_project_indices([0], primary=0)
+        assert window._selected_design_indices() == [0]
+    finally:
+        deadline = monotonic() + 45.0
+        while (window._background_job is not None
+               or window._import_thread is not None) and monotonic() < deadline:
+            app.processEvents()
+            sleep(0.01)
+        window.close()
