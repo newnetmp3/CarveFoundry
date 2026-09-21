@@ -46,7 +46,12 @@ class ViewportInteractionMixin:
             and not event.modifiers() & Qt.KeyboardModifier.AltModifier
         ):
             picked = self._pick_vector_node(event.position())
-            if picked is not None:
+            if (
+                picked is not None
+                and self.project is not None
+                and self.selected_item_index is not None
+                and not self.project.items[self.selected_item_index].locked
+            ):
                 self._node_drag_index = picked
                 self._node_drag_item = self.selected_item_index
                 self._node_drag_world = self._editable_node_points()[picked].copy()
@@ -553,6 +558,9 @@ class ViewportInteractionMixin:
             return
 
         item = self.project.items[self.selected_item_index]
+        if item.locked:
+            event.accept()
+            return
         tx, ty, tz = item.transform.translation_mm
         self.itemTransformStarted.emit(self.selected_item_index)
         item.transform.translation_mm = (tx + dx, ty + dy, tz + dz)
