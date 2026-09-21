@@ -101,7 +101,9 @@ def test_local_generation_writes_real_importable_stl_without_model_download(
     assert result["path"] == str(destination)
     assert result["faces"] > 0
     assert destination.stat().st_size > 84  # binary STL header and triangles
-    mesh = trimesh.load(destination, process=False)
+    # STL stores expanded triangle corners rather than shared vertex indices.
+    # Weld duplicates to verify the actual exported solid topology.
+    mesh = trimesh.load(destination, process=True)
     assert isinstance(mesh, trimesh.Trimesh)
     assert mesh.is_watertight
     assert np.allclose(mesh.extents[:2], (70, 50))
