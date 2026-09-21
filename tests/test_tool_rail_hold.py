@@ -106,3 +106,20 @@ def test_corner_marker_is_part_of_active_tool_icon() -> None:
     # Original tool icon is visible; the south-east marker occupies its corner.
     assert result.pixelColor(8, 8) == QColor("#526375")
     assert result.pixelColor(24, 25) == QColor("#c8ff3d")
+
+
+def test_main_window_cam_icon_tracks_chosen_active_operation() -> None:
+    from carvefoundry.ui.main_window import MainWindow
+
+    window = MainWindow()
+    try:
+        button = window.tool_rail.buttons["cam"]
+        assert button.popupMode() == QToolButton.ToolButtonPopupMode.DelayedPopup
+        window._select_cam_operation("pocket")
+        pocket_icon = button.icon().cacheKey()
+        assert button.property("currentAction") == window._ui_actions["cam_pocket"].text()
+        window._select_cam_operation("finish")
+        assert button.property("currentAction") == window._ui_actions["cam_finish"].text()
+        assert button.icon().cacheKey() != pocket_icon
+    finally:
+        window.close()
