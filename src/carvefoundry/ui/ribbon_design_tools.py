@@ -25,6 +25,7 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 from carvefoundry.core.vector_path import VectorPath
 
+from .contextual_tool_state import ToolOptionsState
 from .ribbon_forms import _ActionForm
 
 
@@ -110,14 +111,14 @@ class RibbonDesignToolsMixin:
         if not active:
             return
 
+        options = ToolOptionsState.for_mode(mode)
         self.tool_options_title.setText(f"{mode.title()} Tool")
         self.tool_options_depth_spin.blockSignals(True)
         self.tool_options_depth_spin.setValue(self._tool_option_depth_mm)
         self.tool_options_depth_spin.blockSignals(False)
-        has_depth = mode not in {"measure", "fixture"}
-        self.tool_options_depth_label.setVisible(has_depth)
-        self.tool_options_depth_spin.setVisible(has_depth)
-        is_fixture = mode == "fixture"
+        self.tool_options_depth_label.setVisible(options.depth)
+        self.tool_options_depth_spin.setVisible(options.depth)
+        is_fixture = options.fixture
         for element in (
             self.tool_options_fixture_top_label,
             self.tool_options_fixture_top_spin,
@@ -139,15 +140,15 @@ class RibbonDesignToolsMixin:
             self.tool_options_fixture_size_label.setText(
                 "Drag a rectangle on the stock to place a fixture"
             )
-        self.tool_options_measure_label.setVisible(mode == "measure")
-        self.tool_options_measure_clear.setVisible(mode == "measure")
-        if mode == "measure":
+        self.tool_options_measure_label.setVisible(options.measure)
+        self.tool_options_measure_clear.setVisible(options.measure)
+        if options.measure:
             self.tool_options_measure_label.setText(
                 self._measurement.label if self._measurement is not None
                 else "Drag two points on stock top (XY · Z0)"
             )
 
-        is_polygon = mode == "polygon"
+        is_polygon = options.polygon
         self.tool_options_polygon_label.setVisible(is_polygon)
         self.tool_options_polygon_sides.setVisible(is_polygon)
         if is_polygon:
@@ -157,7 +158,7 @@ class RibbonDesignToolsMixin:
             )
             self.tool_options_polygon_sides.blockSignals(False)
 
-        is_line = mode == "line"
+        is_line = options.line
         self.tool_options_line_width_label.setVisible(is_line)
         self.tool_options_line_width_spin.setVisible(is_line)
         if is_line:
@@ -167,7 +168,7 @@ class RibbonDesignToolsMixin:
             )
             self.tool_options_line_width_spin.blockSignals(False)
 
-        is_pen = mode == "pen"
+        is_pen = options.pen
         self.tool_options_pen_width_label.setVisible(is_pen)
         self.tool_options_pen_width_spin.setVisible(is_pen)
         self.tool_options_pen_smoothing_label.setVisible(is_pen)
@@ -200,7 +201,7 @@ class RibbonDesignToolsMixin:
                 self._tool_option_pen_spacing_mm
             )
 
-        is_text = mode == "text"
+        is_text = options.text
         self.tool_options_text_label.setVisible(is_text)
         self.tool_options_text_edit.setVisible(is_text)
         self.tool_options_font_label.setVisible(is_text)
