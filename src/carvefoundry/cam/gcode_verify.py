@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from itertools import pairwise
 from math import isfinite
 
 from carvefoundry.cam.gcode import GrblPostSettings
@@ -17,7 +18,6 @@ from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.machine_profiles import MachineProfile
 from carvefoundry.core.project import Stock
-from carvefoundry.core.tools import Cutter
 
 _WORD = re.compile(
     r"([A-Za-z])\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
@@ -259,10 +259,10 @@ def verify_grbl_export(
         ))
     # Refuse rapid sweeps inside untouched stock. This is conservative: the
     # path may traverse already-cleared pockets, but must not be certified.
-    for index, (before, after) in enumerate(zip(shifted, shifted[1:]), start=1):
+    for index, (before, after) in enumerate(pairwise(shifted), start=1):
         if (after.kind is MoveKind.RAPID and min(before.z_mm, after.z_mm) < -0.001
                 and (abs(before.x_mm - after.x_mm) > 1e-6
-                     or abs(before.y_mm - after.y_mm) > 1e-6)) :
+                     or abs(before.y_mm - after.y_mm) > 1e-6)):
             r = stage[0].cutter.radius_mm
             if (
                 max(before.x_mm, after.x_mm) + r >= 0
