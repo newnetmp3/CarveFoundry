@@ -5,10 +5,19 @@ acceptance still requires the physical KDE Plasma session checklist.
 """
 from __future__ import annotations
 
+from pathlib import Path
+from runpy import run_path
+
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.ui.project_window import MainWindow
-from scripts.wayland_qa import NativeInputRecorder, attach_native_input_telemetry
+
+# The QA script is a repo-only executable, not part of the installed src
+# package. pytest's console entry point does not put the repo root on sys.path.
+_script_path = Path(__file__).resolve().parents[1] / "scripts" / "wayland_qa.py"
+qa = run_path(str(_script_path), run_name="carvefoundry_wayland_qa")
+NativeInputRecorder = qa["NativeInputRecorder"]
+attach_native_input_telemetry = qa["attach_native_input_telemetry"]
 
 _APP = QApplication.instance() or QApplication([])
 
