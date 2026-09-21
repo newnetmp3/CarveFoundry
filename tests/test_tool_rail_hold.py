@@ -61,9 +61,14 @@ def test_press_and_hold_opens_flyout_without_running_active_tool() -> None:
         button = rail.buttons["shapes"]
         menu = button.menu()
         assert menu is not None
+        opened: list[bool] = []
+        menu.aboutToShow.connect(lambda: opened.append(True))
+        # Native QToolButton DelayedPopup may enter QMenu.exec() in its
+        # hold timer; close it from Qt's event loop so qWait can return.
+        QTimer.singleShot(1200, menu.close)
         QTest.mousePress(button, Qt.MouseButton.LeftButton)
-        QTest.qWait(1050)  # Longer than Qt's platform tool-button hold delay.
-        assert menu.isVisible()
+        QTest.qWait(1450)  # Longer than Qt's platform tool-button hold delay.
+        assert opened == [True]
         assert events == []
         QTest.mouseRelease(button, Qt.MouseButton.LeftButton)
         _APP.processEvents()
