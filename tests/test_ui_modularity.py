@@ -1,6 +1,7 @@
 """Architecture regressions for UI controller boundaries."""
 from __future__ import annotations
 
+from carvefoundry.ui.import_controller import ImportControllerMixin
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.selection_transform_controller import SelectionTransformControllerMixin
 
@@ -18,3 +19,17 @@ def test_selection_and_transform_domain_stays_out_of_main_window() -> None:
     assert owned <= SelectionTransformControllerMixin.__dict__.keys()
     assert owned.isdisjoint(MainWindow.__dict__.keys())
     assert SelectionTransformControllerMixin in MainWindow.__mro__
+
+
+def test_import_lifecycle_stays_out_of_main_window() -> None:
+    owned = {
+        "_import_file",
+        "_start_import",
+        "_import_progress_changed",
+        "_import_completed",
+        "_import_failed",
+        "_import_thread_finished",
+    }
+    assert owned <= ImportControllerMixin.__dict__.keys()
+    assert owned.isdisjoint(MainWindow.__dict__.keys())
+    assert ImportControllerMixin in MainWindow.__mro__
