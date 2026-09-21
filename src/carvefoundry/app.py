@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtGui import QGuiApplication, QIcon, QSurfaceFormat
 from PySide6.QtWidgets import QApplication
 
 from .ui.project_window import MainWindow
 from .ui.theme import APP_STYLESHEET
+
+APP_ID = "io.github.newnetmp3.CarveFoundry"
 
 
 def _configure_opengl() -> None:
@@ -37,6 +40,14 @@ def create_application(argv: list[str]) -> QApplication:
 
     app = QApplication(argv)
     app.setApplicationDisplayName("CarveFoundry")
+    # Match the .desktop file ID to the Wayland window for KDE taskbar/icon
+    # association, even when launched from a terminal instead of the menu.
+    QGuiApplication.setDesktopFileName(APP_ID)
+    icon_path = Path(__file__).resolve().parents[2] / "packaging" / f"{APP_ID}.svg"
+    if icon_path.is_file():
+        app.setWindowIcon(QIcon(str(icon_path)))
+    else:
+        app.setWindowIcon(QIcon.fromTheme(APP_ID))
     app.setStyleSheet(APP_STYLESHEET)
     return app
 
