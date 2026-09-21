@@ -64,9 +64,9 @@ def test_bad_depth_is_rejected(depth):
 
 
 def test_request_requires_exclusive_source_and_safe_stl_destination(tmp_path):
-    base = dict(
-        output_path=str(tmp_path / "relief.stl"), width_mm=80, height_mm=50
-    )
+    base = {
+        "output_path": str(tmp_path / "relief.stl"), "width_mm": 80, "height_mm": 50,
+    }
     with pytest.raises(ValueError, match="exactly one"):
         ReliefRequest(**base).validate()
     with pytest.raises(ValueError, match="exactly one"):
@@ -134,6 +134,7 @@ def test_failed_depth_generation_never_creates_stl(tmp_path, monkeypatch):
 def test_ai_relief_dialog_and_shared_model_action_do_not_load_models():
     pytest.importorskip("PySide6.QtWidgets")
     from PySide6.QtWidgets import QApplication
+
     from carvefoundry.ui.ai_relief import build_ai_relief_dialog
     from carvefoundry.ui.main_window import MainWindow
 
@@ -161,6 +162,7 @@ def test_prompt_mode_saves_stl_and_auto_imports_through_existing_path(tmp_path, 
     pytest.importorskip("PySide6.QtWidgets")
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication, QDialogButtonBox
+
     from carvefoundry.ui import ai_relief
     from carvefoundry.ui.main_window import MainWindow
 
