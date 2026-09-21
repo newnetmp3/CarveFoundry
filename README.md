@@ -18,6 +18,50 @@ Planned and current areas include:
 - G-code export
 - Linux/Wayland-native desktop behavior
 
+## Locally generated AI bas-reliefs
+
+Open **Model → Generate AI Bas-Relief…** (also in the Position tool flyout).
+Choose **From image** for a local photograph/illustration, or **From text
+prompt** to generate a reference image first. Choose relief width, height,
+raised depth, backing thickness, grid detail (32–384 samples on the long
+axis), foreground inversion, and smoothing. CarveFoundry saves a real,
+watertight **STL in millimeters** at your selected path and automatically
+imports it through the normal STL importer, ready to position, save in
+`.cf3d`, and machine with cutter-aware CAM. Prompt generation also writes
+`<STL stem>_source.png` beside the STL.
+
+Install the optional, **locally executed** models on your Arch Linux Python
+environment:
+
+```bash
+cd /mnt/moar/Downloads/git/CarveFoundry
+source .venv/bin/activate
+python -m pip install -e '.[ai]'
+```
+
+Install a compatible PyTorch build for your CPU/CUDA/ROCm hardware before
+running; the optional dependency alone does not guarantee GPU support.
+**Depth Anything V2 Small** estimates relative image depth. For prompt mode,
+**SD-Turbo** generates a reference image before depth estimation. Hugging Face
+downloads their weights the first time you use each model, into your local
+model cache. Later generation runs locally, and can run offline when the
+weights are cached. No inference server, cloud generation account, or API key
+is required. Image mode can run on CPU; prompt mode on CPU may be very slow
+and needs substantially more memory. Consult SD-Turbo's current model license
+for commercial-use terms.
+
+The result is a **single-view, rectangular 2.5D heightfield relief** with
+a flat back and solid edge walls, not a true multi-view 3D reconstruction.
+Perspective, hidden surfaces, thin lettering, overlapping features and
+background may require source-image cleanup or inversion. The ML predictions
+are *relative*, not metric measurements; the selected millimeter depth
+controls actual geometry. Check cutter reach, stock thickness, fixtures,
+visual detail and preflight before cutting. The generated STL is placed with
+its highest point at the current stock-top **Z0**, with stock-bottom-left XY
+zero; change the object Z transform to recess its highest point if desired.
+CarveFoundry keeps the UI responsive during generation and supports Cancel,
+although model downloads and CPU jobs may consume substantial resources.
+
 ## Cutter geometry
 
 CarveFoundry is not designed around a ball-nose-only 3D finishing assumption. Cutter definitions model the actual cutter profile so flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and future custom revolved profiles can be handled by the CAM engine.
