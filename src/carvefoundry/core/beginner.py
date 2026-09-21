@@ -204,3 +204,42 @@ def design_advisories(
             ),
         ))
     return tuple(issues)
+
+
+def explain_motion_preflight(report: str, safe_to_export: bool) -> str:
+    """Explain planned-motion preflight in ordinary terms.
+
+    Actual posted NC is independently checked later by export; this report
+    alone does not certify a physically mounted cutter, work zero or clamps.
+    """
+    errors = [
+        line.removeprefix("ERROR:").strip()
+        for line in report.splitlines() if line.startswith("ERROR:")
+    ]
+    warnings = [
+        line.removeprefix("WARNING:").strip()
+        for line in report.splitlines() if line.startswith("WARNING:")
+    ]
+    headline = (
+        "No software-blocking planned-motion errors were found."
+        if safe_to_export
+        else "The planned job contains errors; do not export until corrected."
+    )
+    details = [
+        headline,
+        f"{len(errors)} error(s), {len(warnings)} warning(s).",
+    ]
+    details += [
+        f"Fix: {entry}" for entry in errors[:5]
+    ]
+    details += [
+        f"Check: {entry}" for entry in warnings[:5]
+    ]
+    if len(errors) > 5 or len(warnings) > 5:
+        details.append("More findings are in the detailed report.")
+    details.append(
+        "These checks use configured machine and fixture limits. Actual "
+        "export separately verifies the posted G-code. Neither can check "
+        "physical clamps, live work zero, holder reach or router RPM."
+    )
+    return "\n\n".join(details)
