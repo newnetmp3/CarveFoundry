@@ -4,6 +4,7 @@ from __future__ import annotations
 from carvefoundry.ui.import_controller import ImportControllerMixin
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.selection_transform_controller import SelectionTransformControllerMixin
+from carvefoundry.ui.toolpath_state_controller import ToolpathStateControllerMixin
 
 
 def test_selection_and_transform_domain_stays_out_of_main_window() -> None:
@@ -33,3 +34,16 @@ def test_import_lifecycle_stays_out_of_main_window() -> None:
     assert owned <= ImportControllerMixin.__dict__.keys()
     assert owned.isdisjoint(MainWindow.__dict__.keys())
     assert ImportControllerMixin in MainWindow.__mro__
+
+
+def test_toolpath_state_domain_stays_out_of_main_window() -> None:
+    owned = {
+        "_set_cam_status",
+        "_sync_toolpath_output_state",
+        "_toolpath_source_names",
+        "_sync_toolpath_state_from_project",
+        "_invalidate_toolpaths",
+    }
+    assert owned <= ToolpathStateControllerMixin.__dict__.keys()
+    assert owned.isdisjoint(MainWindow.__dict__.keys())
+    assert ToolpathStateControllerMixin in MainWindow.__mro__
