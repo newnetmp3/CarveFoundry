@@ -20,6 +20,7 @@ from PySide6.QtOpenGL import (
     QOpenGLVertexArrayObject,
     QOpenGLWindow,
 )
+
 from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.core.vector_path import node_world_points
 
