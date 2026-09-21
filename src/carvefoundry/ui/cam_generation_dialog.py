@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from carvefoundry.core.beginner import MATERIAL_STARTERS, material_starting_values
 from carvefoundry.core.tools import Cutter, ToolType
 
 from .cam_dialog_help import cam_generation_help
@@ -88,6 +89,20 @@ class CamGenerationDialogMixin:
             "space on smaller screens."
         )
         title_row.addWidget(steps_toggle)
+        mode_combo = QComboBox(dialog)
+        mode_combo.setObjectName("CamExperienceMode")
+        mode_combo.addItems(("Simple", "Advanced"))
+        selected_mode = bool(
+            self._settings.value("cam/simple_mode", True, type=bool)
+        ) and self._active_cam_operation in {
+            "profile", "pocket", "vcarve", "engrave", "rough", "finish",
+        }
+        mode_combo.setCurrentIndex(0 if selected_mode else 1)
+        mode_combo.setToolTip(
+            "Simple asks only what to carve, which bit, depth and detail. "
+            "Advanced keeps every original CAM parameter available."
+        )
+        title_row.addWidget(mode_combo)
         outer.addLayout(title_row)
 
         intro = QLabel(
@@ -811,6 +826,129 @@ class CamGenerationDialogMixin:
         buttons.rejected.connect(dialog.reject)
         outer.addWidget(buttons)
 
+        # Simple Mode is a VIEW over the same real CAM fields, never a second
+        # settings store or alternate generation engine. All values go through
+        # accept_and_generate and its independent readiness checks.
+        simple_panel = QGroupBox("Your first toolpath · four choices", dialog)
+        simple_panel.setObjectName("SimpleCamPanel")
+        simple_form = QFormLayout(simple_panel)
+        simple_intro = QLabel(
+            "Choose what you want the cutter to do. The Advanced view contains "
+            "all safety heights, linking and pass settings. They still apply "
+            "in Simple Mode; review them before running the physical machine."
+        )
+        simple_intro.setWordWrap(True)
+        simple_form.addRow(simple_intro)
+        simple_operation = QComboBox(simple_panel)
+        simple_operation.setObjectName("SimpleCamOperation")
+        for op in ("profile", "pocket", "vcarve", "engrave", "rough", "finish"):
+            simple_operation.addItem(self._cam_operation_title(op), op)
+        op_idx = simple_operation.findData(operation_combo.currentData())
+        simple_operation.setCurrentIndex(max(op_idx, 0))
+        simple_form.addRow("What should the bit do?", simple_operation)
+        simple_cutter = QComboBox(simple_panel)
+        simple_cutter.setObjectName("SimpleCamCutter")
+        for i in range(cutter_combo.count()):
+            simple_cutter.addItem(
+                cutter_combo.itemText(i), cutter_combo.itemData(i)
+            )
+        simple_cutter.setCurrentIndex(cutter_combo.currentIndex())
+        simple_form.addRow("Which cutter?", simple_cutter)
+        simple_depth = self._generation_double_spin(
+            cut_depth.value(), minimum=cut_depth.minimum(),
+            maximum=cut_depth.maximum(), suffix=" mm", step=0.25,
+        )
+        simple_depth.setObjectName("SimpleCamDepth")
+        simple_form.addRow("How deep?", simple_depth)
+        simple_detail = QSpinBox(simple_panel)
+        simple_detail.setRange(0, 100)
+        simple_detail.setValue(detail.value())
+        simple_detail.setSuffix(" %")
+        simple_detail.setObjectName("SimpleCamDetail")
+        simple_detail.setToolTip(
+            "Higher detail produces closer passes when the operation uses "
+            "surface-detail settings. For Profile/Engrave, detail may not "
+            "change toolpath geometry."
+        )
+        simple_form.addRow("How detailed?", simple_detail)
+        simple_material = QComboBox(simple_panel)
+        simple_material.setObjectName("SimpleCamMaterial")
+        for starter in MATERIAL_STARTERS:
+            simple_material.addItem(starter.name, starter)
+        simple_form.addRow("Example material", simple_material)
+        material_note = QLabel(
+            "Starting values only. Confirm bit maker, RPM, machine travel "
+            "and workholding. Material selection alone changes NOTHING."
+        )
+        material_note.setWordWrap(True)
+        simple_form.addRow(material_note)
+        use_material = QPushButton("Apply example feed / plunge / stepdown")
+        use_material.setObjectName("SimpleCamApplyMaterial")
+        simple_form.addRow(use_material)
+        simple_readiness = QLabel(simple_panel)
+        simple_readiness.setObjectName("SimpleCamReadiness")
+        simple_readiness.setTextFormat(Qt.TextFormat.RichText)
+        simple_readiness.setWordWrap(True)
+        simple_form.addRow(simple_readiness)
+        outer.insertWidget(3, simple_panel)
+
+        def sync_simple_operation(_index: int) -> None:
+            desired = operation_combo.findData(simple_operation.currentData())
+            if desired >= 0 and desired != operation_combo.currentIndex():
+                operation_combo.setCurrentIndex(desired)
+
+        def sync_advanced_operation(_index: int) -> None:
+            desired = simple_operation.findData(operation_combo.currentData())
+            if desired >= 0 and desired != simple_operation.currentIndex():
+                simple_operation.setCurrentIndex(desired)
+
+        def sync_simple_cutter(index: int) -> None:
+            if index != cutter_combo.currentIndex():
+                cutter_combo.setCurrentIndex(index)
+
+        def sync_advanced_cutter(index: int) -> None:
+            if index != simple_cutter.currentIndex():
+                simple_cutter.setCurrentIndex(index)
+
+        simple_operation.currentIndexChanged.connect(sync_simple_operation)
+        operation_combo.currentIndexChanged.connect(sync_advanced_operation)
+        simple_cutter.currentIndexChanged.connect(sync_simple_cutter)
+        cutter_combo.currentIndexChanged.connect(sync_advanced_cutter)
+        simple_depth.valueChanged.connect(cut_depth.setValue)
+        cut_depth.valueChanged.connect(simple_depth.setValue)
+        simple_detail.valueChanged.connect(detail.setValue)
+        detail.valueChanged.connect(simple_detail.setValue)
+
+        def apply_material() -> None:
+            bit = simple_cutter.currentData()
+            if not isinstance(bit, Cutter):
+                return
+            starter = simple_material.currentData()
+            example_feed, example_plunge, example_stepdown = (
+                material_starting_values(starter, bit)
+            )
+            feed.setValue(example_feed)
+            plunge.setValue(example_plunge)
+            stepdown.setValue(example_stepdown)
+        use_material.clicked.connect(apply_material)
+
+        def set_cam_mode(_index: int) -> None:
+            simple = mode_combo.currentIndex() == 0
+            simple_panel.setVisible(simple)
+            workspace.setVisible(not simple)
+            steps_toggle.setVisible(not simple)
+            self._settings.setValue("cam/simple_mode", simple)
+
+        mode_combo.currentIndexChanged.connect(set_cam_mode)
+        fields["mode"] = mode_combo
+        fields["simple_operation"] = simple_operation
+        fields["simple_cutter"] = simple_cutter
+        fields["simple_depth"] = simple_depth
+        fields["simple_detail"] = simple_detail
+        fields["simple_material"] = simple_material
+        fields["simple_apply_material"] = use_material
+        fields["simple_readiness"] = simple_readiness
+
         def update_relevance_and_readiness() -> None:
             operation = str(operation_combo.currentData() or "")
             is_3d = operation in {
@@ -1004,6 +1142,7 @@ class CamGenerationDialogMixin:
                 )
             )
             generate_button.setEnabled(all_ready)
+            simple_readiness.setText(readiness.text())
             cam_brief.setText(
                 f"{operation_combo.currentText()}   •   "
                 f"{cutter.name if isinstance(cutter, Cutter) else 'No cutter'}"
@@ -1149,4 +1288,5 @@ class CamGenerationDialogMixin:
         dialog.generation_help_text = generation_help
         dialog.refresh_generation_readiness = update_relevance_and_readiness
         update_relevance_and_readiness()
+        set_cam_mode(mode_combo.currentIndex())
         return dialog
