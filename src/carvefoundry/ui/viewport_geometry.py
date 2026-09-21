@@ -295,7 +295,7 @@ class ViewportGeometryMixin:
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not self._item_viewport_visible(self.selected_item_index, item):
+        if item.locked or not self._item_viewport_visible(self.selected_item_index, item):
             return None
         return self._item_bounds_mm(item).mean(axis=0)
 
