@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from carvefoundry.ui.import_controller import ImportControllerMixin
 from carvefoundry.ui.main_window import MainWindow
+from carvefoundry.ui.project_file_controller import ProjectFileControllerMixin
 from carvefoundry.ui.project_inspector_controller import ProjectInspectorControllerMixin
 from carvefoundry.ui.selection_transform_controller import SelectionTransformControllerMixin
 from carvefoundry.ui.toolpath_state_controller import ToolpathStateControllerMixin
@@ -75,3 +76,18 @@ def test_workspace_command_facade_stays_split_by_surface() -> None:
     assert "_build_command_actions" not in WorkspaceCommandsMixin.__dict__
     assert "_build_main_menu_bar" not in WorkspaceCommandsMixin.__dict__
     assert "_build_tool_rail" not in WorkspaceCommandsMixin.__dict__
+
+
+def test_project_file_lifecycle_stays_out_of_main_window() -> None:
+    owned = {
+        "_set_project",
+        "_new_project",
+        "_open_project",
+        "_save_project",
+        "_save_project_as",
+        "_save_project_to",
+        "_export_gcode",
+    }
+    assert owned <= ProjectFileControllerMixin.__dict__.keys()
+    assert owned.isdisjoint(MainWindow.__dict__.keys())
+    assert ProjectFileControllerMixin in MainWindow.__mro__
