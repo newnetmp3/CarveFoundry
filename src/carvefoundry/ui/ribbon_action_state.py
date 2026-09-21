@@ -123,6 +123,7 @@ class RibbonActionStateMixin:
         self._simulation_timer = QTimer(self)
         self._simulation_timer.setInterval(40)
         self._simulation_timer.timeout.connect(self._advance_simulation)
+        self._simulation_total_segments = 0
         self._simulation_button = None
         self._toolpaths_view_button = None
         self._rapids_view_button = None
