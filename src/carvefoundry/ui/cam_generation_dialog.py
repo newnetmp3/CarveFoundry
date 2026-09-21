@@ -1312,7 +1312,14 @@ class CamGenerationDialogMixin:
         dialog.generation_help_text = generation_help
         dialog.refresh_generation_readiness = update_relevance_and_readiness
         update_relevance_and_readiness()
-        sync_simple_operation(simple_operation.currentIndex())
+        # Never let a hidden Simple control replace a specialized Advanced
+        # operation (Rest, Waterline, etc.) during dialog construction.
+        operation_preview.set_operation(
+            str(simple_operation.currentData() or "")
+        )
+        operation_help.setText(
+            operation_explanation(str(simple_operation.currentData() or ""))
+        )
         set_cam_mode(mode_combo.currentIndex())
         dialog.finished.connect(lambda _result: operation_preview.set_running(False))
         return dialog
