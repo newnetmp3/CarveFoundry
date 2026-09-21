@@ -2,6 +2,41 @@
 
 CarveFoundry is a native Linux CNC design and CAM application with a compact Photopea-style menu and tool rail. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
 
+## New to CNC? Start here
+
+CarveFoundry opens a **Welcome / Start Here** window the first time you launch
+the desktop app. Reopen it anytime from **Help → Welcome / Start Here…**.
+
+1. Select **Create my first nameplate** (editable lettering) or **Try a coaster
+   template**. You can also import your own image, SVG or STL.
+2. Open **Help → Machine Setup Explained…**. Learn the difference between
+   machine home and the stock-bottom-left **work XY0 / stock-top Z0** origin.
+   Verify the profile's travel dimensions against YOUR machine; choose
+   **I don't have a CNC machine yet** to design and learn without connecting one.
+3. Open **Help → Cutter & Material Guide…** for cross-section illustrations,
+   cutter use cases and opt-in **example** feed/plunge/stepdown values.
+   These are *not manufacturer-approved cutting recipes*, and do not set RPM.
+4. Choose **Toolpaths → Generate Toolpaths**. **Simple** asks what to cut,
+   which cutter to use, depth and detail; **Advanced** exposes the full
+   unchanged CAM controls. Either mode runs the same generation and readiness
+   checks.
+5. Select **Toolpaths → Will This Carve Correctly?…** and compare the modeled
+   design against simulated stock after verified posted G-code. Available
+   3D model-surface deviation colors show sampled uncut/gouged regions;
+   2D pockets/engraving require visual interpretation and are not directly
+   comparable to model-top surfaces.
+6. Run independent **CNC Preflight**, then export the checked NC files.
+   **File → Print CNC Job Setup Sheet…** creates a PDF with cutter stages,
+   origin, stock, fixture coordinates and the physical checklist. It includes
+   exported filenames only when they match the current project.
+7. Record actual cutting outcomes under **Project → Project Notes / Carving Log…**.
+   Notes and the recorded material survive CF3D save/reload and Undo/Redo.
+
+The **Guided CNC Workflow** under Help or Project links these actual actions.
+For definitions of jargon, use **Help → Search CNC Glossary…**. CarveFoundry
+cannot verify physical clamps, live work offsets, holder reach or spindle
+condition; operator checks are required even after a passing software preflight.
+
 ## Install on Linux (KDE Plasma / Wayland)
 
 CarveFoundry has a **user-local native desktop installer**. After installation
