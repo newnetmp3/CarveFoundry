@@ -31,6 +31,7 @@ ai = [
   "accelerate>=1.0",
 ]
 dev = [
+  "Pillow>=10.0",
   "pytest>=8.3",
   "ruff>=0.9",
 ]
