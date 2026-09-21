@@ -21,7 +21,7 @@ class ToolOptionsState:
 
     @classmethod
     def for_mode(cls, mode: str | None) -> ToolOptionsState:
-        if not mode:
+        if not mode or mode in {"camera", "select", "direct_select"}:
             return cls()
         return cls(
             depth=mode not in {"measure", "fixture"},
