@@ -820,6 +820,23 @@ class MainWindow(
         self.cam_status_label.style().unpolish(self.cam_status_label)
         self.cam_status_label.style().polish(self.cam_status_label)
 
+    def _selection_is_editable(self, indices: list[int] | None = None) -> bool:
+        """A lock protects edits without preventing selection or visibility toggles."""
+        if indices is None:
+            indices = self._selected_design_indices(expand_groups=True)
+        protected = [
+            self.project.items[index].name for index in indices
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].locked
+        ]
+        if not protected:
+            return True
+        self.statusBar().showMessage(
+            "Unlock layer(s) before editing: " + ", ".join(protected[:3]),
+            4000,
+        )
+        return False
+
     def _sync_selection_action_state(self) -> None:
         if not hasattr(self, "project_list"):
             return
@@ -827,11 +844,18 @@ class MainWindow(
         item = self._selected_item()
         indices = self._selected_design_indices()
         has_selection = bool(indices)
+        editable_selection = bool(indices) and not any(
+            item.locked for item in (
+                self.project.items[index]
+                for index in self._selected_design_indices(expand_groups=True)
+            )
+        )
         selection_count = len(indices)
         has_mesh = bool(
             selection_count == 1
             and item is not None
             and item.mesh is not None
+            and not item.locked
         )
         has_grouped = any(
             self.project.items[index].group_id is not None
@@ -866,26 +890,27 @@ class MainWindow(
             ("frame_selected", has_selection),
             ("isolate_selected", has_selection),
             ("exit_isolate", self.viewport.isolated),
-            ("apply_scale", has_bakeable_mesh),
-            ("apply_rotation_scale", has_bakeable_mesh),
+            ("apply_scale", has_bakeable_mesh and editable_selection),
+            ("apply_rotation_scale", has_bakeable_mesh and editable_selection),
         ):
             action = self._ui_actions.get(key)
             if action is not None:
                 action.setEnabled(enabled)
 
         enabled_by_action = {
-            "cut": has_selection,
+            "cut": editable_selection,
             "copy": has_selection,
             "paste": bool(self._clipboard_items),
-            "delete": has_selection,
-            "align": has_selection,
-            "center": has_selection,
-            "group": selection_count >= 2,
-            "ungroup": has_grouped,
-            "duplicate": has_selection,
-            "move_up": current_index is not None and current_index > 0,
+            "delete": editable_selection,
+            "align": editable_selection,
+            "center": editable_selection,
+            "group": editable_selection and selection_count >= 2,
+            "ungroup": editable_selection and has_grouped,
+            "duplicate": editable_selection,
+            "move_up": editable_selection and current_index is not None and current_index > 0,
             "move_down": (
-                current_index is not None
+                editable_selection
+                and current_index is not None
                 and current_index < len(self.project.items) - 1
             ),
         }
@@ -1626,6 +1651,8 @@ class MainWindow(
         if index is None or item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
+        if not self._selection_is_editable([index]):
+            return
 
         self._before_context_transform(index, label)
         transform_action(item)
@@ -1640,6 +1667,9 @@ class MainWindow(
 
     def _focus_transform_section(self, section: str) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2099,6 +2129,9 @@ class MainWindow(
             return
 
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             return
 
@@ -2174,6 +2207,9 @@ class MainWindow(
 
     def _center_selected_xy(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2196,6 +2232,9 @@ class MainWindow(
 
     def _top_selected_to_surface(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2213,6 +2252,9 @@ class MainWindow(
 
     def _reset_selected_transform(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2229,6 +2271,8 @@ class MainWindow(
 
     def _duplicate_selected_item(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
@@ -2277,6 +2321,8 @@ class MainWindow(
 
     def _delete_selected_item(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
@@ -2301,6 +2347,8 @@ class MainWindow(
 
     def _move_selected_item(self, offset: int) -> None:
         index = self._selected_item_index()
+        if index is not None and not self._selection_is_editable([index]):
+            return
         if index is None:
             self.statusBar().showMessage("Select a design item to reorder", 3000)
             return
@@ -2401,6 +2449,8 @@ class MainWindow(
         label: str,
     ) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage(
                 "Select one or more mesh objects first",
