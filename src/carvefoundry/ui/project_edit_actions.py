@@ -27,7 +27,7 @@ class ProjectEditActionsMixin:
         if not changed:
             return
         normalized = label.strip().lower()
-        if normalized in {"group", "ungroup"}:
+        if normalized in {"group", "ungroup", "edit project notes"}:
             return
         if normalized.startswith("calculate ") or normalized == "reorder machining job":
             return
