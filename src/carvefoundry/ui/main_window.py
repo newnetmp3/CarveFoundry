@@ -1655,6 +1655,8 @@ class MainWindow(
         if index is None or item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
+        if not self._can_edit_layers([index]):
+            return
 
         self._before_context_transform(index, label)
         transform_action(item)
@@ -2206,6 +2208,8 @@ class MainWindow(
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
+        if not self._can_edit_layers():
+            return
 
         transformed = item.transformed_mesh()
         assert transformed is not None
@@ -2244,6 +2248,8 @@ class MainWindow(
         item = self._selected_item()
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
+            return
+        if not self._can_edit_layers():
             return
 
         item.transform = self.project.default_transform_for_mesh(
@@ -2439,6 +2445,8 @@ class MainWindow(
                 "Select one or more mesh objects first",
                 3000,
             )
+            return
+        if not self._can_edit_layers(indices):
             return
 
         self._before_ribbon_mutation(label)
