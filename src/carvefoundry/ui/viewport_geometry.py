@@ -295,7 +295,7 @@ class ViewportGeometryMixin:
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not self._item_viewport_visible(self.selected_item_index, item):
+        if item.locked or not self._item_viewport_visible(self.selected_item_index, item):
             return None
         return self._item_bounds_mm(item).mean(axis=0)
 
@@ -422,7 +422,9 @@ class ViewportGeometryMixin:
     def pick_gizmo_axis(self, position: QPointF) -> int | None:
         """Return the selected translation axis when a gizmo handle is hit."""
 
-        if self.selected_item_index is None:
+        if self.selected_item_index is None or self.project is None:
+            return None
+        if self.project.items[self.selected_item_index].locked:
             return None
         projection, view_matrix, world_per_pixel = self._camera_geometry()
         view_projection = projection * view_matrix
@@ -607,7 +609,7 @@ class ViewportGeometryMixin:
         ):
             return None
         item = self.project.items[self.selected_item_index]
-        if not self._item_viewport_visible(self.selected_item_index, item):
+        if item.locked or not self._item_viewport_visible(self.selected_item_index, item):
             return None
         return self.selected_item_index, item
 
@@ -687,7 +689,7 @@ class ViewportGeometryMixin:
         ):
             return False
         item = self.project.items[item_index]
-        if item.mesh is None or not item.visible:
+        if item.mesh is None or not item.visible or item.locked:
             return False
         corners = self._resize_world_corners(item)
         if len(corners) != 4:

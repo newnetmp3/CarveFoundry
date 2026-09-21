@@ -30,6 +30,8 @@ class BatchLayoutMixin:
             self.statusBar().showMessage("Finish the current operation first", 5000)
             return False
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return False
         sources = tuple(self.project.items[i] for i in indices)
         if not sources or any(not i.visible or i.mesh is None for i in sources):
             self.statusBar().showMessage("Select visible geometry to duplicate.", 6000)
@@ -56,6 +58,8 @@ class BatchLayoutMixin:
             return clones
 
         def finished(clones):
+            if not self._selection_is_editable(indices):
+                return
             if self.project is not project or tuple(source.item_id for source in sources) != ids:
                 raise ValueError("Batch source changed before completion.")
             self._before_ribbon_mutation("batch grid")
@@ -88,6 +92,8 @@ class BatchLayoutMixin:
 
     def _batch_layout(self) -> bool:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return False
         if not indices:
             self.statusBar().showMessage("Select the batch template object(s).", 6000)
             return False

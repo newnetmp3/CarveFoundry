@@ -34,7 +34,10 @@ class DirectSelectionMixin:
         ):
             return None
         item = self.project.items[index]
-        return item if item.visible and item.vector_path is not None else None
+        return (
+            item if item.visible and not item.locked
+            and item.vector_path is not None else None
+        )
 
     def _set_direct_selection(self, enabled: bool) -> None:
         if enabled and self._editable_vector_item() is None:
@@ -101,6 +104,9 @@ class DirectSelectionMixin:
             )
             return False
         item = self.project.items[indices[0]]
+        if item.locked:
+            self.statusBar().showMessage("Unlock the layer before editing nodes", 3500)
+            return False
         try:
             mesh = path.mesh_asset()
         except (ValueError, IndexError) as exc:

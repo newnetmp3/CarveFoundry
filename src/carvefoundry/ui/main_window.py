@@ -51,7 +51,7 @@ from .import_worker import ImportWorker
 from .inspector_controls import InspectorControlsMixin
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
-from .layers_popup import LayersPopup
+from .layers_popup import LAYER_LOCK_ROLE, LayersPanel
 from .planar_operations_actions import PlanarOperationsMixin
 from .project_recovery import ProjectRecoveryMixin
 from .ribbon import Ribbon
@@ -315,9 +315,9 @@ class MainWindow(
         splitter.setChildrenCollapsible(False)
         self.workspace_splitter = splitter
 
-        # Keep the existing QListWidget-based project selection model, but move
-        # it out of the permanent layout.  It now lives in an on-demand popup.
-        self.layers_popup = LayersPopup(
+        # One selection model for Layers, the viewport, and the Inspector.
+        # The Layers section is permanently embedded at the Inspector's top.
+        self.layers_popup = LayersPanel(
             self,
             move_up=lambda: self._move_selected_item(-1),
             move_down=lambda: self._move_selected_item(1),
@@ -359,7 +359,7 @@ class MainWindow(
 
         self.layers_button = QPushButton("Layers")
         self.layers_button.setToolTip(
-            "Open the object/layer manager for visibility, multi-select, and ordering."
+            "Focus the Layers section at the top of the Inspector."
         )
         self.layers_button.clicked.connect(self._show_layers_popup)
         canvas_bar_layout.addWidget(self.layers_button)
@@ -692,6 +692,7 @@ class MainWindow(
         # Keep the inspector useful at a compact canvas-friendly width while
         # preventing users from collapsing it until controls become unusable.
         self.properties_panel.setMinimumWidth(260)
+        self.properties_panel.body_layout.addWidget(self.layers_popup)
 
         selection_heading = QLabel("Selection")
         selection_heading.setObjectName("SectionHeading")
@@ -819,6 +820,23 @@ class MainWindow(
         self.cam_status_label.style().unpolish(self.cam_status_label)
         self.cam_status_label.style().polish(self.cam_status_label)
 
+    def _selection_is_editable(self, indices: list[int] | None = None) -> bool:
+        """A lock protects edits without preventing selection or visibility toggles."""
+        if indices is None:
+            indices = self._selected_design_indices(expand_groups=True)
+        protected = [
+            self.project.items[index].name for index in indices
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].locked
+        ]
+        if not protected:
+            return True
+        self.statusBar().showMessage(
+            "Unlock layer(s) before editing: " + ", ".join(protected[:3]),
+            4000,
+        )
+        return False
+
     def _sync_selection_action_state(self) -> None:
         if not hasattr(self, "project_list"):
             return
@@ -826,11 +844,18 @@ class MainWindow(
         item = self._selected_item()
         indices = self._selected_design_indices()
         has_selection = bool(indices)
+        editable_selection = bool(indices) and not any(
+            item.locked for item in (
+                self.project.items[index]
+                for index in self._selected_design_indices(expand_groups=True)
+            )
+        )
         selection_count = len(indices)
         has_mesh = bool(
             selection_count == 1
             and item is not None
             and item.mesh is not None
+            and not item.locked
         )
         has_grouped = any(
             self.project.items[index].group_id is not None
@@ -865,26 +890,27 @@ class MainWindow(
             ("frame_selected", has_selection),
             ("isolate_selected", has_selection),
             ("exit_isolate", self.viewport.isolated),
-            ("apply_scale", has_bakeable_mesh),
-            ("apply_rotation_scale", has_bakeable_mesh),
+            ("apply_scale", has_bakeable_mesh and editable_selection),
+            ("apply_rotation_scale", has_bakeable_mesh and editable_selection),
         ):
             action = self._ui_actions.get(key)
             if action is not None:
                 action.setEnabled(enabled)
 
         enabled_by_action = {
-            "cut": has_selection,
+            "cut": editable_selection,
             "copy": has_selection,
             "paste": bool(self._clipboard_items),
-            "delete": has_selection,
-            "align": has_selection,
-            "center": has_selection,
-            "group": selection_count >= 2,
-            "ungroup": has_grouped,
-            "duplicate": has_selection,
-            "move_up": current_index is not None and current_index > 0,
+            "delete": editable_selection,
+            "align": editable_selection,
+            "center": editable_selection,
+            "group": editable_selection and selection_count >= 2,
+            "ungroup": editable_selection and has_grouped,
+            "duplicate": editable_selection,
+            "move_up": editable_selection and current_index is not None and current_index > 0,
             "move_down": (
-                current_index is not None
+                editable_selection
+                and current_index is not None
                 and current_index < len(self.project.items) - 1
             ),
         }
@@ -1185,7 +1211,7 @@ class MainWindow(
             self.object_selector.addItem("Stock")
 
             for project_item in self.project.items:
-                list_item = QListWidgetItem(self._item_list_text(project_item))
+                list_item = QListWidgetItem(project_item.name)
                 kind = (
                     "STL"
                     if project_item.kind.lower() == "stl"
@@ -1213,7 +1239,8 @@ class MainWindow(
                         if source_size
                         else ""
                     )
-                    + "\nDouble-click or press F2 to rename."
+                    + "\nEye: show/hide • Lock: protect from edits"
+                    + "\nDouble-click name or press F2 to rename."
                 )
                 list_item.setFlags(
                     list_item.flags()
@@ -1225,6 +1252,11 @@ class MainWindow(
                     if project_item.visible
                     else Qt.CheckState.Unchecked
                 )
+                list_item.setData(LAYER_LOCK_ROLE, project_item.locked)
+                if project_item.locked:
+                    list_item.setFlags(
+                        list_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+                    )
                 self.project_list.addItem(list_item)
                 self.object_selector.addItem(
                     self._object_selector_text(project_item)
@@ -1254,9 +1286,12 @@ class MainWindow(
             self._select_project_indices([row - 1], primary=row - 1)
 
     def _show_layers_popup(self) -> None:
+        """Reveal and focus the permanently embedded Inspector Layers list."""
         if not hasattr(self, "layers_popup"):
             return
-        self.layers_popup.show_below(self.layers_button)
+        self._ensure_inspector_visible()
+        self.properties_panel.scroll_area.ensureWidgetVisible(self.layers_popup)
+        self.project_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _active_cutter_changed(self, _index: int) -> None:
         cutter = self.tool_combo.currentData()
@@ -1313,6 +1348,9 @@ class MainWindow(
         visible = list_item.checkState() == Qt.CheckState.Checked
         visibility_changed = visible != project_item.visible
         project_item.visible = visible
+        locked = bool(list_item.data(LAYER_LOCK_ROLE))
+        lock_changed = locked != project_item.locked
+        project_item.locked = locked
 
         requested_name = list_item.text().strip()
         if not requested_name:
@@ -1332,6 +1370,21 @@ class MainWindow(
             unique_name = f"{base} {number}"
 
         renamed = unique_name != project_item.name
+        if renamed and project_item.locked:
+            self._updating_project_list = True
+            try:
+                list_item.setText(project_item.name)
+            finally:
+                self._updating_project_list = False
+            renamed = False
+        if lock_changed:
+            flags = list_item.flags()
+            list_item.setFlags(
+                flags & ~Qt.ItemFlag.ItemIsEditable
+                if locked else flags | Qt.ItemFlag.ItemIsEditable
+            )
+            if locked:
+                self.viewport.set_node_edit_mode(False)
         if renamed:
             old_name = project_item.name
             project_item.name = unique_name
@@ -1380,6 +1433,11 @@ class MainWindow(
                 f"Renamed {old_name} → {unique_name}",
                 2500,
             )
+        elif lock_changed:
+            state = "locked" if locked else "unlocked"
+            self.statusBar().showMessage(
+                f"{project_item.name} {state}", 2500,
+            )
         elif visibility_changed:
             state = "visible" if visible else "hidden"
             self.statusBar().showMessage(
@@ -1387,6 +1445,8 @@ class MainWindow(
                 2000,
             )
 
+        if lock_changed:
+            self._update_properties(self.project_list.currentRow())
         self.viewport.update()
 
     def _sync_stock_controls(self) -> None:
@@ -1591,6 +1651,8 @@ class MainWindow(
         if index is None or item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
+        if not self._selection_is_editable([index]):
+            return
 
         self._before_context_transform(index, label)
         transform_action(item)
@@ -1605,6 +1667,9 @@ class MainWindow(
 
     def _focus_transform_section(self, section: str) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -1991,6 +2056,8 @@ class MainWindow(
         self._set_inspector_context_sections(
             text=is_text, transform=has_mesh,
         )
+        self.text_widget.setEnabled(not item.locked)
+        self.transform_widget.setEnabled(not item.locked)
         if is_text:
             self._sync_text_controls(item)
         if has_mesh:
@@ -2036,6 +2103,9 @@ class MainWindow(
         if self._updating_transform_controls:
             return
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             return
         units = self.source_units_combo.currentData()
@@ -2062,6 +2132,9 @@ class MainWindow(
             return
 
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             return
 
@@ -2137,6 +2210,9 @@ class MainWindow(
 
     def _center_selected_xy(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2159,6 +2235,9 @@ class MainWindow(
 
     def _top_selected_to_surface(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2176,6 +2255,9 @@ class MainWindow(
 
     def _reset_selected_transform(self) -> None:
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             self.statusBar().showMessage("Select a model or shape first", 3000)
             return
@@ -2192,6 +2274,8 @@ class MainWindow(
 
     def _duplicate_selected_item(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
@@ -2240,6 +2324,8 @@ class MainWindow(
 
     def _delete_selected_item(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
@@ -2264,6 +2350,8 @@ class MainWindow(
 
     def _move_selected_item(self, offset: int) -> None:
         index = self._selected_item_index()
+        if index is not None and not self._selection_is_editable([index]):
+            return
         if index is None:
             self.statusBar().showMessage("Select a design item to reorder", 3000)
             return
@@ -2364,6 +2452,8 @@ class MainWindow(
         label: str,
     ) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage(
                 "Select one or more mesh objects first",

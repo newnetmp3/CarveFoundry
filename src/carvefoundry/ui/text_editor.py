@@ -1115,6 +1115,7 @@ class TextEditorMixin:
             or item is None
             or item.kind.lower() != "text"
             or item.mesh is None
+            or item.locked
         ):
             return
 

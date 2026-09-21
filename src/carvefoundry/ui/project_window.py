@@ -460,12 +460,12 @@ class MainWindow(_BaseMainWindow):
         snapshot = capture_workspace(self.project)
         selected_row = self.project_list.currentRow()
         before = tuple(
-            (item.name, item.visible)
+            (item.name, item.visible, item.locked)
             for item in self.project.items
         )
         super()._project_item_changed(list_item)
         after = tuple(
-            (item.name, item.visible)
+            (item.name, item.visible, item.locked)
             for item in self.project.items
         )
         if after == before:
@@ -473,10 +473,15 @@ class MainWindow(_BaseMainWindow):
 
         renamed = any(
             old_name != new_name
-            for (old_name, _old_visible), (new_name, _new_visible)
+            for (old_name, _old_visible, _old_lock), (new_name, _new_visible, _new_lock)
             in zip(before, after, strict=True)
         )
-        label = "rename object" if renamed else "visibility"
+        locked_changed = any(
+            old_lock != new_lock
+            for (_old_name, _old_visible, old_lock), (_new_name, _new_visible, new_lock)
+            in zip(before, after, strict=True)
+        )
+        label = "rename object" if renamed else "layer lock" if locked_changed else "visibility"
         self._record_undo(snapshot, selected_row, label)
 
     def _stock_control_changed(self, value: float) -> None:
