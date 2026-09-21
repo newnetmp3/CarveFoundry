@@ -62,6 +62,9 @@ def test_production_bootstrap_configures_gl_before_qapplication(monkeypatch) -> 
         def setApplicationDisplayName(self, name):
             events.append(("display", name))
 
+        def setWindowIcon(self, icon):
+            events.append(("icon", not icon.isNull()))
+
         def setStyleSheet(self, stylesheet):
             events.append(("stylesheet", stylesheet))
 
@@ -76,4 +79,5 @@ def test_production_bootstrap_configures_gl_before_qapplication(monkeypatch) -> 
     assert events[0] == ("configure_gl", None)
     assert events[1] == ("QApplication", ["carvefoundry"])
     assert events[2] == ("display", "CarveFoundry")
-    assert events[3] == ("stylesheet", carve_app.APP_STYLESHEET)
+    assert events[3] == ("icon", True)
+    assert events[4] == ("stylesheet", carve_app.APP_STYLESHEET)
