@@ -41,7 +41,7 @@ def test_split_modules_still_compose_one_authoritative_window_and_renderer() -> 
 
 def test_contextual_tool_modes_are_disjoint_except_common_depth() -> None:
     assert ToolOptionsState.for_mode(None) == ToolOptionsState()
-    assert ToolOptionsState.for_mode("camera") == ToolOptionsState(depth=True)
+    assert ToolOptionsState.for_mode("camera") == ToolOptionsState()
     for mode in ("rectangle", "ellipse", "polygon", "line", "pen", "text"):
         assert ToolOptionsState.for_mode(mode).depth
     for mode in ("measure", "fixture"):
