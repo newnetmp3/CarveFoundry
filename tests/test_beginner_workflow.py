@@ -10,6 +10,7 @@ from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.beginner import (
     MATERIAL_STARTERS,
     design_advisories,
+    explain_motion_preflight,
     material_starting_values,
     starter_project,
 )
@@ -238,3 +239,16 @@ def test_notes_edit_does_not_invalidate_existing_cam(monkeypatch) -> None:
         assert window.project.toolpaths == initial_paths
     finally:
         window.close()
+
+
+def test_plain_english_preflight_distinguishes_posted_nc_and_physical_checks() -> None:
+    report = (
+        "Cutter stage 1:\nPreflight BLOCKED — 12 moves\n"
+        "ERROR: Stock width exceeds machine travel.\n"
+        "WARNING: No fixtures recorded.\n"
+    )
+    text = explain_motion_preflight(report, False)
+    assert "1 error(s), 1 warning(s)" in text
+    assert "Stock width exceeds" in text
+    assert "posted G-code" in text
+    assert "physical clamps" in text
