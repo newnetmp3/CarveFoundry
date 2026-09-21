@@ -71,7 +71,8 @@ class LayerRowDelegate(QStyledItemDelegate):
             painter.fillRect(lock, option.palette.highlight())
         self._draw_eye(
             painter, eye,
-            index.data(Qt.ItemDataRole.CheckStateRole) == Qt.CheckState.Checked,
+            Qt.CheckState(index.data(Qt.ItemDataRole.CheckStateRole))
+            == Qt.CheckState.Checked,
         )
         self._draw_lock(painter, lock, bool(index.data(LAYER_LOCK_ROLE)))
         painter.restore()
@@ -125,7 +126,7 @@ class LayerRowDelegate(QStyledItemDelegate):
                         old = index.data(Qt.ItemDataRole.CheckStateRole)
                         state = (
                             Qt.CheckState.Unchecked
-                            if old == Qt.CheckState.Checked
+                            if Qt.CheckState(old) == Qt.CheckState.Checked
                             else Qt.CheckState.Checked
                         )
                         model.setData(index, state, Qt.ItemDataRole.CheckStateRole)
