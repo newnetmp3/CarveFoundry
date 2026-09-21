@@ -43,6 +43,11 @@ class LayerRowDelegate(QStyledItemDelegate):
                   cls.ICON_WIDTH, row_rect.height()),
         )
 
+    def initStyleOption(self, option: QStyleOptionViewItem, index) -> None:
+        super().initStyleOption(option, index)
+        if index.row() > 0:
+            option.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         if index.row() == 0:
             super().paint(painter, option, index)
