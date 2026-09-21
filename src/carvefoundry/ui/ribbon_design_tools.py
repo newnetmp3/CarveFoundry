@@ -7,10 +7,11 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QFontInfo, QImage
+from PySide6.QtGui import QFont, QFontInfo, QImage
 from PySide6.QtWidgets import QDialog, QFileDialog
 
 from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.image_trace import trace_mask
 from carvefoundry.core.measurement import measure_xy
 from carvefoundry.core.primitives import (
     bitmap_runs_mesh,
@@ -26,6 +27,7 @@ from carvefoundry.core.units import ModelUnits
 from carvefoundry.core.vector_path import VectorPath
 
 from .contextual_tool_state import ToolOptionsState
+from .image_trace_dialog import ImageTraceDialog, qimage_rgba
 from .ribbon_forms import _ActionForm
 
 
@@ -669,65 +671,55 @@ class RibbonDesignToolsMixin:
         if not path:
             return
 
-        form = _ActionForm(self, "Trace Image")
-        form.add_int(
-            "threshold", "Dark threshold (0-255)", 150,
-            minimum=0, maximum=255,
+        source = QImage(path)
+        if source.isNull():
+            self.statusBar().showMessage(
+                "Could not load the selected image for tracing.", 6000,
+            )
+            return
+        dialog = ImageTraceDialog(
+            self,
+            source,
+            source_name=path,
+            default_width_mm=min(120.0, self.project.stock.width_mm * 0.7),
         )
-        form.add_double(
-            "width",
-            "Output width",
-            min(120.0, self.project.stock.width_mm * 0.7),
-            minimum=1.0,
-            suffix=" mm",
-        )
-        form.add_double("depth", "Depth", 1.0, minimum=0.1, suffix=" mm")
-        form.add_check("invert", "Trace light pixels instead", False)
-        if form.exec() != QDialog.DialogCode.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        # Capture every setting on the GUI thread. Image decoding, pixel
-        # conversion and mesh construction happen in the background worker.
-        threshold = int(form.value("threshold"))
-        invert = bool(form.value("invert"))
-        width_mm = float(form.value("width"))
-        depth_mm = float(form.value("depth"))
+        # The dialog has already computed the original pixel dimensions and
+        # captured every setting. No hard-coded trace resolution ceiling.
+        settings = dialog.settings()
         name = Path(path).stem + " trace"
+        source = QImage(source)  # Hold a reference for the background job.
 
         def trace(progress):
-            progress(0.03, "Loading image")
-            image = QImage(path)
-            if image.isNull():
-                raise ValueError("Could not load image.")
-            max_dimension = 96
-            if max(image.width(), image.height()) > max_dimension:
-                image = image.scaled(
-                    max_dimension,
-                    max_dimension,
-                    Qt.AspectRatioMode.KeepAspectRatio,
+            progress(0.03, "Preparing source image")
+            if (
+                source.width() == settings.target_width
+                and source.height() == settings.target_height
+            ):
+                image = source
+            else:
+                image = source.scaled(
+                    settings.target_width,
+                    settings.target_height,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-            mask = np.zeros((image.height(), image.width()), dtype=bool)
-            for y in range(image.height()):
-                for x in range(image.width()):
-                    color = QColor(image.pixel(x, y))
-                    luminance = (
-                        0.2126 * color.red()
-                        + 0.7152 * color.green()
-                        + 0.0722 * color.blue()
-                    )
-                    active = color.alpha() > 16 and luminance <= threshold
-                    mask[y, x] = (
-                        not active if invert and color.alpha() > 16 else active
-                    )
-                if y % 4 == 0:
-                    progress(
-                        0.15 + 0.60 * (y + 1) / max(1, image.height()),
-                        f"Tracing row {y + 1} / {image.height()}",
-                    )
-            progress(0.78, "Building relief mesh")
+            progress(
+                0.20,
+                f"Tracing {image.width():,} × {image.height():,} pixels",
+            )
+            mask = trace_mask(
+                qimage_rgba(image),
+                threshold=settings.threshold,
+                invert=settings.invert,
+            )
+            progress(0.65, "Building relief mesh from selected pixels")
             mesh = bitmap_runs_mesh(
-                mask, width_mm=width_mm, depth_mm=depth_mm
+                mask,
+                width_mm=settings.width_mm,
+                depth_mm=settings.depth_mm,
             )
             progress(0.98, "Trace ready")
             return mesh
