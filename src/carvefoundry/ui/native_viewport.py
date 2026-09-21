@@ -2085,3 +2085,13 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
             view_projection,
             world_per_pixel,
         )
+
+
+def __getattr__(name: str):
+    """Compatibility for older direct imports of viewport widget classes."""
+
+    if name in {"MeshViewport", "_RulerBand"}:
+        from . import viewport_widget
+
+        return getattr(viewport_widget, name)
+    raise AttributeError(name)
