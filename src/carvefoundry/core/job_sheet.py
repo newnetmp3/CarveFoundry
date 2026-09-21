@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from html import escape
 from itertools import groupby
+from pathlib import Path
 
 from carvefoundry.core.machine_profiles import MachineProfile
 from carvefoundry.core.project import Project
@@ -16,7 +17,10 @@ def _h(value: object) -> str:
     return escape(str(value), quote=True)
 
 
-def job_sheet_html(project: Project, machine: MachineProfile) -> str:
+def job_sheet_html(
+    project: Project, machine: MachineProfile, *,
+    output_files: tuple[str, ...] = (),
+) -> str:
     """Create deterministic letter-sized print markup without running CAM."""
     stock = project.stock
     paths = project.toolpaths
@@ -33,11 +37,16 @@ def job_sheet_html(project: Project, machine: MachineProfile) -> str:
             max(path.safe_z_mm for path in selected),
         ))
 
+    filenames = (
+        tuple(Path(name).name for name in output_files)
+        if len(output_files) == len(stages) else ()
+    )
     rows = "".join(
         "<tr>"
         f"<td>{index}</td><td>{_h(cutter)}</td>"
         f"<td>{number}</td><td>{minutes:.1f} min</td>"
         f"<td>+{safe_z:g} mm</td>"
+        f"<td>{_h(filenames[index - 1]) if filenames else 'Not exported yet'}</td>"
         "</tr>"
         for index, (cutter, number, minutes, safe_z) in enumerate(stages, 1)
     )
@@ -73,7 +82,7 @@ th {{ background: #eaf0f1; }}
 {machine.work_y_mm:g} × {machine.work_z_mm:g} mm</p>
 <h2>2 · Cutter stages, in programmed order</h2>
 <table><tr><th>Stage</th><th>Install cutter</th><th>Operations</th>
-<th>Cut-only estimate</th><th>Safe Z</th></tr>{rows}</table>
+<th>Cut-only estimate</th><th>Safe Z</th><th>NC filename</th></tr>{rows}</table>
 <p>Estimated cutting: {total:.1f} minutes, excluding rapid moves, pauses,
 setup, and tool changes. After EACH cutter change stop and re-probe
 stock-top Z0. Execute only the corresponding exported NC program.</p>
