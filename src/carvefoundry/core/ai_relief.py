@@ -226,6 +226,7 @@ def generate_relief(request: ReliefRequest, report: Progress) -> dict[str, objec
         report(0.05, "Opening source image")
         with Image.open(request.image_path) as source:
             image = source.convert("RGB")
+        image.thumbnail((1536, 1536), resample=Image.Resampling.LANCZOS)
     else:
         image = _prompt_image(request.prompt.strip(), report)
 
@@ -265,8 +266,13 @@ def generate_relief(request: ReliefRequest, report: Progress) -> dict[str, objec
         # Preserve the actual generated input next to the STL for later
         # reproducibility and manual refinement, without modifying the project.
         reference = destination.with_name(destination.stem + "_source.png")
-        image.save(reference)
-        reference_path = str(reference)
+        try:
+            image.save(reference)
+            reference_path = str(reference)
+        except OSError:
+            # The STL is already valid and should still be auto-imported if
+            # the optional reference image cannot be written.
+            report(0.95, "STL saved; reference image could not be saved")
     report(0.96, "STL ready for import")
     return {
         "path": str(destination),
