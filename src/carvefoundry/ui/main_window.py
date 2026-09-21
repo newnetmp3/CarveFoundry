@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from PySide6.QtCore import QEvent, QSettings, Qt, QThread, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
@@ -46,9 +47,9 @@ from .job_planner import JobPlannerMixin
 from .layers_popup import LAYER_LOCK_ROLE, LayersPanel
 from .planar_operations_actions import PlanarOperationsMixin
 from .project_recovery import ProjectRecoveryMixin
-from .selection_transform_controller import SelectionTransformControllerMixin
 from .ribbon import Ribbon
 from .ribbon_actions import RibbonActionsMixin
+from .selection_transform_controller import SelectionTransformControllerMixin
 from .stock_simulation import StockSimulationMixin
 from .text_editor import TextEditorMixin
 from .two_sided_setup import TwoSidedSetupMixin
