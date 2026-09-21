@@ -62,16 +62,6 @@ class BackgroundJobControllerMixin:
 
         status = QStatusBar()
 
-        # Import has its own streaming worker/progress semantics and remains
-        # separate from the generic one-at-a-time background-job queue.
-        self.import_progress = QProgressBar()
-        self.import_progress.setObjectName("ImportProgress")
-        self.import_progress.setFixedWidth(300)
-        self.import_progress.setTextVisible(True)
-        self.import_progress.setFormat("Import · %p%")
-        self.import_progress.hide()
-        status.addPermanentWidget(self.import_progress)
-
         self.job_progress = QProgressBar()
         self.job_progress.setObjectName("BackgroundJobProgress")
         self.job_progress.setFixedWidth(320)
