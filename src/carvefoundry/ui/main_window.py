@@ -1952,9 +1952,7 @@ class MainWindow(
                 "Use Align, Group, Duplicate, Delete, or the Layers panel "
                 "to operate on the complete selection."
             )
-            self.stock_widget.setVisible(False)
-            self.text_widget.setVisible(False)
-            self.transform_widget.setVisible(False)
+            self._set_inspector_context_sections()
             self.viewport.set_selected_items(
                 selected_indices,
                 primary=primary,
@@ -1970,9 +1968,7 @@ class MainWindow(
                 f"{self._number(stock.thickness_mm)} mm"
             )
             self._sync_stock_controls()
-            self.stock_widget.setVisible(True)
-            self.text_widget.setVisible(False)
-            self.transform_widget.setVisible(False)
+            self._set_inspector_context_sections(stock=True)
             self.viewport.set_selected_item(None)
             self._refresh_inspector_context()
             return
@@ -1990,11 +1986,11 @@ class MainWindow(
         item = self.project.items[item_index]
         self.selection_info.setText(self._mesh_properties_text(item))
         self.viewport.set_selected_item(item_index)
-        self.stock_widget.setVisible(False)
         has_mesh = item.mesh is not None
         is_text = item.kind.lower() == "text" and has_mesh
-        self.text_widget.setVisible(is_text)
-        self.transform_widget.setVisible(has_mesh)
+        self._set_inspector_context_sections(
+            text=is_text, transform=has_mesh,
+        )
         if is_text:
             self._sync_text_controls(item)
         if has_mesh:
