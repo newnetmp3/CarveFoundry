@@ -32,7 +32,7 @@ def test_split_modules_still_compose_one_authoritative_window_and_renderer() -> 
         assert renderer.project is window.project
         assert renderer.camera is window.viewport._renderer.camera
         assert renderer.camera_control_mode
-        assert renderer._gpu_mesh_cache == {}  # No eager GL uploads during refactor.
+        assert renderer._mesh_cache == {}  # No eager GL uploads during refactor.
         assert callable(renderer.pick_item)
         assert callable(renderer.mousePressEvent)
     finally:
