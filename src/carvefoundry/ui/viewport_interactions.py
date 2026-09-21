@@ -553,6 +553,9 @@ class ViewportInteractionMixin:
             return
 
         item = self.project.items[self.selected_item_index]
+        if item.locked:
+            event.accept()
+            return
         tx, ty, tz = item.transform.translation_mm
         self.itemTransformStarted.emit(self.selected_item_index)
         item.transform.translation_mm = (tx + dx, ty + dy, tz + dz)
