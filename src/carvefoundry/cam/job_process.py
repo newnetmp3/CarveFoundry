@@ -45,6 +45,7 @@ from carvefoundry.cam.vector_ops import (
     geometry_silhouette,
     geometry_vcarve,
 )
+from carvefoundry.core.ai_relief import ReliefRequest, generate_relief
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.machine_profiles import MachineProfile
 from carvefoundry.core.project import Project, ProjectItem, Stock
@@ -608,7 +609,9 @@ def main() -> int:
     try:
         with Path(sys.argv[1]).open("rb") as handle:
             request = pickle.load(handle)
-        if isinstance(request, CamRequest):
+        if isinstance(request, ReliefRequest):
+            result = generate_relief(request, lambda value, message: report(value, message, force=True))
+        elif isinstance(request, CamRequest):
             result = run_cam(request)
         elif isinstance(request, GcodeRequest):
             result = run_gcode(request)
