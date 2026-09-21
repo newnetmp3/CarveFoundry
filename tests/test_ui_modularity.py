@@ -3,10 +3,13 @@ from __future__ import annotations
 
 from carvefoundry.ui.import_controller import ImportControllerMixin
 from carvefoundry.ui.main_window import MainWindow
+from carvefoundry.ui.object_lifecycle_actions import ObjectLifecycleActionsMixin
 from carvefoundry.ui.project_file_controller import ProjectFileControllerMixin
 from carvefoundry.ui.project_inspector_controller import ProjectInspectorControllerMixin
+from carvefoundry.ui.selection_controller import SelectionControllerMixin
 from carvefoundry.ui.selection_transform_controller import SelectionTransformControllerMixin
 from carvefoundry.ui.toolpath_state_controller import ToolpathStateControllerMixin
+from carvefoundry.ui.transform_interaction_controller import TransformInteractionControllerMixin
 from carvefoundry.ui.workspace_action_registry import WorkspaceActionRegistryMixin
 from carvefoundry.ui.workspace_commands import WorkspaceCommandsMixin
 from carvefoundry.ui.workspace_menu_builder import WorkspaceMenuBuilderMixin
@@ -14,19 +17,39 @@ from carvefoundry.ui.workspace_surface_builder import WorkspaceSurfaceBuilderMix
 
 
 def test_selection_and_transform_domain_stays_out_of_main_window() -> None:
-    owned = {
+    selection_owned = {
         "_sync_selection_action_state",
         "_select_project_indices",
+        "_viewport_selection_requested",
+        "_update_properties",
+    }
+    transform_owned = {
         "_viewport_transform_changed",
         "_show_viewport_item_context_menu",
         "_transform_control_changed",
-        "_duplicate_selected_item",
         "_apply_selected_transform_components",
     }
-    assert owned <= SelectionTransformControllerMixin.__dict__.keys()
-    assert owned.isdisjoint(MainWindow.__dict__.keys())
+    object_owned = {
+        "_duplicate_selected_item",
+        "_delete_selected_item",
+        "_move_selected_item",
+    }
+    assert selection_owned <= SelectionControllerMixin.__dict__.keys()
+    assert transform_owned <= TransformInteractionControllerMixin.__dict__.keys()
+    assert object_owned <= ObjectLifecycleActionsMixin.__dict__.keys()
+    all_owned = selection_owned | transform_owned | object_owned
+    assert all_owned.isdisjoint(SelectionTransformControllerMixin.__dict__.keys())
+    assert all_owned.isdisjoint(MainWindow.__dict__.keys())
+    assert issubclass(SelectionTransformControllerMixin, SelectionControllerMixin)
+    assert issubclass(
+        SelectionTransformControllerMixin,
+        TransformInteractionControllerMixin,
+    )
+    assert issubclass(
+        SelectionTransformControllerMixin,
+        ObjectLifecycleActionsMixin,
+    )
     assert SelectionTransformControllerMixin in MainWindow.__mro__
-
 
 def test_import_lifecycle_stays_out_of_main_window() -> None:
     owned = {
