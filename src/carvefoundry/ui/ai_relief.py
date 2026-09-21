@@ -95,7 +95,7 @@ def build_ai_relief_dialog(parent, *, width_mm: float, height_mm: float, thickne
     samples = QSpinBox()
     samples.setRange(32, 384)
     samples.setValue(256)
-    samples.setToolTip("Maximum samples on the longer axis. 256 ≈ 130k faces; 384 ≈ 290k.")
+    samples.setToolTip("Maximum samples on the longer axis. 256 ≈ 260k faces; 384 ≈ 590k.")
     invert = QCheckBox("Reverse estimated foreground/background")
     blur = mm_field(0.6, 0, 12)
     blur.setSuffix(" px")
