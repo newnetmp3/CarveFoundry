@@ -140,6 +140,11 @@ def test_welcome_and_simple_cam_use_existing_project_and_cam_widgets() -> None:
         fields["mode"].setCurrentText("Advanced")
         assert fields["mode"].currentText() == "Advanced"
         assert fields["simple_depth"].value() == pytest.approx(2.5)
+        fields["operation"].setCurrentIndex(
+            fields["operation"].findData("waterline")
+        )
+        fields["mode"].setCurrentText("Simple")
+        assert fields["mode"].currentText() == "Advanced"
         dialog.close()
     finally:
         if old_mode is None:
