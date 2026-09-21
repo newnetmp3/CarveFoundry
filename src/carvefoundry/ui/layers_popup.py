@@ -143,8 +143,9 @@ class LayerRowDelegate(QStyledItemDelegate):
             eye, lock = self.icon_rects(option.rect)
             if eye.contains(event.pos()):
                 message = (
-                    "Hide layer" if index.data(Qt.ItemDataRole.CheckStateRole)
-                    == Qt.CheckState.Checked else "Show layer"
+                    "Hide layer" if Qt.CheckState(
+                        index.data(Qt.ItemDataRole.CheckStateRole)
+                    ) == Qt.CheckState.Checked else "Show layer"
                 )
             elif lock.contains(event.pos()):
                 message = (
