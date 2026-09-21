@@ -214,3 +214,44 @@ def test_prompt_mode_saves_stl_and_auto_imports_through_existing_path(tmp_path, 
         assert imported == [([str(generated_stl)], "STL")]
     finally:
         window.close()
+
+
+
+def test_optional_ai_package_declares_torchvision():
+    from pathlib import Path
+    from tomllib import loads
+
+    project_file = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    packages = loads(project_file.read_text(encoding="utf-8"))["project"][
+        "optional-dependencies"
+    ]["ai"]
+    assert any(requirement.startswith("torchvision>=") for requirement in packages)
+
+
+def test_missing_torchvision_has_actionable_local_install_message(monkeypatch):
+    from carvefoundry.core import ai_relief
+
+    def missing(name):
+        assert name == "torchvision"
+        raise ModuleNotFoundError("No module named 'torchvision'", name="torchvision")
+
+    monkeypatch.setattr(ai_relief, "import_module", missing)
+    with pytest.raises(RuntimeError, match="pip install -e") as error:
+        ai_relief._require_torchvision()
+    assert "CarveFoundry venv" in str(error.value)
+    assert "Restart CarveFoundry" in str(error.value)
+
+
+def test_incompatible_torchvision_reports_matching_pytorch_builds(monkeypatch):
+    from carvefoundry.core import ai_relief
+
+    def incompatible(name):
+        assert name == "torchvision"
+        raise RuntimeError("operator torchvision::nms does not exist")
+
+    monkeypatch.setattr(ai_relief, "import_module", incompatible)
+    with pytest.raises(RuntimeError, match="compatible torch and torchvision") as error:
+        ai_relief._require_torchvision()
+    assert "CUDA" in str(error.value)
+    assert "ROCm" in str(error.value)
+    assert "torchvision::nms" in str(error.value)

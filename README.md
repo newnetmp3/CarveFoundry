@@ -35,12 +35,23 @@ environment:
 
 ```bash
 cd /mnt/moar/Downloads/git/CarveFoundry
+git pull --ff-only
 source .venv/bin/activate
 python -m pip install -e '.[ai]'
+python -c "import torch, torchvision; print('torch:', torch.__version__, 'torchvision:', torchvision.__version__)"
 ```
 
-Install a compatible PyTorch build for your CPU/CUDA/ROCm hardware before
-running; the optional dependency alone does not guarantee GPU support.
+The AI extra installs **torchvision** as well as torch, Pillow, Transformers
+and Diffusers. A missing Torchvision installation previously stopped
+`AutoImageProcessor` before it could estimate depth. Install these in the
+**same virtual environment** used to start CarveFoundry, then restart the app.
+If the import check reports an error such as
+`operator torchvision::nms does not exist`, torch and torchvision likely
+have incompatible binary builds. Reinstall **matching** torch/torchvision
+wheels for your CPU/CUDA/ROCm hardware, following the official PyTorch
+installation selector at https://pytorch.org/get-started/locally/; do not
+mix CPU, CUDA, ROCm, or system/pip builds. The optional dependency alone does
+not guarantee GPU support.
 **Depth Anything V2 Small** estimates relative image depth. For prompt mode,
 **SD-Turbo** generates a reference image before depth estimation. Hugging Face
 downloads their weights the first time you use each model, into your local
