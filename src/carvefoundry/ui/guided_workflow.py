@@ -55,6 +55,12 @@ class GuidedWorkflowMixin:
         machine_ready = (
             machine.work_x_mm > 0 and machine.work_y_mm > 0
             and machine.work_z_mm > 0
+            and not self._settings.value(
+                "onboarding/no_machine", False, type=bool
+            )
+            and self._settings.value(
+                "onboarding/verified_machine", False, type=bool
+            )
         )
         visible = sum(
             item.visible and item.mesh is not None
@@ -80,6 +86,10 @@ class GuidedWorkflowMixin:
                 (
                     f"{machine.name}: travel {machine.work_x_mm:g} × "
                     f"{machine.work_y_mm:g} × {machine.work_z_mm:g} mm"
+                    + (
+                        " · confirm these against YOUR machine"
+                        if not machine_ready else " · confirmed by operator"
+                    )
                 ),
                 machine_ready, True,
             ),
@@ -191,7 +201,7 @@ class GuidedWorkflowMixin:
         rows: list[tuple[QLabel, QLabel, QPushButton]] = []
         commands = (
             ("Edit Stock", self._focus_stock_section),
-            ("Machine Profile", self._select_machine_profile),
+            ("Machine Setup", self._show_beginner_machine_setup),
             ("Clamps / Fences", self._fixture_editor),
             ("Design / Layers", self._show_layers_popup),
             ("Generate Toolpaths", self._calculate_toolpath),
@@ -225,6 +235,8 @@ class GuidedWorkflowMixin:
             ("Preview Paths", self._preview_toolpaths),
             ("Rest Cleanup", self._start_guided_rest_cleanup),
             ("Material Removal", self._simulate_stock_removal),
+            ("Check Carve Quality", self._show_carving_quality_inspector),
+            ("Job Setup Sheet", self._export_setup_sheet),
         ):
             button = QPushButton(text, body)
             button.clicked.connect(
