@@ -22,8 +22,10 @@ from carvefoundry.ui.text_edit_behavior import TextEditBehaviorMixin
 from carvefoundry.ui.text_editor import TextEditorMixin
 from carvefoundry.ui.text_font_catalog import TextFontCatalogMixin
 from carvefoundry.ui.view_simulation_actions import ViewSimulationActionsMixin
+from carvefoundry.ui.viewport import MeshViewport as PublicMeshViewport
 from carvefoundry.ui.viewport_geometry import ViewportGeometryMixin
 from carvefoundry.ui.viewport_interactions import ViewportInteractionMixin
+from carvefoundry.ui.viewport_widget import MeshViewport
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -42,6 +44,8 @@ def test_split_modules_still_compose_one_authoritative_window_and_renderer() -> 
     assert "_export_tiled_gcode" not in RibbonActionsMixin.__dict__
     assert issubclass(_NativeOpenGLViewport, ViewportGeometryMixin)
     assert issubclass(_NativeOpenGLViewport, ViewportInteractionMixin)
+    assert PublicMeshViewport is MeshViewport
+    assert "_RulerBand" not in _NativeOpenGLViewport.__dict__
     assert issubclass(TextEditorMixin, TextFontCatalogMixin)
     assert issubclass(TextEditorMixin, TextControlBuilderMixin)
     assert issubclass(TextEditorMixin, TextEditBehaviorMixin)
