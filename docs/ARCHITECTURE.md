@@ -6,38 +6,57 @@ small Rust/PyO3 geometry acceleration library. The UI is Linux/Wayland first.
 ## UI composition
 
 `ui/project_window.py` is the application window used at startup. It extends
-`ui/main_window.py` with project dirty-state management, background save/open,
-Undo/Redo and guarded New/Open/Close flows. Keep history ownership here.
+`ui/main_window.py` with dirty-state management, Undo/Redo and guarded
+New/Open/Close flows. Keep history ownership there.
 
-`ui/main_window.py` owns application construction, selection/Inspector state,
-mesh transform interactions, import/export orchestration and the reusable
-background-job lifecycle. It **composes** the following functional mixins:
+`ui/main_window.py` is now intentionally the **composition shell**: it creates
+the top-level workspace/widgets, connects major signals, installs shortcuts and
+owns shutdown. Feature behavior belongs in narrower controllers/mixins.
 
 | Module | Owner / purpose |
 | --- | --- |
-| `ui/workspace_commands.py` | Shared QAction registry, visible top menus, compact left tool rail and the hidden legacy ribbon host. |
-| `ui/two_sided_setup.py` / `core/two_sided.py` | Partition front/back models, bake physical reflection in XY, save and reload-verify separate CF3D projects with operator checklist. |
-| `ui/job_planner.py` / `cam/job_plan.py` | Session-owned generated motion sequence and cutter-stage grouping, reordering, validation and runtime estimates. |
-| `ui/stock_simulation.py` / `cam/stock_simulation.py` | Off-thread sampled 2.5D remaining-stock simulation, cutter-profile sweep, per-stage estimates and target-surface display. |
-| `cam/gcode_verify.py` / `cam/virtual_machining.py` | Fail-closed independent NC modal decoding, posted-motion/fixture verification, and verified G-code-driven sampled stock simulation. |
-| `ui/project_recovery.py` / `core/recovery.py` | Separate atomic CF3D idle checkpoints with checksum verification, startup restore and cleanup on explicit Save/Discard. |
+| `ui/background_job_controller.py` / `ui/background_jobs.py` | One shared long-running-job lifecycle, cancellation and the single generic status-bar progress indicator; worker/process primitives stay separate from widgets. |
+| `ui/import_controller.py` / `ui/import_worker.py` | File selection, import thread/progress lifecycle and atomic prepared-item commit. Import progress is intentionally separate from generic CAM/background progress. |
+| `ui/project_file_controller.py` | Base New/Open/Save/Save As/project replacement and normal verified G-code export. `project_window.py` may override history/confirmation behavior. |
+| `ui/project_inspector_controller.py` | Layers/Object selector presentation, rename/visibility/lock state, stock controls and Inspector visibility. |
+| `ui/selection_transform_controller.py` | Compatibility facade only. Selection lives in `selection_controller.py`; transforms/context/snapping/framing live in `transform_interaction_controller.py`; duplicate/delete/reorder live in `object_lifecycle_actions.py`. |
+| `ui/toolpath_state_controller.py` | CAM ready/stale state, output-action enablement, viewport toolpath visibility and invalidation when design/CAM inputs change. |
+| `ui/workspace_commands.py` | Compatibility facade only. `workspace_action_registry.py` owns canonical QActions, `workspace_menu_builder.py` owns desktop menus, and `workspace_surface_builder.py` owns the hidden ribbon host plus visible tool rail. |
+| `ui/ribbon_actions.py` | Compatibility facade only. State, project-edit/arrange, view simulation, Smart Values and job utilities live in `ribbon_action_state.py`, `project_edit_actions.py`, `view_simulation_actions.py`, `smart_value_actions.py` and `job_utility_actions.py`. |
+| `ui/ribbon_design_tools.py` | Paint-style drawing/tool-mode behavior and image trace entry points. |
+| `ui/ribbon_cam_actions.py` / `ui/cam_generation_dialog.py` | CAM option state, operation submission, preview and the single CAM configuration/review dialog. The dialog is intentionally cohesive even though its layout is substantial. |
+| `ui/ribbon_machine_actions.py` | Cutter library, machine profiles, GRBL/post settings and machine-control commands. |
+| `ui/text_editor.py` | Compatibility facade only. Installed-font discovery/grouping lives in `text_font_catalog.py`, Inspector construction in `text_control_builder.py`, and live typography/mesh updates in `text_edit_behavior.py`. |
+| `ui/native_viewport.py` / `ui/viewport_gpu.py` | Native QOpenGLWindow renderer, scene overlays and GPU/cache operations. |
+| `ui/viewport_widget.py` / `ui/viewport.py` | Public QWidget shell around the native renderer, including rulers, projection/view controls and signal forwarding. |
+| `ui/viewport_geometry.py` / `ui/viewport_interactions.py` | Geometry/picking math and user interaction behavior mixed into the native renderer. |
+| `ui/inspector_controls.py` / `ui/layout_widgets.py` | Reusable stock/transform control construction and compact Inspector/CAM layout widgets. |
+| `ui/two_sided_setup.py` / `core/two_sided.py` | Partition front/back models, bake physical reflection in XY, and save/reload-verify separate CF3D projects. |
+| `ui/job_planner.py` / `cam/job_plan.py` | Session-owned generated motion sequence, cutter-stage grouping/reordering, validation and runtime estimates. |
+| `ui/stock_simulation.py` / `cam/stock_simulation.py` | Off-thread sampled 2.5D remaining-stock simulation, cutter-profile sweep and result display. |
+| `cam/gcode_verify.py` / `cam/virtual_machining.py` | Fail-closed independent NC decoding, posted-motion/fixture verification and verified-G-code-driven stock simulation. |
+| `ui/project_recovery.py` / `core/recovery.py` | Atomic CF3D idle checkpoints, checksum verification and restore/cleanup. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
-| `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves; immutable knot data, fresh mesh regeneration, history and CF3D persistence. |
-| `ui/guided_workflow.py` | Modeless guided design-to-CAM workflow; derived live statuses and preflight fingerprint, not a second independent CAM state. |
-| `ui/inspector_controls.py` / `ui/layout_widgets.py` | Stock and model transform control construction, persistent compact Inspector accordions and CAM section navigation; avoid putting form construction back in the main window. |
-| `ui/cam_dialog_help.py` | Pure text catalog for one shared contextual CAM explanation per setting. |
-| `ui/text_editor.py` | Editable text Inspector, installed-font grouping, font-face validation, typography-to-mesh updates. |
-| `ui/interface_settings.py` | Load/save/migrate persistent layout and viewport preferences, display toggles, navigation defaults. |
-| `ui/planar_operations_actions.py` | Background task orchestration and commit of selected vector-outline Boolean/Offset results. |
-| `ui/ribbon_actions.py` | Drawing, CAM control state, cutter/machine commands, Smart Values, fixtures and export actions; it inherits `CamGenerationDialogMixin`. |
-| `ui/cam_generation_dialog.py` | CAM form layout, fixed context strip, section rail and live validation/readiness controls; reuse pure help catalog and existing CAM worker. |
-| `ui/native_viewport.py` / `ui/viewport_gpu.py` | Native OpenGL interaction, scene overlays and GPU data/cache operations. |
+| `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves. |
+| `ui/guided_workflow.py` | Modeless design-to-CAM workflow with derived live statuses and preflight fingerprint. |
+| `ui/interface_settings.py` | Persistent layout/viewport preferences and migration. |
+| `ui/planar_operations_actions.py` | Background orchestration and commit of planar Boolean/Offset results. |
+| `ui/cam_dialog_help.py` | Pure contextual CAM help text catalog. |
 
 All mixin methods operate on the **same MainWindow instance** and existing Qt
-widgets. UI actions are created only once in WorkspaceCommandsMixin and are
-bound to their real owning handlers; avoid duplicate buttons or parallel state.
-Put new behavior in the narrowest relevant module, not automatically in
-`main_window.py` or `ribbon_actions.py`.
+widgets. UI actions are created once in the action registry and reused by menus,
+the hidden compatibility ribbon and the tool rail; do not create parallel state
+for the same command.
+
+Prefer responsibility boundaries over arbitrary file-size targets. A large file
+is acceptable when it is one cohesive engine (for example the native OpenGL
+renderer or CAM generation dialog). Split files when they accumulate unrelated
+state/lifecycles or when independent tests/owners become difficult.
+
+Architecture regressions in `tests/test_ui_modularity.py` and
+`tests/test_ui_refactor.py` intentionally pin important facade/ownership
+boundaries. Put new behavior in the narrowest relevant module instead of
+growing `main_window.py`, a facade module, or a generic catch-all controller.
 
 ## Model, motion and file formats
 
