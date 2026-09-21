@@ -67,9 +67,6 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
         self._measurement = None
         self._cam_selector_widgets: dict[str, list[QComboBox]] = {}
         self._cam_detail_widgets: list[object] = []
-        self._toolpath_dialog_progress = None
-        self._toolpath_progress_last_value = -1
-        self._toolpath_progress_last_text = ""
 
         def saved_choice(
             key: str,
