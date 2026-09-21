@@ -22,6 +22,7 @@ class ProjectItemSnapshot:
     source_path: Path | None
     kind: str
     visible: bool
+    locked: bool
     mesh: MeshAsset | None
     translation_mm: tuple[float, float, float]
     rotation_deg: tuple[float, float, float]
@@ -51,6 +52,7 @@ def _snapshot_item(item: ProjectItem) -> ProjectItemSnapshot:
         source_path=item.source_path,
         kind=item.kind,
         visible=item.visible,
+        locked=item.locked,
         mesh=item.mesh,
         translation_mm=tuple(item.transform.translation_mm),
         rotation_deg=tuple(item.transform.rotation_deg),
@@ -87,6 +89,7 @@ def _restore_item(snapshot: ProjectItemSnapshot) -> ProjectItem:
         source_path=snapshot.source_path,
         kind=snapshot.kind,
         visible=snapshot.visible,
+        locked=snapshot.locked,
         mesh=snapshot.mesh,
         transform=Transform3D(
             translation_mm=snapshot.translation_mm,
