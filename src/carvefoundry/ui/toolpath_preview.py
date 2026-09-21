@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -193,6 +194,15 @@ class ToolpathPreviewWindow(QMainWindow):
         self._code_toggle.clicked.connect(self._toggle_code_panel)
         top_layout.addWidget(self._code_toggle)
 
+        if callable(getattr(self.parent(), "_simulate_stock_removal", None)):
+            verified_button = QPushButton("Virtual machining")
+            verified_button.setToolTip(
+                "Verify the actual posted G-code against stock, fixtures and "
+                "the original paths, then simulate remaining material."
+            )
+            verified_button.clicked.connect(self._open_virtual_machining)
+            top_layout.addWidget(verified_button)
+
         for label, callback in (
             ("Fit", self.viewport.fit_view),
             ("Top", lambda: self.viewport.set_standard_view("Top")),
@@ -214,6 +224,24 @@ class ToolpathPreviewWindow(QMainWindow):
         self._splitter.setSizes([390, 1030])
         self._splitter.setStretchFactor(1, 1)
         root_layout.addWidget(self._splitter, 1)
+
+    def _open_virtual_machining(self) -> None:
+        """Launch the real project's verified-NC material-removal dialog."""
+        host = self.parent()
+        action = getattr(host, "_simulate_stock_removal", None)
+        if not callable(action):
+            return
+        current = getattr(getattr(host, "project", None), "toolpaths", ())
+        if len(current) != len(self._toolpaths) or any(
+            a is not b for a, b in zip(current, self._toolpaths, strict=True)
+        ):
+            QMessageBox.information(
+                self, "Toolpath preview is outdated",
+                "Toolpaths changed after this preview opened. Close it and "
+                "reopen Toolpath Preview before simulating the current job.",
+            )
+            return
+        action()
 
     def _panel_header(self, text: str) -> QLabel:
         label = QLabel(text)
