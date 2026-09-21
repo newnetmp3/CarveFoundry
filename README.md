@@ -358,6 +358,15 @@ The normal default is auto, which uses Rust when the compiled extension is avail
 For module ownership and extension guidelines, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## Native Wayland hardware acceptance
+
+Automated CI tests run offscreen and cannot prove physical KDE Plasma/Wayland
+pointer delivery, input focus, real OpenGL rendering or GPU performance. The
+hardware acceptance matrix and native-input recorder are in
+[docs/WAYLAND_QA.md](docs/WAYLAND_QA.md). Run it locally after viewport,
+gizmo, toolbar and Inspector changes; do not report those behaviors as
+hardware-tested based on headless CI alone.
+
 ## Development
 
 Requires Python 3.12 or newer and a Rust toolchain new enough for PyO3 0.29 (Rust 1.83 or newer).

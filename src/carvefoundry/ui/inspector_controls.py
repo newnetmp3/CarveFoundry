@@ -25,6 +25,15 @@ from .layout_widgets import InspectorSection
 
 
 class InspectorControlsMixin:
+    def _set_inspector_context_sections(
+        self, *, stock: bool = False, text: bool = False,
+        transform: bool = False,
+    ) -> None:
+        """Apply all contextual Inspector sections as one coherent state."""
+        self.stock_widget.setVisible(stock)
+        self.text_widget.setVisible(text)
+        self.transform_widget.setVisible(transform)
+
     @staticmethod
     def _configured_spin(
         *,
