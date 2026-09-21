@@ -838,6 +838,9 @@ class MainWindow(
 
         item = self._selected_item()
         indices = self._selected_design_indices()
+        editable_selection = bool(indices) and all(
+            not self.project.items[index].locked for index in indices
+        )
         has_selection = bool(indices)
         selection_count = len(indices)
         has_mesh = bool(
@@ -866,7 +869,7 @@ class MainWindow(
             )
 
         for button in self._model_selection_buttons:
-            button.setEnabled(has_mesh)
+            button.setEnabled(has_mesh and editable_selection)
 
         has_bakeable_mesh = any(
             0 <= index < len(self.project.items)
@@ -886,18 +889,19 @@ class MainWindow(
                 action.setEnabled(enabled)
 
         enabled_by_action = {
-            "cut": has_selection,
+            "cut": editable_selection,
             "copy": has_selection,
             "paste": bool(self._clipboard_items),
-            "delete": has_selection,
-            "align": has_selection,
-            "center": has_selection,
-            "group": selection_count >= 2,
-            "ungroup": has_grouped,
+            "delete": editable_selection,
+            "align": editable_selection,
+            "center": editable_selection,
+            "group": editable_selection and selection_count >= 2,
+            "ungroup": editable_selection and has_grouped,
             "duplicate": has_selection,
-            "move_up": current_index is not None and current_index > 0,
+            "move_up": editable_selection and current_index is not None
+            and current_index > 0,
             "move_down": (
-                current_index is not None
+                editable_selection and current_index is not None
                 and current_index < len(self.project.items) - 1
             ),
         }
@@ -924,7 +928,7 @@ class MainWindow(
             self._ui_actions[key].setEnabled(enabled)
 
         if hasattr(self, "tool_rail"):
-            self.tool_rail.set_tool_enabled("arrange", has_selection)
+            self.tool_rail.set_tool_enabled("arrange", editable_selection)
             self.tool_rail.set_tool_enabled("cam", True)
 
     def _set_history_action_state(
@@ -1228,8 +1232,11 @@ class MainWindow(
                     )
                     + "\nDouble-click or press F2 to rename."
                 )
+                flags = list_item.flags()
                 list_item.setFlags(
-                    list_item.flags() | Qt.ItemFlag.ItemIsEditable
+                    flags & ~Qt.ItemFlag.ItemIsEditable
+                    if project_item.locked
+                    else flags | Qt.ItemFlag.ItemIsEditable
                 )
                 self.project_list.addItem(list_item)
                 self.object_selector.addItem(
@@ -1281,11 +1288,38 @@ class MainWindow(
             return
         item = self.project.items[index]
         item.locked = not item.locked
+        list_item = self.project_list.item(index + 1)
+        if list_item is not None:
+            flags = list_item.flags()
+            list_item.setFlags(
+                flags & ~Qt.ItemFlag.ItemIsEditable
+                if item.locked else flags | Qt.ItemFlag.ItemIsEditable
+            )
         self.project_list.viewport().update()
         self._update_properties(self.project_list.currentRow())
         self.statusBar().showMessage(
             f"{item.name} {'locked' if item.locked else 'unlocked'}", 2500
         )
+
+    def _can_edit_layers(self, indices: list[int] | None = None) -> bool:
+        """Prevent mixed locked/unlocked selections from mutating partially."""
+        selected = (
+            self._selected_design_indices(expand_groups=True)
+            if indices is None else indices
+        )
+        locked = [
+            self.project.items[index].name
+            for index in selected
+            if 0 <= index < len(self.project.items)
+            and self.project.items[index].locked
+        ]
+        if locked:
+            self.statusBar().showMessage(
+                "Unlock layer(s) before editing: " + ", ".join(locked[:3]),
+                4500,
+            )
+            return False
+        return True
 
     def _active_cutter_changed(self, _index: int) -> None:
         cutter = self.tool_combo.currentData()
@@ -2021,6 +2055,8 @@ class MainWindow(
         self._set_inspector_context_sections(
             text=is_text, transform=has_mesh,
         )
+        self.text_widget.setEnabled(not item.locked)
+        self.transform_widget.setEnabled(not item.locked)
         if is_text:
             self._sync_text_controls(item)
         if has_mesh:
@@ -2066,7 +2102,7 @@ class MainWindow(
         if self._updating_transform_controls:
             return
         item = self._selected_item()
-        if item is None or item.mesh is None:
+        if item is None or item.mesh is None or item.locked:
             return
         units = self.source_units_combo.currentData()
         if not isinstance(units, ModelUnits) or units is item.source_units:
@@ -2092,7 +2128,7 @@ class MainWindow(
             return
 
         item = self._selected_item()
-        if item is None or item.mesh is None:
+        if item is None or item.mesh is None or item.locked:
             return
 
         sender = self.sender()
@@ -2273,6 +2309,8 @@ class MainWindow(
         if not indices:
             self.statusBar().showMessage("Select one or more design objects", 3000)
             return
+        if not self._can_edit_layers(indices):
+            return
 
         removed_names = [
             self.project.items[index].name
@@ -2296,6 +2334,8 @@ class MainWindow(
         index = self._selected_item_index()
         if index is None:
             self.statusBar().showMessage("Select a design item to reorder", 3000)
+            return
+        if not self._can_edit_layers([index]):
             return
         new_index = self.project.move_item(index, offset)
         self._refresh_project_list(new_index + 1)
