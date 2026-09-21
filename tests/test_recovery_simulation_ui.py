@@ -4,7 +4,7 @@ from __future__ import annotations
 from time import monotonic, sleep
 from uuid import uuid4
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.primitives import rectangle_mesh
@@ -132,4 +132,31 @@ def test_recovery_toggle_stops_auto_timer_but_allows_manual_snapshot(
     finally:
         window._settings.setValue("recovery/enabled", original)
         window._settings.sync()
+        window.close()
+
+
+
+def test_preview_opens_virtual_machining_for_exact_current_paths(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("CARVEFOUNDRY_RECOVERY_DIR", str(tmp_path / "recovery"))
+    window = MainWindow()
+    try:
+        window._set_project(_scene(), project_path=None)
+        called = []
+        monkeypatch.setattr(
+            window, "_simulate_stock_removal", lambda: called.append("opened"),
+        )
+        window._preview_toolpaths()
+        preview = window._toolpath_preview_window
+        assert preview is not None
+        buttons = [
+            button for button in preview.findChildren(QPushButton)
+            if button.text() == "Virtual machining"
+        ]
+        assert len(buttons) == 1
+        buttons[0].click()
+        assert called == ["opened"]
+        preview.close()
+    finally:
         window.close()
