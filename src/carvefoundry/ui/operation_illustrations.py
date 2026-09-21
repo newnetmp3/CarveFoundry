@@ -5,6 +5,8 @@ stock-removal simulation are authoritative.
 """
 from __future__ import annotations
 
+from itertools import pairwise
+
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
@@ -108,7 +110,7 @@ class CamOperationIllustration(QWidget):
                 ))
                 for i in range(25)
             ]
-            for a, b in zip(path, path[1:]):
+            for a, b in pairwise(path):
                 painter.drawLine(int(a[0]), int(a[1]), int(b[0]), int(b[1]))
         else:
             painter.setPen(QPen(QColor("#263b4d"), 4))
