@@ -10,6 +10,7 @@ from carvefoundry.ui.contextual_tool_state import ToolOptionsState
 from carvefoundry.ui.job_utility_actions import JobUtilityActionsMixin
 from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.native_viewport import _NativeOpenGLViewport
+from carvefoundry.ui.viewport import MeshViewport as PublicMeshViewport
 from carvefoundry.ui.project_edit_actions import ProjectEditActionsMixin
 from carvefoundry.ui.ribbon_action_state import RibbonActionStateMixin
 from carvefoundry.ui.ribbon_actions import RibbonActionsMixin
@@ -17,8 +18,11 @@ from carvefoundry.ui.ribbon_cam_actions import RibbonCamActionsMixin
 from carvefoundry.ui.ribbon_design_tools import RibbonDesignToolsMixin
 from carvefoundry.ui.ribbon_machine_actions import RibbonMachineActionsMixin
 from carvefoundry.ui.smart_value_actions import SmartValueActionsMixin
+from carvefoundry.ui.text_control_builder import TextControlBuilderMixin
+from carvefoundry.ui.text_edit_behavior import TextEditBehaviorMixin
+from carvefoundry.ui.text_editor import TextEditorMixin
+from carvefoundry.ui.text_font_catalog import TextFontCatalogMixin
 from carvefoundry.ui.view_simulation_actions import ViewSimulationActionsMixin
-from carvefoundry.ui.viewport import MeshViewport as PublicMeshViewport
 from carvefoundry.ui.viewport_geometry import ViewportGeometryMixin
 from carvefoundry.ui.viewport_interactions import ViewportInteractionMixin
 from carvefoundry.ui.viewport_widget import MeshViewport
@@ -42,6 +46,11 @@ def test_split_modules_still_compose_one_authoritative_window_and_renderer() -> 
     assert issubclass(_NativeOpenGLViewport, ViewportInteractionMixin)
     assert PublicMeshViewport is MeshViewport
     assert "_RulerBand" not in _NativeOpenGLViewport.__dict__
+    assert issubclass(TextEditorMixin, TextFontCatalogMixin)
+    assert issubclass(TextEditorMixin, TextControlBuilderMixin)
+    assert issubclass(TextEditorMixin, TextEditBehaviorMixin)
+    assert "_build_text_controls" not in TextEditorMixin.__dict__
+    assert "_apply_text_properties_from_controls" not in TextEditorMixin.__dict__
 
     window = MainWindow()
     try:
