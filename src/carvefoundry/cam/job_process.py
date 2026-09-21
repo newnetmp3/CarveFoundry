@@ -401,7 +401,7 @@ def _write_tool_stages(
         for number, stage in enumerate(stages, start=1):
             if len(stages) == 1:
                 destination = normalize_gcode_path(output)
-        else:
+            else:
                 slug = re.sub(
                     r"[^a-z0-9]+", "_", stage[0].cutter.name.lower()
                 ).strip("_")[:36] or "cutter"
@@ -435,7 +435,9 @@ def _write_tool_stages(
                 stage, settings, progress=stage_progress,
             )
             if stock is None or machine_profile is None:
-                raise ValueError("NC export requires stock and machine profile for verification.")
+                raise ValueError(
+                    "NC export requires stock and machine profile for verification."
+                )
             verification = verify_grbl_export(
                 program, stage, stock, machine_profile,
                 fixtures, settings, local_shift_mm=local_shift_mm,
@@ -459,6 +461,7 @@ def _write_tool_stages(
         for temporary, _ in pending:
             temporary.unlink(missing_ok=True)
         raise
+
 
 def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     toolpaths = request.toolpaths
