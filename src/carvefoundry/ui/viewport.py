@@ -5,6 +5,6 @@ QOpenGLWidget. This avoids the extra QWidget/FBO composition path that produced
 zoom-only frame ghosting under KDE Plasma/Wayland.
 """
 
-from .native_viewport import MeshViewport
+from .viewport_widget import MeshViewport
 
 __all__ = ["MeshViewport"]
