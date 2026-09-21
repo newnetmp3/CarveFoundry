@@ -174,3 +174,60 @@ def test_exported_nc_verifies_and_can_be_redecoded(tmp_path: Path):
     ))
     assert result["files"] == [str(dest)]
     assert verify(dest.read_text()).safe_to_export
+
+
+def test_virtual_machining_uses_decoded_nc_and_preserves_model():
+    from carvefoundry.cam.stock_simulation import simulate_stock_removal
+    from carvefoundry.cam.virtual_machining import simulate_posted_stock_removal
+    from carvefoundry.core.project import Project
+
+    stock, machine = context()
+    scene = Project(name="Synthetic engraving", stock=stock, toolpaths=[stage()])
+    raw = simulate_stock_removal(scene, spacing_mm=1, compare_model=False)
+    actual = simulate_posted_stock_removal(
+        scene, machine, spacing_mm=1, compare_model=False,
+    )
+    assert actual.removed_volume_mm3 == pytest.approx(
+        raw.removed_volume_mm3, abs=1e-4,
+    )
+    assert len(actual.stages) == 1
+    assert "NC stage" in actual.stages[0].name
+    assert scene.toolpaths[0].name == "Detail"
+
+
+def test_virtual_machining_rejects_fixtures_before_simulating():
+    from carvefoundry.cam.virtual_machining import simulate_posted_stock_removal
+    from carvefoundry.core.project import Project
+
+    stock, machine = context()
+    fixture = Fixture("Blocking fence", 17, 7, 19, 9, 4, 0)
+    scene = Project(
+        name="Fixture test", stock=stock, toolpaths=[stage()],
+        fixtures=[fixture],
+    )
+    with pytest.raises(ValueError, match="Posted NC stage"):
+        simulate_posted_stock_removal(
+            scene, machine, spacing_mm=1, compare_model=False,
+        )
+
+
+def test_multiple_cutter_stages_are_verified_separately():
+    from carvefoundry.cam.virtual_machining import simulate_posted_stock_removal
+    from carvefoundry.core.project import Project
+
+    stock, machine = context()
+    rough = stage()
+    ball = stage(cutter=Cutter("ball", ToolType.BALL_NOSE, 2))
+    ball.name = "Finish"
+    ball.moves = [
+        ToolpathMove(12, 12, 6, MoveKind.RAPID),
+        ToolpathMove(12, 12, -1, MoveKind.PLUNGE, 120),
+        ToolpathMove(20, 12, -1, MoveKind.CUT, 400),
+    ]
+    scene = Project(stock=stock, toolpaths=[rough, ball])
+    result = simulate_posted_stock_removal(
+        scene, machine, spacing_mm=1, compare_model=False,
+    )
+    assert len(result.stages) == 2
+    assert result.stages[0].removed_volume_mm3 > 0
+    assert result.cut_sample_count > 0
