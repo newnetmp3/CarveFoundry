@@ -27,9 +27,10 @@ It must not be described as a guarantee of physical safety.
 1. **Live, managed CNC sender:** GRBL planner/serial response tracking, real
    machine position, feed overrides, pause, stop, recovery and alarm handling;
    design for interrupted transfers and controller disconnection.
-2. **Exact volumetric simulation beyond the new sampled stock preview:**
-   A 2.5D top-down stock-removal viewer now models actual cutter radial
-   profiles, moves, approximate removed volume and top-surface deviation.
+2. **Exact volumetric simulation beyond the sampled, verified-NC stock preview:**
+   The top-down 2.5D viewer now decodes and preflights exported GRBL motion,
+   models actual cutter radial profiles, approximate removed volume and
+   top-surface deviation. It does not validate arbitrary unsupported NC.
    Accurate undercuts, continuous CSG, holder collision and live machining
    verification remain unimplemented.
 3. **Robust job recovery:** immutable job manifests, machine state/work-zero
