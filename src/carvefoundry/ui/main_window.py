@@ -315,14 +315,18 @@ class MainWindow(
         splitter.setChildrenCollapsible(False)
         self.workspace_splitter = splitter
 
-        # Keep the existing QListWidget-based project selection model, but move
-        # it out of the permanent layout.  It now lives in an on-demand popup.
+        # Keep the existing QListWidget selection model. Layers now remains
+        # docked above Inspector rather than living in a temporary popup.
         self.layers_popup = LayersPopup(
             self,
             move_up=lambda: self._move_selected_item(-1),
             move_down=lambda: self._move_selected_item(1),
             duplicate=self._duplicate_selected_item,
             delete=self._delete_selected_item,
+            visible_at=lambda index: self.project.items[index].visible,
+            locked_at=lambda index: self.project.items[index].locked,
+            toggle_visibility=self._toggle_layer_visibility,
+            toggle_lock=self._toggle_layer_lock,
         )
         self.project_list = self.layers_popup.list_widget
 
@@ -359,7 +363,7 @@ class MainWindow(
 
         self.layers_button = QPushButton("Layers")
         self.layers_button.setToolTip(
-            "Open the object/layer manager for visibility, multi-select, and ordering."
+            "Expand and focus the docked Layers section above Inspector."
         )
         self.layers_button.clicked.connect(self._show_layers_popup)
         canvas_bar_layout.addWidget(self.layers_button)
@@ -737,8 +741,17 @@ class MainWindow(
         self.project_list.itemChanged.connect(self._project_item_changed)
         self._refresh_project_list(0)
 
+        self.inspector_sidebar = QWidget()
+        self.inspector_sidebar.setObjectName("InspectorSidebar")
+        self.inspector_sidebar.setMinimumWidth(260)
+        sidebar_layout = QVBoxLayout(self.inspector_sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(4)
+        sidebar_layout.addWidget(self.layers_popup)
+        sidebar_layout.addWidget(self.properties_panel, 1)
+
         splitter.addWidget(canvas)
-        splitter.addWidget(self.properties_panel)
+        splitter.addWidget(self.inspector_sidebar)
         splitter.setSizes(self._default_workspace_splitter_sizes(1500))
         splitter.setStretchFactor(0, 1)
         layout.addWidget(splitter, 1)
@@ -1216,14 +1229,7 @@ class MainWindow(
                     + "\nDouble-click or press F2 to rename."
                 )
                 list_item.setFlags(
-                    list_item.flags()
-                    | Qt.ItemFlag.ItemIsUserCheckable
-                    | Qt.ItemFlag.ItemIsEditable
-                )
-                list_item.setCheckState(
-                    Qt.CheckState.Checked
-                    if project_item.visible
-                    else Qt.CheckState.Unchecked
+                    list_item.flags() | Qt.ItemFlag.ItemIsEditable
                 )
                 self.project_list.addItem(list_item)
                 self.object_selector.addItem(
@@ -1256,7 +1262,30 @@ class MainWindow(
     def _show_layers_popup(self) -> None:
         if not hasattr(self, "layers_popup"):
             return
+        self._ensure_inspector_visible()
         self.layers_popup.show_below(self.layers_button)
+
+    def _toggle_layer_visibility(self, index: int) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        item = self.project.items[index]
+        item.visible = not item.visible
+        self.project_list.viewport().update()
+        self.viewport.update()
+        self.statusBar().showMessage(
+            f"{item.name} {'visible' if item.visible else 'hidden'}", 2500
+        )
+
+    def _toggle_layer_lock(self, index: int) -> None:
+        if not 0 <= index < len(self.project.items):
+            return
+        item = self.project.items[index]
+        item.locked = not item.locked
+        self.project_list.viewport().update()
+        self._update_properties(self.project_list.currentRow())
+        self.statusBar().showMessage(
+            f"{item.name} {'locked' if item.locked else 'unlocked'}", 2500
+        )
 
     def _active_cutter_changed(self, _index: int) -> None:
         cutter = self.tool_combo.currentData()
@@ -1274,6 +1303,7 @@ class MainWindow(
             self._update_text_cnc_hint()
 
     def _ensure_inspector_visible(self) -> None:
+        self.inspector_sidebar.show()
         self.properties_panel.show()
         self.inspector_button.setChecked(True)
         if hasattr(self, "tool_rail"):
@@ -1310,11 +1340,18 @@ class MainWindow(
             return
 
         project_item = self.project.items[index]
-        visible = list_item.checkState() == Qt.CheckState.Checked
-        visibility_changed = visible != project_item.visible
-        project_item.visible = visible
-
         requested_name = list_item.text().strip()
+        if project_item.locked:
+            if requested_name != project_item.name:
+                self._updating_project_list = True
+                try:
+                    list_item.setText(project_item.name)
+                finally:
+                    self._updating_project_list = False
+                self.statusBar().showMessage(
+                    "Unlock this layer before renaming it", 3000
+                )
+            return
         if not requested_name:
             requested_name = project_item.name
 
@@ -1380,13 +1417,6 @@ class MainWindow(
                 f"Renamed {old_name} → {unique_name}",
                 2500,
             )
-        elif visibility_changed:
-            state = "visible" if visible else "hidden"
-            self.statusBar().showMessage(
-                f"{project_item.name} {state}",
-                2000,
-            )
-
         self.viewport.update()
 
     def _sync_stock_controls(self) -> None:
