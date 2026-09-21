@@ -42,6 +42,7 @@ from ..core.project_file import (
 )
 from ..core.transform import Transform3D
 from ..core.units import ModelUnits
+from .ai_relief import AiReliefMixin
 from .background_jobs import BackgroundWorker, JobCallbacks, JobState
 from .batch_layout import BatchLayoutMixin
 from .direct_selection import DirectSelectionMixin
@@ -100,6 +101,7 @@ class Panel(QFrame):
 
 
 class MainWindow(
+    AiReliefMixin,
     WorkspaceCommandsMixin,
     DirectSelectionMixin,
     GuidedWorkflowMixin,
