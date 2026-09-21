@@ -2,6 +2,72 @@
 
 CarveFoundry is a native Linux CNC design and CAM application with a compact Photopea-style menu and tool rail. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
 
+## Install on Linux (KDE Plasma / Wayland)
+
+CarveFoundry has a **user-local native desktop installer**. After installation
+you can launch it from the KDE application menu or by typing `carvefoundry`
+from a terminal; you do **not** need to activate a Python virtual environment.
+No `sudo pip`, system Python modifications, or global PyTorch installs.
+
+On Arch Linux, install the source-build prerequisites once:
+
+```bash
+sudo pacman -S --needed git python python-pip rust
+git clone https://github.com/newnetmp3/CarveFoundry.git
+cd CarveFoundry
+bash scripts/install-linux.sh
+```
+
+This compiles the existing Rust CAM extension inside a private virtual
+environment, installs the application as an editable Python package, and
+registers a `CarveFoundry` KDE/GNOME menu entry with its icon. The first build
+needs internet access and takes longer. This is a **native source-checkout
+installer**, not a prebuilt Flatpak or a self-contained binary: keep the cloned
+directory in place after installing. The application automatically reuses
+`./.venv` if present, preserving installed PyTorch and model dependencies.
+Otherwise it creates a private venv under
+`${XDG_DATA_HOME:-~/.local/share}/carvefoundry/venv`.
+
+**Already have a working CarveFoundry venv?** Register the app without touching
+any Python/Rust packages:
+
+```bash
+cd /mnt/moar/Downloads/git/CarveFoundry
+bash scripts/install-linux.sh --desktop-only
+```
+
+This uses the checkout's existing `.venv`. If yours is elsewhere, add
+`--venv /absolute/path/to/venv`. This is the safest option when you already
+have matching CPU/CUDA/ROCm AI packages installed.
+
+To install optional local AI dependencies into the installer-managed venv for
+a new installation, use `bash scripts/install-linux.sh --with-ai`. **Existing
+GPU users:** this can replace matching PyTorch wheels; preserve your working
+venv with `--desktop-only`, or use the
+[official PyTorch installation selector](https://pytorch.org/get-started/locally/)
+to choose matching CPU/CUDA/ROCm wheels. It does not package model weights;
+those download on first use.
+
+**Launch:**
+
+```bash
+~/.local/bin/carvefoundry
+```
+
+If `~/.local/bin` is already in your `PATH`, just run `carvefoundry`.
+Or open the KDE application launcher and search for **CarveFoundry**.
+For subsequent application updates:
+
+```bash
+cd /path/to/CarveFoundry
+git pull --ff-only
+bash scripts/install-linux.sh
+```
+
+Flatpak remains a future, separately tested distribution target, especially
+for users on other Linux distributions. Its sandbox and GPU/AI dependency
+handling need physical validation before replacing this native build.
+
 ## Project direction
 
 CarveFoundry aims to cover the practical workflow people often use Easel for while giving more control over imported geometry, cutter definitions, 3D relief work, preview, optimization, and G-code export.
