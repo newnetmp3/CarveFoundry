@@ -44,6 +44,10 @@ class ViewSimulationActionsMixin:
             self.statusBar().showMessage("Simulation stopped", 2500)
             return
 
+        self._simulation_total_segments = sum(
+            max(0, len(toolpath.moves) - 1)
+            for toolpath in self.project.toolpaths
+        )
         self.viewport.set_toolpaths_visible(True)
         self.viewport.set_simulation_fraction(0.0)
         if self._toolpaths_view_button is not None:
@@ -54,11 +58,10 @@ class ViewSimulationActionsMixin:
         self.statusBar().showMessage("Toolpath simulation running…")
 
     def _advance_simulation(self) -> None:
-        total_segments = sum(
-            max(0, len(toolpath.moves) - 1)
-            for toolpath in self.project.toolpaths
+        increment = max(
+            0.005,
+            1.0 / max(self._simulation_total_segments, 1),
         )
-        increment = max(0.005, 1.0 / max(total_segments, 1))
         fraction = self.viewport.simulation_fraction + increment
         if fraction >= 1.0:
             self._simulation_timer.stop()
