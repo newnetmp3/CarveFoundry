@@ -106,6 +106,36 @@ class ViewportGeometryMixin:
                 best_distance = distance
         return best_index
 
+    def _is_empty_viewport_background(self, position: QPointF) -> bool:
+        """Only allow double-click Fit View outside visible stock and meshes.
+
+        The stock-plane mapping used by drawing tools clamps XY to the board
+        even when the pointer is over the black margin, so it cannot determine
+        whether the pointer is on the background. Use the unclamped world ray
+        against the actual stock volume instead. Respect hidden stock/grid and
+        mesh visibility; use the existing model picker for object hits.
+        """
+        if self.project is None:
+            return True
+        ray = self._screen_ray(position)
+        if ray is None:
+            return False
+        if self.pick_item(position) is not None:
+            return False
+        if self.show_stock or self.show_grid:
+            stock = self.project.stock
+            bounds = np.array(
+                (
+                    (0.0, 0.0, -float(stock.thickness_mm)),
+                    (float(stock.width_mm), float(stock.height_mm), 0.0),
+                ),
+                dtype=float,
+            )
+            origin, direction = ray
+            if self._ray_bounds_distance(origin, direction, bounds) is not None:
+                return False
+        return True
+
     def _stock_plane_point(self, position: QPointF) -> np.ndarray | None:
         """Map a screen position onto the top of the stock and clamp to its XY area."""
 
