@@ -3,7 +3,7 @@
 //! This implements the same grid-centre and radial-profile semantics as
 //! cam/stock_simulation.py. The independent Python reference remains available
 //! through CARVEFOUNDRY_CAM_BACKEND=python, with cross-backend regression tests.
-use numpy::{PyReadonlyArray1, PyReadwriteArray2};
+use numpy::{PyReadonlyArray1, PyReadwriteArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
