@@ -1,7 +1,7 @@
 """Real Qt mouse input for Photopea-style rail click vs press-and-hold."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMenu, QToolButton
