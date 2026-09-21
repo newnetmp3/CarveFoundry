@@ -68,6 +68,30 @@ Flatpak remains a future, separately tested distribution target, especially
 for users on other Linux distributions. Its sandbox and GPU/AI dependency
 handling need physical validation before replacing this native build.
 
+## CarveWork — local AI project chat (Ollama)
+
+The **CarveWork** companion website is included in this same Git repository
+at `tools/carve-work/`. It defaults to local Ollama
+(`devstral-small-2:24b`); OpenAI API remains an explicit, separately billed
+opt-in. Automatic linked chat handovers, historical chat search, project
+tasks, and approval-gated file/command tools are included.
+
+With your existing CarveFoundry checkout up to date and Ollama running:
+
+```bash
+cd /mnt/moar/Downloads/git/CarveFoundry
+git pull --ff-only
+ollama list  # install devstral-small-2:24b if needed
+bash scripts/run-carvework.sh
+```
+
+Open `http://127.0.0.1:8765`. No separate ZIP or source checkout is needed.
+If an earlier CarveWork installation has chats under
+`$HOME/git/carve-work/data`, the launcher reuses them automatically when
+the original database exists; `CARVE_WORK_DATA` overrides this
+selection. **Chats, databases, `ai.key`, and other secrets stay local and are
+not tracked in Git.** See [CarveWork setup and security](tools/carve-work/README.md).
+
 ## Project direction
 
 CarveFoundry aims to cover the practical workflow people often use Easel for while giving more control over imported geometry, cutter definitions, 3D relief work, preview, optimization, and G-code export.
