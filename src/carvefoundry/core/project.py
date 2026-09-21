@@ -174,6 +174,8 @@ class Project:
         repr=False,
         compare=False,
     )
+    material_name: str = "Not specified"
+    notes: str = ""
     _asset_workspace_owner: object | None = field(
         default=None,
         repr=False,
