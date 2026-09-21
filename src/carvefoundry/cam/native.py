@@ -6,6 +6,8 @@ from typing import Final
 
 import numpy as np
 
+from carvefoundry.core.tools import Cutter
+
 try:
     from carvefoundry import _native as _rust
 except ImportError as exc:  # pragma: no cover - source-only fallback.
@@ -79,3 +81,31 @@ def compensate_height_field(
         _rust.compensate_height_field(source_z, list(footprint)),
         dtype=float,
     )
+
+
+
+def sweep_stock_segment(
+    surface: np.ndarray,
+    x_axis: np.ndarray,
+    y_axis: np.ndarray,
+    cutter: Cutter,
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+    samples: int,
+    stock_bottom: float,
+) -> int | None:
+    """Update sampled stock in place using the native cutter-sweep kernel.
+
+    Returns None for the Python reference backend, otherwise the number
+    of cell updates (counting repeated cuts of the same cell).
+    """
+    if backend_name() != "rust":
+        return None
+    assert _rust is not None
+    return int(_rust.sweep_stock_segment(
+        surface, x_axis, y_axis, start, end, samples, stock_bottom,
+        cutter.tool_type.value, cutter.diameter_mm,
+        float(cutter.angle_deg or 0), cutter.tip_diameter_mm,
+        float(cutter.taper_angle_deg or 0), float(cutter.ball_radius_mm or 0),
+        list(cutter.profile_points or ()),
+    ))
