@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..cam.job_process import GcodeRequest
-from ..core.project import Project, ProjectItem
+from ..core.project import Project
 from ..core.project_file import (
     PROJECT_SUFFIX,
     load_project,
