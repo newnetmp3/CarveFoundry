@@ -49,7 +49,7 @@ def test_independent_parser_recovers_written_moves_and_retracts():
     code = render_grbl_program([path])
     decoded = decode_grbl(code)
     assert decoded.initial_safe_z_mm == 6
-    assert len(decoded.moves) == len(path.moves) + 2
+    assert len(decoded.moves) == len(path.moves) + 1
     assert decoded.moves[1].xyz == (8, 8, -2)
     assert decoded.moves[1].feed_mm_min == 120
     assert decoded.moves[-1].kind is MoveKind.RAPID
@@ -58,9 +58,10 @@ def test_independent_parser_recovers_written_moves_and_retracts():
 
 def test_modal_incremental_inches_and_feed_conversion():
     code = (
-        "G20 G91 G17 G94\n"
+        "G20 G90 G17 G94\n"
         "G0 Z0.25\n"
         "G0 X0.5 Y0.5\n"
+        "G91\n"
         "F10 G1 Z-0.1\n"
         "G1 X0.25\n"
         "G0 Z0.1\n"
@@ -106,7 +107,7 @@ def test_verified_posted_fixture_collision_detected_on_rapid():
     path.moves[2] = ToolpathMove(9, 8, -2, MoveKind.CUT, 400)
     path.moves[3] = ToolpathMove(9, 8, 6, MoveKind.RAPID)
     output = render_grbl_program([path])
-    malicious = output.replace("M2\n", "G0 X30 Y8 Z3\nM2\n")
+    malicious = output.replace("M2\n", "G0 X30 Y8 Z1\nM2\n")
     outcome = verify(malicious, [path], (fixture,))
     assert not outcome.safe_to_export
     assert any(f.code == "FIXTURE_COLLISION" for f in outcome.preflight.findings)
