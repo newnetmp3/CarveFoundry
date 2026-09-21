@@ -12,6 +12,7 @@ from time import monotonic
 
 from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtGui import QGuiApplication
+
 from carvefoundry.app import create_application
 from carvefoundry.ui.project_window import MainWindow
 
