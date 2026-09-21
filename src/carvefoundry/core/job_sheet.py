@@ -72,7 +72,7 @@ th {{ background: #eaf0f1; }}
 </style></head><body>
 <h1>CarveFoundry · CNC Job Setup Sheet</h1>
 <p><b>Project:</b> {_h(project.name)} &nbsp; <b>Machine profile:</b>
-{_h(machine.name)}</p>
+{_h(machine.name)}<br><b>Recorded material:</b> {_h(project.material_name)}</p>
 <h2>1 · Stock and coordinates</h2>
 <p><b>Wood:</b> {stock.width_mm:g} × {stock.height_mm:g} ×
 {stock.thickness_mm:g} mm (X × Y × thickness)</p>
@@ -89,7 +89,9 @@ stock-top Z0. Execute only the corresponding exported NC program.</p>
 <h2>3 · Recorded clamps / fences (not physically verified)</h2>
 <table><tr><th>Keep-out</th><th>Recorded coordinates relative to stock</th></tr>
 {fixtures}</table>
-<h2>4 · Physical setup checklist — operator must confirm</h2>
+<h2>4 · Project/operator notes</h2>
+<p>{_h(project.notes[:1500]).replace(chr(10), '<br>') if project.notes else 'No notes recorded.'}</p>
+<h2>5 · Physical setup checklist — operator must confirm</h2>
 <p>☐ Verify actual wood size and secure all clamps/fences.</p>
 <p>☐ Verify the selected NC file, installed cutter, usable bit length and router speed.</p>
 <p>☐ Verify machine home, the configured work offset, XY origin and actual Z0.</p>
