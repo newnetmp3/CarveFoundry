@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+
 class _ActionForm(QDialog):
     """Compact reusable form dialog for ribbon actions."""
 
