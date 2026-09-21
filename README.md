@@ -226,6 +226,17 @@ and configured work-envelope limits. The same checks run automatically
 before normal, resume and tiled G-code export; known errors block export.
 Tiled programs are checked tile-by-tile in their own local work envelopes.
 
+**Export now also verifies the actual NC text:** For each consecutive cutter
+stage, CarveFoundry renders the GRBL commands, independently decodes modal
+G0/G1 movements, checks posted XYZ and feeds against the planned cuts, and
+preflights the decoded retracts, rapids, parking and cutting motions. Unknown
+codes (including arcs, canned cycles or changed work offsets) fail closed;
+they are not approximated. Cutter-stage NC files are prepared temporarily
+before replacing their destination files, so a later stage's verification
+failure does not overwrite earlier files. Supported GRBL output uses
+G90/G91, G20/G21, G17, G94, F and M2/M30. This offline interpreter is not
+a substitute for inspecting the actual controller and installed work offset.
+
 Multi-tool output is split into one G-code file per consecutive cutter stage.
 Run these files in the numbered order, stop the machine between stages,
 change the cutter and re-probe the new tool's Z before proceeding.
@@ -357,7 +368,8 @@ preflight.
 ## Sampled material-removal simulation
 
 Choose **Toolpaths → Simulate Material Removal…** after generating a machining
-job. This is separate from the existing backplot/path animation. CarveFoundry
+job, or click **Virtual machining** in the standalone Toolpath Preview.
+This is separate from the existing backplot/path animation. CarveFoundry
 simulates each cutting/plunge move, in cutter-stage order, against a regular XY
 grid of remaining stock using the selected flat, ball, V/cone, tapered ball or
 custom radial cutter profile. G0 rapid moves are not treated as cuts. The
@@ -368,12 +380,32 @@ Choose XY sample spacing before calculation; the application rejects overly
 large grids/sampling workloads instead of silently degrading resolution.
 Long simulations support cancellation.
 
+The **Verify and simulate posted G-code** box is on by default. It
+postprocesses each cutter stage, decodes and preflights the resulting NC
+against configured machine travel, stock and recorded fixtures, then runs
+material removal using those decoded NC motions (rather than trusting the
+unexported plan). Uncheck it only to compare against the original in-memory
+toolpaths. The stock viewer identifies which mode produced its result. The
+posted-code parser and geometric stock solver are separate parts; the latter
+is still sampled 2.5D rather than a second exact CSG implementation.
+
 **Scope:** This is sampled **2.5D material removal**, not exact continuous
 volumetric CSG. It cannot represent undercuts, physical holder contact,
 runout, machine acceleration, the actual work offset or fixtures not recorded
 in the project. Model comparison uses the *top surface* of visible 3D objects:
 intentional 2D pocket/cutout operations can be below that surface. Simulated
 volume is approximate. Always run mandatory CNC preflight before exporting.
+
+### Repeatable offline benchmark
+
+Run `python scripts/virtual_cam_benchmark.py --spacing-mm 1` from an
+installed CarveFoundry environment to produce JSON metrics for a synthetic
+three-cutter serpentine job: decoded NC move count, cutting and rapid
+distance, lateral retract travel, estimated material removed and simulation
+runtime. The benchmark is an explicitly **synthetic surrogate**, not the
+original CPO anchor, coin or plaque project. Original project assets must be
+checked in (with permission) before claiming those as reference fixtures.
+No simulation result is physical Onefinity validation.
 
 ## Automatic project recovery
 

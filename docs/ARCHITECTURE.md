@@ -19,6 +19,7 @@ background-job lifecycle. It **composes** the following functional mixins:
 | `ui/two_sided_setup.py` / `core/two_sided.py` | Partition front/back models, bake physical reflection in XY, save and reload-verify separate CF3D projects with operator checklist. |
 | `ui/job_planner.py` / `cam/job_plan.py` | Session-owned generated motion sequence and cutter-stage grouping, reordering, validation and runtime estimates. |
 | `ui/stock_simulation.py` / `cam/stock_simulation.py` | Off-thread sampled 2.5D remaining-stock simulation, cutter-profile sweep, per-stage estimates and target-surface display. |
+| `cam/gcode_verify.py` / `cam/virtual_machining.py` | Fail-closed independent NC modal decoding, posted-motion/fixture verification, and verified G-code-driven sampled stock simulation. |
 | `ui/project_recovery.py` / `core/recovery.py` | Separate atomic CF3D idle checkpoints with checksum verification, startup restore and cleanup on explicit Save/Discard. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
 | `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves; immutable knot data, fresh mesh regeneration, history and CF3D persistence. |
@@ -60,7 +61,7 @@ Put new behavior in the narrowest relevant module, not automatically in
 CPU-heavy CAM and mesh work must not run in the GUI event loop; the existing
 background thread/process pipeline presents progress and applies validated
 results on the Qt thread. Do not move Qt widget mutations into a worker.
-Actual export must run mandatory preflight and split cutter stages for GRBL.
+Actual export must preflight planner paths, independently decode/verify actual posted G-code including rapids and parking, and split cutter stages for GRBL. Reject unrecognized NC commands; don't silently simulate them.
 
 ## Checks before merging
 

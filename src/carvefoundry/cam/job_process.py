@@ -20,9 +20,10 @@ import numpy as np
 from carvefoundry.cam.basic_ops import BasicCamSettings, ReliefStyle, finish_3d, waterline_3d
 from carvefoundry.cam.gcode import (
     GrblPostSettings,
+    normalize_gcode_path,
     render_grbl_program,
-    write_grbl_program,
 )
+from carvefoundry.cam.gcode_verify import verify_grbl_export
 from carvefoundry.cam.job_plan import validate_job_order
 from carvefoundry.cam.job_workflows import (
     TilingSettings,
@@ -387,50 +388,79 @@ def _write_tool_stages(
     *,
     start_fraction: float,
     span_fraction: float,
+    stock: Stock | None = None,
+    machine_profile: MachineProfile | None = None,
+    fixtures: tuple[Fixture, ...] = (),
+    local_shift_mm: tuple[float, float] = (0.0, 0.0),
 ) -> list[str]:
     stages = _tool_stages(toolpaths)
     total_moves = sum(len(path.moves) for path in toolpaths)
     completed = 0
-    written: list[str] = []
-    for number, stage in enumerate(stages, start=1):
-        if len(stages) == 1:
-            destination = output
-        else:
-            slug = re.sub(
-                r"[^a-z0-9]+", "_", stage[0].cutter.name.lower()
-            ).strip("_")[:36] or "cutter"
-            suffix = output.suffix if output.suffix.lower() in {
-                ".nc", ".gcode", ".tap", ".cnc"
-            } else ".nc"
-            destination = output.with_name(
-                f"{output.stem}_tool{number:02d}_{slug}{suffix}"
+    pending: list[tuple[Path, Path]] = []
+    try:
+        for number, stage in enumerate(stages, start=1):
+            if len(stages) == 1:
+                destination = normalize_gcode_path(output)
+            else:
+                slug = re.sub(
+                    r"[^a-z0-9]+", "_", stage[0].cutter.name.lower()
+                ).strip("_")[:36] or "cutter"
+                suffix = output.suffix if output.suffix.lower() in {
+                    ".nc", ".gcode", ".tap", ".cnc"
+                } else ".nc"
+                destination = output.with_name(
+                    f"{output.stem}_tool{number:02d}_{slug}{suffix}"
+                )
+            count = sum(len(path.moves) for path in stage)
+            stage_start = completed
+            cutter_name = stage[0].cutter.name
+
+            def stage_progress(
+                value: float,
+                *,
+                path_start: int = stage_start,
+                path_count: int = count,
+                stage_number: int = number,
+                tool_name: str = cutter_name,
+            ) -> None:
+                report(
+                    start_fraction
+                    + span_fraction * (path_start + value * path_count)
+                    / max(1, total_moves),
+                    f"Verifying cutter stage {stage_number}/{len(stages)}: "
+                    f"{tool_name}",
+                )
+
+            program = render_grbl_program(
+                stage, settings, progress=stage_progress,
             )
-        count = sum(len(path.moves) for path in stage)
-        stage_start = completed
-
-        cutter_name = stage[0].cutter.name
-
-        def stage_progress(
-            value: float,
-            *,
-            path_start: int = stage_start,
-            path_count: int = count,
-            stage_number: int = number,
-            tool_name: str = cutter_name,
-        ) -> None:
-            report(
-                start_fraction
-                + span_fraction * (path_start + value * path_count)
-                / max(1, total_moves),
-                f"Writing cutter stage {stage_number}/{len(stages)}: "
-                f"{tool_name}",
+            if stock is None or machine_profile is None:
+                raise ValueError(
+                    "NC export requires stock and machine profile for verification."
+                )
+            verification = verify_grbl_export(
+                program, stage, stock, machine_profile,
+                fixtures, settings, local_shift_mm=local_shift_mm,
             )
-
-        written.append(str(write_grbl_program(
-            stage, destination, settings, progress=stage_progress,
-        )))
-        completed += count
-    return written
+            if not verification.safe_to_export:
+                raise ValueError(
+                    f"Posted NC stage {number} ({cutter_name}):\n"
+                    + verification.format_report()
+                )
+            # Prepare all cutter files without replacing an existing valid job.
+            # If a later cutter fails verification, remove only temporary files.
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_suffix(destination.suffix + ".verify.tmp")
+            pending.append((temporary, destination))
+            temporary.write_text(program, encoding="ascii")
+            completed += count
+        for temporary, destination in pending:
+            temporary.replace(destination)
+        return [str(destination) for _, destination in pending]
+    except Exception:
+        for temporary, _ in pending:
+            temporary.unlink(missing_ok=True)
+        raise
 
 
 def run_gcode(request: GcodeRequest) -> dict[str, Any]:
@@ -510,7 +540,10 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
         suffix = output.suffix if output.suffix.lower() in {
             ".nc", ".gcode", ".tap", ".cnc"
         } else ".nc"
-        jobs: list[tuple[Path, list[Any], GrblPostSettings]] = []
+        jobs: list[tuple[
+            Path, list[Any], GrblPostSettings, Stock,
+            tuple[Fixture, ...], tuple[float, float],
+        ]] = []
         tile_count = len(tiles)
         for index, tile in enumerate(tiles):
             report(
@@ -565,17 +598,24 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
                         f"cutter {stage[0].cutter.name}:\n"
                         + result.format_report()
                     )
-            jobs.append((tiled_path, clipped, options))
+            jobs.append((
+                tiled_path, clipped, options, tile_stock, local_fixtures,
+                (0.0, 0.0) if tile_settings.rebase_each_tile else
+                (-tile.x0_mm, -tile.y0_mm),
+            ))
         if not jobs:
             raise ValueError("No cutting moves intersect these tiles.")
         # Validate ALL tiles before writing ANY output files.
         paths: list[str] = []
         job_count = len(jobs)
-        for index, (tiled_path, clipped, options) in enumerate(jobs):
+        for index, (tiled_path, clipped, options, tile_stock,
+                    local_fixtures, local_shift) in enumerate(jobs):
             paths.extend(_write_tool_stages(
                 clipped, tiled_path, options,
                 start_fraction=0.45 + 0.50 * index / job_count,
                 span_fraction=0.50 / job_count,
+                stock=tile_stock, machine_profile=request.machine_profile,
+                fixtures=local_fixtures, local_shift_mm=local_shift,
             ))
         if not paths:
             raise ValueError("No cutting moves intersect these tiles.")
@@ -592,6 +632,8 @@ def run_gcode(request: GcodeRequest) -> dict[str, Any]:
     saved_files = _write_tool_stages(
         toolpaths, Path(request.path), settings,
         start_fraction=0.15, span_fraction=0.72,
+        stock=request.stock, machine_profile=request.machine_profile,
+        fixtures=request.fixtures,
     )
     report(0.95, "G-code written", force=True)
     return {
