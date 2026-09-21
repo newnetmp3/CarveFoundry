@@ -116,8 +116,9 @@ def test_trace_dialog_shows_original_and_previews_up_to_100_percent() -> None:
 def test_trace_dialog_warns_before_exceptionally_heavy_mesh(monkeypatch) -> None:
     image = QImage(200, 100, QImage.Format.Format_ARGB32)
     image.fill(QColor("black"))
+    parent = QWidget()
     dialog = ImageTraceDialog(
-        QWidget(), image, source_name="dense.png", default_width_mm=100.0,
+        parent, image, source_name="dense.png", default_width_mm=100.0,
     )
     try:
         dialog._estimated_runs = 30_000
@@ -140,6 +141,7 @@ def test_trace_dialog_warns_before_exceptionally_heavy_mesh(monkeypatch) -> None
         assert dialog.result() == QDialog.DialogCode.Accepted
     finally:
         dialog.close()
+        parent.close()
 
 
 def test_trace_action_does_not_downscale_when_slider_at_100_percent(
