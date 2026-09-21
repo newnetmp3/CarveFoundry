@@ -25,6 +25,10 @@ from carvefoundry.core.tools import Cutter, ToolType
 
 from .cam_dialog_help import cam_generation_help
 from .layout_widgets import CamSectionNavigator
+from .operation_illustrations import (
+    CamOperationIllustration,
+    operation_explanation,
+)
 
 
 class CamGenerationDialogMixin:
@@ -846,6 +850,12 @@ class CamGenerationDialogMixin:
         op_idx = simple_operation.findData(operation_combo.currentData())
         simple_operation.setCurrentIndex(max(op_idx, 0))
         simple_form.addRow("What should the bit do?", simple_operation)
+        operation_help = QLabel(simple_panel)
+        operation_help.setWordWrap(True)
+        operation_help.setObjectName("SimpleCamOperationHelp")
+        operation_preview = CamOperationIllustration(simple_panel)
+        simple_form.addRow(operation_help)
+        simple_form.addRow(operation_preview)
         simple_cutter = QComboBox(simple_panel)
         simple_cutter.setObjectName("SimpleCamCutter")
         for i in range(cutter_combo.count()):
@@ -893,6 +903,9 @@ class CamGenerationDialogMixin:
         outer.insertWidget(3, simple_panel)
 
         def sync_simple_operation(_index: int) -> None:
+            chosen = str(simple_operation.currentData() or "")
+            operation_preview.set_operation(chosen)
+            operation_help.setText(operation_explanation(chosen))
             desired = operation_combo.findData(simple_operation.currentData())
             if desired >= 0 and desired != operation_combo.currentIndex():
                 operation_combo.setCurrentIndex(desired)
@@ -945,11 +958,14 @@ class CamGenerationDialogMixin:
             simple_panel.setVisible(simple)
             workspace.setVisible(not simple)
             steps_toggle.setVisible(not simple)
+            operation_preview.set_running(simple)
             self._settings.setValue("cam/simple_mode", simple)
 
         mode_combo.currentIndexChanged.connect(set_cam_mode)
         fields["mode"] = mode_combo
         fields["simple_operation"] = simple_operation
+        fields["simple_operation_help"] = operation_help
+        fields["simple_operation_preview"] = operation_preview
         fields["simple_cutter"] = simple_cutter
         fields["simple_depth"] = simple_depth
         fields["simple_detail"] = simple_detail
@@ -1296,5 +1312,7 @@ class CamGenerationDialogMixin:
         dialog.generation_help_text = generation_help
         dialog.refresh_generation_readiness = update_relevance_and_readiness
         update_relevance_and_readiness()
+        sync_simple_operation(simple_operation.currentIndex())
         set_cam_mode(mode_combo.currentIndex())
+        dialog.finished.connect(lambda _result: operation_preview.set_running(False))
         return dialog
