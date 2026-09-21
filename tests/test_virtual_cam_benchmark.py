@@ -1,9 +1,17 @@
 """Pin virtual CAM benchmark geometry and NC metrics without machine access."""
 from __future__ import annotations
 
+from pathlib import Path
+from runpy import run_path
+
 import pytest
 
-from scripts.virtual_cam_benchmark import run_benchmark, sample_project
+_script = run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts" / "virtual_cam_benchmark.py"),
+    run_name="carvefoundry_virtual_cam_benchmark",
+)
+run_benchmark = _script["run_benchmark"]
+sample_project = _script["sample_project"]
 
 
 def test_benchmark_has_real_distinct_cutter_stages_and_stock_fence():
