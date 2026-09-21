@@ -7,7 +7,6 @@ or any extra GL allocation per interaction.
 from __future__ import annotations
 
 from itertools import pairwise
-from math import cos, sin
 
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
