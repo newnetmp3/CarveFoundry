@@ -106,6 +106,7 @@ class ProjectItem:
     text_properties: TextProperties | None = None
     smart_bindings: dict[str, str] = field(default_factory=dict)
     vector_path: VectorPath | None = None
+    locked: bool = False
 
     def source_mesh_mm(self) -> trimesh.Trimesh | None:
         """Return source geometry converted to CarveFoundry's millimeter coordinate space."""
@@ -234,6 +235,7 @@ class Project:
             source_path=source.source_path,
             kind=source.kind,
             visible=source.visible,
+            locked=source.locked,
             mesh=source.mesh,
             transform=Transform3D(
                 translation_mm=tuple(source.transform.translation_mm),
