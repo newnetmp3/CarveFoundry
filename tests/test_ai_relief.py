@@ -154,3 +154,57 @@ def test_ai_relief_dialog_and_shared_model_action_do_not_load_models():
         dialog.close()
     finally:
         window.close()
+
+
+def test_prompt_mode_saves_stl_and_auto_imports_through_existing_path(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6.QtWidgets")
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+    from carvefoundry.ui import ai_relief
+    from carvefoundry.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        generated_stl = tmp_path / "my-ai-relief.stl"
+        original = ai_relief.build_ai_relief_dialog
+
+        def make_dialog(*args, **kwargs):
+            dialog, fields = original(*args, **kwargs)
+            fields["source"].setCurrentIndex(1)
+            fields["prompt"].setPlainText("An anchor with a heavy chain")
+            QTimer.singleShot(
+                0,
+                fields["buttons"].button(
+                    QDialogButtonBox.StandardButton.Ok
+                ).click,
+            )
+            return dialog, fields
+
+        monkeypatch.setattr(ai_relief, "build_ai_relief_dialog", make_dialog)
+        monkeypatch.setattr(
+            ai_relief.QFileDialog, "getSaveFileName",
+            lambda *args: (str(generated_stl), "STL mesh (*.stl)"),
+        )
+        jobs = []
+        imported = []
+        monkeypatch.setattr(
+            window, "_start_background_job",
+            lambda title, **kwargs: jobs.append((title, kwargs)) or True,
+        )
+        monkeypatch.setattr(
+            window, "_start_import",
+            lambda paths, kind: imported.append((paths, kind)),
+        )
+        window._generate_ai_relief()
+        assert len(jobs) == 1
+        title, callbacks = jobs[0]
+        assert title == "Local AI bas-relief"
+        assert callbacks["request"].prompt == "An anchor with a heavy chain"
+        assert callbacks["request"].output_path == str(generated_stl)
+        assert callbacks["request"].image_path == ""
+        assert callbacks["cancelable"]
+        callbacks["on_done"]({"path": str(generated_stl)})
+        assert imported == [([str(generated_stl)], "STL")]
+    finally:
+        window.close()
