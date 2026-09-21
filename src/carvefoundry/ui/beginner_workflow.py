@@ -18,9 +18,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMessageBox,
     QPushButton,
+    QPlainTextEdit,
     QVBoxLayout,
 )
 
@@ -140,6 +142,11 @@ class BeginnerWorkflowMixin:
             "See cutters and starting settings",
             self._show_beginner_cutter_guide,
             "Illustrated bits, example materials and editable feed/plunge defaults.",
+        )
+        action(
+            "Find a CNC term",
+            self._show_cnc_glossary,
+            "Search what work zero, feed, stepover, tabs and G-code mean.",
         )
         bottom = QPushButton("Open empty workspace", dialog)
         bottom.clicked.connect(dialog.close)
@@ -320,6 +327,8 @@ class BeginnerWorkflowMixin:
                 if isinstance(item, Cutter) and item.name == cutter.name:
                     self.tool_combo.setCurrentIndex(idx)
                     break
+            self._before_ribbon_mutation("set project material")
+            self.project.material_name = material.currentData().name
             for key, value in (
                 ("cam/feed_mm_min", feed),
                 ("cam/plunge_mm_min", plunge),
@@ -327,6 +336,9 @@ class BeginnerWorkflowMixin:
             ):
                 self._settings.setValue(key, value)
             self._settings.sync()
+            # Settings are CAM input. Existing paths retain their OLD feeds:
+            # invalidate rather than silently exporting mismatched NC.
+            self._after_ribbon_mutation("set project material", True)
             dialog.accept()
 
         apply_button = QPushButton("Use cutter and example starting values")
@@ -335,6 +347,115 @@ class BeginnerWorkflowMixin:
         cancel = QPushButton("Close without changing settings")
         cancel.clicked.connect(dialog.reject)
         layout.addWidget(cancel)
+        dialog.exec()
+
+    def _show_project_notes(self) -> None:
+        dialog = QDialog(self)
+        dialog.setObjectName("ProjectNotesDialog")
+        dialog.setWindowTitle("Project Notes / Carving Log")
+        dialog.resize(650, 440)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Record your wood, the cutter and actual router speed, what worked "
+            "and what you would change next time. Notes stay inside the CF3D "
+            "project and can be undone. Editing notes does not change toolpaths."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        edit = QPlainTextEdit(dialog)
+        edit.setObjectName("ProjectNotesText")
+        edit.setPlainText(self.project.notes)
+        edit.setPlaceholderText(
+            "Wood species, cutter, physical spindle setting, "
+            "workholding, result and lessons learned…"
+        )
+        layout.addWidget(edit, 1)
+        controls = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        controls.accepted.connect(dialog.accept)
+        controls.rejected.connect(dialog.reject)
+        layout.addWidget(controls)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_notes = edit.toPlainText()[:20000]
+            if new_notes != self.project.notes:
+                self._before_ribbon_mutation("edit project notes")
+                self.project.notes = new_notes
+                self._after_ribbon_mutation("edit project notes", True)
+                self.statusBar().showMessage(
+                    "Project notes updated. Save the CF3D to retain them.", 5000
+                )
+
+    def _show_cnc_glossary(self) -> None:
+        terms = {
+            "Stock": "The physical wood or material being cut. Measure its real X, Y and thickness.",
+            "Machine home": "The controller's reference location. It is NOT the start of your carving.",
+            "Work zero": "The origin used by the G-code. CarveFoundry uses stock bottom-left XY and stock-top Z0.",
+            "Safe Z": "A retract height above Z0 while moving between cuts. It must clear real clamps/fences.",
+            "Toolpath": "The ordered physical cutter movements generated from your design and chosen operation.",
+            "Pocket": "Removes material inside a bounded region; use it to recess a shape.",
+            "Profile": "Follows a boundary, potentially outside/inside it; cutouts need secure workholding.",
+            "V-Carve": "Uses a V-shaped cutter to form variable-width lettering and details.",
+            "Roughing": "Clears bulk material, leaving some for the finishing cutter.",
+            "Finishing": "Adds closer, cutter-compensated passes for the final surface.",
+            "Rest machining": "Targets sampled stock that a previous cutter could not remove.",
+            "Feed rate": "Horizontal/cutting speed, here in millimeters per minute—not spindle RPM.",
+            "Plunge rate": "Speed when entering the wood in Z; often slower than the cutting feed.",
+            "RPM": "Router/spindle revolutions per minute. Check your tool/material combination.",
+            "Stepover": "Sideways spacing between neighboring passes; smaller can improve finish but costs time.",
+            "Stepdown": "Maximum depth removed in each successive pass.",
+            "Workholding": "The clamps, fences, tape or fixture keeping material fixed while machining.",
+            "Tabs": "Uncut bridges left on a cutout to hold a part in its board.",
+            "Preflight": "Software checks of computed/posted moves against configured limits and keep-outs.",
+            "G-code": "Controller commands for motion and machine functions; inspect before running.",
+            "Tool change": "Stop, install the next cutter and re-probe Z0 before its next program.",
+        }
+        dialog = QDialog(self)
+        dialog.setObjectName("CncGlossaryDialog")
+        dialog.setWindowTitle("CNC Basics · Searchable Glossary")
+        dialog.resize(700, 490)
+        layout = QVBoxLayout(dialog)
+        search = QLineEdit(dialog)
+        search.setObjectName("CncGlossarySearch")
+        search.setPlaceholderText("Search a CNC word or explanation…")
+        layout.addWidget(search)
+        entries = QListWidget(dialog)
+        entries.setObjectName("CncGlossaryTerms")
+        layout.addWidget(entries, 1)
+        meaning = QLabel(dialog)
+        meaning.setObjectName("CncGlossaryExplanation")
+        meaning.setWordWrap(True)
+        meaning.setMinimumHeight(66)
+        layout.addWidget(meaning)
+
+        def filter_entries(value: str) -> None:
+            entries.clear()
+            needle = value.casefold().strip()
+            for word, explanation in terms.items():
+                if needle in (word + " " + explanation).casefold():
+                    entries.addItem(word)
+            if entries.count():
+                entries.setCurrentRow(0)
+            else:
+                meaning.setText("No matching term. Try 'zero' or 'cutter'.")
+
+        def select_word() -> None:
+            item = entries.currentItem()
+            meaning.setText(terms[item.text()] if item is not None else "")
+
+        search.textChanged.connect(filter_entries)
+        entries.currentRowChanged.connect(select_word)
+        filter_entries("")
+        button = QPushButton("Open guided first carving")
+        button.clicked.connect(
+            lambda: (dialog.accept(), self._show_guided_workflow())
+        )
+        layout.addWidget(button)
+        done = QPushButton("Close")
+        done.clicked.connect(dialog.reject)
+        layout.addWidget(done)
         dialog.exec()
 
     def _show_carving_quality_inspector(self) -> None:
