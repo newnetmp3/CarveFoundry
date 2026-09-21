@@ -79,6 +79,9 @@ class WorkspaceMenuBuilderMixin:
              "smart_values", "smart_bindings"),
         )
         project_menu.addSeparator()
+        notes_action = QAction("Project Notes / Carving Log…", project_menu)
+        notes_action.triggered.connect(self._show_project_notes)
+        project_menu.addAction(notes_action)
         starter = project_menu.addMenu("Beginner Templates")
         for title, kind in (
             ("First Nameplate…", "nameplate"),
@@ -370,6 +373,8 @@ class WorkspaceMenuBuilderMixin:
         for title, callback in (
             ("Welcome / Start Here…", self._show_welcome),
             ("Guided First Carving…", self._show_guided_workflow),
+            ("Search CNC Glossary…", self._show_cnc_glossary),
+            ("Project Notes / Carving Log…", self._show_project_notes),
             ("Machine Setup Explained…", self._show_beginner_machine_setup),
             ("Cutter & Material Guide…", self._show_beginner_cutter_guide),
             ("Carving Quality Inspector…", self._show_carving_quality_inspector),
