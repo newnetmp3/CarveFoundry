@@ -75,6 +75,7 @@ impl CutterProfile {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sweep_impl(
     surface: &mut [f32],
     x_axis: &[f64],
