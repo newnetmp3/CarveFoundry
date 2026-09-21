@@ -97,7 +97,7 @@ def test_unmanaged_user_executable_is_never_overwritten(tmp_path: Path) -> None:
     launcher.write_text("#!/bin/sh\necho do-not-touch\n", encoding="utf-8")
     result = subprocess.run(
         ["bash", str(SCRIPT), "--desktop-only", "--venv", str(venv)],
-        env=env, capture_output=True, text=True,
+        env=env, capture_output=True, text=True, check=False,
     )
     assert result.returncode != 0
     assert "not a CarveFoundry-managed launcher" in result.stderr
@@ -108,6 +108,6 @@ def test_unmanaged_user_executable_is_never_overwritten(tmp_path: Path) -> None:
 def test_install_rejects_incomplete_options(option: str) -> None:
     result = subprocess.run(
         ["bash", str(SCRIPT), option],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     assert result.returncode != 0
