@@ -35,9 +35,6 @@ from carvefoundry.core.units import ModelUnits
 
 from .cam_generation_dialog import CamGenerationDialogMixin
 from .machine_control import MachineController
-from .toolpath_preview import ToolpathPreviewWindow
-
-from .cam_generation_dialog import CamGenerationDialogMixin
 from .ribbon_cam_actions import RibbonCamActionsMixin
 from .ribbon_design_tools import RibbonDesignToolsMixin
 from .ribbon_forms import _ActionForm
