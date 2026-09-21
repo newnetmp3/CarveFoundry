@@ -108,6 +108,8 @@ class PlanarOperationsMixin:
                 "Offset: select one shape; Boolean: select two or more shapes.", 6000
             )
             return False
+        if not self._selection_is_editable(indices):
+            return False
         items = tuple(self.project.items[index] for index in indices)
         if any(item.kind.lower() not in PLANAR_KINDS or item.mesh is None for item in items):
             self.statusBar().showMessage(
@@ -139,6 +141,8 @@ class PlanarOperationsMixin:
 
         def completed(mesh):
             # No mutation happens until the entire calculation validates.
+            if not self._selection_is_editable(indices):
+                return
             if tuple(self.project.items[index].item_id for index in indices) != source_ids:
                 raise ValueError("Selection changed; no shapes were modified.")
             stem = f"{items[0].name} {_LABELS[operation]}"
