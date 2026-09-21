@@ -238,6 +238,7 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
             source_path=item.source_path,
             kind=item.kind,
             visible=item.visible,
+            locked=item.locked,
             mesh=item.mesh,
             transform=Transform3D(
                 translation_mm=(
@@ -287,6 +288,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _cut_selected_items(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select a design item to cut", 3000)
             return
@@ -333,6 +336,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _align_selected_items(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design items", 3000)
             return
@@ -428,6 +433,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _center_selected_items(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage("Select one or more design items", 3000)
             return
@@ -457,6 +464,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _group_selected_items(self) -> None:
         indices = self._selected_design_indices()
+        if indices and not self._selection_is_editable(indices):
+            return
         if len(indices) < 2:
             self.statusBar().showMessage("Select at least two items to group", 3000)
             return
@@ -471,6 +480,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _ungroup_selected_items(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         grouped = [
             index
             for index in indices
