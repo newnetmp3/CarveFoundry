@@ -124,6 +124,11 @@ def test_welcome_and_simple_cam_use_existing_project_and_cam_widgets() -> None:
         fields = dialog.generation_fields
         assert fields["mode"].currentText() == "Simple"
         assert fields["simple_operation"].objectName() == "SimpleCamOperation"
+        assert (
+            fields["simple_operation_preview"].objectName()
+            == "CamOperationIllustration"
+        )
+        assert "surface" in fields["simple_operation_help"].text().lower()
         assert not fields["simple_depth"].isHidden()
         fields["simple_depth"].setValue(2.5)
         assert fields["cut_depth"].value() == pytest.approx(2.5)
@@ -133,6 +138,7 @@ def test_welcome_and_simple_cam_use_existing_project_and_cam_widgets() -> None:
             fields["simple_operation"].findData("pocket")
         )
         assert fields["operation"].currentData() == "pocket"
+        assert "inside" in fields["simple_operation_help"].text().lower()
         old_feed = fields["feed"].value()
         fields["simple_material"].setCurrentIndex(1)
         assert fields["feed"].value() == old_feed
