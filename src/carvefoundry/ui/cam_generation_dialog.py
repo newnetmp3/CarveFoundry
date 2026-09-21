@@ -934,6 +934,14 @@ class CamGenerationDialogMixin:
 
         def set_cam_mode(_index: int) -> None:
             simple = mode_combo.currentIndex() == 0
+            if simple and simple_operation.findData(
+                operation_combo.currentData()
+            ) < 0:
+                # Rest, surfacing and specialized operations have requirements
+                # that Simple Mode cannot express; never display a different
+                # operation from the one that will actually run.
+                mode_combo.setCurrentIndex(1)
+                return
             simple_panel.setVisible(simple)
             workspace.setVisible(not simple)
             steps_toggle.setVisible(not simple)
