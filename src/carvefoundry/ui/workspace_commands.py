@@ -1300,7 +1300,7 @@ class WorkspaceCommandsMixin:
                     "Polygon tool — sides are set in the tool options bar.",
                 ),
             ),
-            tooltip="Shape tools — click arrow to choose Rectangle, Ellipse, or Polygon.",
+            tooltip="Shape tools — click to draw; press and hold for Rectangle, Ellipse, or Polygon.",
             checkable=True,
         )
         rail.add_action_tool(
@@ -1326,8 +1326,8 @@ class WorkspaceCommandsMixin:
             "Pen",
             vector_menu,
             tooltip=(
-                "Vector tools — Pen draws freehand directly in the viewport; "
-                "Trace Image converts artwork to vector-like geometry."
+                "Vector tools — click for Pen; press and hold to choose "
+                "Direct Selection, Trace Image, Boolean, or Offset."
             ),
             primary_callback=self._create_pen_path,
             checkable=True,
@@ -1348,8 +1348,8 @@ class WorkspaceCommandsMixin:
             "Draw Fixture",
             fixture_menu,
             tooltip=(
-                "Draw a clamp/fence keep-out on the stock. Use the small "
-                "arrow to edit all fixtures, including off-stock fences."
+                "Click to draw a clamp/fence keep-out; press and hold "
+                "for fixture setup, including off-stock fences."
             ),
             primary_callback=self._activate_fixture_tool,
             checkable=True,

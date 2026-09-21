@@ -281,14 +281,13 @@ QToolButton#ToolRailButton:pressed {
     color: #0b1020;
     border-color: #c8ff3d;
 }
+/* The active tool icon already contains a bottom-right down/right arrow.
+   Hide Qt's separate split-button indicator; hold opens the full flyout. */
 QToolButton#ToolRailButton::menu-indicator {
     image: none;
-    width: 7px;
-    height: 7px;
-    subcontrol-origin: padding;
-    subcontrol-position: bottom right;
-    border-right: 1px solid #8f9aae;
-    border-bottom: 1px solid #8f9aae;
+    width: 0;
+    height: 0;
+    border: none;
 }
 #ToolRailSeparator {
     color: #273149;

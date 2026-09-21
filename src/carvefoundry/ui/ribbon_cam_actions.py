@@ -444,6 +444,10 @@ class RibbonCamActionsMixin:
 
     def _select_cam_operation(self, operation: str) -> None:
         self._active_cam_operation = operation
+        if hasattr(self, "tool_rail"):
+            action = self._ui_actions.get(f"cam_{operation}")
+            if action is not None:
+                self.tool_rail.set_menu_active_action("cam", action)
         labels = {
             "profile": "Profile",
             "silhouette": "Silhouette",

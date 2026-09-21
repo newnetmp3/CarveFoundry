@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QPointF, QSize, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QMenu,
@@ -68,6 +68,37 @@ class ToolRail(QFrame):
         }
 
     @staticmethod
+    def _flyout_icon(icon: QIcon) -> QIcon:
+        """Overlay a small south-east arrow on the currently active tool icon.
+
+        The marker is part of the icon rather than Qt's split-button menu
+        indicator: the entire 38-pixel button remains the short-click target.
+        """
+        pixmap = QPixmap(28, 28)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.drawPixmap(2, 2, icon.pixmap(QSize(22, 22)))
+        painter.setPen(QPen(QColor("#c8ff3d"), 1.7))
+        painter.drawLine(QPointF(19, 19), QPointF(25, 25))
+        painter.drawLine(QPointF(19, 25), QPointF(25, 25))
+        painter.drawLine(QPointF(25, 25), QPointF(25, 19))
+        painter.end()
+        return QIcon(pixmap)
+
+    @staticmethod
+    def _use_hold_to_open_menu(button: QToolButton) -> None:
+        """Qt handles the hold timer and suppresses the release's click.
+
+        DelayedPopup invokes clicked() on a brief click and shows the attached
+        QMenu only after a press-and-hold. Avoid custom mouse event handling:
+        Qt also handles cancelling the hold when the pointer leaves the tool.
+        """
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.DelayedPopup)
+        button.setIconSize(QSize(25, 25))
+        button.setProperty("holdForOptions", True)
+
+    @staticmethod
     def _button(
         label: str,
         *,
@@ -124,7 +155,7 @@ class ToolRail(QFrame):
             tooltip=tooltip,
             checkable=checkable,
         )
-        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self._use_hold_to_open_menu(button)
 
         menu = QMenu(button)
         menu.setObjectName("ToolRailMenu")
@@ -195,10 +226,10 @@ class ToolRail(QFrame):
         button = self.buttons.get(key)
         if button is None:
             return
-        button.setIcon(action.icon())
+        button.setIcon(self._flyout_icon(action.icon()))
         button.setToolTip(
             f"{action.toolTip()}\n"
-            "Click the small arrow for related tools."
+            "Click to use this tool; press and hold for related tools."
         )
         button.setProperty("currentAction", action_key)
         self._flyout_callbacks[key] = callback
@@ -207,6 +238,18 @@ class ToolRail(QFrame):
         callback = self._flyout_callbacks.get(key)
         if callback is not None:
             callback()
+
+    def set_menu_active_action(self, key: str, action: QAction) -> None:
+        """Show the chosen operation as the primary icon of a hold-flyout."""
+        button = self.buttons.get(key)
+        if button is None or not button.property("holdForOptions"):
+            return
+        button.setIcon(self._flyout_icon(action.icon()))
+        button.setProperty("currentAction", action.text())
+        button.setToolTip(
+            f"{action.text()} — click to activate.\n"
+            "Press and hold for related options."
+        )
 
     def add_menu(
         self,
@@ -225,15 +268,25 @@ class ToolRail(QFrame):
             tooltip=tooltip,
             checkable=checkable,
         )
-        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self._use_hold_to_open_menu(button)
+        button.setIcon(self._flyout_icon(button.icon()))
         button.setMenu(menu)
         if primary_callback is not None:
             button.clicked.connect(
                 lambda _checked=False, fn=primary_callback: fn()
             )
+            button.setToolTip(
+                f"{tooltip}\nClick to activate; press and hold for options."
+            )
         else:
-            button.setPopupMode(
-                QToolButton.ToolButtonPopupMode.InstantPopup
+            # A category without a safe default (Machine, Cutter, Model)
+            # must not execute an arbitrary command on a brief click.
+            # It opens the same options menu by click OR press-and-hold.
+            button.clicked.connect(
+                lambda _checked=False, b=button: b.showMenu()
+            )
+            button.setToolTip(
+                f"{tooltip}\nClick or press and hold for options."
             )
         self.buttons[key] = button
         self._layout.addWidget(button)
