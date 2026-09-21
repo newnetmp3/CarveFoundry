@@ -8,8 +8,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QColor, QPainter, QPdfWriter, QPixmap, QTextDocument
+from PySide6.QtCore import QPointF, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPdfWriter, QPixmap, QPolygonF, QTextDocument
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -45,9 +45,6 @@ def _tool_picture(cutter: Cutter) -> QPixmap:
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setPen(QColor("#a2d4b4"))
     painter.setBrush(QColor("#70ad92"))
-    from PySide6.QtGui import QPolygonF
-    from PySide6.QtCore import QPointF
-
     if cutter.tool_type in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}:
         points = ((70, 12), (120, 12), (120, 38), (96, 98), (94, 98), (70, 38))
     elif cutter.tool_type in {ToolType.BALL_NOSE, ToolType.TAPERED_BALL_NOSE}:
