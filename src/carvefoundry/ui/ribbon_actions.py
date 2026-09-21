@@ -631,6 +631,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
         item: ProjectItem,
         resolved: dict[str, float],
     ) -> None:
+        if item.locked:
+            return
         tx, ty, tz = item.transform.translation_mm
         item.transform.translation_mm = (
             resolved.get("position_x", tx),
@@ -696,7 +698,7 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
                 resolved = [
                     (item, self._resolve_item_smart_bindings(item, values=table))
                     for item in self.project.items
-                    if item.smart_bindings
+                    if item.smart_bindings and not item.locked
                 ]
             except (SmartValueError, ZeroDivisionError) as exc:
                 QMessageBox.warning(self, "Smart Values", str(exc))
@@ -720,6 +722,8 @@ class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMa
 
     def _smart_bindings_dialog(self) -> None:
         indices = self._selected_design_indices(expand_groups=True)
+        if indices and not self._selection_is_editable(indices):
+            return
         if not indices:
             self.statusBar().showMessage(
                 "Select one or more design objects to bind",
