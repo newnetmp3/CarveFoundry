@@ -162,9 +162,11 @@ def design_advisories(
         if cutter is not None and item.kind == "text":
             issues.append((
                 "INSPECT",
-                f"{item.name}: inspect small letter strokes in the stock-removal "
-                f"preview; a {cutter.diameter_mm:g} mm cutter cannot reproduce "
-                "arbitrarily narrow detail.",
+                (
+                    f"{item.name}: inspect small letter strokes in the stock-removal "
+                    f"preview; a {cutter.diameter_mm:g} mm cutter cannot reproduce "
+                    "arbitrarily narrow detail."
+                ),
             ))
     if cutter is None:
         issues.append(("NEXT STEP", "Choose a cutter from the tool library."))
@@ -188,12 +190,17 @@ def design_advisories(
     if len(cutters) > 1:
         issues.append((
             "CHECK",
-            f"{len(cutters)} different cutters: stop, change, and reprobe Z0 "
-            "before each subsequent program.",
+            (
+                f"{len(cutters)} different cutters: stop, change, and reprobe Z0 "
+                "before each subsequent program."
+            ),
         ))
     if not issues:
         issues.append((
-            "INFO", "No obvious design/setup issues found. Run the independent "
-            "CNC preflight and check the real machine before cutting.",
+            "INFO",
+            (
+                "No obvious design/setup issues found. Run the independent "
+                "CNC preflight and check the real machine before cutting."
+            ),
         ))
     return tuple(issues)
