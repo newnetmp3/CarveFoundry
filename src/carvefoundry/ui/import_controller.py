@@ -161,10 +161,13 @@ class ImportControllerMixin:
                         prepared.gpu_vertex_bytes,
                         prepared.gpu_vertex_count,
                     )
-            self.project.items.append(item)
             imported.append(item)
 
         if imported:
+            # Commit the prepared batch atomically after every source has been
+            # converted. This avoids a partially mutated project if one
+            # prepared item unexpectedly fails during finalization.
+            self.project.items.extend(imported)
             self._invalidate_toolpaths("Project geometry")
             self._refresh_project_list(len(self.project.items))
             if any(item.mesh is not None for item in imported):
