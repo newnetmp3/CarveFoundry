@@ -239,6 +239,18 @@ class ToolRail(QFrame):
         if callback is not None:
             callback()
 
+    def set_menu_active_action(self, key: str, action: QAction) -> None:
+        """Show the chosen operation as the primary icon of a hold-flyout."""
+        button = self.buttons.get(key)
+        if button is None or not button.property("holdForOptions"):
+            return
+        button.setIcon(self._flyout_icon(action.icon()))
+        button.setProperty("currentAction", action.text())
+        button.setToolTip(
+            f"{action.text()} — click to activate.\n"
+            "Press and hold for related options."
+        )
+
     def add_menu(
         self,
         key: str,
