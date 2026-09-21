@@ -87,6 +87,7 @@ class WorkspaceCommandsMixin:
             ("measure", "Measure XY", self._activate_measure_tool),
             ("fixture_draw", "Draw Fixture", self._activate_fixture_tool),
             ("trace_image", "Trace Image", self._trace_image),
+            ("ai_relief", "Generate AI Bas-Relief…", self._generate_ai_relief),
             ("vector_union", "Union Silhouettes", lambda: self._run_planar_operation("union")),
             ("vector_subtract", "Subtract Silhouettes",
              lambda: self._run_planar_operation("subtract")),
@@ -510,7 +511,7 @@ class WorkspaceCommandsMixin:
         self._add_menu_actions(design_menu, ("layers", "move_up", "move_down"))
 
         model_menu = bar.addMenu("Model")
-        self._add_menu_actions(model_menu, ("stock_setup", "fit_view"))
+        self._add_menu_actions(model_menu, ("stock_setup", "fit_view", "ai_relief"))
         transform_menu = model_menu.addMenu("Transform")
         self._add_menu_actions(
             transform_menu,
@@ -1359,7 +1360,7 @@ class WorkspaceCommandsMixin:
         model_menu = QMenu(rail)
         self._add_menu_actions(
             model_menu,
-            ("stock_setup", "work_zero", "fixtures", "two_sided", "guided_workflow", "batch_layout",
+            ("stock_setup", "work_zero", "fixtures", "two_sided", "ai_relief", "guided_workflow", "batch_layout",
              "smart_values", "smart_bindings", "fit_view"),
         )
         transform_menu = model_menu.addMenu("Transform")
