@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -39,6 +38,7 @@ from .ribbon_cam_actions import RibbonCamActionsMixin
 from .ribbon_design_tools import RibbonDesignToolsMixin
 from .ribbon_forms import _ActionForm
 from .ribbon_machine_actions import RibbonMachineActionsMixin
+from .toolpath_preview import ToolpathPreviewWindow
 
 
 class RibbonActionsMixin(RibbonDesignToolsMixin, RibbonCamActionsMixin, RibbonMachineActionsMixin, CamGenerationDialogMixin):
