@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from importlib import import_module
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -162,6 +163,33 @@ def mesh_from_depth(
     return mesh
 
 
+def _require_torchvision() -> None:
+    """Detect a missing or incompatible local vision runtime before model loading."""
+    try:
+        import_module("torchvision")
+    except ModuleNotFoundError as exc:
+        if exc.name == "torchvision":
+            raise RuntimeError(
+                "Local AI relief needs Torchvision, which is missing from "
+                "CarveFoundry's Python environment. In the CarveFoundry venv, "
+                "run: python -m pip install -e '.[ai]' (or install a "
+                "torchvision build matching your PyTorch CUDA/ROCm/CPU build). "
+                "Restart CarveFoundry after installing."
+            ) from exc
+        raise RuntimeError(
+            "Torchvision could not import a required dependency "
+            f"({exc.name}). Reinstall matching PyTorch and Torchvision builds "
+            "for your CPU, CUDA, or ROCm setup in the CarveFoundry venv."
+        ) from exc
+    except (ImportError, OSError, RuntimeError) as exc:
+        raise RuntimeError(
+            "Torchvision is installed but cannot load with this PyTorch build. "
+            "Install compatible torch and torchvision builds together for "
+            "your CPU, CUDA, or ROCm setup in the CarveFoundry venv. "
+            f"Underlying error: {exc}"
+        ) from exc
+
+
 def _prompt_image(prompt: str, report: Progress):
     """Generate the reference image entirely in the local worker process."""
     try:
@@ -172,6 +200,7 @@ def _prompt_image(prompt: str, report: Progress):
             "Local text generation needs the optional AI packages: "
             "pip install -e '.[ai]' (and a compatible PyTorch build)."
         ) from exc
+    _require_torchvision()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
     report(0.07, "Loading local text-to-image model (first use downloads weights)")
@@ -204,6 +233,7 @@ def _estimate_depth(image, report: Progress) -> np.ndarray:
             "Local depth estimation needs the optional AI packages: "
             "pip install -e '.[ai]' (and a compatible PyTorch build)."
         ) from exc
+    _require_torchvision()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     report(0.30, "Loading local Depth Anything V2 (first use downloads weights)")
     processor = AutoImageProcessor.from_pretrained(DEPTH_MODEL_ID)
