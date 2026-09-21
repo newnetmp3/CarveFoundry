@@ -74,8 +74,6 @@ def mesh_from_depth(
     The near surface is higher than the distant surface. The backing and four
     sidewalls make the exported STL watertight, unlike a single open heightmap.
     """
-    from PIL import Image, ImageFilter
-
     values = np.asarray(depth, dtype=np.float32)
     if values.ndim != 2 or min(values.shape) < 2 or not np.isfinite(values).all():
         raise ValueError("Depth estimation must produce a finite 2D array.")
@@ -95,10 +93,22 @@ def mesh_from_depth(
     if invert_depth:
         heights = 1 - heights
     if smoothing_px:
-        image = Image.fromarray(np.asarray(heights, dtype=np.float32), mode="F")
-        heights = np.asarray(
-            image.filter(ImageFilter.GaussianBlur(radius=smoothing_px)), dtype=np.float32
-        )
+        # PIL's GaussianBlur does not support float-mode images. Keep full
+        # floating-point depth precision instead of quantizing the CNC surface.
+        radius = max(1, int(np.ceil(3 * smoothing_px)))
+        taps = np.arange(-radius, radius + 1, dtype=np.float32)
+        kernel = np.exp(-0.5 * (taps / smoothing_px) ** 2)
+        kernel /= kernel.sum()
+        for axis in (0, 1):
+            padding = ((radius, radius), (0, 0)) if axis == 0 else (
+                (0, 0), (radius, radius)
+            )
+            padded = np.pad(heights, padding, mode="edge")
+            heights = sum(
+                weight * (padded[index:index + rows, :] if axis == 0 else
+                          padded[:, index:index + cols])
+                for index, weight in enumerate(kernel)
+            )
         heights = np.clip(heights, 0, 1)
 
     rows, cols = heights.shape
@@ -224,7 +234,7 @@ def generate_relief(request: ReliefRequest, report: Progress) -> dict[str, objec
     longest = max(request.width_mm, request.height_mm)
     cols = max(16, round(request.grid_samples * request.width_mm / longest))
     rows = max(16, round(request.grid_samples * request.height_mm / longest))
-    depth_image = Image.fromarray(np.asarray(depth, dtype=np.float32), mode="F")
+    depth_image = Image.fromarray(np.asarray(depth, dtype=np.float32))
     depth = np.asarray(
         depth_image.resize((cols, rows), resample=Image.Resampling.BILINEAR),
         dtype=np.float32,
