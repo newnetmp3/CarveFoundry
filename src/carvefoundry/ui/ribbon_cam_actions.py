@@ -1,11 +1,10 @@
 """Toolpath design options, CAM requests and preview actions."""
 from __future__ import annotations
 
-from dataclasses import replace
 from math import ceil, sqrt
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QComboBox, QDialog
 
 from carvefoundry.cam.basic_ops import (
@@ -20,9 +19,8 @@ from carvefoundry.cam.job_process import CamRequest
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.core.tools import Cutter
 
-from .toolpath_preview import ToolpathPreviewWindow
-
 from .ribbon_forms import _ActionForm
+from .toolpath_preview import ToolpathPreviewWindow
 
 
 class RibbonCamActionsMixin:
