@@ -138,6 +138,7 @@ def test_ai_relief_dialog_and_shared_model_action_do_not_load_models():
     from carvefoundry.ui.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
+    assert app is not None
     window = MainWindow()
     try:
         action = window._ui_actions["ai_relief"]
@@ -164,6 +165,7 @@ def test_prompt_mode_saves_stl_and_auto_imports_through_existing_path(tmp_path, 
     from carvefoundry.ui.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
+    assert app is not None
     window = MainWindow()
     try:
         generated_stl = tmp_path / "my-ai-relief.stl"
