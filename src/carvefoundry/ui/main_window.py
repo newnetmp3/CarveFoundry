@@ -34,7 +34,6 @@ from ..core.project_file import (
     load_project,
     save_project,
 )
-from ..core.units import ModelUnits
 from .ai_relief import AiReliefMixin
 from .background_job_controller import BackgroundJobControllerMixin
 from .batch_layout import BatchLayoutMixin
