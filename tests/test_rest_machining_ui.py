@@ -93,7 +93,14 @@ def test_workshop_guide_has_real_rest_launcher_that_checks_prior_stages():
     window = _window()
     try:
         window._show_guided_workflow()
-        assert len(window._guided_workflow_extras) == 5
+        labels = {
+            button.text() for button in window._guided_workflow_extras
+        }
+        assert len(labels) == 8
+        assert {
+            "Rest Cleanup", "Check Carve Quality", "Job Setup Sheet",
+            "Carving Notes",
+        } <= labels
         rest_button = next(
             button for button in window._guided_workflow_extras
             if button.text() == "Rest Cleanup"
