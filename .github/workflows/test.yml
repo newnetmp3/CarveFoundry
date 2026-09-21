@@ -49,6 +49,8 @@ jobs:
       - if: matrix.python-version == '3.12'
         run: cargo test --manifest-path rust/Cargo.toml
       - run: bash -n scripts/install-linux.sh
+      - run: bash -n scripts/run-carvework.sh tools/carve-work/run.sh
+      - run: python -m unittest discover -s tools/carve-work/tests -v
       - run: ruff check src tests scripts
       - run: python -m compileall -q scripts/wayland_qa.py
       - run: pytest -q
