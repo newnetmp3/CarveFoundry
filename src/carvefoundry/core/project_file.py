@@ -268,6 +268,8 @@ def _build_container(
         "application": "CarveFoundry",
         "coordinate_system": {"linear_units": "mm"},
         "name": project.name,
+        "material_name": project.material_name,
+        "notes": project.notes,
         "stock": _stock_to_dict(project.stock),
         "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
@@ -788,6 +790,10 @@ def _load_native_project(project_path: Path) -> Project:
             name = manifest.get("name", "Untitled")
             if not isinstance(name, str) or not name:
                 raise ProjectFileError("Project name is invalid.")
+            material_name = manifest.get("material_name", "Not specified")
+            notes = manifest.get("notes", "")
+            if not isinstance(material_name, str) or not isinstance(notes, str):
+                raise ProjectFileError("Material or project notes have invalid text.")
             stock = _load_stock(manifest.get("stock"))
             fixtures = _load_fixtures(manifest.get("fixtures", []))
             items_value = manifest.get("items", [])
@@ -830,6 +836,8 @@ def _load_native_project(project_path: Path) -> Project:
         items=items,
         smart_values=smart_values,
         fixtures=fixtures,
+        material_name=material_name,
+        notes=notes,
         _asset_workspace_owner=workspace_owner,
     )
 
