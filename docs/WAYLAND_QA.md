@@ -19,8 +19,13 @@ The script refuses X11/XWayland/offscreen, creates the *real* main window with
 its native GL child and prints the Qt backend, GL-context validity and actual
 mouse/keyboard events received from the compositor. It does not inject fake
 input or consume events. A real OpenGL context must be valid and the native
-window exposed before proceeding. Record your GPU/driver, KDE, Qt, Python and
-display scaling in the QA report (use `inxi -G` if available).
+window exposed before proceeding. The test launcher uses the **same** Qt/OpenGL
+bootstrap as regular CarveFoundry, including the requested 24-bit depth buffer,
+8-bit stencil buffer, 4× multisampling and application stylesheet. Its startup
+log shows the **actual** depth and sample values granted by the driver; report
+these values (a depth buffer of 0 is a failed rendering precondition). Record
+your GPU/driver, KDE, Qt, Python and display scaling in the QA report (use
+`inxi -G` if available).
 
 ## Physical acceptance checklist
 

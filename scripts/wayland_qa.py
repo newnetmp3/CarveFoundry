@@ -12,8 +12,8 @@ from time import monotonic
 
 from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication
 
+from carvefoundry.app import create_application
 from carvefoundry.ui.project_window import MainWindow
 
 
@@ -73,7 +73,9 @@ def attach_native_input_telemetry(
 
 
 def main() -> int:
-    app = QApplication(sys.argv)
+    # Use the same pre-QApplication surface format as the normal entry point.
+    # Without its depth buffer the QA view can show torn/overlapping mesh faces.
+    app = create_application(sys.argv)
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     platform = QGuiApplication.platformName().lower()
     if session != "wayland" or platform != "wayland":
@@ -96,7 +98,9 @@ def main() -> int:
             "CarveFoundry REAL compositor QA: "
             f"session={session}, Qt={platform}, "
             f"native window exposed={renderer.isExposed()}, "
-            f"OpenGL context={bool(context and context.isValid())}",
+            f"OpenGL context={bool(context and context.isValid())}, "
+            f"depth={context.format().depthBufferSize() if context else 'none'}, "
+            f"samples={context.format().samples() if context else 'none'}",
             flush=True,
         )
         print(
