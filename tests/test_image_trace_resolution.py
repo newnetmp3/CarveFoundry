@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QWidget
 
