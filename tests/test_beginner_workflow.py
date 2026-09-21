@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QPlainTextEdit
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.beginner import (
@@ -13,8 +13,10 @@ from carvefoundry.core.beginner import (
     material_starting_values,
     starter_project,
 )
+from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.job_sheet import job_sheet_html
 from carvefoundry.core.machine_profiles import MachineProfile
+from carvefoundry.core.project_file import load_project, save_project
 from carvefoundry.core.tools import DEFAULT_TOOLS
 from carvefoundry.ui.main_window import MainWindow
 
@@ -172,5 +174,62 @@ def test_job_setup_sheet_saves_real_pdf(tmp_path: Path, monkeypatch) -> None:
         data = target.read_bytes()
         assert data.startswith(b"%PDF-")
         assert len(data) > 1000
+    finally:
+        window.close()
+
+
+def test_project_material_and_notes_survive_cf3d_and_undo(tmp_path: Path) -> None:
+    project = starter_project("coaster")
+    project.material_name = "Hardwood"
+    project.notes = "Maple: inspect cut quality & use a test scrap. <no auto-RPM>"
+    before = capture_workspace(project)
+    project.notes = "Changed"
+    project.material_name = "Plywood"
+    restore_workspace(project, before)
+    assert project.material_name == "Hardwood"
+    assert "Maple:" in project.notes
+    target = tmp_path / "coaster.cf3d"
+    save_project(project, target)
+    restored = load_project(target)
+    assert restored.material_name == project.material_name
+    assert restored.notes == project.notes
+    sheet = job_sheet_html(
+        project_with_demo_path(project), MachineProfile()
+    )
+    assert "Hardwood" in sheet
+    assert "&lt;no auto-RPM&gt;" in sheet
+
+
+def project_with_demo_path(project):
+    cutter = DEFAULT_TOOLS[0]
+    project.toolpaths.append(Toolpath(
+        name="Demo", operation="engrave", cutter=cutter, safe_z_mm=5,
+        moves=[
+            ToolpathMove(30, 30, 5, MoveKind.RAPID),
+            ToolpathMove(30, 30, -1, MoveKind.PLUNGE, 100),
+        ],
+    ))
+    return project
+
+
+def test_notes_edit_does_not_invalidate_existing_cam(monkeypatch) -> None:
+    window = MainWindow()
+    try:
+        window._set_project(
+            project_with_demo_path(starter_project("coaster")),
+            project_path=None,
+        )
+        initial_paths = list(window.project.toolpaths)
+
+        def edit_and_accept(dialog):
+            entry = dialog.findChild(QPlainTextEdit, "ProjectNotesText")
+            assert entry is not None
+            entry.setPlainText("Test notes for maple")
+            return QDialog.DialogCode.Accepted
+
+        monkeypatch.setattr(QDialog, "exec", edit_and_accept)
+        window._show_project_notes()
+        assert window.project.notes == "Test notes for maple"
+        assert window.project.toolpaths == initial_paths
     finally:
         window.close()
