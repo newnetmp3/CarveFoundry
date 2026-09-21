@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from carvefoundry.cam.job_process import GcodeRequest
+from carvefoundry.core.beginner import explain_motion_preflight
 from carvefoundry.cam.job_workflows import TilingSettings, find_safe_resume_index, plan_tiles
 from carvefoundry.core.fixtures import Fixture
 
@@ -189,9 +190,14 @@ class JobUtilityActionsMixin:
                 if payload["safe_to_export"] else QMessageBox.Icon.Warning
             )
             display.setText(
-                "Preflight passed (with noted warnings)."
+                "Planned-motion preflight passed (review warnings)."
                 if payload["safe_to_export"] else
-                "Preflight blocked export until errors are corrected."
+                "Planned-motion preflight found blocking errors."
+            )
+            display.setInformativeText(
+                explain_motion_preflight(
+                    report, bool(payload["safe_to_export"]),
+                )
             )
             display.setDetailedText(report)
             display.setStandardButtons(QMessageBox.StandardButton.Ok)
