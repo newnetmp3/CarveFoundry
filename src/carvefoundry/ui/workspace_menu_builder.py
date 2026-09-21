@@ -68,6 +68,9 @@ class WorkspaceMenuBuilderMixin:
         )
         file_menu.addSeparator()
         file_menu.addAction(self._ui_actions["export_gcode"])
+        setup_sheet_action = QAction("Print CNC Job Setup Sheet…", file_menu)
+        setup_sheet_action.triggered.connect(self._export_setup_sheet)
+        file_menu.addAction(setup_sheet_action)
 
         project_menu = bar.addMenu("Project")
         self._add_menu_actions(
@@ -75,6 +78,19 @@ class WorkspaceMenuBuilderMixin:
             ("stock_setup", "work_zero", "fixtures", "two_sided", "guided_workflow",
              "smart_values", "smart_bindings"),
         )
+        project_menu.addSeparator()
+        starter = project_menu.addMenu("Beginner Templates")
+        for title, kind in (
+            ("First Nameplate…", "nameplate"),
+            ("First Coaster…", "coaster"),
+        ):
+            action = QAction(title, starter)
+            action.triggered.connect(
+                lambda _checked=False, template=kind: (
+                    self._create_starter_project(template)
+                )
+            )
+            starter.addAction(action)
 
         edit_menu = bar.addMenu("Edit")
         self._add_menu_actions(edit_menu, ("undo", "redo"))
@@ -255,6 +271,9 @@ class WorkspaceMenuBuilderMixin:
             self._cam_linking,
         )
 
+        quality_action = QAction("Will This Carve Correctly?…", toolpaths_menu)
+        quality_action.triggered.connect(self._show_carving_quality_inspector)
+        toolpaths_menu.addAction(quality_action)
         toolpaths_menu.addSeparator()
         self._add_menu_actions(
             toolpaths_menu,
@@ -347,5 +366,17 @@ class WorkspaceMenuBuilderMixin:
             navigation_menu,
             ("reverse_horizontal", "invert_vertical"),
         )
+        help_menu = bar.addMenu("Help")
+        for title, callback in (
+            ("Welcome / Start Here…", self._show_welcome),
+            ("Guided First Carving…", self._show_guided_workflow),
+            ("Machine Setup Explained…", self._show_beginner_machine_setup),
+            ("Cutter & Material Guide…", self._show_beginner_cutter_guide),
+            ("Carving Quality Inspector…", self._show_carving_quality_inspector),
+            ("Print CNC Job Setup Sheet…", self._export_setup_sheet),
+        ):
+            action = QAction(title, help_menu)
+            action.triggered.connect(callback)
+            help_menu.addAction(action)
         return bar
 
