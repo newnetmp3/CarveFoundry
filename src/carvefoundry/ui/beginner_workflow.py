@@ -21,8 +21,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
     QVBoxLayout,
 )
 
@@ -494,7 +494,7 @@ class BeginnerWorkflowMixin:
             ))
         )
         btns.addWidget(simulate)
-        checks = QPushButton("Run independent CNC preflight")
+        checks = QPushButton("Run planned-motion preflight")
         checks.setEnabled(
             bool(self.project.toolpaths) and not self._toolpaths_stale_reason
         )
