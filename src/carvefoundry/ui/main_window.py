@@ -2103,6 +2103,9 @@ class MainWindow(
         if self._updating_transform_controls:
             return
         item = self._selected_item()
+        if item is not None and item.locked:
+            self._selection_is_editable()
+            return
         if item is None or item.mesh is None:
             return
         units = self.source_units_combo.currentData()
