@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMenu, QToolButton
 
+from carvefoundry.ui.main_window import MainWindow
 from carvefoundry.ui.tool_rail import ToolRail
 
 _APP = QApplication.instance() or QApplication([])
@@ -109,8 +110,6 @@ def test_corner_marker_is_part_of_active_tool_icon() -> None:
 
 
 def test_main_window_cam_icon_tracks_chosen_active_operation() -> None:
-    from carvefoundry.ui.main_window import MainWindow
-
     window = MainWindow()
     try:
         button = window.tool_rail.buttons["cam"]
