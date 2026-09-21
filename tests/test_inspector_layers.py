@@ -50,7 +50,8 @@ def _click_layer_icon(window: MainWindow, row: int, icon: str) -> None:
     option = QStyleOptionViewItem()
     option.rect = visual
     index = listing.model().index(row, 0)
-    assert delegate.editorEvent(event, listing.model(), option, index)
+    handled = delegate.editorEvent(event, listing.model(), option, index)
+    assert handled or row == 0  # Stock has no Eye/Lock hit targets.
 
 
 def test_layers_are_at_inspector_top_not_a_popup() -> None:
