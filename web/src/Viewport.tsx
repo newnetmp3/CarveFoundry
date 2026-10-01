@@ -115,7 +115,7 @@ export function Viewport({ stock, shapes, selectedId, pocket, preview, onSelect 
 
     const ray = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const handleSelect = (event: PointerEvent) => {
+    const handleSelect = (event: MouseEvent) => {
       if (event.button !== 0) return;
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1,
