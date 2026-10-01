@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 const MAX_MOVES: usize = 250_000;
 const EPS: f64 = 1e-8;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PocketRequest {
     pub stock_width_mm: f64,
