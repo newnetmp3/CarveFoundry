@@ -116,3 +116,63 @@ def test_busy_panel_cannot_invoke_commands(window):
         assert all(not button.isEnabled() for button in window.machining_steps)
     finally:
         window._background_job = None
+
+
+def test_tabbed_machine_workspace_shares_the_real_cam_form(window):
+    window.workspace_mode.setCurrentText("Machine")
+    assert [window.machining_tabs.tabText(i) for i in range(4)] == [
+        "1 · Setup", "2 · Operations", "3 · Review", "4 · Export",
+    ]
+    assert window.machining_dock.features() & (
+        window.machining_dock.DockWidgetFeature.DockWidgetMovable
+    )
+    window._open_inline_cam_form()
+    form = window._machining_embedded_dialog
+    assert form is not None
+    assert window.machining_tabs.currentIndex() == 1
+    assert not form.isWindow()
+    assert not form.isModal()
+    assert "generate" in form.generation_fields
+    assert form.generation_fields["mode"].currentText() == "Simple"
+
+    window.experience_mode.setCurrentText("Advanced")
+    assert form.generation_fields["mode"].currentText() == "Advanced"
+    assert not window.machining_edit_bar.isHidden()
+    form.close()
+
+
+def test_docked_cam_form_rejects_design_changes_before_submission(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window._open_inline_cam_form()
+    form = window._machining_embedded_dialog
+    initial_context = window._machining_form_snapshot
+    assert initial_context == window._cam_form_context_key()
+    window.project.stock.thickness_mm += 2
+    assert initial_context != window._cam_form_context_key()
+    window._refresh_machining_panel()
+    assert not form.generation_fields["generate"].isEnabled()
+    assert "out of date" in window.machining_status.text().lower()
+    window._open_inline_cam_form()
+    assert window._machining_form_snapshot == window._cam_form_context_key()
+    assert window._machining_embedded_dialog is not form
+
+
+def test_preflight_report_is_inline_and_stales_on_setup_changes(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window.project.toolpaths = paths()
+    window._guided_preflight_pass = window._guided_job_fingerprint()
+    should_suppress_popup = window._handle_beta_preflight_result({
+        "safe_to_export": True, "report": "Decoded NC preflight report\\nNO BLOCKING ISSUES",
+    })
+    assert should_suppress_popup
+    assert window.machining_tabs.currentIndex() == 2
+    assert "Decoded NC preflight" in window.machining_preflight_report.toPlainText()
+    assert "PASS" in window.machining_preflight_state.text()
+    window.project.fixtures.append(
+        __import__("carvefoundry.core.fixtures", fromlist=["Fixture"]).Fixture(
+            "Fence", -20, 0, -1, 50, 4, 2,
+        )
+    )
+    window._refresh_machining_panel()
+    assert "NOT CLEARED" in window.machining_preflight_state.text()
+    assert not window.machining_steps[7].isEnabled()
