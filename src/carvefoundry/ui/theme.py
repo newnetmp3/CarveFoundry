@@ -718,4 +718,120 @@ QToolButton#ViewportOverflowButton:hover {
     background: #c8ff3d;
     color: #0b1020;
 }
+
+/* Beta2 browser-inspired workspace: compact segmented navigation and content. */
+#BetaWorkspaceBar {
+    background: #101a2a;
+    border-bottom: 1px solid #34475c;
+}
+#BetaWorkspaceBadge {
+    background: #244a32;
+    color: #d2ffa2;
+    border: 1px solid #578344;
+    border-radius: 5px;
+    font-weight: 800;
+    padding: 5px 8px;
+}
+#BetaWorkspaceHint { color: #b7c7d6; }
+#BetaWorkspacePicker, #BetaExperiencePicker {
+    background: #192a34;
+    border: 1px solid #486452;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-weight: 700;
+    min-width: 100px;
+}
+QDockWidget#BetaMachiningDock {
+    background: #101828;
+    color: #f2f6f1;
+    border-left: 1px solid #344455;
+    font-weight: 700;
+}
+#BetaMachineFrame, #BetaMachineTabBody { background: #0e1726; }
+#BetaMachineHeading {
+    background: #152536;
+    border-bottom: 1px solid #2d4955;
+}
+#BetaMachineStatus {
+    background: #1b2e38;
+    border-left: 3px solid #a4e95a;
+    padding: 9px;
+    color: #dce7e0;
+    font-weight: 600;
+}
+#BetaMachineNote {
+    color: #bdcbbf;
+    padding: 5px;
+    line-height: 1.4;
+}
+#BetaMachineNext {
+    background: #c8ff3d;
+    color: #162317;
+    font-weight: 800;
+}
+#BetaMachineProgress {
+    background: #162535;
+    color: #e4eee6;
+    border: 1px solid #3d5860;
+    border-radius: 4px;
+    text-align: center;
+    min-height: 25px;
+}
+#BetaMachineProgress::chunk { background: #72c653; }
+QTabWidget#BetaMachiningTabs::pane {
+    background: #0e1726;
+    border: 0;
+}
+QTabWidget#BetaMachiningTabs QTabBar::tab {
+    background: #131e2f;
+    color: #b3c5bd;
+    padding: 10px 6px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    min-width: 62px;
+    font-weight: 650;
+}
+QTabWidget#BetaMachiningTabs QTabBar::tab:selected {
+    background: #233d33;
+    color: #c8ff3d;
+    border-bottom: 2px solid #c8ff3d;
+}
+QTabWidget#BetaMachiningTabs QTabBar::tab:hover {
+    color: #f4f8f4;
+    background: #254239;
+}
+#BetaMachiningOperations {
+    background: #111c2d;
+    border: 1px solid #314d51;
+    border-radius: 6px;
+    padding: 4px;
+}
+#BetaEmbeddedCamHost { background: transparent; border: 0; }
+#BetaSectionTitle {
+    color: #c8ff3d;
+    font-weight: 800;
+    padding-top: 5px;
+}
+#BetaPreflightState {
+    background: #20313f;
+    border-left: 3px solid #c8ff3d;
+    border-radius: 4px;
+    padding: 10px;
+}
+QPlainTextEdit#BetaPreflightReport {
+    background: #0b1320;
+    border: 1px solid #365059;
+    border-radius: 6px;
+    color: #d4e2ec;
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+}
+#BetaExportWarning {
+    background: #302c1d;
+    color: #f9d58c;
+    border: 1px solid #776034;
+    border-radius: 7px;
+    padding: 12px;
+    font-weight: 650;
+}
 """
