@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -53,7 +54,7 @@ class CamGenerationDialogMixin:
         spin.setKeyboardTracking(False)
         return spin
 
-    def _build_toolpath_generation_dialog(self) -> QDialog:
+    def _build_toolpath_generation_dialog(self, *, embedded: bool = False) -> QDialog:
         """Build the all-in-one CAM generation dialog.
 
         The dialog is intentionally complete enough to generate the chosen
@@ -65,7 +66,13 @@ class CamGenerationDialogMixin:
         dialog.setWindowTitle("Generate Toolpaths")
         dialog.resize(1090, 760)
         dialog.setMinimumSize(820, 600)
-        dialog.setModal(True)
+        dialog.setModal(not embedded)
+        if embedded:
+            # The exact same CAM form lives in a dock tab instead of a
+            # separate window. No duplicate settings or calculation path.
+            dialog.setWindowFlags(Qt.WindowType.Widget)
+            dialog.setMinimumSize(0, 0)
+            dialog.resize(540, 720)
 
         outer = QVBoxLayout(dialog)
         outer.setContentsMargins(12, 12, 12, 12)
@@ -141,16 +148,20 @@ class CamGenerationDialogMixin:
         workspace_layout.setSpacing(8)
         navigator = CamSectionNavigator(scroll, workspace)
         workspace_layout.addWidget(navigator)
+        if embedded:
+            navigator.hide()
+            steps_toggle.hide()
         workspace_layout.addWidget(scroll, 1)
         outer.addWidget(workspace, 1)
 
         def show_step_navigation(visible: bool) -> None:
             navigator.setVisible(visible)
             steps_toggle.setText("Hide steps" if visible else "Show steps")
-            self._settings.setValue("cam/show_step_navigation", visible)
+            if not embedded:
+                self._settings.setValue("cam/show_step_navigation", visible)
 
         steps_toggle.toggled.connect(show_step_navigation)
-        show_step_navigation(steps_toggle.isChecked())
+        show_step_navigation(not embedded and steps_toggle.isChecked())
 
         fields: dict[str, QWidget] = {}
         help_buttons: dict[str, QPushButton] = {}
@@ -417,7 +428,7 @@ class CamGenerationDialogMixin:
             "cutter_details",
             cutter_details,
         )
-        grid.addWidget(cutter_box, 0, 1)
+        grid.addWidget(cutter_box, 1 if embedded else 0, 0 if embedded else 1)
 
         strategy_box, strategy_form = group("3. Geometry & Strategy")
         cut_type = QComboBox()
@@ -533,7 +544,7 @@ class CamGenerationDialogMixin:
             "padding",
             padding,
         )
-        grid.addWidget(strategy_box, 1, 0)
+        grid.addWidget(strategy_box, 2 if embedded else 1, 0)
 
         depth_box, depth_form = group("4. Depth Requirements")
         cut_depth = self._generation_double_spin(
@@ -570,7 +581,7 @@ class CamGenerationDialogMixin:
             "bit_length",
             bit_length,
         )
-        grid.addWidget(depth_box, 1, 1)
+        grid.addWidget(depth_box, 3 if embedded else 1, 0 if embedded else 1)
 
         motion_box, motion_form = group("5. Motion & Safety")
         safe_z = self._generation_double_spin(
@@ -707,7 +718,7 @@ class CamGenerationDialogMixin:
             "link_tolerance",
             link_tolerance,
         )
-        grid.addWidget(motion_box, 2, 0)
+        grid.addWidget(motion_box, 4 if embedded else 2, 0)
 
         tabs_box, tabs_form = group("6. Tabs / Cutout Holding")
         tabs_enabled = QCheckBox("Use holding tabs")
@@ -740,7 +751,7 @@ class CamGenerationDialogMixin:
         tab_count.setValue(int(self._settings.value("cam/tab_count", 4)))
         fields["tab_count"] = tab_count
         add_help_row(tabs_form, "Tab count", "tab_count", tab_count)
-        grid.addWidget(tabs_box, 2, 1)
+        grid.addWidget(tabs_box, 5 if embedded else 2, 0 if embedded else 1)
 
         rest_box, rest_form = group("Stock-Aware Rest Cleanup")
         rest_intro = QLabel(
@@ -781,7 +792,7 @@ class CamGenerationDialogMixin:
         )
         fields["rest_resolution"] = rest_resolution
         rest_form.addRow("Stock simulation spacing", rest_resolution)
-        grid.addWidget(rest_box, 3, 0, 1, 2)
+        grid.addWidget(rest_box, 6 if embedded else 3, 0, 1, 1 if embedded else 2)
 
         ready_box = QGroupBox("7. Generation Readiness")
         ready_layout = QVBoxLayout(ready_box)
@@ -790,7 +801,7 @@ class CamGenerationDialogMixin:
         readiness.setTextFormat(Qt.TextFormat.RichText)
         fields["readiness"] = readiness
         ready_layout.addWidget(help_row("readiness", readiness))
-        grid.addWidget(ready_box, 4, 0, 1, 2)
+        grid.addWidget(ready_box, 7 if embedded else 4, 0, 1, 1 if embedded else 2)
 
         for key, heading, section in (
             ("source", "1  Source / Operation", source_box),
@@ -1196,7 +1207,20 @@ class CamGenerationDialogMixin:
                 safe_z.value() > 0 and stepdown.value() > 0
             ))
 
+        generation_context = self._cam_form_context_key() if embedded else None
+
         def accept_and_generate() -> None:
+            # The dock is nonmodal: design, stock, and fixtures can change
+            # while it is open. Never submit captured, obsolete geometry.
+            if embedded and generation_context != self._cam_form_context_key():
+                QMessageBox.warning(
+                    dialog,
+                    "CAM inputs changed",
+                    "The project or machining setup changed while this form "
+                    "was open. Reload the operation to use current inputs.",
+                )
+                QTimer.singleShot(0, self._open_inline_cam_form)
+                return
             update_relevance_and_readiness()
             if not generate_button.isEnabled():
                 return
