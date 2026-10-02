@@ -473,6 +473,8 @@ class BetaWorkspaceMixin:
         return (
             id(self.project),
             getattr(self, "_history_state_id", None),
+            self._active_cam_operation,
+            repr(self.tool_combo.currentData()),
             (
                 self.project.stock.width_mm,
                 self.project.stock.height_mm,
@@ -607,6 +609,11 @@ class BetaWorkspaceMixin:
         self._machining_form_snapshot = self._cam_form_context_key()
         form = self._build_toolpath_generation_dialog(embedded=True)
         self._machining_embedded_dialog = form
+        form.generation_fields["mode"].currentTextChanged.connect(
+            lambda mode: self.experience_mode.setCurrentText(
+                "Beginner" if mode == "Simple" else "Advanced"
+            )
+        )
         self.machining_form_layout.addWidget(form)
         self.machining_form_host.show()
         self.machining_form_prompt.hide()
