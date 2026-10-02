@@ -318,7 +318,7 @@ class BetaWorkspaceMixin:
             if beginner else "Design and machining share one project and selection."
         )
         form = getattr(self, "_machining_embedded_dialog", None)
-        if form is not None and form.isVisible():
+        if form is not None and not form.isHidden():
             combo = form.generation_fields.get("mode")
             if isinstance(combo, QComboBox):
                 combo.setCurrentText("Simple" if beginner else "Advanced")
@@ -479,7 +479,7 @@ class BetaWorkspaceMixin:
         # on changes. The Generate handler also checks immediately on click.
         form = getattr(self, "_machining_embedded_dialog", None)
         if (
-            form is not None and form.isVisible()
+            form is not None and not form.isHidden()
             and self._machining_form_snapshot != self._cam_form_context_key()
         ):
             form.generation_fields["generate"].setEnabled(False)
