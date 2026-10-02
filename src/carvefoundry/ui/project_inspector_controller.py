@@ -219,6 +219,8 @@ class ProjectInspectorControllerMixin:
             self._update_text_cnc_hint()
 
     def _ensure_inspector_visible(self) -> None:
+        if hasattr(self, "workspace_mode"):
+            self.workspace_mode.setCurrentText("Design")
         self.properties_panel.show()
         self.inspector_button.setChecked(True)
         if hasattr(self, "tool_rail"):

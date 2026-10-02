@@ -29,6 +29,7 @@ from .ai_relief import AiReliefMixin
 from .background_job_controller import BackgroundJobControllerMixin
 from .batch_layout import BatchLayoutMixin
 from .beginner_workflow import BeginnerWorkflowMixin
+from .beta_workspace import BetaWorkspaceMixin
 from .direct_selection import DirectSelectionMixin
 from .guided_workflow import GuidedWorkflowMixin
 from .import_controller import ImportControllerMixin
@@ -89,6 +90,7 @@ class Panel(QFrame):
 
 
 class MainWindow(
+    BetaWorkspaceMixin,
     AiReliefMixin,
     BackgroundJobControllerMixin,
     WorkspaceCommandsMixin,
@@ -167,6 +169,7 @@ class MainWindow(
         self._build_command_actions()
         self.main_menu_bar = self._build_main_menu_bar()
         layout.addWidget(self.main_menu_bar)
+        layout.addWidget(self._build_workspace_switcher())
         layout.addWidget(self._build_workspace(), 1)
 
         status = self._build_status_bar()
@@ -201,6 +204,7 @@ class MainWindow(
             self._shape_draw_mode_changed
         )
         self._restore_options()
+        self._init_beta_workspace()
 
     def _build_brand_row(self) -> QWidget:
         row = QWidget()
@@ -667,7 +671,7 @@ class MainWindow(
         self.transform_widget = self._build_transform_controls()
         self.properties_panel.body_layout.addWidget(self.transform_widget)
 
-        activity_heading = QLabel("Job / CAM")
+        activity_heading = QLabel("Activity")
         activity_heading.setObjectName("SectionHeading")
         self.properties_panel.body_layout.addWidget(activity_heading)
 
@@ -679,7 +683,7 @@ class MainWindow(
         self.properties_panel.body_layout.addWidget(self.activity_info)
 
         inspector_hint = QLabel(
-            "Cutter selection and CAM settings are grouped on the Toolpaths ribbon."
+            "Switch to Machine to prepare, review and export your machining job."
         )
         inspector_hint.setWordWrap(True)
         inspector_hint.setObjectName("Muted")

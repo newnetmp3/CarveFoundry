@@ -810,6 +810,11 @@ class CamGenerationDialogMixin:
             "operations) instead of replacing it"
         )
         append_job.setObjectName("AppendCamJobCheck")
+        append_job.setChecked(
+            bool(self.project.toolpaths)
+            and getattr(self, "workspace_mode", None) is not None
+            and self.workspace_mode.currentText() == "Machine"
+        )
         append_job.setEnabled(bool(self.project.toolpaths))
         append_job.setToolTip(
             "Build all old and new toolpaths into one ordered job, including "

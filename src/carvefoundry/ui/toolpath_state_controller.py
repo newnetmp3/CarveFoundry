@@ -74,6 +74,8 @@ class ToolpathStateControllerMixin:
                 "No calculated toolpath for the current job.",
             )
 
+        self._refresh_machining_panel()
+
     def _toolpath_source_names(self, toolpaths) -> list[str]:
         names_by_id = {
             item.item_id: item.name

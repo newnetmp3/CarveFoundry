@@ -545,3 +545,33 @@ cargo fmt --manifest-path rust/Cargo.toml --check
 cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path rust/Cargo.toml
 ```
+
+## Beta2 desktop workspace
+
+The **Beta2** branch adds two workspaces above the viewport:
+
+- **Design** keeps Layers, stock and object properties together in the Inspector,
+  with drawing tools on the left and machining shortcuts moved out of the rail.
+- **Machine** replaces the Inspector with a docked machining job panel. Set up
+  stock, machine and fixtures; add operations; review their export order; preview
+  or simulate stock removal; run CNC preflight; then export per-cutter programs.
+  Stock and design commands return to the Design Inspector. The project and
+  selection are shared across both workspaces.
+
+Choose **Beginner** for explanatory guidance, a next-step button and Simple CAM
+settings by default. Choose **Advanced** for direct operation reorder/removal and
+Advanced CAM settings. Both use the same CAM engine and mandatory export checks.
+The experience and workspace preferences persist across launches; the CAM dialog
+still lets you choose Simple or Advanced for an individual setup. Operations
+unsupported by Simple CAM automatically use Advanced.
+
+In Machine, Generate Toolpaths defaults to **Append to existing machining job**
+when paths already exist. You can explicitly uncheck it to replace the job.
+Reordering applies the existing rough-before-finish and cutout-last validation.
+The panel enables export only after preflight passes for the current setup;
+export itself still independently checks the actual posted motion.
+
+Generated operations remain **session-only**. Saving CF3D preserves design data,
+not calculated paths: regenerate after reopening. The panel's feed-only cutting
+estimates exclude rapid travel, acceleration and manual cutter changes. This
+release does not add live machine control or physical machine verification.

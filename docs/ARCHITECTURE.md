@@ -96,3 +96,14 @@ The CI matrix runs Python 3.12 and 3.14. For UI tests, the
 `tests/conftest.py` offscreen/software-OpenGL setup is required. Verify real
 interaction, project save/reload and Undo/Redo when changing an interactive
 tool, and geometry/motion/preflight tests when changing machinable results.
+
+## Beta2 workspace composition
+
+`ui/beta_workspace.py` owns the Design/Machine selector, persisted experience
+preference and docked machining panel. It delegates to existing Inspector,
+CAM, job planner, preview, simulation, preflight and export commands. No second
+project, selection model or motion pipeline is introduced. Panel commands
+recheck busy state and current guided-preflight eligibility when invoked.
+Operation editing uses the existing background job rebuild and ordering checks.
+`beta2/workspace` and `beta2/experience` are user preferences; selecting an
+experience updates `cam/simple_mode` as the default for subsequent CAM dialogs.

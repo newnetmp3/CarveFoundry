@@ -150,7 +150,11 @@ class InterfaceSettingsMixin:
     def _save_interface_options(self) -> None:
         self._settings.setValue(
             "interface/inspector_visible",
-            self.properties_panel.isVisible(),
+            (
+                self._design_inspector_visible
+                if getattr(self, "_beta_workspace_previous", "Design") == "Machine"
+                else not self.properties_panel.isHidden()
+            ),
         )
         self._settings.setValue(
             "interface/status_bar_visible",
@@ -199,6 +203,9 @@ class InterfaceSettingsMixin:
         self._show_layers_popup()
 
     def _toggle_properties_panel_option(self) -> None:
+        if getattr(self, "_beta_workspace_previous", "Design") == "Machine":
+            self._ensure_inspector_visible()
+            return
         visible = not self.properties_panel.isVisible()
         self.properties_panel.setVisible(visible)
         self.inspector_button.setChecked(visible)
