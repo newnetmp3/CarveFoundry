@@ -11,6 +11,7 @@ from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.ui import main_window
+from carvefoundry.ui.workspace_palette import PaletteCommand, WorkspaceCommandPalette
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -280,3 +281,59 @@ def test_machine_beginner_always_uses_verified_nc_simulation(window):
     window.experience_mode.setCurrentText("Beginner")
     assert window.machining_verify_posted_nc.isChecked()
     assert window.machining_verify_posted_nc.isHidden()
+
+
+def test_quick_command_palette_search_and_guarded_execution():
+    called = []
+    dialog = WorkspaceCommandPalette([
+        PaletteCommand("Edit stock", lambda: called.append("stock")),
+        PaletteCommand(
+            "Export NC", lambda: called.append("unsafe"), enabled=False,
+            keywords="machine",
+        ),
+        PaletteCommand("Open toolpaths", lambda: called.append("paths")),
+    ])
+    dialog.search.setText("export")
+    assert dialog.results.count() == 1
+    assert not dialog.results.item(0).isSelected()
+    dialog.run_selected()
+    _APP.processEvents()
+    assert called == []
+
+    dialog.search.setText("stock")
+    assert dialog.results.count() == 1
+    dialog.run_selected()
+    _APP.processEvents()
+    assert called == ["stock"]
+    dialog.close()
+
+
+def test_quick_commands_and_restore_closed_machine_dock(window):
+    assert window._beta_command_shortcut.key().toString() == "Ctrl+K"
+    window.workspace_mode.setCurrentText("Machine")
+    window.machining_dock.hide()
+    assert window.machining_dock.isHidden()
+    window._restore_beta_panels()
+    assert not window.machining_dock.isHidden()
+    window._show_command_palette()
+    popup = window._beta_palette
+    assert popup is not None
+    popup.search.setText("Switch to Design")
+    assert popup.results.count() >= 1
+    popup.run_selected()
+    _APP.processEvents()
+    assert window.workspace_mode.currentText() == "Design"
+
+
+def test_beginner_reviews_job_order_inline_with_advanced_fallback(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window.project.toolpaths = paths()
+    window._refresh_machining_panel()
+    window.machining_tabs.setCurrentIndex(0)
+    assert window.machining_advanced_planner.isHidden()
+    window.machining_steps[5].click()
+    assert window.machining_tabs.currentIndex() == 1
+    assert window.machining_operations.count() == 2
+    window.experience_mode.setCurrentText("Advanced")
+    assert not window.machining_advanced_planner.isHidden()
+    assert window.machining_advanced_planner.isEnabled()
