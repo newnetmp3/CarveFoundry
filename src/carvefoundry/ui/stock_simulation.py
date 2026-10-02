@@ -182,6 +182,11 @@ class StockSimulationMixin:
             self.statusBar().showMessage(
                 f"Stock simulation failed: {message}", 9000
             )
+            on_panel_failure = getattr(
+                self, "_handle_beta_stock_failure", None
+            )
+            if callable(on_panel_failure):
+                on_panel_failure(message)
 
         return self._start_background_job(
             "Simulate stock removal",
