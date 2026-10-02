@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.tools import Cutter, ToolType
+from carvefoundry.core.fixtures import Fixture
 from carvefoundry.ui import main_window
 
 _APP = QApplication.instance() or QApplication([])
@@ -169,7 +170,7 @@ def test_preflight_report_is_inline_and_stales_on_setup_changes(window):
     assert "Decoded NC preflight" in window.machining_preflight_report.toPlainText()
     assert "PASS" in window.machining_preflight_state.text()
     window.project.fixtures.append(
-        __import__("carvefoundry.core.fixtures", fromlist=["Fixture"]).Fixture(
+        Fixture(
             "Fence", -20, 0, -1, 50, 4, 2,
         )
     )
