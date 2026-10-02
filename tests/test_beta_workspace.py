@@ -6,8 +6,8 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
-from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.fixtures import Fixture
+from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.ui import main_window
 
 _APP = QApplication.instance() or QApplication([])
