@@ -4,7 +4,7 @@ from time import monotonic, sleep
 import numpy as np
 import pytest
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFormLayout, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.stock_simulation import RemovalStage, StockRemovalResult
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
@@ -143,7 +143,7 @@ def test_busy_panel_cannot_invoke_commands(window):
 def test_tabbed_machine_workspace_shares_the_real_cam_form(window):
     window.workspace_mode.setCurrentText("Machine")
     assert [window.machining_tabs.tabText(i) for i in range(4)] == [
-        "1 · Setup", "2 · Operations", "3 · Review", "4 · Export",
+        "1\nSetup", "2\nOperations", "3\nReview", "4\nExport",
     ]
     assert window.machining_dock.features() & (
         window.machining_dock.DockWidgetFeature.DockWidgetMovable
@@ -370,3 +370,58 @@ def test_stock_simulation_failure_and_cancel_clear_pending_review(window):
     window._refresh_machining_panel()
     assert not window._beta_stock_pending
     assert "cancelled" in window.machining_stock_summary.text()
+
+
+def test_machine_tabs_fit_narrow_dock_without_horizontal_scroll(window):
+    tabs = window.machining_tabs
+    bar = tabs.tabBar()
+    assert bar.count() == 4
+    assert not bar.usesScrollButtons()
+    assert bar.expanding()
+    assert bar.elideMode() == Qt.TextElideMode.ElideNone
+    assert all("\\n" in tabs.tabText(i) for i in range(4))
+    bar.resize(332, 60)
+    _APP.processEvents()
+    assert bar.tabRect(3).right() <= bar.width()
+
+
+def test_embedded_cam_form_stacks_both_simple_and_advanced_controls(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window._open_inline_cam_form()
+    form = window._machining_embedded_dialog
+    fields = form.generation_fields
+    simple_panel = fields["simple_form"]
+    simple_form = simple_panel.layout()
+    assert isinstance(simple_form, QFormLayout)
+    assert simple_form.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+    assert fields["simple_operation_preview"].isHidden()
+    assert form.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Ignored
+    assert fields["advanced_scroll"].widget() is None
+    assert fields["advanced_body"].layout().columnCount() == 1
+
+    form.resize(280, 720)
+    form.layout().activate()
+    assert form.minimumSizeHint().width() <= 330
+    fields["mode"].setCurrentText("Advanced")
+    form.layout().activate()
+    assert form.minimumSizeHint().width() <= 330
+    # Fields are still the authoritative, editable CAM controls.
+    assert fields["cutter"] is not None
+    assert fields["cut_depth"] is not None
+    form.close()
+
+
+def test_standalone_cam_dialog_preserves_original_wide_form(window):
+    dialog = window._build_toolpath_generation_dialog()
+    try:
+        panel = dialog.findChild(QGroupBox, "SimpleCamPanel")
+        assert panel is not None
+        assert panel.layout().rowWrapPolicy() == (
+            QFormLayout.RowWrapPolicy.WrapLongRows
+        )
+        assert not dialog.generation_fields["simple_operation_preview"].isHidden()
+        assert dialog.minimumWidth() == 820
+        assert dialog.isModal()
+    finally:
+        dialog.close()
+
