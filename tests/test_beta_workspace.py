@@ -417,7 +417,7 @@ def test_standalone_cam_dialog_preserves_original_wide_form(window):
         panel = dialog.findChild(QGroupBox, "SimpleCamPanel")
         assert panel is not None
         assert panel.layout().rowWrapPolicy() == (
-            QFormLayout.RowWrapPolicy.WrapLongRows
+            QFormLayout.RowWrapPolicy.DontWrapRows
         )
         assert not dialog.generation_fields["simple_operation_preview"].isHidden()
         assert dialog.minimumWidth() == 820
