@@ -166,7 +166,7 @@ class BetaWorkspaceMixin:
             ("Clamps / fences", self._fixture_editor),
             ("Edit design", self._show_layers_popup),
             ("Edit / generate operation", self._open_inline_cam_form),
-            ("Review job order", self._show_job_planner),
+            ("Review cutter stages", self._focus_machine_job_order),
             ("Run CNC preflight", self._preflight_toolpaths),
             ("Export per-cutter G-code", self._export_gcode),
         )
@@ -254,6 +254,16 @@ class BetaWorkspaceMixin:
             edit.addWidget(button)
             self.machining_edit_buttons.append(button)
         operations.addWidget(self.machining_edit_bar)
+        self.machining_advanced_planner = QPushButton("Detailed job planner…")
+        self.machining_advanced_planner.setObjectName("BetaDetailedJobPlanner")
+        self.machining_advanced_planner.setIcon(workspace_icon("review"))
+        self.machining_advanced_planner.setToolTip(
+            "Open the full machining job planner for advanced edits."
+        )
+        self.machining_advanced_planner.clicked.connect(
+            self._show_job_planner
+        )
+        operations.addWidget(self.machining_advanced_planner)
         operations.addStretch()
 
         review.addWidget(self._machine_note(
@@ -564,6 +574,7 @@ class BetaWorkspaceMixin:
         self.machining_intro.setVisible(beginner)
         self.machining_next.setVisible(beginner)
         self.machining_edit_bar.setVisible(not beginner)
+        self.machining_advanced_planner.setVisible(not beginner)
         self.machining_progress.setVisible(beginner)
         self.machining_verify_posted_nc.setVisible(not beginner)
         if beginner:
@@ -607,6 +618,20 @@ class BetaWorkspaceMixin:
             tuple(repr(fixture) for fixture in self.project.fixtures),
             repr(self._active_machine_profile()),
         )
+
+    def _focus_machine_job_order(self) -> None:
+        """Review the live ordered cutter stages in the existing dock."""
+        self.workspace_mode.setCurrentText("Machine")
+        self.machining_tabs.setCurrentIndex(1)
+        self.machining_operations.setFocus()
+        # The editor can be tall; reveal the list without recreating tools.
+        scroll = self.machining_tabs.widget(1)
+        if isinstance(scroll, QScrollArea):
+            QTimer.singleShot(
+                0, lambda: scroll.ensureWidgetVisible(
+                    self.machining_operations, 12, 12
+                )
+            )
 
     def _select_machine_operation(self, index: int) -> None:
         """Pick a real CAM operation; specialized cuts require Advanced mode."""
@@ -828,6 +853,7 @@ class BetaWorkspaceMixin:
         )
         for button in self.machining_review_buttons + self.machining_edit_buttons:
             button.setEnabled(has_paths and not busy)
+        self.machining_advanced_planner.setEnabled(has_paths and not busy)
         self.machining_operation_picker.setEnabled(not busy)
         selected_index = self.machining_operation_picker.findData(
             self._active_cam_operation
