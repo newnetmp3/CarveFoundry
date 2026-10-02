@@ -259,6 +259,11 @@ class BetaWorkspaceMixin:
         export.addStretch()
 
         root.addWidget(tabs, 1)
+        last_tab = self._settings.value("beta2/machine_tab", 0, type=int)
+        tabs.setCurrentIndex(max(0, min(int(last_tab), tabs.count() - 1)))
+        tabs.currentChanged.connect(
+            lambda index: self._settings.setValue("beta2/machine_tab", index)
+        )
         dock.setWidget(frame)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.machining_dock = dock
@@ -299,6 +304,17 @@ class BetaWorkspaceMixin:
         inspector_visible = not machine and self._design_inspector_visible
         self.properties_panel.setVisible(inspector_visible)
         self.inspector_button.setChecked(inspector_visible)
+        # The compact viewport bar follows the workspace instead of
+        # displaying both editing and machining commands at once.
+        self.generate_toolpaths_button.setVisible(machine)
+        self.cam_status_label.setVisible(machine)
+        for widget in (
+            self.layers_button,
+            self.object_selector,
+            self._viewport_import_button,
+            self.inspector_button,
+        ):
+            widget.setVisible(not machine)
         self._beta_workspace_previous = mode
         for key in ("cam", "cutter", "machine", "generate", "preview", "preflight", "export"):
             button = self.tool_rail.buttons.get(key)
