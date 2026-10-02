@@ -475,6 +475,18 @@ class BetaWorkspaceMixin:
             self.machining_preflight_state.setText(
                 "Not yet verified. Run CNC preflight before exporting."
             )
+        # Invalidate a visible docked CAM form as soon as anything it depends
+        # on changes. The Generate handler also checks immediately on click.
+        form = getattr(self, "_machining_embedded_dialog", None)
+        if (
+            form is not None and form.isVisible()
+            and self._machining_form_snapshot != self._cam_form_context_key()
+        ):
+            form.generation_fields["generate"].setEnabled(False)
+            if not busy:
+                self.machining_status.setText(
+                    "CAM settings are out of date. Reopen Edit / generate operation."
+                )
         snapshot = tuple(id(path) for path in self.project.toolpaths)
         if snapshot != self._machining_paths_snapshot:
             selected = self.machining_operations.currentRow()
