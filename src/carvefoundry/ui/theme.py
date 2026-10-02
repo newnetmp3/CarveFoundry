@@ -834,4 +834,52 @@ QPlainTextEdit#BetaPreflightReport {
     padding: 12px;
     font-weight: 650;
 }
+
+/* Beta2 in-workspace operations and stock-removal review. */
+#BetaOperationPicker {
+    background: #1a3040;
+    color: #effcf0;
+    border: 1px solid #4b715d;
+    border-radius: 6px;
+    padding: 9px;
+    font-weight: 700;
+}
+#BetaOperationPicker:hover { border-color: #c8ff3d; }
+#BetaSetupSummary, #BetaJobSummary, #BetaExportSummary {
+    background: #182a36;
+    color: #ddeddf;
+    border: 1px solid #35544c;
+    border-radius: 7px;
+    padding: 10px;
+    font-weight: 600;
+}
+#BetaPathOverlay {
+    background: #182a36;
+    border: 1px solid #35544c;
+    border-radius: 6px;
+    color: #b8d6c8;
+}
+#BetaPathOverlay:checked {
+    background: #244e39;
+    border: 1px solid #95ce6d;
+    color: #dcffad;
+}
+#BetaStockSummary {
+    background: #1a2c35;
+    border-left: 3px solid #a1ce63;
+    color: #d0e7d7;
+    border-radius: 5px;
+    padding: 10px;
+}
+#BetaStockImage {
+    background: #0f1a20;
+    border: 1px solid #344c45;
+    border-radius: 6px;
+    color: #718f82;
+    padding: 5px;
+}
+#BetaSimPostedNC, #BetaStockDeviations {
+    color: #c7dacb;
+    font-size: 11px;
+}
 """
