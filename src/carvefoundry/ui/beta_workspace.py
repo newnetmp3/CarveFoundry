@@ -367,6 +367,15 @@ class BetaWorkspaceMixin:
             repr(self._active_machine_profile()),
         )
 
+    def _open_cam_generation_workspace(self) -> None:
+        """Route the visible viewport CTA to Machine, not another window."""
+        if not hasattr(self, "machining_dock"):
+            self._show_toolpath_generation_dialog()
+            return
+        if self.workspace_mode.currentText() != "Machine":
+            self.workspace_mode.setCurrentText("Machine")
+        self._open_inline_cam_form()
+
     def _open_inline_cam_form(self) -> None:
         """Render the canonical CAM options directly inside the Machine tab."""
         if self._machining_busy():
@@ -402,6 +411,9 @@ class BetaWorkspaceMixin:
             (i for i, (_title, _detail, ready, allowed) in enumerate(stages)
              if not ready and allowed),
             7,
+        )
+        self.machining_tabs.setCurrentIndex(
+            0 if index < 4 else 1 if index == 4 else 2 if index < 7 else 3
         )
         self.machining_steps[index].click()
 
