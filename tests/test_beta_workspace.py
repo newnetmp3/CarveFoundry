@@ -3,7 +3,7 @@ from time import monotonic, sleep
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QSettings, Qt, Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication, QFormLayout, QGroupBox, QSizePolicy
 
 from carvefoundry.cam.stock_simulation import RemovalStage, StockRemovalResult
