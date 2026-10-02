@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .workspace_icons import workspace_icon
+
 
 class BetaWorkspaceMixin:
     """Web-like Design/Machine UI; delegates every machining action."""
@@ -67,7 +69,7 @@ class BetaWorkspaceMixin:
         layout.setContentsMargins(11, 12, 11, 15)
         layout.setSpacing(10)
         scroll.setWidget(body)
-        tabs.addTab(scroll, name)
+        tabs.addTab(scroll, workspace_icon(name.split("·")[-1].strip().lower()), name)
         return layout
 
     @staticmethod
@@ -155,6 +157,10 @@ class BetaWorkspaceMixin:
         for index, (caption, callback) in enumerate(commands):
             button = QPushButton(caption)
             button.setObjectName(f"MachiningStep{index}")
+            button.setIcon(workspace_icon((
+                "stock", "machine", "fixtures", "layers",
+                "operations", "review", "preflight", "export",
+            )[index]))
             button.clicked.connect(
                 lambda _checked=False, i=index, fn=callback: self._run_machining_step(i, fn)
             )
@@ -221,6 +227,9 @@ class BetaWorkspaceMixin:
             ("Simulate removed stock", self._simulate_stock_removal),
         ):
             button = QPushButton(caption)
+            button.setIcon(workspace_icon(
+                "simulate" if "Simulate" in caption else "review"
+            ))
             button.clicked.connect(
                 lambda _checked=False, fn=callback: self._run_machining_step(5, fn)
             )
@@ -246,6 +255,7 @@ class BetaWorkspaceMixin:
             "machine, stock, fixtures and toolpaths."
         ))
         self.machining_setup_sheet = QPushButton("Print job setup sheet")
+        self.machining_setup_sheet.setIcon(workspace_icon("job_sheet"))
         self.machining_setup_sheet.clicked.connect(
             lambda _checked=False: self._run_machining_step(5, self._export_setup_sheet)
         )
