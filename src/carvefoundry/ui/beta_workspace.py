@@ -641,6 +641,10 @@ class BetaWorkspaceMixin:
         operation = self.machining_operation_picker.itemData(index)
         if not isinstance(operation, str) or not operation:
             return
+        if self.machining_operation_picker.currentIndex() != index:
+            # Programmatic selections follow the same path as a user click.
+            # The activated signal is user-only, so this cannot recurse.
+            self.machining_operation_picker.setCurrentIndex(index)
         if operation not in {
             "profile", "pocket", "vcarve", "engrave", "rough", "finish",
         } and self.experience_mode.currentText() == "Beginner":
