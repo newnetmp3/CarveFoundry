@@ -337,3 +337,18 @@ def test_beginner_reviews_job_order_inline_with_advanced_fallback(window):
     window.experience_mode.setCurrentText("Advanced")
     assert not window.machining_advanced_planner.isHidden()
     assert window.machining_advanced_planner.isEnabled()
+
+
+def test_stock_simulation_failure_and_cancel_clear_pending_review(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window._beta_stock_pending = True
+    window._handle_beta_stock_failure("NC fixture boundary violation")
+    assert not window._beta_stock_pending
+    assert "fixture boundary" in window.machining_stock_summary.text().lower()
+    assert not window.machining_stock_details.isEnabled()
+
+    window._beta_stock_pending = True
+    window._background_job = None
+    window._refresh_machining_panel()
+    assert not window._beta_stock_pending
+    assert "cancelled" in window.machining_stock_summary.text()
