@@ -1,10 +1,12 @@
 """Beta2 surfaces drive the shared project, CAM state and guarded commands."""
 from time import monotonic, sleep
 
+import numpy as np
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from carvefoundry.cam.stock_simulation import RemovalStage, StockRemovalResult
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.tools import Cutter, ToolType
@@ -177,3 +179,104 @@ def test_preflight_report_is_inline_and_stales_on_setup_changes(window):
     window._refresh_machining_panel()
     assert "NOT CLEARED" in window.machining_preflight_state.text()
     assert not window.machining_steps[7].isEnabled()
+
+
+def test_operation_picker_opens_specialized_advanced_cam_inline(window):
+    window.workspace_mode.setCurrentText("Machine")
+    assert window.experience_mode.currentText() == "Beginner"
+    picker = window.machining_operation_picker
+    row = picker.findData("rest")
+    assert row >= 0
+    window._select_machine_operation(row)
+    assert window._active_cam_operation == "rest"
+    assert window.experience_mode.currentText() == "Advanced"
+    form = window._machining_embedded_dialog
+    assert form is not None
+    assert form.generation_fields["operation"].currentData() == "rest"
+    assert form.generation_fields["mode"].currentText() == "Advanced"
+    assert picker.currentData() == "rest"
+
+
+def test_embedded_cam_experience_stays_in_sync_and_outside_changes_stale(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window._open_inline_cam_form()
+    form = window._machining_embedded_dialog
+    form.generation_fields["mode"].setCurrentText("Advanced")
+    assert window.experience_mode.currentText() == "Advanced"
+    window.experience_mode.setCurrentText("Beginner")
+    assert form.generation_fields["mode"].currentText() == "Simple"
+
+    window._select_cam_operation("pocket")
+    assert window._machining_form_snapshot != window._cam_form_context_key()
+    window._refresh_machining_panel()
+    assert not form.generation_fields["generate"].isEnabled()
+
+
+def test_review_path_overlays_and_per_cutter_summary(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window.project.toolpaths = paths()
+    window._refresh_machining_panel()
+    assert "2 operations" in window.machining_job_summary.text()
+    assert "1 cutter stage" in window.machining_job_summary.text()
+    before = window.viewport.toolpaths_visible
+    window.machining_paths_toggle.click()
+    assert window.viewport.toolpaths_visible != before
+    assert window.machining_paths_toggle.isChecked() == window.viewport.toolpaths_visible
+    window.machining_rapids_toggle.click()
+    assert window.machining_rapids_toggle.isChecked() == window.viewport.rapids_visible
+
+
+def test_stock_simulation_runs_original_background_path_without_modal(window, monkeypatch):
+    window.workspace_mode.setCurrentText("Machine")
+    window.project.toolpaths = paths()
+    window._refresh_machining_panel()
+    requested = []
+    monkeypatch.setattr(
+        window, "_run_stock_removal",
+        lambda **kw: requested.append(kw) or True,
+    )
+    window._simulate_stock_in_workspace()
+    assert requested == [{"spacing_mm": 0.75, "posted_nc": True}]
+    assert window.machining_tabs.currentIndex() == 2
+    assert "background" in window.machining_stock_summary.text()
+    window.experience_mode.setCurrentText("Advanced")
+    window.machining_verify_posted_nc.setChecked(False)
+    window.machining_sample_spacing.setValue(1.5)
+    window._simulate_stock_in_workspace()
+    assert requested[-1] == {"spacing_mm": 1.5, "posted_nc": False}
+
+
+def test_simulation_result_is_embedded_not_reused_after_stock_change(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window.project.toolpaths = paths()
+    zeros = np.zeros((3, 3), dtype=np.float32)
+    result = StockRemovalResult(
+        x_mm=np.array([0, 1, 2], dtype=float),
+        y_mm=np.array([0, 1, 2], dtype=float),
+        remaining_z_mm=zeros,
+        target_z_mm=None,
+        removed_volume_mm3=20.0,
+        cut_sample_count=3,
+        grid_spacing_mm=1.0,
+        stages=(RemovalStage("Rough", "Flat 3 mm", 20.0, 3),),
+    )
+    window._show_stock_removal_result(result, posted_nc=True)
+    assert window._beta_stock_result is result
+    assert "Verified posted NC" in window.machining_stock_summary.text()
+    assert window.machining_stock_image.pixmap() is not None
+    assert window.machining_stock_details.isEnabled()
+    assert getattr(window, "_stock_removal_dialog", None) is None
+    window.project.stock.thickness_mm += 1
+    window._refresh_machining_panel()
+    assert window._beta_stock_result is None
+    assert not window.machining_stock_details.isEnabled()
+    assert "out of date" in window.machining_stock_image.text()
+
+
+def test_machine_beginner_always_uses_verified_nc_simulation(window):
+    window.workspace_mode.setCurrentText("Machine")
+    window.experience_mode.setCurrentText("Advanced")
+    window.machining_verify_posted_nc.setChecked(False)
+    window.experience_mode.setCurrentText("Beginner")
+    assert window.machining_verify_posted_nc.isChecked()
+    assert window.machining_verify_posted_nc.isHidden()
