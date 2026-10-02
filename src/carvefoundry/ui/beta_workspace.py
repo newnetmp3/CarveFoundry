@@ -47,6 +47,7 @@ class BetaWorkspaceMixin:
         self.workspace_mode.setObjectName("BetaWorkspacePicker")
         self.workspace_mode.setAccessibleName("Workspace")
         self.workspace_mode.addItems(["Design", "Machine"])
+        self._size_workspace_selector_popup(self.workspace_mode)
         layout.addWidget(self.workspace_mode)
         self.workspace_hint = QLabel("Design your part, then prepare your machining job.")
         self.workspace_hint.setObjectName("BetaWorkspaceHint")
@@ -58,6 +59,7 @@ class BetaWorkspaceMixin:
         self.experience_mode.setObjectName("BetaExperiencePicker")
         self.experience_mode.setAccessibleName("Experience level")
         self.experience_mode.addItems(["Beginner", "Advanced"])
+        self._size_workspace_selector_popup(self.experience_mode)
         layout.addWidget(self.experience_mode)
         self.beta_commands_button = QPushButton("⌕ Commands")
         self.beta_commands_button.setObjectName("BetaCommandsButton")
@@ -74,6 +76,26 @@ class BetaWorkspaceMixin:
         self.beta_restore_button.clicked.connect(self._restore_beta_panels)
         layout.addWidget(self.beta_restore_button)
         return bar
+
+    @staticmethod
+    def _size_workspace_selector_popup(combo: QComboBox) -> None:
+        """Keep short selectors fully visible on KDE/Wayland popup styles.
+
+        Qt's native-looking combo popup can show scroll indicators even for
+        two choices when its item view gets a too-small default height.
+        Reserve room for every row *plus* popup margins, without making the
+        closed combo taller or altering the global dropdown style.
+        """
+        combo.setMaxVisibleItems(max(combo.count(), 4))
+        view = combo.view()
+        row_height = max(
+            combo.fontMetrics().height() + 14,
+            *(view.sizeHintForRow(row) for row in range(combo.count())),
+        )
+        view.setMinimumHeight(row_height * combo.count() + 18)
+        view.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
 
     @staticmethod
     def _machine_tab_layout(tabs: QTabWidget, name: str) -> QVBoxLayout:
