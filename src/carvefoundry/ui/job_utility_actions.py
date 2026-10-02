@@ -183,6 +183,11 @@ class JobUtilityActionsMixin:
             self._refresh_guided_workflow()
             report = str(payload["report"])
             self._set_activity_info(report)
+            # Beta2 renders the exact background verifier's report in the
+            # Review tab. Legacy Design/dialog callers keep the usual popup.
+            inline = getattr(self, "_handle_beta_preflight_result", None)
+            if inline is not None and inline(payload):
+                return
             display = QMessageBox(self)
             display.setWindowTitle("CNC Preflight")
             display.setIcon(
