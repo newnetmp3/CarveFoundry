@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -72,11 +73,17 @@ class CamGenerationDialogMixin:
             # separate window. No duplicate settings or calculation path.
             dialog.setWindowFlags(Qt.WindowType.Widget)
             dialog.setMinimumSize(0, 0)
-            dialog.resize(540, 720)
+            dialog.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+            )
+            dialog.resize(300, 600)
 
         outer = QVBoxLayout(dialog)
-        outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
+        outer.setContentsMargins(
+            4 if embedded else 12, 6 if embedded else 12,
+            4 if embedded else 12, 6 if embedded else 12,
+        )
+        outer.setSpacing(6 if embedded else 10)
 
         title = QLabel("Generate Toolpaths")
         title.setObjectName("DialogTitle")
@@ -114,6 +121,8 @@ class CamGenerationDialogMixin:
             "Advanced keeps every original CAM parameter available."
         )
         title_row.addWidget(mode_combo)
+        if embedded:
+            title.setText("CAM settings")
         outer.addLayout(title_row)
 
         intro = QLabel(
@@ -125,6 +134,9 @@ class CamGenerationDialogMixin:
         intro.setWordWrap(True)
         intro.setObjectName("Muted")
         outer.addWidget(intro)
+        if embedded:
+            # This long modal introduction is redundant under Operations.
+            intro.hide()
         cam_brief = QLabel(dialog)
         cam_brief.setObjectName("CamContextSummary")
         cam_brief.setWordWrap(True)
@@ -141,8 +153,22 @@ class CamGenerationDialogMixin:
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
-        scroll.setWidget(body)
+        # The Machine tab already scrolls. In dock mode use that single
+        # scrollbar, not a nested scroll area that clips the CAM form.
+        if not embedded:
+            scroll.setWidget(body)
+        else:
+            body.setMinimumWidth(0)
+            body.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+            )
+            grid.setColumnStretch(0, 1)
         workspace = QWidget(dialog)
+        if embedded:
+            workspace.setMinimumWidth(0)
+            workspace.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+            )
         workspace_layout = QHBoxLayout(workspace)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(8)
@@ -151,8 +177,8 @@ class CamGenerationDialogMixin:
         if embedded:
             navigator.hide()
             steps_toggle.hide()
-        workspace_layout.addWidget(scroll, 1)
-        outer.addWidget(workspace, 1)
+        workspace_layout.addWidget(body if embedded else scroll, 1)
+        outer.addWidget(workspace, 0 if embedded else 1)
 
         def show_step_navigation(visible: bool) -> None:
             navigator.setVisible(visible)
@@ -223,6 +249,16 @@ class CamGenerationDialogMixin:
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(6)
             row_layout.addWidget(widget, 1)
+            if embedded:
+                row.setMinimumWidth(0)
+                row.setSizePolicy(
+                    QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+                )
+                widget.setMinimumWidth(0)
+                widget.setSizePolicy(
+                    QSizePolicy.Policy.Ignored,
+                    widget.sizePolicy().verticalPolicy(),
+                )
 
             help_button = QPushButton("?")
             help_button.setObjectName(f"GenerationHelp_{help_key}")
@@ -274,9 +310,17 @@ class CamGenerationDialogMixin:
             form.setFieldGrowthPolicy(
                 QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
             )
-            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-            form.setHorizontalSpacing(10)
+            form.setRowWrapPolicy(
+                QFormLayout.RowWrapPolicy.WrapAllRows
+                if embedded else QFormLayout.RowWrapPolicy.WrapLongRows
+            )
+            form.setHorizontalSpacing(6 if embedded else 10)
             form.setVerticalSpacing(7)
+            if embedded:
+                box.setMinimumWidth(0)
+                box.setSizePolicy(
+                    QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+                )
             return box, form
 
         source_box, source_form = group("1. Source & Operation")
@@ -833,9 +877,18 @@ class CamGenerationDialogMixin:
             "regenerate after reopening a .cf3d project."
         )
         fields["append_job"] = append_job
+        if embedded:
+            append_job.setText(
+                f"Append to job ({len(self.project.toolpaths)} operations)"
+            )
+            append_job.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            )
         outer.addWidget(append_job)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        if embedded:
+            buttons.setOrientation(Qt.Orientation.Vertical)
         generate_button = buttons.addButton(
             "Generate Toolpaths",
             QDialogButtonBox.ButtonRole.AcceptRole,
@@ -852,6 +905,20 @@ class CamGenerationDialogMixin:
         simple_panel = QGroupBox("Your first toolpath · four choices", dialog)
         simple_panel.setObjectName("SimpleCamPanel")
         simple_form = QFormLayout(simple_panel)
+        if embedded:
+            simple_panel.setMinimumWidth(0)
+            simple_panel.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+            )
+            simple_form.setRowWrapPolicy(
+                QFormLayout.RowWrapPolicy.WrapAllRows
+            )
+            simple_form.setFieldGrowthPolicy(
+                QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+            )
+            simple_form.setContentsMargins(8, 10, 8, 10)
+            simple_form.setHorizontalSpacing(5)
+            simple_form.setVerticalSpacing(8)
         simple_intro = QLabel(
             "Choose what you want the cutter to do. The Advanced view contains "
             "all safety heights, linking and pass settings. They still apply "
@@ -866,11 +933,25 @@ class CamGenerationDialogMixin:
         op_idx = simple_operation.findData(operation_combo.currentData())
         simple_operation.setCurrentIndex(max(op_idx, 0))
         operation_preview = CamOperationIllustration(simple_panel)
+        # The fixed 250 px illustration beside the combo forced a 500+ px
+        # minimum width on a ~340 px dock. Keep it only in the full dialog.
         operation_choice = QHBoxLayout()
         operation_choice.setContentsMargins(0, 0, 0, 0)
         operation_choice.setSpacing(12)
-        operation_choice.addWidget(simple_operation, 1, Qt.AlignmentFlag.AlignTop)
-        operation_choice.addWidget(operation_preview, 0, Qt.AlignmentFlag.AlignTop)
+        if embedded:
+            simple_operation.setMinimumWidth(0)
+            simple_operation.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            )
+            operation_choice.addWidget(simple_operation, 1)
+            operation_preview.hide()
+        else:
+            operation_choice.addWidget(
+                simple_operation, 1, Qt.AlignmentFlag.AlignTop
+            )
+            operation_choice.addWidget(
+                operation_preview, 0, Qt.AlignmentFlag.AlignTop
+            )
         simple_form.addRow("What should the bit do?", operation_choice)
         operation_help = QLabel(simple_panel)
         operation_help.setWordWrap(True)
@@ -912,8 +993,20 @@ class CamGenerationDialogMixin:
         )
         material_note.setWordWrap(True)
         simple_form.addRow(material_note)
-        use_material = QPushButton("Apply example feed / plunge / stepdown")
+        use_material = QPushButton(
+            "Apply example feeds / stepdown"
+            if embedded else "Apply example feed / plunge / stepdown"
+        )
         use_material.setObjectName("SimpleCamApplyMaterial")
+        if embedded:
+            use_material.setToolTip(
+                "Apply example cutting feed, plunge feed and depth per pass. "
+                "These are starting values only; verify the cutter and machine."
+            )
+            use_material.setMinimumWidth(0)
+            use_material.setSizePolicy(
+                QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            )
         simple_form.addRow(use_material)
         simple_readiness = QLabel(simple_panel)
         simple_readiness.setObjectName("SimpleCamReadiness")
@@ -978,7 +1071,7 @@ class CamGenerationDialogMixin:
             simple_panel.setVisible(simple)
             workspace.setVisible(not simple)
             steps_toggle.setVisible(not simple)
-            operation_preview.set_running(simple)
+            operation_preview.set_running(simple and not embedded)
             self._settings.setValue("cam/simple_mode", simple)
 
         mode_combo.currentIndexChanged.connect(set_cam_mode)
@@ -1341,6 +1434,19 @@ class CamGenerationDialogMixin:
         fields["context_summary"] = cam_brief
         dialog.section_navigator = navigator
         dialog.generation_fields = fields
+        if embedded:
+            fields["simple_form"] = simple_panel
+            fields["advanced_body"] = body
+            fields["advanced_scroll"] = scroll
+            # Allow long descriptions to wrap to the available dock width
+            # instead of forcing an invisible horizontal overflow.
+            for label in dialog.findChildren(QLabel):
+                if label.wordWrap():
+                    label.setMinimumWidth(0)
+                    label.setSizePolicy(
+                        QSizePolicy.Policy.Ignored,
+                        QSizePolicy.Policy.Preferred,
+                    )
         dialog.generation_help_buttons = help_buttons
         dialog.generation_help_text = generation_help
         dialog.refresh_generation_readiness = update_relevance_and_readiness
