@@ -6,8 +6,11 @@ machine profiles and export safety checks. No second CAM engine or job state.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QDockWidget,
     QHBoxLayout,
     QLabel,
@@ -22,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .stock_simulation import stock_image
 from .workspace_icons import workspace_icon
 
 
@@ -173,6 +177,10 @@ class BetaWorkspaceMixin:
                 review.addWidget(button)
             else:
                 export.addWidget(button)
+        self.machining_setup_summary = self._machine_note(
+            "Stock and machine readiness", name="BetaSetupSummary"
+        )
+        setup.addWidget(self.machining_setup_summary)
         setup.addWidget(self._machine_note(
             "Fixture top Z is measured relative to stock-top Z0, not bed height. "
             "For a bed-mounted 23 mm fence, enter 23 mm minus stock thickness."
@@ -180,9 +188,28 @@ class BetaWorkspaceMixin:
         setup.addStretch()
 
         operations.addWidget(self._machine_note(
-            "Add or edit a cutter stage without leaving the machining workspace. "
-            "Generate runs the existing background CAM process."
+            "Select an operation to edit it here. The same Python/Rust CAM "
+            "process handles calculation in both Beginner and Advanced modes."
         ))
+        operations.addWidget(self._machine_note(
+            "Operation type", name="BetaSectionTitle"
+        ))
+        self.machining_operation_picker = QComboBox()
+        self.machining_operation_picker.setObjectName("BetaOperationPicker")
+        self.machining_operation_picker.setAccessibleName("New cutter operation")
+        for op in (
+            "profile", "silhouette", "pocket", "surface", "vcarve",
+            "engrave", "drill", "center_drill", "rough", "finish",
+            "height_map", "rest", "waterline",
+        ):
+            self.machining_operation_picker.addItem(self._cam_operation_title(op), op)
+        self.machining_operation_picker.setCurrentIndex(
+            max(0, self.machining_operation_picker.findData(self._active_cam_operation))
+        )
+        self.machining_operation_picker.activated.connect(
+            self._select_machine_operation
+        )
+        operations.addWidget(self.machining_operation_picker)
         self.machining_form_prompt = self._machine_note(
             "Choose 'Edit / generate operation' to show the full CAM form here."
         )
@@ -218,13 +245,33 @@ class BetaWorkspaceMixin:
         operations.addStretch()
 
         review.addWidget(self._machine_note(
-            "Review the actual planned motion, remaining stock and cutter order. "
-            "Preflight runs separately in the background; it cannot see physical clamps."
+            "Review planned toolpaths, simulate the posted NC, then run "
+            "preflight. Physical fixtures and machine offsets require your inspection."
         ))
+        self.machining_job_summary = self._machine_note(
+            "No generated operations.", name="BetaJobSummary"
+        )
+        review.addWidget(self.machining_job_summary)
+        overlays = QHBoxLayout()
+        self.machining_paths_toggle = QPushButton("Show toolpaths")
+        self.machining_paths_toggle.setCheckable(True)
+        self.machining_paths_toggle.setObjectName("BetaPathOverlay")
+        self.machining_paths_toggle.clicked.connect(
+            lambda _checked=False: self._toggle_toolpaths_view()
+        )
+        overlays.addWidget(self.machining_paths_toggle)
+        self.machining_rapids_toggle = QPushButton("Show rapid moves")
+        self.machining_rapids_toggle.setCheckable(True)
+        self.machining_rapids_toggle.setObjectName("BetaPathOverlay")
+        self.machining_rapids_toggle.clicked.connect(
+            lambda _checked=False: self._toggle_rapids_view()
+        )
+        overlays.addWidget(self.machining_rapids_toggle)
+        review.addLayout(overlays)
         self.machining_review_buttons = []
         for caption, callback in (
             ("Preview toolpaths", self._preview_toolpaths),
-            ("Simulate removed stock", self._simulate_stock_removal),
+            ("Simulate verified NC stock", self._simulate_stock_in_workspace),
         ):
             button = QPushButton(caption)
             button.setIcon(workspace_icon(
@@ -235,6 +282,66 @@ class BetaWorkspaceMixin:
             )
             review.addWidget(button)
             self.machining_review_buttons.append(button)
+        review.addWidget(self._machine_note(
+            "Stock simulation quality", name="BetaSectionTitle"
+        ))
+        sample_row = QHBoxLayout()
+        sample_row.addWidget(QLabel("XY sample spacing"))
+        self.machining_sample_spacing = QDoubleSpinBox()
+        self.machining_sample_spacing.setObjectName("BetaStockSampleSpacing")
+        self.machining_sample_spacing.setRange(0.1, 10.0)
+        self.machining_sample_spacing.setDecimals(2)
+        self.machining_sample_spacing.setSingleStep(0.25)
+        self.machining_sample_spacing.setValue(0.75)
+        self.machining_sample_spacing.setSuffix(" mm")
+        self.machining_sample_spacing.setToolTip(
+            "Smaller samples improve visible detail but use more memory and time."
+        )
+        sample_row.addWidget(self.machining_sample_spacing)
+        review.addLayout(sample_row)
+        self.machining_verify_posted_nc = QCheckBox(
+            "Verify posted G-code before simulation (recommended)"
+        )
+        self.machining_verify_posted_nc.setObjectName("BetaSimPostedNC")
+        self.machining_verify_posted_nc.setChecked(True)
+        self.machining_verify_posted_nc.setToolTip(
+            "The existing verifier decodes the actual post-processed NC and "
+            "checks its motion before running the stock sweep."
+        )
+        review.addWidget(self.machining_verify_posted_nc)
+        self.machining_stock_summary = self._machine_note(
+            "Run stock simulation to see estimated remaining material.",
+            name="BetaStockSummary",
+        )
+        review.addWidget(self.machining_stock_summary)
+        self.machining_stock_image = QLabel()
+        self.machining_stock_image.setObjectName("BetaStockImage")
+        self.machining_stock_image.setMinimumHeight(175)
+        self.machining_stock_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.machining_stock_image.setText("Stock preview appears here")
+        review.addWidget(self.machining_stock_image)
+        self.machining_stock_deviations = QCheckBox(
+            "Highlight residual material (blue) and gouges (red)"
+        )
+        self.machining_stock_deviations.setObjectName("BetaStockDeviations")
+        self.machining_stock_deviations.setEnabled(False)
+        self.machining_stock_deviations.toggled.connect(
+            self._render_inline_stock_image
+        )
+        review.addWidget(self.machining_stock_deviations)
+        self.machining_stock_details = QPushButton("Open full-size stock viewer")
+        self.machining_stock_details.setEnabled(False)
+        self.machining_stock_details.clicked.connect(
+            self._open_stock_details
+        )
+        review.addWidget(self.machining_stock_details)
+        self._beta_stock_result = None
+        self._beta_stock_fingerprint = None
+        self._beta_stock_posted_nc = False
+        review.addWidget(self._machine_note(
+            "Simulation is sampled 2.5D stock, not exact volumetric cutting. "
+            "It cannot detect cutter holders, runout, or unrecorded clamps."
+        ))
         self.machining_preflight_state = self._machine_note(
             "No preflight result for this job.", name="BetaPreflightState"
         )
@@ -260,6 +367,11 @@ class BetaWorkspaceMixin:
             lambda _checked=False: self._run_machining_step(5, self._export_setup_sheet)
         )
         export.addWidget(self.machining_setup_sheet)
+        self.machining_export_summary = self._machine_note(
+            "Generate toolpaths and run preflight before export.",
+            name="BetaExportSummary",
+        )
+        export.addWidget(self.machining_export_summary)
         export.addWidget(self._machine_note(
             "A new NC file is produced for each cutter stage. Stop the machine, "
             "change cutters, and RE-PROBE stock-top Z0 before each file. "
