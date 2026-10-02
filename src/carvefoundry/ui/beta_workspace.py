@@ -451,6 +451,9 @@ class BetaWorkspaceMixin:
         self.machining_next.setVisible(beginner)
         self.machining_edit_bar.setVisible(not beginner)
         self.machining_progress.setVisible(beginner)
+        self.machining_verify_posted_nc.setVisible(not beginner)
+        if beginner:
+            self.machining_verify_posted_nc.setChecked(True)
         self.workspace_hint.setText(
             "Design your part → Machine: setup, operations, review, export."
             if beginner else "Design and machining share one project and selection."
@@ -704,7 +707,50 @@ class BetaWorkspaceMixin:
         )
         for button in self.machining_review_buttons + self.machining_edit_buttons:
             button.setEnabled(has_paths and not busy)
+        self.machining_operation_picker.setEnabled(not busy)
+        selected_index = self.machining_operation_picker.findData(
+            self._active_cam_operation
+        )
+        if selected_index >= 0 and selected_index != self.machining_operation_picker.currentIndex():
+            self.machining_operation_picker.setCurrentIndex(selected_index)
+        for overlay in (self.machining_paths_toggle, self.machining_rapids_toggle):
+            overlay.setEnabled(has_paths)
+        self.machining_paths_toggle.setChecked(self.viewport.toolpaths_visible)
+        self.machining_rapids_toggle.setChecked(self.viewport.rapids_visible)
+        self.machining_sample_spacing.setEnabled(not busy)
+        self.machining_verify_posted_nc.setEnabled(not busy)
         self.machining_setup_sheet.setEnabled(has_paths and not busy)
+        stock = self.project.stock
+        machine = self._active_machine_profile()
+        self.machining_setup_summary.setText(
+            f"Stock {stock.width_mm:g} × {stock.height_mm:g} × "
+            f"{stock.thickness_mm:g} mm · XY0 bottom-left · Z0 stock top.\n"
+            f"Machine: {machine.name} "
+            f"({'confirmed' if stages[1][2] else 'needs operator confirmation'}). "
+            f"Fixtures: {len(self.project.fixtures)}."
+        )
+        self.machining_export_summary.setText(
+            "Planned-motion preflight passed for this exact setup. The export "
+            "step independently verifies posted NC. Confirm workholding and "
+            "probe stock-top Z0 on each cutter change."
+            if verified else
+            "Export locked until the current setup passes planned-motion "
+            "preflight. Run Review → CNC preflight."
+        )
+        if (
+            self._beta_stock_result is not None
+            and self._beta_stock_fingerprint != self._guided_job_fingerprint()
+        ):
+            self._beta_stock_result = None
+            self._beta_stock_fingerprint = None
+            self.machining_stock_image.clear()
+            self.machining_stock_image.setText("Stock simulation is out of date")
+            self.machining_stock_summary.setText(
+                "Stock, job, or machine settings changed. Simulate the current "
+                "posted NC again before relying on this preview."
+            )
+            self.machining_stock_details.setEnabled(False)
+            self.machining_stock_deviations.setEnabled(False)
         if verified:
             self.machining_preflight_state.setText(
                 "PASS for current stock, machine, fixtures and toolpaths. "
@@ -733,6 +779,18 @@ class BetaWorkspaceMixin:
                 )
         snapshot = tuple(id(path) for path in self.project.toolpaths)
         if snapshot != self._machining_paths_snapshot:
+            cutter_stages = sum(
+                index == 0 or path.cutter != self.project.toolpaths[index - 1].cutter
+                for index, path in enumerate(self.project.toolpaths)
+            )
+            cutting_minutes = sum(
+                path.estimated_cutting_minutes for path in self.project.toolpaths
+            )
+            self.machining_job_summary.setText(
+                f"{len(snapshot)} operations · {cutter_stages} cutter "
+                f"stage(s) · {cutting_minutes:.1f} min cutting (estimate)."
+                if has_paths else "No generated operations yet."
+            )
             selected = self.machining_operations.currentRow()
             self.machining_operations.clear()
             for index, path in enumerate(self.project.toolpaths, 1):
