@@ -489,6 +489,100 @@ class BetaWorkspaceMixin:
             repr(self._active_machine_profile()),
         )
 
+    def _select_machine_operation(self, index: int) -> None:
+        """Pick a real CAM operation; specialized cuts require Advanced mode."""
+        if self._machining_busy():
+            return
+        operation = self.machining_operation_picker.itemData(index)
+        if not isinstance(operation, str) or not operation:
+            return
+        if operation not in {
+            "profile", "pocket", "vcarve", "engrave", "rough", "finish",
+        } and self.experience_mode.currentText() == "Beginner":
+            self.experience_mode.setCurrentText("Advanced")
+        self._select_cam_operation(operation)
+        self._open_inline_cam_form()
+
+    def _simulate_stock_in_workspace(self) -> None:
+        """Run existing background simulation without an extra settings dialog."""
+        if self._machining_busy() or not self.project.toolpaths:
+            return
+        posted = self.machining_verify_posted_nc.isChecked()
+        started = self._run_stock_removal(
+            spacing_mm=self.machining_sample_spacing.value(),
+            posted_nc=posted,
+        )
+        if started:
+            self._beta_stock_result = None
+            self._beta_stock_fingerprint = None
+            self.machining_stock_image.clear()
+            self.machining_stock_image.setText("Calculating stock removal…")
+            self.machining_stock_summary.setText(
+                "Verifying posted NC and simulating removal in the background…"
+                if posted else
+                "Simulating planned toolpaths in the background (not posted NC)…"
+            )
+            self.machining_stock_details.setEnabled(False)
+            self.machining_stock_deviations.setEnabled(False)
+            self.machining_tabs.setCurrentIndex(2)
+
+    def _show_stock_removal_result(self, result, *, posted_nc: bool = False) -> None:
+        """Reuse the native stock-sweep result; show inline only in Machine."""
+        if (
+            not hasattr(self, "machining_tabs")
+            or self.workspace_mode.currentText() != "Machine"
+        ):
+            super()._show_stock_removal_result(result, posted_nc=posted_nc)
+            return
+        self._beta_stock_result = result
+        self._beta_stock_fingerprint = self._guided_job_fingerprint()
+        self._beta_stock_posted_nc = posted_nc
+        uncut, gouged, compared = result.deviation_counts()
+        identity = "Verified posted NC" if posted_nc else "Planned toolpaths only"
+        detail = (
+            f"{uncut:,} residual / {gouged:,} gouged of "
+            f"{compared:,} model samples (±0.15 mm)" if compared else
+            "Model surface comparison unavailable"
+        )
+        self.machining_stock_summary.setText(
+            f"{identity} · {result.grid_spacing_mm:.2f} mm sample grid · "
+            f"{result.removed_volume_cm3:.2f} cm³ estimated removed · "
+            f"{len(result.stages)} cutter stages.\n{detail}\n"
+            "Sampled stock cannot verify holders, actual fixturing, or work offsets."
+        )
+        self.machining_stock_deviations.setEnabled(compared > 0)
+        self.machining_stock_deviations.setChecked(compared > 0)
+        self.machining_stock_details.setEnabled(True)
+        self._render_inline_stock_image()
+        self.machining_tabs.setCurrentIndex(2)
+
+    def _render_inline_stock_image(self, _checked: bool = False) -> None:
+        result = getattr(self, "_beta_stock_result", None)
+        if result is None:
+            return
+        image = stock_image(
+            result, deviations=self.machining_stock_deviations.isChecked()
+        )
+        width = max(240, min(self.machining_stock_image.width() - 14, 640))
+        pixmap = QPixmap.fromImage(image).scaled(
+            width, 340,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.machining_stock_image.setPixmap(pixmap)
+
+    def _open_stock_details(self) -> None:
+        """Offer the existing high-resolution viewer for close inspection."""
+        result = self._beta_stock_result
+        if result is None:
+            return
+        if self._beta_stock_fingerprint != self._guided_job_fingerprint():
+            self._refresh_machining_panel()
+            return
+        super()._show_stock_removal_result(
+            result, posted_nc=self._beta_stock_posted_nc,
+        )
+
     def _open_cam_generation_workspace(self) -> None:
         """Route the visible viewport CTA to Machine, not another window."""
         if not hasattr(self, "machining_dock"):
