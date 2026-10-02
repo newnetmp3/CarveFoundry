@@ -785,10 +785,12 @@ QTabWidget#BetaMachiningTabs::pane {
 QTabWidget#BetaMachiningTabs QTabBar::tab {
     background: #131e2f;
     color: #b3c5bd;
-    padding: 10px 6px;
+    padding: 6px 2px;
+    min-height: 43px;
     border: 0;
     border-bottom: 2px solid transparent;
-    min-width: 62px;
+    min-width: 0px;
+    font-size: 11px;
     font-weight: 650;
 }
 QTabWidget#BetaMachiningTabs QTabBar::tab:selected {
