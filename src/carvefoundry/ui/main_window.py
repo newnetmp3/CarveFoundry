@@ -339,7 +339,7 @@ class MainWindow(
             "toolpath."
         )
         self.generate_toolpaths_button.clicked.connect(
-            self._show_toolpath_generation_dialog
+            self._open_cam_generation_workspace
         )
         canvas_bar_layout.addWidget(self.generate_toolpaths_button)
 
