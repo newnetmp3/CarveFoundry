@@ -6,7 +6,7 @@ machine profiles and export safety checks. No second CAM engine or job state.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from .stock_simulation import stock_image
 from .workspace_icons import workspace_icon
+from .workspace_palette import PaletteCommand, WorkspaceCommandPalette
 
 
 class BetaWorkspaceMixin:
@@ -57,6 +58,17 @@ class BetaWorkspaceMixin:
         self.experience_mode.setAccessibleName("Experience level")
         self.experience_mode.addItems(["Beginner", "Advanced"])
         layout.addWidget(self.experience_mode)
+        self.beta_commands_button = QPushButton("Search commands  Ctrl+K")
+        self.beta_commands_button.setObjectName("BetaCommandsButton")
+        self.beta_commands_button.setToolTip(
+            "Search tools, editing actions and machining workflows (Ctrl+K)."
+        )
+        self.beta_commands_button.clicked.connect(self._show_command_palette)
+        layout.addWidget(self.beta_commands_button)
+        self.beta_restore_button = QPushButton("Restore panels")
+        self.beta_restore_button.setObjectName("BetaRestoreButton")
+        self.beta_restore_button.clicked.connect(self._restore_beta_panels)
+        layout.addWidget(self.beta_restore_button)
         return bar
 
     @staticmethod
@@ -417,6 +429,108 @@ class BetaWorkspaceMixin:
         )
         if dock.isVisible():
             self._machining_timer.start()
+        self._beta_palette = None
+        self._beta_command_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self._beta_command_shortcut.activated.connect(self._show_command_palette)
+
+    def _restore_beta_panels(self) -> None:
+        """Reopen a dock closed by the operator; keep the canonical Qt canvas."""
+        if self.workspace_mode.currentText() == "Machine":
+            self.machining_dock.setFloating(False)
+            self.addDockWidget(
+                Qt.DockWidgetArea.RightDockWidgetArea, self.machining_dock
+            )
+            self.machining_dock.show()
+            self.machining_dock.raise_()
+        else:
+            self.properties_panel.show()
+            self.inspector_button.setChecked(True)
+            self._design_inspector_visible = True
+            self._settings.setValue("interface/inspector_visible", True)
+
+    def _show_command_palette(self) -> None:
+        """Search the already-registered UI actions; do not clone their logic."""
+        previous = getattr(self, "_beta_palette", None)
+        if previous is not None:
+            previous.raise_()
+            previous.activateWindow()
+            previous.search.setFocus()
+            return
+        busy = self._machining_busy()
+        stages = self._guided_stage_status()
+        commands = [
+            PaletteCommand(
+                "Switch to Design workspace",
+                lambda: self.workspace_mode.setCurrentText("Design"),
+                keywords="cad editing panels",
+            ),
+            PaletteCommand(
+                "Switch to Machine workspace",
+                lambda: self.workspace_mode.setCurrentText("Machine"),
+                keywords="cnc toolpaths",
+            ),
+            PaletteCommand(
+                "Beginner experience",
+                lambda: self.experience_mode.setCurrentText("Beginner"),
+                keywords="simple cnc mode",
+            ),
+            PaletteCommand(
+                "Advanced experience",
+                lambda: self.experience_mode.setCurrentText("Advanced"),
+                keywords="full cnc settings",
+            ),
+            PaletteCommand(
+                "Edit and generate toolpath",
+                self._open_cam_generation_workspace,
+                enabled=not busy,
+                keywords="pocket profile finish rough cut",
+            ),
+            PaletteCommand(
+                "Review and simulate toolpaths",
+                lambda: (
+                    self.workspace_mode.setCurrentText("Machine"),
+                    self.machining_tabs.setCurrentIndex(2),
+                ),
+                enabled=bool(self.project.toolpaths),
+                keywords="simulation stock verify preview",
+            ),
+            PaletteCommand(
+                "Run CNC preflight",
+                lambda: self._run_machining_step(6, self._preflight_toolpaths),
+                enabled=not busy and stages[6][3],
+                keywords="safety stock fixtures check",
+            ),
+            PaletteCommand(
+                "Export G-code per cutter",
+                lambda: self._run_machining_step(7, self._export_gcode),
+                enabled=not busy and stages[7][3],
+                keywords="grbl probe nc",
+            ),
+            PaletteCommand(
+                "Restore workspace panels",
+                self._restore_beta_panels,
+                keywords="dock show inspector",
+            ),
+        ]
+        seen = {command.title.casefold() for command in commands}
+        for key, action in sorted(self._ui_actions.items()):
+            title = action.text().replace("&", "").strip()
+            if not title or title.casefold() in seen:
+                continue
+            seen.add(title.casefold())
+            commands.append(PaletteCommand(
+                title,
+                lambda a=action: a.trigger() if a.isEnabled() else None,
+                enabled=action.isEnabled(),
+                keywords=key.replace("_", " ") + " " + action.toolTip(),
+            ))
+        palette = WorkspaceCommandPalette(commands, self)
+        palette.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self._beta_palette = palette
+        palette.destroyed.connect(
+            lambda _obj=None: setattr(self, "_beta_palette", None)
+        )
+        palette.open()
 
     def _set_beta_workspace(self, mode: str) -> None:
         machine = mode == "Machine"
