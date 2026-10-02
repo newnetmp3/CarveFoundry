@@ -379,7 +379,7 @@ def test_machine_tabs_fit_narrow_dock_without_horizontal_scroll(window):
     assert not bar.usesScrollButtons()
     assert bar.expanding()
     assert bar.elideMode() == Qt.TextElideMode.ElideNone
-    assert all("\\n" in tabs.tabText(i) for i in range(4))
+    assert all("\n" in tabs.tabText(i) for i in range(4))
     bar.resize(332, 60)
     _APP.processEvents()
     assert bar.tabRect(3).right() <= bar.width()
