@@ -51,6 +51,7 @@ class BetaWorkspaceMixin:
         self.workspace_hint = QLabel("Design your part, then prepare your machining job.")
         self.workspace_hint.setObjectName("BetaWorkspaceHint")
         self.workspace_hint.setWordWrap(True)
+        self.workspace_hint.setMinimumWidth(0)
         layout.addWidget(self.workspace_hint, 1)
         layout.addWidget(QLabel("Experience"))
         self.experience_mode = QComboBox()
@@ -58,15 +59,18 @@ class BetaWorkspaceMixin:
         self.experience_mode.setAccessibleName("Experience level")
         self.experience_mode.addItems(["Beginner", "Advanced"])
         layout.addWidget(self.experience_mode)
-        self.beta_commands_button = QPushButton("Search commands  Ctrl+K")
+        self.beta_commands_button = QPushButton("⌕ Commands")
         self.beta_commands_button.setObjectName("BetaCommandsButton")
         self.beta_commands_button.setToolTip(
             "Search tools, editing actions and machining workflows (Ctrl+K)."
         )
         self.beta_commands_button.clicked.connect(self._show_command_palette)
         layout.addWidget(self.beta_commands_button)
-        self.beta_restore_button = QPushButton("Restore panels")
+        self.beta_restore_button = QPushButton("Panels")
         self.beta_restore_button.setObjectName("BetaRestoreButton")
+        self.beta_restore_button.setToolTip(
+            "Restore the dock or Inspector if you closed a workspace panel."
+        )
         self.beta_restore_button.clicked.connect(self._restore_beta_panels)
         layout.addWidget(self.beta_restore_button)
         return bar
