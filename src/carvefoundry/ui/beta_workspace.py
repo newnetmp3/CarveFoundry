@@ -114,7 +114,7 @@ class BetaWorkspaceMixin:
         # Number and name on separate lines keeps all four stages visible
         # in a narrow dock without horizontal tab scrolling.
         number, title = (part.strip() for part in name.split("·", 1))
-        tabs.addTab(scroll, f"{number}\\n{title}")
+        tabs.addTab(scroll, f"{number}\n{title}")
         return layout
 
     @staticmethod
