@@ -360,6 +360,7 @@ class BetaWorkspaceMixin:
         self._beta_stock_result = None
         self._beta_stock_fingerprint = None
         self._beta_stock_posted_nc = False
+        self._beta_stock_pending = False
         review.addWidget(self._machine_note(
             "Simulation is sampled 2.5D stock, not exact volumetric cutting. "
             "It cannot detect cutter holders, runout, or unrecorded clamps."
@@ -657,6 +658,7 @@ class BetaWorkspaceMixin:
             posted_nc=posted,
         )
         if started:
+            self._beta_stock_pending = True
             self._beta_stock_result = None
             self._beta_stock_fingerprint = None
             self.machining_stock_image.clear()
@@ -672,6 +674,7 @@ class BetaWorkspaceMixin:
 
     def _show_stock_removal_result(self, result, *, posted_nc: bool = False) -> None:
         """Reuse the native stock-sweep result; show inline only in Machine."""
+        self._beta_stock_pending = False
         if (
             not hasattr(self, "machining_tabs")
             or self.workspace_mode.currentText() != "Machine"
@@ -699,6 +702,19 @@ class BetaWorkspaceMixin:
         self.machining_stock_details.setEnabled(True)
         self._render_inline_stock_image()
         self.machining_tabs.setCurrentIndex(2)
+
+    def _handle_beta_stock_failure(self, message: str) -> None:
+        """A failed stock worker must never leave a phantom 'running' result."""
+        self._beta_stock_pending = False
+        self._beta_stock_result = None
+        self._beta_stock_fingerprint = None
+        self.machining_stock_image.clear()
+        self.machining_stock_image.setText("Stock simulation failed")
+        self.machining_stock_summary.setText(
+            f"Stock removal did not complete: {message}"
+        )
+        self.machining_stock_details.setEnabled(False)
+        self.machining_stock_deviations.setEnabled(False)
 
     def _render_inline_stock_image(self, _checked: bool = False) -> None:
         result = getattr(self, "_beta_stock_result", None)
@@ -828,6 +844,13 @@ class BetaWorkspaceMixin:
         if not hasattr(self, "machining_dock"):
             return
         busy = self._machining_busy()
+        if self._beta_stock_pending and not busy:
+            self._beta_stock_pending = False
+            self.machining_stock_image.setText("Stock simulation not completed")
+            self.machining_stock_summary.setText(
+                "The stock simulation ended without a result or was cancelled. "
+                "Run it again before relying on the stock preview."
+            )
         stages = self._guided_stage_status()
         for button, (title, detail, _ready, allowed) in zip(
             self.machining_steps, stages, strict=True,
