@@ -111,7 +111,10 @@ class BetaWorkspaceMixin:
         layout.setContentsMargins(11, 12, 11, 15)
         layout.setSpacing(10)
         scroll.setWidget(body)
-        tabs.addTab(scroll, workspace_icon(name.split("·")[-1].strip().lower()), name)
+        # Number and name on separate lines keeps all four stages visible
+        # in a narrow dock without horizontal tab scrolling.
+        number, title = (part.strip() for part in name.split("·", 1))
+        tabs.addTab(scroll, f"{number}\\n{title}")
         return layout
 
     @staticmethod
@@ -175,6 +178,11 @@ class BetaWorkspaceMixin:
         tabs = QTabWidget(frame)
         tabs.setObjectName("BetaMachiningTabs")
         tabs.setDocumentMode(True)
+        tabs.setMinimumWidth(0)
+        tab_bar = tabs.tabBar()
+        tab_bar.setUsesScrollButtons(False)
+        tab_bar.setExpanding(True)
+        tab_bar.setElideMode(Qt.TextElideMode.ElideNone)
         self.machining_tabs = tabs
         setup = self._machine_tab_layout(tabs, "1 · Setup")
         operations = self._machine_tab_layout(tabs, "2 · Operations")
