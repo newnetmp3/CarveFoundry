@@ -3,7 +3,7 @@ from time import monotonic, sleep
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.stock_simulation import RemovalStage, StockRemovalResult
@@ -53,6 +53,24 @@ def test_workspace_preserves_project_selection_and_restores_preferences(window):
         assert not second.properties_panel.isHidden()
     finally:
         second.close()
+
+
+def test_short_workspace_dropdowns_reserve_room_for_all_items(window):
+    # KDE popup menus must not have to scroll for two choices.
+    for combo in (window.workspace_mode, window.experience_mode):
+        assert combo.count() == 2
+        assert combo.maxVisibleItems() >= combo.count()
+        view = combo.view()
+        expected_row = max(
+            combo.fontMetrics().height() + 14,
+            *(view.sizeHintForRow(i) for i in range(combo.count())),
+        )
+        assert view.minimumHeight() >= expected_row * combo.count() + 18
+        assert view.verticalScrollBarPolicy() == (
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        # Keep the selected/closed control compact, unlike the popup.
+        assert combo.sizeHint().height() < view.minimumHeight()
 
 
 def test_cam_mode_and_machine_append_default_share_real_form(window):
