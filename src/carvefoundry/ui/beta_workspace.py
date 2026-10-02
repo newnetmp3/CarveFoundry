@@ -10,8 +10,8 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QDockWidget,
+    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
