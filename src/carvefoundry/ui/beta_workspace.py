@@ -645,15 +645,15 @@ class BetaWorkspaceMixin:
         operation = self.machining_operation_picker.itemData(index)
         if not isinstance(operation, str) or not operation:
             return
-        if self.machining_operation_picker.currentIndex() != index:
-            # Programmatic selections follow the same path as a user click.
-            # The activated signal is user-only, so this cannot recurse.
-            self.machining_operation_picker.setCurrentIndex(index)
         if operation not in {
             "profile", "pocket", "vcarve", "engrave", "rough", "finish",
         } and self.experience_mode.currentText() == "Beginner":
             self.experience_mode.setCurrentText("Advanced")
         self._select_cam_operation(operation)
+        # Changing experience refreshes the panel; restore the selected
+        # operation AFTER that refresh instead of reverting to prior 'finish'.
+        if self.machining_operation_picker.currentIndex() != index:
+            self.machining_operation_picker.setCurrentIndex(index)
         self._open_inline_cam_form()
 
     def _simulate_stock_in_workspace(self) -> None:
