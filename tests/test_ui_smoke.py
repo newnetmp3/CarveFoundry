@@ -700,7 +700,7 @@ def test_generation_dialog_blocks_incompatible_vcarve_cutter() -> None:
         )
         fields["cutter"].setCurrentIndex(flat_index)
         assert not fields["generate"].isEnabled()
-        assert "V-Carve cutter" in fields["readiness"].text()
+        assert "V-Carving cutter" in fields["readiness"].text()
 
         v_index = next(
             index
