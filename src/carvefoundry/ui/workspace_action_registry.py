@@ -205,7 +205,7 @@ class WorkspaceActionRegistryMixin:
             ("silhouette", "Silhouette"),
             ("pocket", "Pocket"),
             ("surface", "Surface"),
-            ("vcarve", "V-Carve"),
+            ("vcarve", "V-Carving"),
             ("engrave", "Engrave"),
             ("drill", "Drill Features"),
             ("center_drill", "Center Drill"),
