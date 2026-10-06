@@ -189,7 +189,7 @@ class WorkspaceSurfaceBuilderMixin:
             ("silhouette", "Silhouette"),
             ("pocket", "Pocket"),
             ("surface", "Surface"),
-            ("vcarve", "V-Carve"),
+            ("vcarve", "V-Carving"),
             ("engrave", "Engrave"),
             ("drill", "Drill Features"),
             ("center_drill", "Center Drill"),
@@ -741,7 +741,7 @@ class WorkspaceSurfaceBuilderMixin:
         )
         rail.add_menu(
             "cam",
-            "V-Carve",
+            "V-Carving",
             cam_menu,
             tooltip="All CAM operations, path design, motion, Detail, and generation.",
             primary_callback=lambda: self._select_cam_operation(
