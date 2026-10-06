@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 _OPERATION_EXPLANATIONS = {
     "profile": "Profile follows the outline of a shape. Choose Inside/Outside in Advanced when cutter radius matters; a cutout needs secure holding.",
     "pocket": "Pocket removes wood INSIDE a closed region, leaving a recessed area.",
-    "vcarve": "V-Carve varies cutting depth across lettering or shapes with a V-bit.",
+    "vcarve": "V-Carving varies cutting depth across lettering or shapes with a V-bit.",
     "engrave": "Engrave traces outlines or linework at the configured depth.",
     "rough": "3D Rough removes bulk material before a smaller or round finishing cutter refines the surface.",
     "finish": "3D Finish follows the modeled top surface. A finer stepover can improve visible detail but takes more passes.",
