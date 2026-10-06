@@ -62,7 +62,9 @@ growing `main_window.py`, a facade module, or a generic catch-all controller.
 
 - `core/project.py`, `core/history.py`, `core/project_file.py`: design
   state, snapshots and self-contained .cf3d assets. Mesh assets are shared in
-  snapshots rather than deep-copied on every Undo.
+  snapshots rather than deep-copied on every Undo. Native projects also retain
+  calculated CAM toolpaths; dense motion is stored as checksum-verified,
+  compressed binary payloads rather than expanded JSON.
 - `core/planar_operations.py`: XY silhouette Booleans and signed offsets,
   returning Z0-topped, independently triangulated 2.5D shapes. Not 3D mesh
   Booleans.
