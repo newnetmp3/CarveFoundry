@@ -324,12 +324,12 @@ def _load_toolpaths(
                 f"Toolpath {path_index + 1} operation is invalid."
             )
 
-        try:
-            move_count = int(raw_path.get("move_count", 0))
-        except (TypeError, ValueError) as exc:
+        raw_move_count = raw_path.get("move_count", 0)
+        if isinstance(raw_move_count, bool) or not isinstance(raw_move_count, int):
             raise ProjectFileError(
                 f"Toolpath {path_index + 1} move count is invalid."
-            ) from exc
+            )
+        move_count = raw_move_count
         if move_count < 0:
             raise ProjectFileError(
                 f"Toolpath {path_index + 1} move count is invalid."
@@ -614,6 +614,12 @@ def _build_container(
                 "transform": _transform_to_dict(item.transform),
             }
         )
+
+    if len(project.toolpaths) > _MAX_TOOLPATHS:
+        raise ProjectFileError("Project contains too many toolpaths.")
+    total_toolpath_moves = sum(len(toolpath.moves) for toolpath in project.toolpaths)
+    if total_toolpath_moves > _MAX_TOOLPATH_MOVES:
+        raise ProjectFileError("Project contains too many toolpath moves.")
 
     toolpaths: list[dict[str, object]] = []
     for path_index, toolpath in enumerate(project.toolpaths):
