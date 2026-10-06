@@ -334,7 +334,7 @@ class CamGenerationDialogMixin:
                     "Face the stock top. This operation can run with no design "
                     "objects."
                 ),
-                "V-Carve": (
+                "V-Carving": (
                     "Use a V-bit/cone profile to carve vector/detail geometry."
                 ),
                 "Engrave": "Trace projected contours/linework with the cutter.",
@@ -498,7 +498,7 @@ class CamGenerationDialogMixin:
         fields["detail"] = detail
         add_help_row(
             strategy_form,
-            "3D / V-Carve detail",
+            "3D / V-Carving detail",
             "detail",
             detail,
         )
@@ -1112,7 +1112,7 @@ class CamGenerationDialogMixin:
                         and cutter.tool_type
                         in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}
                         and cutter.angle_deg is not None,
-                        "V-Carve cutter has a V/cone profile and included angle",
+                        "V-Carving cutter has a V/cone profile and included angle",
                     )
                 )
             checks.append(
