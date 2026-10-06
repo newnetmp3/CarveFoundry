@@ -97,6 +97,11 @@ def test_project_round_trip_persists_toolpaths_and_cutter_geometry(
         source_item_name=item.name,
     )
     project = Project(items=[item], toolpaths=[toolpath])
+    manifest = project_to_dict(project, tmp_path / "cam-job.cf3d")
+    stored_path = manifest["toolpaths"][0]
+    assert "moves" not in stored_path
+    assert stored_path["move_count"] == len(toolpath.moves)
+    assert stored_path["moves_asset_id"] in manifest["assets"]
 
     loaded = load_project(save_project(project, tmp_path / "cam-job.cf3d"))
 
