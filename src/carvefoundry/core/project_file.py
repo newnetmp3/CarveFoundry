@@ -4,7 +4,7 @@ import hashlib
 import json
 import struct
 import tempfile
-from math import isfinite
+from math import isfinite, isnan
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
@@ -34,6 +34,14 @@ _HEADER_FLAGS = 0
 _MAX_MANIFEST_SIZE = 64 * 1024 * 1024
 _MAX_TOOLPATHS = 10_000
 _MAX_TOOLPATH_MOVES = 1_000_000
+_TOOLPATH_MOVES_ENCODING = "cfmoves-f64-v1"
+_TOOLPATH_MOVE_STRUCT = struct.Struct("<dddBd")
+_MOVE_KIND_TO_CODE = {
+    MoveKind.RAPID: 0,
+    MoveKind.PLUNGE: 1,
+    MoveKind.CUT: 2,
+}
+_MOVE_CODE_TO_KIND = {code: kind for kind, code in _MOVE_KIND_TO_CODE.items()}
 _ASSET_ZSTD_LEVEL = 19
 _MANIFEST_ZSTD_LEVEL = 12
 
@@ -187,7 +195,79 @@ def _load_cutter(value: object, *, path_index: int) -> Cutter:
         ) from exc
 
 
-def _toolpath_to_dict(toolpath: Toolpath) -> dict[str, object]:
+def _encode_toolpath_moves(toolpath: Toolpath) -> bytes:
+    data = bytearray(len(toolpath.moves) * _TOOLPATH_MOVE_STRUCT.size)
+    for index, move in enumerate(toolpath.moves):
+        feed = float("nan") if move.feed_mm_min is None else move.feed_mm_min
+        _TOOLPATH_MOVE_STRUCT.pack_into(
+            data,
+            index * _TOOLPATH_MOVE_STRUCT.size,
+            move.x_mm,
+            move.y_mm,
+            move.z_mm,
+            _MOVE_KIND_TO_CODE[move.kind],
+            feed,
+        )
+    return bytes(data)
+
+
+def _decode_toolpath_moves(
+    data: bytes,
+    *,
+    path_index: int,
+    move_count: int,
+) -> list[ToolpathMove]:
+    expected_size = move_count * _TOOLPATH_MOVE_STRUCT.size
+    if len(data) != expected_size:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} motion payload size is invalid."
+        )
+
+    moves: list[ToolpathMove] = []
+    for move_index in range(move_count):
+        offset = move_index * _TOOLPATH_MOVE_STRUCT.size
+        x_mm, y_mm, z_mm, kind_code, feed_value = _TOOLPATH_MOVE_STRUCT.unpack_from(
+            data,
+            offset,
+        )
+        kind = _MOVE_CODE_TO_KIND.get(kind_code)
+        if kind is None:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                "has an invalid move kind."
+            )
+        if isnan(feed_value):
+            feed_mm_min = None
+        elif not isfinite(feed_value):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                "has an invalid feed."
+            )
+        else:
+            feed_mm_min = feed_value
+        try:
+            moves.append(
+                ToolpathMove(
+                    x_mm=x_mm,
+                    y_mm=y_mm,
+                    z_mm=z_mm,
+                    kind=kind,
+                    feed_mm_min=feed_mm_min,
+                )
+            )
+        except ValueError as exc:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                f"is invalid: {exc}"
+            ) from exc
+    return moves
+
+
+def _toolpath_to_dict(
+    toolpath: Toolpath,
+    *,
+    moves_asset_id: str | None,
+) -> dict[str, object]:
     return {
         "name": toolpath.name,
         "operation": toolpath.operation,
@@ -195,16 +275,9 @@ def _toolpath_to_dict(toolpath: Toolpath) -> dict[str, object]:
         "safe_z_mm": toolpath.safe_z_mm,
         "source_item_id": toolpath.source_item_id,
         "source_item_name": toolpath.source_item_name,
-        "moves": [
-            {
-                "x_mm": move.x_mm,
-                "y_mm": move.y_mm,
-                "z_mm": move.z_mm,
-                "kind": move.kind.value,
-                "feed_mm_min": move.feed_mm_min,
-            }
-            for move in toolpath.moves
-        ],
+        "move_count": len(toolpath.moves),
+        "moves_encoding": _TOOLPATH_MOVES_ENCODING,
+        "moves_asset_id": moves_asset_id,
     }
 
 
@@ -220,7 +293,14 @@ def _optional_text(
     return value
 
 
-def _load_toolpaths(value: object) -> list[Toolpath]:
+def _load_toolpaths(
+    value: object,
+    *,
+    handle: BinaryIO,
+    payload_start: int,
+    container_size: int,
+    assets: object,
+) -> list[Toolpath]:
     if not isinstance(value, list):
         raise ProjectFileError("Project toolpaths section is invalid.")
     if len(value) > _MAX_TOOLPATHS:
@@ -244,66 +324,52 @@ def _load_toolpaths(value: object) -> list[Toolpath]:
                 f"Toolpath {path_index + 1} operation is invalid."
             )
 
-        raw_moves = raw_path.get("moves", [])
-        if not isinstance(raw_moves, list):
+        try:
+            move_count = int(raw_path.get("move_count", 0))
+        except (TypeError, ValueError) as exc:
             raise ProjectFileError(
-                f"Toolpath {path_index + 1} moves must be a list."
+                f"Toolpath {path_index + 1} move count is invalid."
+            ) from exc
+        if move_count < 0:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move count is invalid."
             )
-        total_moves += len(raw_moves)
+        total_moves += move_count
         if total_moves > _MAX_TOOLPATH_MOVES:
             raise ProjectFileError("Project contains too many toolpath moves.")
 
-        moves: list[ToolpathMove] = []
-        for move_index, raw_move in enumerate(raw_moves):
-            if not isinstance(raw_move, dict):
+        encoding = raw_path.get("moves_encoding")
+        if encoding != _TOOLPATH_MOVES_ENCODING:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} motion encoding is unsupported."
+            )
+        asset_id = raw_path.get("moves_asset_id")
+        if move_count == 0:
+            if asset_id is not None:
                 raise ProjectFileError(
-                    f"Toolpath {path_index + 1} move {move_index + 1} "
-                    "must be an object."
+                    f"Toolpath {path_index + 1} has an unexpected motion payload."
                 )
-            try:
-                kind = MoveKind(raw_move.get("kind"))
-                feed_value = raw_move.get("feed_mm_min")
-                move = ToolpathMove(
-                    x_mm=_finite_float(
-                        raw_move.get("x_mm"),
-                        field_name=(
-                            f"Toolpath {path_index + 1} move "
-                            f"{move_index + 1} X"
-                        ),
-                    ),
-                    y_mm=_finite_float(
-                        raw_move.get("y_mm"),
-                        field_name=(
-                            f"Toolpath {path_index + 1} move "
-                            f"{move_index + 1} Y"
-                        ),
-                    ),
-                    z_mm=_finite_float(
-                        raw_move.get("z_mm"),
-                        field_name=(
-                            f"Toolpath {path_index + 1} move "
-                            f"{move_index + 1} Z"
-                        ),
-                    ),
-                    kind=kind,
-                    feed_mm_min=(
-                        None
-                        if feed_value is None
-                        else _finite_float(
-                            feed_value,
-                            field_name=(
-                                f"Toolpath {path_index + 1} move "
-                                f"{move_index + 1} feed"
-                            ),
-                        )
-                    ),
-                )
-            except (TypeError, ValueError) as exc:
+            moves: list[ToolpathMove] = []
+        else:
+            if not isinstance(asset_id, str) or len(asset_id) != 64:
                 raise ProjectFileError(
-                    f"Toolpath {path_index + 1} move {move_index + 1} "
-                    f"is invalid: {exc}"
-                ) from exc
-            moves.append(move)
+                    f"Toolpath {path_index + 1} motion payload id is invalid."
+                )
+            metadata = _asset_metadata(assets, asset_id)
+            expected_size = move_count * _TOOLPATH_MOVE_STRUCT.size
+            data = _read_asset_data(
+                handle,
+                payload_start=payload_start,
+                container_size=container_size,
+                asset_id=asset_id,
+                metadata=metadata,
+                expected_original_size=expected_size,
+            )
+            moves = _decode_toolpath_moves(
+                data,
+                path_index=path_index,
+                move_count=move_count,
+            )
 
         try:
             path = Toolpath(
@@ -473,6 +539,31 @@ def _encode_asset(data: bytes) -> tuple[str, bytes]:
     return "raw", data
 
 
+def _store_payload_asset(
+    assets: dict[str, dict[str, Any]],
+    payloads: list[bytes],
+    data: bytes,
+    *,
+    payload_offset: int,
+    original_name: str,
+) -> tuple[str, int]:
+    asset_id = hashlib.sha256(data).hexdigest()
+    if asset_id in assets:
+        return asset_id, payload_offset
+
+    codec, stored = _encode_asset(data)
+    assets[asset_id] = {
+        "offset": payload_offset,
+        "stored_size": len(stored),
+        "original_size": len(data),
+        "codec": codec,
+        "sha256": asset_id,
+        "original_name": original_name,
+    }
+    payloads.append(stored)
+    return asset_id, payload_offset + len(stored)
+
+
 def _build_container(
     project: Project,
 ) -> tuple[dict[str, Any], list[bytes]]:
@@ -488,19 +579,13 @@ def _build_container(
 
         if asset is not None:
             data, source_name = asset
-            asset_id = hashlib.sha256(data).hexdigest()
-            if asset_id not in assets:
-                codec, stored = _encode_asset(data)
-                assets[asset_id] = {
-                    "offset": payload_offset,
-                    "stored_size": len(stored),
-                    "original_size": len(data),
-                    "codec": codec,
-                    "sha256": asset_id,
-                    "original_name": source_name,
-                }
-                payloads.append(stored)
-                payload_offset += len(stored)
+            asset_id, payload_offset = _store_payload_asset(
+                assets,
+                payloads,
+                data,
+                payload_offset=payload_offset,
+                original_name=source_name,
+            )
 
         items.append(
             {
@@ -530,6 +615,25 @@ def _build_container(
             }
         )
 
+    toolpaths: list[dict[str, object]] = []
+    for path_index, toolpath in enumerate(project.toolpaths):
+        move_data = _encode_toolpath_moves(toolpath)
+        moves_asset_id: str | None = None
+        if move_data:
+            moves_asset_id, payload_offset = _store_payload_asset(
+                assets,
+                payloads,
+                move_data,
+                payload_offset=payload_offset,
+                original_name=f"toolpath-{path_index + 1}.cfmoves",
+            )
+        toolpaths.append(
+            _toolpath_to_dict(
+                toolpath,
+                moves_asset_id=moves_asset_id,
+            )
+        )
+
     manifest: dict[str, Any] = {
         "format": PROJECT_FORMAT,
         "version": PROJECT_FILE_VERSION,
@@ -543,7 +647,7 @@ def _build_container(
         "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
         "items": items,
-        "toolpaths": [_toolpath_to_dict(path) for path in project.toolpaths],
+        "toolpaths": toolpaths,
         "assets": assets,
     }
     return manifest, payloads
@@ -577,6 +681,8 @@ def save_project(project: Project, path: str | Path) -> Path:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    if len(manifest_raw) > _MAX_MANIFEST_SIZE:
+        raise ProjectFileError("Project manifest is too large to save safely.")
     manifest_stored = _compress_zstd(manifest_raw, level=_MANIFEST_ZSTD_LEVEL)
     header = _HEADER.pack(
         PROJECT_FILE_MAGIC,
@@ -854,16 +960,15 @@ def _asset_metadata(
     return metadata
 
 
-def _materialize_asset(
+def _read_asset_data(
     handle: BinaryIO,
     *,
     payload_start: int,
     container_size: int,
     asset_id: str,
     metadata: dict[str, Any],
-    source_name: str | None,
-    workspace: Path,
-) -> Path:
+    expected_original_size: int | None = None,
+) -> bytes:
     try:
         offset = int(metadata["offset"])
         stored_size = int(metadata["stored_size"])
@@ -873,6 +978,11 @@ def _materialize_asset(
 
     if min(offset, stored_size, original_size) < 0:
         raise ProjectFileError(f"Embedded asset {asset_id} sizes are invalid.")
+    if expected_original_size is not None and original_size != expected_original_size:
+        raise ProjectFileError(
+            f"Embedded asset {asset_id} original size is invalid."
+        )
+
     absolute_start = payload_start + offset
     absolute_end = absolute_start + stored_size
     if absolute_start < payload_start or absolute_end > container_size:
@@ -901,6 +1011,26 @@ def _materialize_asset(
         raise ProjectFileError(
             f"Embedded asset {asset_id} failed SHA-256 verification."
         )
+    return data
+
+
+def _materialize_asset(
+    handle: BinaryIO,
+    *,
+    payload_start: int,
+    container_size: int,
+    asset_id: str,
+    metadata: dict[str, Any],
+    source_name: str | None,
+    workspace: Path,
+) -> Path:
+    data = _read_asset_data(
+        handle,
+        payload_start=payload_start,
+        container_size=container_size,
+        asset_id=asset_id,
+        metadata=metadata,
+    )
 
     metadata_name = metadata.get("original_name")
     preferred = source_name if isinstance(source_name, str) and source_name else metadata_name
@@ -1096,7 +1226,13 @@ def _load_native_project(project_path: Path) -> Project:
                 )
                 for item in items_value
             ]
-            toolpaths = _load_toolpaths(manifest.get("toolpaths", []))
+            toolpaths = _load_toolpaths(
+                manifest.get("toolpaths", []),
+                handle=handle,
+                payload_start=payload_start,
+                container_size=container_size,
+                assets=assets,
+            )
     except (OSError, ProjectFileError):
         workspace_owner.cleanup()
         raise
