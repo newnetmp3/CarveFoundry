@@ -4,16 +4,20 @@ import hashlib
 import json
 import struct
 import tempfile
+from math import isfinite
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 import zstandard as zstd
 
+from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
+
 from .fixtures import Fixture
 from .mesh import MeshImportError, load_stl
 from .project import Project, ProjectItem, Stock, TextProperties
 from .smart_values import SmartValueError, SmartValues
+from .tools import Cutter, ToolType
 from .transform import Transform3D
 from .units import ModelUnits
 from .vector_path import VectorPath
@@ -28,6 +32,8 @@ CONTAINER_VERSION = 1
 _HEADER = struct.Struct("<8sIIQQ")
 _HEADER_FLAGS = 0
 _MAX_MANIFEST_SIZE = 64 * 1024 * 1024
+_MAX_TOOLPATHS = 10_000
+_MAX_TOOLPATH_MOVES = 1_000_000
 _ASSET_ZSTD_LEVEL = 19
 _MANIFEST_ZSTD_LEVEL = 12
 
@@ -61,6 +67,269 @@ def _stock_to_dict(stock: Stock) -> dict[str, object]:
         "thickness_mm": stock.thickness_mm,
         "xy_zero": stock.xy_zero,
     }
+
+
+def _finite_float(value: object, *, field_name: str) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ProjectFileError(f"{field_name} must be a finite number.") from exc
+    if not isfinite(result):
+        raise ProjectFileError(f"{field_name} must be a finite number.")
+    return result
+
+
+def _optional_finite_float(
+    value: object,
+    *,
+    field_name: str,
+) -> float | None:
+    if value is None:
+        return None
+    return _finite_float(value, field_name=field_name)
+
+
+def _cutter_to_dict(cutter: Cutter) -> dict[str, object]:
+    return {
+        "name": cutter.name,
+        "tool_type": cutter.tool_type.value,
+        "diameter_mm": cutter.diameter_mm,
+        "angle_deg": cutter.angle_deg,
+        "tip_diameter_mm": cutter.tip_diameter_mm,
+        "taper_angle_deg": cutter.taper_angle_deg,
+        "ball_radius_mm": cutter.ball_radius_mm,
+        "profile_points": (
+            [list(point) for point in cutter.profile_points]
+            if cutter.profile_points is not None
+            else None
+        ),
+    }
+
+
+def _load_cutter(value: object, *, path_index: int) -> Cutter:
+    if not isinstance(value, dict):
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter must be an object."
+        )
+    name = value.get("name")
+    if not isinstance(name, str) or not name:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter name is invalid."
+        )
+    try:
+        tool_type = ToolType(value.get("tool_type"))
+    except (TypeError, ValueError) as exc:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter type is invalid."
+        ) from exc
+
+    profile_value = value.get("profile_points")
+    profile_points: tuple[tuple[float, float], ...] | None = None
+    if profile_value is not None:
+        if not isinstance(profile_value, list):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} custom cutter profile is invalid."
+            )
+        parsed_points: list[tuple[float, float]] = []
+        for point_index, point in enumerate(profile_value):
+            if not isinstance(point, list) or len(point) != 2:
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} cutter profile point "
+                    f"{point_index + 1} is invalid."
+                )
+            parsed_points.append(
+                (
+                    _finite_float(
+                        point[0],
+                        field_name=(
+                            f"Toolpath {path_index + 1} cutter profile radius"
+                        ),
+                    ),
+                    _finite_float(
+                        point[1],
+                        field_name=(
+                            f"Toolpath {path_index + 1} cutter profile height"
+                        ),
+                    ),
+                )
+            )
+        profile_points = tuple(parsed_points)
+
+    try:
+        return Cutter(
+            name=name,
+            tool_type=tool_type,
+            diameter_mm=_finite_float(
+                value.get("diameter_mm"),
+                field_name=f"Toolpath {path_index + 1} cutter diameter",
+            ),
+            angle_deg=_optional_finite_float(
+                value.get("angle_deg"),
+                field_name=f"Toolpath {path_index + 1} cutter angle",
+            ),
+            tip_diameter_mm=_finite_float(
+                value.get("tip_diameter_mm", 0.0),
+                field_name=f"Toolpath {path_index + 1} cutter tip diameter",
+            ),
+            taper_angle_deg=_optional_finite_float(
+                value.get("taper_angle_deg"),
+                field_name=f"Toolpath {path_index + 1} cutter taper angle",
+            ),
+            ball_radius_mm=_optional_finite_float(
+                value.get("ball_radius_mm"),
+                field_name=f"Toolpath {path_index + 1} cutter ball radius",
+            ),
+            profile_points=profile_points,
+        )
+    except ValueError as exc:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter is invalid: {exc}"
+        ) from exc
+
+
+def _toolpath_to_dict(toolpath: Toolpath) -> dict[str, object]:
+    return {
+        "name": toolpath.name,
+        "operation": toolpath.operation,
+        "cutter": _cutter_to_dict(toolpath.cutter),
+        "safe_z_mm": toolpath.safe_z_mm,
+        "source_item_id": toolpath.source_item_id,
+        "source_item_name": toolpath.source_item_name,
+        "moves": [
+            {
+                "x_mm": move.x_mm,
+                "y_mm": move.y_mm,
+                "z_mm": move.z_mm,
+                "kind": move.kind.value,
+                "feed_mm_min": move.feed_mm_min,
+            }
+            for move in toolpath.moves
+        ],
+    }
+
+
+def _optional_text(
+    value: object,
+    *,
+    field_name: str,
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ProjectFileError(f"{field_name} must be a string or null.")
+    return value
+
+
+def _load_toolpaths(value: object) -> list[Toolpath]:
+    if not isinstance(value, list):
+        raise ProjectFileError("Project toolpaths section is invalid.")
+    if len(value) > _MAX_TOOLPATHS:
+        raise ProjectFileError("Project contains too many toolpaths.")
+
+    result: list[Toolpath] = []
+    total_moves = 0
+    for path_index, raw_path in enumerate(value):
+        if not isinstance(raw_path, dict):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} must be an object."
+            )
+        name = raw_path.get("name")
+        operation = raw_path.get("operation")
+        if not isinstance(name, str) or not name:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} name is invalid."
+            )
+        if not isinstance(operation, str) or not operation:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} operation is invalid."
+            )
+
+        raw_moves = raw_path.get("moves", [])
+        if not isinstance(raw_moves, list):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} moves must be a list."
+            )
+        total_moves += len(raw_moves)
+        if total_moves > _MAX_TOOLPATH_MOVES:
+            raise ProjectFileError("Project contains too many toolpath moves.")
+
+        moves: list[ToolpathMove] = []
+        for move_index, raw_move in enumerate(raw_moves):
+            if not isinstance(raw_move, dict):
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} move {move_index + 1} "
+                    "must be an object."
+                )
+            try:
+                kind = MoveKind(raw_move.get("kind"))
+                feed_value = raw_move.get("feed_mm_min")
+                move = ToolpathMove(
+                    x_mm=_finite_float(
+                        raw_move.get("x_mm"),
+                        field_name=(
+                            f"Toolpath {path_index + 1} move "
+                            f"{move_index + 1} X"
+                        ),
+                    ),
+                    y_mm=_finite_float(
+                        raw_move.get("y_mm"),
+                        field_name=(
+                            f"Toolpath {path_index + 1} move "
+                            f"{move_index + 1} Y"
+                        ),
+                    ),
+                    z_mm=_finite_float(
+                        raw_move.get("z_mm"),
+                        field_name=(
+                            f"Toolpath {path_index + 1} move "
+                            f"{move_index + 1} Z"
+                        ),
+                    ),
+                    kind=kind,
+                    feed_mm_min=(
+                        None
+                        if feed_value is None
+                        else _finite_float(
+                            feed_value,
+                            field_name=(
+                                f"Toolpath {path_index + 1} move "
+                                f"{move_index + 1} feed"
+                            ),
+                        )
+                    ),
+                )
+            except (TypeError, ValueError) as exc:
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} move {move_index + 1} "
+                    f"is invalid: {exc}"
+                ) from exc
+            moves.append(move)
+
+        try:
+            path = Toolpath(
+                name=name,
+                operation=operation,
+                cutter=_load_cutter(raw_path.get("cutter"), path_index=path_index),
+                safe_z_mm=_finite_float(
+                    raw_path.get("safe_z_mm"),
+                    field_name=f"Toolpath {path_index + 1} safe Z",
+                ),
+                moves=moves,
+                source_item_id=_optional_text(
+                    raw_path.get("source_item_id"),
+                    field_name=f"Toolpath {path_index + 1} source item ID",
+                ),
+                source_item_name=_optional_text(
+                    raw_path.get("source_item_name"),
+                    field_name=f"Toolpath {path_index + 1} source item name",
+                ),
+            )
+        except ValueError as exc:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} is invalid: {exc}"
+            ) from exc
+        result.append(path)
+    return result
 
 
 def _text_properties_to_dict(
@@ -274,6 +543,7 @@ def _build_container(
         "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
         "items": items,
+        "toolpaths": [_toolpath_to_dict(path) for path in project.toolpaths],
         "assets": assets,
     }
     return manifest, payloads
@@ -826,6 +1096,7 @@ def _load_native_project(project_path: Path) -> Project:
                 )
                 for item in items_value
             ]
+            toolpaths = _load_toolpaths(manifest.get("toolpaths", []))
     except (OSError, ProjectFileError):
         workspace_owner.cleanup()
         raise
@@ -836,6 +1107,7 @@ def _load_native_project(project_path: Path) -> Project:
         items=items,
         smart_values=smart_values,
         fixtures=fixtures,
+        toolpaths=toolpaths,
         material_name=material_name,
         notes=notes,
         _asset_workspace_owner=workspace_owner,
