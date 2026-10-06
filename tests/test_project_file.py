@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import trimesh
 
+from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.primitives import rectangle_mesh
@@ -19,6 +20,7 @@ from carvefoundry.core.project_file import (
     save_project,
 )
 from carvefoundry.core.smart_values import SmartValues
+from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 
 
@@ -64,6 +66,58 @@ def test_project_round_trip_embeds_stl_and_transform(tmp_path: Path) -> None:
     assert loaded_item.transform.rotation_deg == transform.rotation_deg
     assert loaded_item.transform.scale_xyz == transform.scale_xyz
     assert loaded_item.item_id == project.items[0].item_id
+
+
+def test_project_round_trip_persists_toolpaths_and_cutter_geometry(
+    tmp_path: Path,
+) -> None:
+    item = ProjectItem(
+        "Panel",
+        kind="rectangle",
+        mesh=rectangle_mesh(40.0, 25.0, 3.0),
+    )
+    cutter = Cutter(
+        "Custom Profile",
+        ToolType.CUSTOM,
+        6.0,
+        profile_points=((0.0, 0.0), (1.5, 0.25), (3.0, 1.0)),
+    )
+    toolpath = Toolpath(
+        name="Panel Profile",
+        operation="profile",
+        cutter=cutter,
+        safe_z_mm=1.5,
+        moves=[
+            ToolpathMove(5.0, 5.0, 1.5, MoveKind.RAPID),
+            ToolpathMove(5.0, 5.0, -1.0, MoveKind.PLUNGE, 300.0),
+            ToolpathMove(35.0, 5.0, -1.0, MoveKind.CUT, 900.0),
+            ToolpathMove(35.0, 5.0, 1.5, MoveKind.RAPID),
+        ],
+        source_item_id=item.item_id,
+        source_item_name=item.name,
+    )
+    project = Project(items=[item], toolpaths=[toolpath])
+
+    loaded = load_project(save_project(project, tmp_path / "cam-job.cf3d"))
+
+    assert len(loaded.toolpaths) == 1
+    restored = loaded.toolpaths[0]
+    assert restored.name == toolpath.name
+    assert restored.operation == toolpath.operation
+    assert restored.cutter == cutter
+    assert restored.safe_z_mm == toolpath.safe_z_mm
+    assert restored.moves == toolpath.moves
+    assert restored.source_item_id == item.item_id
+    assert restored.source_item_name == item.name
+
+
+def test_native_manifest_toolpaths_are_optional_for_older_projects(
+    tmp_path: Path,
+) -> None:
+    project = Project()
+    manifest = project_to_dict(project, tmp_path / "old-native.cf3d")
+
+    assert manifest["toolpaths"] == []
 
 
 def test_saved_project_is_native_container_with_current_manifest(tmp_path: Path) -> None:
