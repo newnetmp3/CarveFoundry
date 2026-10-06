@@ -32,7 +32,7 @@ def cam_generation_help() -> dict[str, tuple[str, str]]:
                 "Pocket — clears the interior of projected closed regions.\n\n"
                 "Surface / Face — faces the stock top and can run without any "
                 "design objects.\n\n"
-                "V-Carve — follows vector/detail geometry with a V-bit or "
+                "V-Carving — follows vector/detail geometry with a V-bit or "
                 "engraving cone. A valid included cutter angle is required.\n\n"
                 "Engrave — traces projected linework/contours with the selected "
                 "cutter and supports the 2D Cut Type choices.\n\n"
@@ -71,7 +71,7 @@ def cam_generation_help() -> dict[str, tuple[str, str]]:
                 "CarveFoundry compensates generated geometry for the selected "
                 "tool profile rather than assuming every tool is a ball nose. "
                 "Diameter, tool type, included angle, and tip diameter can all "
-                "change the resulting path. V-Carve requires a V-bit or "
+                "change the resulting path. V-Carving requires a V-bit or "
                 "engraving cone with a valid included angle. The tool must "
                 "match the cutter actually installed in the machine."
             ),
@@ -133,10 +133,10 @@ def cam_generation_help() -> dict[str, tuple[str, str]]:
             ),
         ),
         "detail": (
-            "3D / V-Carve detail",
+            "3D / V-Carving detail",
             (
                 "Controls path density for 3D finishing and the supported "
-                "V-Carve detail behavior. Higher values create denser sampling "
+                "V-Carving detail behavior. Higher values create denser sampling "
                 "and smaller finishing stepover, improving fine detail and "
                 "surface smoothness at the cost of more G-code and longer run "
                 "time. Lower values generate fewer passes and run faster. "
