@@ -20,16 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from carvefoundry.cam import operation_plan
 from carvefoundry.cam.operation import CamOperation
-from carvefoundry.cam.operation_plan import (
-    delete_operation,
-    duplicate_operation,
-    invalidate_from,
-    operation_index,
-    reorder_operation,
-    set_operation_enabled,
-    update_operation,
-)
 from carvefoundry.core.tools import Cutter
 
 from .layout_widgets import InspectorSection
@@ -323,7 +315,7 @@ class MachiningOperationsPanelMixin:
         enabled = item.checkState() == Qt.CheckState.Checked
 
         self._before_ribbon_mutation("machining operation enabled state")
-        changed = set_operation_enabled(self.project, operation_id, enabled)
+        changed = operation_plan.set_operation_enabled(self.project, operation_id, enabled)
         self._finish_machining_plan_mutation(
             changed,
             selected_operation_id=operation_id,
@@ -368,11 +360,11 @@ class MachiningOperationsPanelMixin:
         operation = self._selected_machining_operation()
         if operation is None:
             return
-        old_index = operation_index(self.project, operation.operation_id)
+        old_index = operation_plan.operation_index(self.project, operation.operation_id)
         target = old_index + int(delta)
 
         self._before_ribbon_mutation("machining operation reorder")
-        changed = reorder_operation(
+        changed = operation_plan.reorder_operation(
             self.project,
             operation.operation_id,
             target,
@@ -389,7 +381,7 @@ class MachiningOperationsPanelMixin:
         if operation is None:
             return
         self._before_ribbon_mutation("machining operation duplicate")
-        duplicate = duplicate_operation(self.project, operation.operation_id)
+        duplicate = operation_plan.duplicate_operation(self.project, operation.operation_id)
         self._finish_machining_plan_mutation(
             True,
             selected_operation_id=duplicate.operation_id,
@@ -416,7 +408,7 @@ class MachiningOperationsPanelMixin:
             return
 
         self._before_ribbon_mutation("machining operation delete")
-        delete_operation(self.project, operation.operation_id)
+        operation_plan.delete_operation(self.project, operation.operation_id)
         next_id = (
             self.project.cam_operations[
                 min(
@@ -438,10 +430,10 @@ class MachiningOperationsPanelMixin:
         operation = self._selected_machining_operation()
         if operation is None or not operation.enabled:
             return
-        index = operation_index(self.project, operation.operation_id)
+        index = operation_plan.operation_index(self.project, operation.operation_id)
 
         self._before_ribbon_mutation("machining operation recalculate")
-        stale_ids = invalidate_from(
+        stale_ids = operation_plan.invalidate_from(
             self.project,
             index,
             "Manual recalculation requested",
@@ -680,7 +672,7 @@ class MachiningOperationsPanelMixin:
             return
 
         self._before_ribbon_mutation("machining operation edit")
-        update_operation(
+        operation_plan.update_operation(
             self.project,
             operation.operation_id,
             operation_type=operation_type,
