@@ -31,7 +31,7 @@ class CamOperation:
         if len(set(self.source_item_ids)) != len(self.source_item_ids):
             raise ValueError("CAM source item IDs must be unique.")
         if not isinstance(self.enabled, bool):
-            raise ValueError("CAM enabled state must be boolean.")
+            raise TypeError("CAM enabled state must be boolean.")
 
         for key, value in self.parameters.items():
             if not isinstance(key, str) or not key:
