@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from carvefoundry.cam.operation import CamOperation
     from carvefoundry.cam.toolpath import Toolpath
 
 from .fixtures import Fixture
@@ -44,6 +45,7 @@ class WorkspaceSnapshot:
     smart_values: tuple[tuple[str, str], ...]
     items: tuple[ProjectItemSnapshot, ...]
     toolpaths: tuple[Toolpath, ...]
+    cam_operations: tuple[CamOperation, ...]
     material_name: str
     notes: str
 
@@ -82,6 +84,10 @@ def capture_workspace(project: Project) -> WorkspaceSnapshot:
         smart_values=tuple(project.smart_values.expressions.items()),
         items=tuple(_snapshot_item(item) for item in project.items),
         toolpaths=tuple(project.toolpaths),
+        cam_operations=tuple(
+            replace(operation, parameters=dict(operation.parameters))
+            for operation in project.cam_operations
+        ),
         material_name=project.material_name,
         notes=project.notes,
     )
@@ -122,5 +128,9 @@ def restore_workspace(project: Project, snapshot: WorkspaceSnapshot) -> None:
     project.smart_values = SmartValues(dict(snapshot.smart_values))
     project.items = [_restore_item(item) for item in snapshot.items]
     project.toolpaths = list(snapshot.toolpaths)
+    project.cam_operations = [
+        replace(operation, parameters=dict(operation.parameters))
+        for operation in snapshot.cam_operations
+    ]
     project.material_name = snapshot.material_name
     project.notes = snapshot.notes

@@ -11,6 +11,7 @@ from typing import Any, BinaryIO
 
 import zstandard as zstd
 
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 
 from .fixtures import Fixture
@@ -33,6 +34,7 @@ _HEADER = struct.Struct("<8sIIQQ")
 _HEADER_FLAGS = 0
 _MAX_MANIFEST_SIZE = 64 * 1024 * 1024
 _MAX_TOOLPATHS = 10_000
+_MAX_CAM_OPERATIONS = 10_000
 _MAX_TOOLPATH_MOVES = 1_000_000
 _TOOLPATH_MOVES_ENCODING = "cfmoves-f64-v1"
 _TOOLPATH_MOVE_STRUCT = struct.Struct("<dddBd")
@@ -275,10 +277,98 @@ def _toolpath_to_dict(
         "safe_z_mm": toolpath.safe_z_mm,
         "source_item_id": toolpath.source_item_id,
         "source_item_name": toolpath.source_item_name,
+        "cam_operation_id": toolpath.cam_operation_id,
         "move_count": len(toolpath.moves),
         "moves_encoding": _TOOLPATH_MOVES_ENCODING,
         "moves_asset_id": moves_asset_id,
     }
+
+
+def _cam_operation_to_dict(operation: CamOperation) -> dict[str, object]:
+    return {
+        "operation_id": operation.operation_id,
+        "operation": operation.operation,
+        "cutter": _cutter_to_dict(operation.cutter),
+        "source_item_ids": list(operation.source_item_ids),
+        "parameters": dict(operation.parameters),
+        "stale_reason": operation.stale_reason,
+    }
+
+
+def _load_cam_operations(value: object) -> list[CamOperation]:
+    if not isinstance(value, list):
+        raise ProjectFileError("Project CAM operations section is invalid.")
+    if len(value) > _MAX_CAM_OPERATIONS:
+        raise ProjectFileError("Project contains too many CAM operations.")
+
+    result: list[CamOperation] = []
+    seen_ids: set[str] = set()
+    for operation_index, raw_operation in enumerate(value):
+        label = f"CAM operation {operation_index + 1}"
+        if not isinstance(raw_operation, dict):
+            raise ProjectFileError(f"{label} must be an object.")
+
+        operation_id = raw_operation.get("operation_id")
+        operation = raw_operation.get("operation")
+        if not isinstance(operation_id, str) or not operation_id:
+            raise ProjectFileError(f"{label} ID is invalid.")
+        if operation_id in seen_ids:
+            raise ProjectFileError(f"{label} ID is duplicated.")
+        seen_ids.add(operation_id)
+        if not isinstance(operation, str) or not operation:
+            raise ProjectFileError(f"{label} type is invalid.")
+
+        source_item_ids = raw_operation.get("source_item_ids", [])
+        if not isinstance(source_item_ids, list) or not all(
+            isinstance(item_id, str) and item_id
+            for item_id in source_item_ids
+        ):
+            raise ProjectFileError(f"{label} source item IDs are invalid.")
+
+        parameters = raw_operation.get("parameters", {})
+        if not isinstance(parameters, dict):
+            raise ProjectFileError(f"{label} parameters are invalid.")
+        parsed_parameters: dict[str, str | int | float | bool | None] = {}
+        for key, parameter_value in parameters.items():
+            if not isinstance(key, str) or not key:
+                raise ProjectFileError(f"{label} parameter name is invalid.")
+            if parameter_value is not None and not isinstance(
+                parameter_value,
+                (str, int, float, bool),
+            ):
+                raise ProjectFileError(
+                    f"{label} parameter {key} has an unsupported value."
+                )
+            if isinstance(parameter_value, float) and not isfinite(parameter_value):
+                raise ProjectFileError(
+                    f"{label} parameter {key} must be finite."
+                )
+            parsed_parameters[key] = parameter_value
+
+        stale_reason = raw_operation.get("stale_reason")
+        if stale_reason is not None and (
+            not isinstance(stale_reason, str) or not stale_reason.strip()
+        ):
+            raise ProjectFileError(f"{label} stale reason is invalid.")
+
+        try:
+            cutter = _load_cutter(
+                raw_operation.get("cutter"),
+                path_index=operation_index,
+            )
+            result.append(
+                CamOperation(
+                    operation=operation,
+                    cutter=cutter,
+                    source_item_ids=tuple(source_item_ids),
+                    parameters=parsed_parameters,
+                    operation_id=operation_id,
+                    stale_reason=stale_reason,
+                )
+            )
+        except (ProjectFileError, ValueError) as exc:
+            raise ProjectFileError(f"{label} is invalid: {exc}") from exc
+    return result
 
 
 def _optional_text(
@@ -388,6 +478,10 @@ def _load_toolpaths(
                 source_item_name=_optional_text(
                     raw_path.get("source_item_name"),
                     field_name=f"Toolpath {path_index + 1} source item name",
+                ),
+                cam_operation_id=_optional_text(
+                    raw_path.get("cam_operation_id"),
+                    field_name=f"Toolpath {path_index + 1} CAM operation ID",
                 ),
             )
         except ValueError as exc:
@@ -653,6 +747,10 @@ def _build_container(
         "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
         "items": items,
+        "cam_operations": [
+            _cam_operation_to_dict(operation)
+            for operation in project.cam_operations
+        ],
         "toolpaths": toolpaths,
         "assets": assets,
     }
@@ -1232,6 +1330,9 @@ def _load_native_project(project_path: Path) -> Project:
                 )
                 for item in items_value
             ]
+            cam_operations = _load_cam_operations(
+                manifest.get("cam_operations", [])
+            )
             toolpaths = _load_toolpaths(
                 manifest.get("toolpaths", []),
                 handle=handle,
@@ -1250,6 +1351,7 @@ def _load_native_project(project_path: Path) -> Project:
         smart_values=smart_values,
         fixtures=fixtures,
         toolpaths=toolpaths,
+        cam_operations=cam_operations,
         material_name=material_name,
         notes=notes,
         _asset_workspace_owner=workspace_owner,

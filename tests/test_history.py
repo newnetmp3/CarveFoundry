@@ -2,11 +2,13 @@ from pathlib import Path
 
 import trimesh
 
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.history import capture_workspace, restore_workspace
 from carvefoundry.core.mesh import load_stl
 from carvefoundry.core.project import Project, ProjectItem, Stock, TextProperties
 from carvefoundry.core.smart_values import SmartValues
+from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 
@@ -118,3 +120,23 @@ def test_undo_snapshot_preserves_fixtures_zero_and_smart_bindings() -> None:
     assert project.fixtures == [clamp]
     assert project.smart_values.resolve("gap") == 4
     assert project.items[0].smart_bindings == {"size_x": "gap"}
+
+
+def test_workspace_snapshot_copies_cam_operation_state() -> None:
+    operation = CamOperation(
+        operation="profile",
+        cutter=Cutter("6 mm flat", ToolType.FLAT_END_MILL, 6.0),
+        source_item_ids=("source-a",),
+        parameters={"feed_mm_min": 1200.0},
+    )
+    project = Project(cam_operations=[operation])
+    snapshot = capture_workspace(project)
+
+    operation.mark_stale("Model transform")
+    operation.parameters["feed_mm_min"] = 400.0
+
+    restore_workspace(project, snapshot)
+
+    restored = project.cam_operations[0]
+    assert not restored.needs_recalculation
+    assert restored.parameters["feed_mm_min"] == 1200.0

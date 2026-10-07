@@ -41,7 +41,7 @@ class TransformInteractionControllerMixin:
                 if item.kind.lower() == "text"
                 else "Model size"
             )
-            self._invalidate_toolpaths(reason)
+            self._invalidate_toolpaths(reason, source_item_ids={item.item_id})
             local_size = item.local_size_mm()
             if local_size is not None:
                 self.statusBar().showMessage(
@@ -56,7 +56,7 @@ class TransformInteractionControllerMixin:
                 )
             return
 
-        self._invalidate_toolpaths("Model position")
+        self._invalidate_toolpaths("Model position", source_item_ids={item.item_id})
         x, y, z = item.transform.translation_mm
         self.statusBar().showMessage(
             f"Moved {item.name} — X {x:.2f}  Y {y:.2f}  Z {z:.2f} mm",
@@ -88,7 +88,7 @@ class TransformInteractionControllerMixin:
         self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
         self.viewport.set_selected_item(index)
-        self._invalidate_toolpaths("Model transform")
+        self._invalidate_toolpaths("Model transform", source_item_ids={item.item_id})
         self.viewport.update()
         self._after_context_transform(index, label)
         self.statusBar().showMessage(f"{label}: {item.name}", 3000)
@@ -436,7 +436,7 @@ class TransformInteractionControllerMixin:
             return
         item.source_units = units
         item.transform = self.project.default_transform_for_mesh(item.mesh, units)
-        self._invalidate_toolpaths("Model units")
+        self._invalidate_toolpaths("Model units", source_item_ids={item.item_id})
         self._refresh_project_list(self.project_list.currentRow())
         self.viewport.fit_view()
         self.statusBar().showMessage(
@@ -525,7 +525,7 @@ class TransformInteractionControllerMixin:
         )
         item.transform.scale_xyz = tuple(float(value) for value in new_scale)
         item.transform.validate()
-        self._invalidate_toolpaths("Model transform")
+        self._invalidate_toolpaths("Model transform", source_item_ids={item.item_id})
 
         self._sync_transform_controls(item)
         self.selection_info.setText(self._mesh_properties_text(item))
@@ -551,7 +551,7 @@ class TransformInteractionControllerMixin:
             tz,
         )
         self._sync_transform_controls(item)
-        self._invalidate_toolpaths("Model position")
+        self._invalidate_toolpaths("Model position", source_item_ids={item.item_id})
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Centered selected mesh on stock", 3000)
@@ -571,7 +571,7 @@ class TransformInteractionControllerMixin:
         tx, ty, tz = item.transform.translation_mm
         item.transform.translation_mm = (tx, ty, tz - bounds[1, 2])
         self._sync_transform_controls(item)
-        self._invalidate_toolpaths("Model position")
+        self._invalidate_toolpaths("Model position", source_item_ids={item.item_id})
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Placed selected mesh top at stock Z0", 3000)
@@ -590,7 +590,7 @@ class TransformInteractionControllerMixin:
             item.source_units,
         )
         self._sync_transform_controls(item)
-        self._invalidate_toolpaths("Model transform")
+        self._invalidate_toolpaths("Model transform", source_item_ids={item.item_id})
         self._update_properties(self.project_list.currentRow())
         self.viewport.update()
         self.statusBar().showMessage("Reset selected mesh transform", 3000)
@@ -700,6 +700,7 @@ class TransformInteractionControllerMixin:
         self._before_ribbon_mutation(label)
         changed = 0
         skipped_text = 0
+        changed_item_ids: set[str] = set()
         selected_after = list(indices)
 
         for index in indices:
@@ -755,9 +756,13 @@ class TransformInteractionControllerMixin:
                 scale_xyz=remaining_scale,
             )
             changed += 1
+            changed_item_ids.add(item.item_id)
 
         if changed:
-            self._invalidate_toolpaths("Applied model transform")
+            self._invalidate_toolpaths(
+                "Applied model transform",
+                source_item_ids=changed_item_ids,
+            )
             self._refresh_project_list(self.project_list.currentRow())
             valid_selection = [
                 index

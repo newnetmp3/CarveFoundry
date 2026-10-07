@@ -19,12 +19,25 @@ class ToolpathStateControllerMixin:
         self.cam_status_label.style().unpolish(self.cam_status_label)
         self.cam_status_label.style().polish(self.cam_status_label)
 
+    def _stale_cam_operations(self):
+        return [
+            operation
+            for operation in self.project.cam_operations
+            if operation.needs_recalculation
+        ]
+
     def _sync_toolpath_output_state(self) -> None:
         has_toolpaths = bool(self.project.toolpaths)
+        stale_operations = self._stale_cam_operations()
+        output_ready = has_toolpaths and not stale_operations
         for button in self._toolpath_output_buttons:
-            button.setEnabled(has_toolpaths)
+            button.setEnabled(output_ready)
 
-        if not has_toolpaths:
+        recalculate = getattr(self, "_recalculate_button", None)
+        if recalculate is not None:
+            recalculate.setEnabled(bool(stale_operations))
+
+        if not output_ready:
             if self._toolpaths_view_button is not None:
                 self._toolpaths_view_button.setChecked(False)
             if self._rapids_view_button is not None:
@@ -41,11 +54,22 @@ class ToolpathStateControllerMixin:
                     self.viewport.rapids_visible
                 )
 
-        if has_toolpaths:
-            self._toolpaths_stale_reason = None
-            source_names = self._toolpath_source_names(
-                self.project.toolpaths
+        if stale_operations:
+            reason = stale_operations[0].stale_reason or self._toolpaths_stale_reason
+            self._toolpaths_stale_reason = reason
+            self._set_cam_status(
+                "stale",
+                "CAM: RECALCULATE",
+                (
+                    f"{len(stale_operations)} machining operation"
+                    f"{'s' if len(stale_operations) != 1 else ''} need "
+                    f"recalculation"
+                    + (f" because {reason.lower()} changed." if reason else ".")
+                ),
             )
+        elif has_toolpaths:
+            self._toolpaths_stale_reason = None
+            source_names = self._toolpath_source_names(self.project.toolpaths)
             operation_names = " + ".join(
                 path.name for path in self.project.toolpaths
             )
@@ -63,7 +87,7 @@ class ToolpathStateControllerMixin:
                 "stale",
                 "CAM: RECALCULATE",
                 (
-                    "The previous toolpath was cleared because "
+                    "Calculated motion is stale because "
                     f"{self._toolpaths_stale_reason.lower()} changed."
                 ),
             )
@@ -91,7 +115,19 @@ class ToolpathStateControllerMixin:
         return names
 
     def _sync_toolpath_state_from_project(self) -> None:
-        if self.project.toolpaths:
+        stale_operations = self._stale_cam_operations()
+        if stale_operations:
+            reason = stale_operations[0].stale_reason or "CAM inputs"
+            self._toolpaths_stale_reason = reason
+            self._set_activity_info(
+                "Toolpaths need recalculation\n"
+                f"{len(stale_operations)} saved machining operation"
+                f"{'s' if len(stale_operations) != 1 else ''} are stale.\n\n"
+                "Their cutters, source objects and calculation settings were "
+                "retained. Recalculate the job before previewing or exporting."
+            )
+            self.viewport.set_toolpaths_visible(False)
+        elif self.project.toolpaths:
             self._toolpaths_stale_reason = None
             operation_names = " + ".join(
                 path.name for path in self.project.toolpaths
@@ -124,13 +160,78 @@ class ToolpathStateControllerMixin:
         self._sync_toolpath_output_state()
         self.viewport.update()
 
-    def _invalidate_toolpaths(self, reason: str) -> bool:
-        """Clear calculated motion when geometry or CAM inputs become stale."""
+    def _invalidate_toolpaths(
+        self,
+        reason: str,
+        *,
+        source_item_ids: set[str] | None = None,
+    ) -> bool:
+        """Invalidate dependent motion while retaining persistent machining intent.
 
-        if not self.project.toolpaths:
-            return False
+        The earliest operation that depends on changed geometry is marked stale
+        along with every later stage, because later stock-removal operations may
+        depend on the material state left by earlier cutters.
+        """
 
-        self.project.toolpaths.clear()
+        operations = self.project.cam_operations
+        if not operations:
+            if not self.project.toolpaths:
+                return False
+            self.project.toolpaths.clear()
+            changed = True
+        else:
+            earliest: int | None = None
+            if source_item_ids is None:
+                earliest = 0
+            else:
+                for index, operation in enumerate(operations):
+                    if set(operation.source_item_ids).intersection(source_item_ids):
+                        earliest = index
+                        break
+
+            if earliest is None:
+                legacy_before = len(self.project.toolpaths)
+                if source_item_ids is not None:
+                    self.project.toolpaths = [
+                        path
+                        for path in self.project.toolpaths
+                        if not (
+                            path.cam_operation_id is None
+                            and path.source_item_id in source_item_ids
+                        )
+                    ]
+                changed = len(self.project.toolpaths) != legacy_before
+                if not changed:
+                    return False
+            else:
+                stale_operations = operations[earliest:]
+                stale_ids = {
+                    operation.operation_id
+                    for operation in stale_operations
+                }
+                for operation in stale_operations:
+                    operation.mark_stale(reason)
+
+                before = len(self.project.toolpaths)
+                self.project.toolpaths = [
+                    path
+                    for path in self.project.toolpaths
+                    if (
+                        path.cam_operation_id not in stale_ids
+                        and not (
+                            path.cam_operation_id is None
+                            and (
+                                source_item_ids is None
+                                or path.source_item_id in source_item_ids
+                            )
+                        )
+                    )
+                ]
+                changed = (
+                    len(self.project.toolpaths) != before
+                    or bool(stale_operations)
+                )
+
         self._prepared_toolpath_geometry = None
         self._prepared_toolpath_stats = None
         self._toolpaths_stale_reason = reason
@@ -145,13 +246,18 @@ class ToolpathStateControllerMixin:
             preview.close()
             self._toolpath_preview_window = None
 
+        stale_count = len(self._stale_cam_operations())
         self._set_activity_info(
-            "Toolpath needs recalculation\n"
+            "Toolpaths need recalculation\n"
             f"{reason} changed after the last calculation.\n\n"
-            "Review the current setup and press Calculate again before previewing "
-            "or exporting G-code."
+            + (
+                f"{stale_count} saved machining operation"
+                f"{'s' if stale_count != 1 else ''} retained "
+                "their cutters and settings."
+                if stale_count
+                else "Calculated motion was cleared."
+            )
         )
         self._sync_toolpath_output_state()
         self.viewport.update()
-        return True
-
+        return changed

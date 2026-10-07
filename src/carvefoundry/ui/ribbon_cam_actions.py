@@ -4,6 +4,7 @@ from __future__ import annotations
 from math import ceil, sqrt
 
 import numpy as np
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QComboBox, QDialog
 
 from carvefoundry.cam.basic_ops import (
@@ -15,6 +16,7 @@ from carvefoundry.cam.basic_ops import (
     detail_stepover_fraction,
 )
 from carvefoundry.cam.job_process import CamRequest
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.raster import RasterAxis, RasterLinkMode
 from carvefoundry.core.tools import Cutter
 
@@ -629,28 +631,244 @@ class RibbonCamActionsMixin:
 
         self._show_toolpath_generation_dialog()
 
+    def _current_cam_parameters(self) -> dict[str, str | int | float | bool | None]:
+        """Capture the complete user-authored setup needed to regenerate CAM."""
+
+        return {
+            "cut_type": self._cam_cut_type,
+            "direction": self._cam_direction,
+            "entry": self._cam_entry,
+            "milling": self._cam_milling,
+            "linking": self._cam_linking,
+            "3d_cut_style": self._cam_3d_cut_style,
+            "detail": int(self._cam_detail),
+            "safe_z_mm": float(self._settings.value("cam/safe_z_mm", 1.5)),
+            "overall_depth_mm": float(
+                self._settings.value("cam/overall_depth_mm", 0.0)
+            ),
+            "feed_mm_min": float(
+                self._settings.value("cam/feed_mm_min", 1000.0)
+            ),
+            "plunge_mm_min": float(
+                self._settings.value("cam/plunge_mm_min", 300.0)
+            ),
+            "stepdown_mm": float(
+                self._settings.value("cam/stepdown_mm", 2.0)
+            ),
+            "stepover_percent": float(
+                self._settings.value("cam/stepover_percent", 45.0)
+            ),
+            "padding_mm": float(
+                self._settings.value("cam/padding_mm", 0.0)
+            ),
+            "usable_bit_length_mm": float(
+                self._settings.value("cam/usable_bit_length_mm", 0.0)
+            ),
+            "tabs_enabled": bool(self._tabs_enabled),
+            "tab_height_mm": float(
+                self._settings.value("cam/tab_height_mm", 2.0)
+            ),
+            "tab_width_mm": float(
+                self._settings.value("cam/tab_width_mm", 6.0)
+            ),
+            "tab_count": int(self._settings.value("cam/tab_count", 4)),
+            "local_link_clearance_mm": float(
+                self._settings.value("cam/local_link_clearance_mm", 0.5)
+            ),
+            "direct_link_tolerance_mm": float(
+                self._settings.value("cam/direct_link_tolerance_mm", 0.02)
+            ),
+            "custom_ramp_angle_deg": float(
+                self._settings.value("cam/custom_ramp_angle_deg", 10.0)
+            ),
+            "rest_min_remaining_mm": float(
+                self._settings.value("cam/rest_min_remaining_mm", 0.15)
+            ),
+            "rest_grid_spacing_mm": float(
+                self._settings.value("cam/rest_grid_spacing_mm", 0.75)
+            ),
+        }
+
+    def _apply_cam_operation_setup(self, definition: CamOperation) -> None:
+        """Restore a saved machining setup before submitting recalculation."""
+
+        parameters = definition.parameters
+        self._select_cam_operation(definition.operation)
+
+        for key, parameter_name in (
+            ("cut_type", "cut_type"),
+            ("direction", "direction"),
+            ("entry", "entry"),
+            ("milling", "milling"),
+            ("linking", "linking"),
+            ("3d_cut_style", "3d_cut_style"),
+        ):
+            value = parameters.get(parameter_name)
+            if isinstance(value, str):
+                self._set_cam_design_option(key, value)
+
+        detail = parameters.get("detail")
+        if isinstance(detail, (int, float)) and not isinstance(detail, bool):
+            self._set_cam_detail(int(detail), mark_custom=True)
+
+        setting_parameters = {
+            "cam/safe_z_mm": "safe_z_mm",
+            "cam/overall_depth_mm": "overall_depth_mm",
+            "cam/feed_mm_min": "feed_mm_min",
+            "cam/plunge_mm_min": "plunge_mm_min",
+            "cam/stepdown_mm": "stepdown_mm",
+            "cam/stepover_percent": "stepover_percent",
+            "cam/padding_mm": "padding_mm",
+            "cam/usable_bit_length_mm": "usable_bit_length_mm",
+            "cam/tab_height_mm": "tab_height_mm",
+            "cam/tab_width_mm": "tab_width_mm",
+            "cam/tab_count": "tab_count",
+            "cam/local_link_clearance_mm": "local_link_clearance_mm",
+            "cam/direct_link_tolerance_mm": "direct_link_tolerance_mm",
+            "cam/custom_ramp_angle_deg": "custom_ramp_angle_deg",
+            "cam/rest_min_remaining_mm": "rest_min_remaining_mm",
+            "cam/rest_grid_spacing_mm": "rest_grid_spacing_mm",
+        }
+        for setting_key, parameter_name in setting_parameters.items():
+            value = parameters.get(parameter_name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                self._settings.setValue(setting_key, value)
+
+        self._tabs_enabled = bool(parameters.get("tabs_enabled", False))
+        self._settings.setValue("cam/tabs_enabled", self._tabs_enabled)
+        if self._tabs_button is not None:
+            self._tabs_button.setChecked(self._tabs_enabled)
+
+        for index in range(self.tool_combo.count()):
+            candidate = self.tool_combo.itemData(index)
+            if isinstance(candidate, Cutter) and candidate == definition.cutter:
+                self.tool_combo.setCurrentIndex(index)
+                break
+        self._settings.sync()
+        self._sync_cam_control_relevance()
+
+    def _recalculate_stale_cam_operations(self) -> None:
+        if self._background_job is not None:
+            self.statusBar().showMessage("Another operation is running", 4000)
+            return
+        stale = [
+            operation.operation_id
+            for operation in self.project.cam_operations
+            if operation.needs_recalculation
+        ]
+        if not stale:
+            self.statusBar().showMessage("No CAM operations need recalculation", 3000)
+            return
+        self._cam_recalculate_queue = stale
+        self.statusBar().showMessage(
+            f"Recalculating {len(stale)} saved machining operation"
+            f"{'s' if len(stale) != 1 else ''}",
+            4000,
+        )
+        self._recalculate_next_cam_operation()
+
+    def _recalculate_next_cam_operation(self) -> None:
+        if self._background_job is not None:
+            QTimer.singleShot(60, self._recalculate_next_cam_operation)
+            return
+
+        queue = getattr(self, "_cam_recalculate_queue", [])
+        while queue:
+            operation_id = queue.pop(0)
+            definition = next(
+                (
+                    operation
+                    for operation in self.project.cam_operations
+                    if operation.operation_id == operation_id
+                ),
+                None,
+            )
+            if definition is None or not definition.needs_recalculation:
+                continue
+
+            self._apply_cam_operation_setup(definition)
+            self._cam_recalculate_operation_id = operation_id
+            if self._calculate_toolpath_now():
+                return
+
+            self._cam_recalculate_operation_id = None
+            self._cam_recalculate_queue = []
+            return
+
+        self._cam_recalculate_operation_id = None
+        self._cam_recalculate_queue = []
+        self._sync_toolpath_state_from_project()
+        self.statusBar().showMessage("CAM recalculation complete", 5000)
+
     def _calculate_toolpath_now(self) -> bool:
         """Submit CAM to a separate Python process; never block the Qt loop."""
 
         if self._background_job is not None:
             self.statusBar().showMessage("Another operation is running", 4000)
             return False
-        # Hidden source shapes must never contribute duplicate/obsolete CNC cuts.
-        items = [item for item in self.project.items if item.visible and item.mesh is not None]
-        cutter = self.tool_combo.currentData()
+
+        recalculate_id = getattr(self, "_cam_recalculate_operation_id", None)
+        definition = None
+        if recalculate_id is not None:
+            definition = next(
+                (
+                    operation
+                    for operation in self.project.cam_operations
+                    if operation.operation_id == recalculate_id
+                ),
+                None,
+            )
+            if definition is None:
+                self.statusBar().showMessage(
+                    "Saved CAM operation no longer exists", 5000
+                )
+                return False
+            operation = definition.operation
+            cutter = definition.cutter
+            source_ids = set(definition.source_item_ids)
+            items = [
+                item
+                for item in self.project.items
+                if item.item_id in source_ids and item.mesh is not None
+            ]
+            if operation != "surface":
+                found_ids = {item.item_id for item in items}
+                missing_ids = source_ids - found_ids
+                if missing_ids:
+                    self.statusBar().showMessage(
+                        "A source object for this CAM operation was removed. "
+                        "Generate a replacement job setup.",
+                        7000,
+                    )
+                    return False
+        else:
+            # Hidden source shapes must never contribute duplicate/obsolete CNC cuts.
+            items = [
+                item
+                for item in self.project.items
+                if item.visible and item.mesh is not None
+            ]
+            cutter = self.tool_combo.currentData()
+            if not isinstance(cutter, Cutter):
+                self.statusBar().showMessage("Select a valid cutter", 4000)
+                return False
+            operation = self._active_cam_operation
+            definition = CamOperation(
+                operation=operation,
+                cutter=cutter,
+                source_item_ids=tuple(item.item_id for item in items),
+                parameters=self._current_cam_parameters(),
+            )
+
         if not isinstance(cutter, Cutter):
             self.statusBar().showMessage("Select a valid cutter", 4000)
             return False
-
-        operation = self._active_cam_operation
         if not items and operation != "surface":
             self.statusBar().showMessage(
                 "Add geometry before generating this operation", 4000
             )
             return False
 
-        # Only small bounds and QSettings are read on the GUI thread. Mesh
-        # transforms, geometry, CAM and path ordering happen in the process.
         specs = []
         for item in items:
             bounds = item.transformed_bounds_mm()
@@ -678,8 +896,12 @@ class RibbonCamActionsMixin:
         if operation == "silhouette" and specs:
             bounds = np.vstack(
                 (
-                    np.vstack([item.transformed_bounds_mm()[0] for item, _ in specs]).min(axis=0),
-                    np.vstack([item.transformed_bounds_mm()[1] for item, _ in specs]).max(axis=0),
+                    np.vstack(
+                        [item.transformed_bounds_mm()[0] for item, _ in specs]
+                    ).min(axis=0),
+                    np.vstack(
+                        [item.transformed_bounds_mm()[1] for item, _ in specs]
+                    ).max(axis=0),
                 )
             )
             silhouette_settings = self._cam_settings(
@@ -687,17 +909,42 @@ class RibbonCamActionsMixin:
                 type("_Bounds", (), {"bounds": bounds})(),
             )
 
-        if operation == "rest" and not self.project.toolpaths:
-            self.statusBar().showMessage(
-                "Generate and append roughing/finishing before 3D Rest.", 7000
+        recalculating = recalculate_id is not None
+        if recalculating:
+            previous_toolpaths = list(self.project.toolpaths) or None
+            append_to_job = bool(previous_toolpaths)
+        else:
+            if (
+                getattr(self, "_cam_append_to_job", False)
+                and any(
+                    saved_operation.needs_recalculation
+                    for saved_operation in self.project.cam_operations
+                )
+            ):
+                self._cam_append_to_job = False
+                self.statusBar().showMessage(
+                    "Recalculate the current machining job before appending "
+                    "another operation.",
+                    7000,
+                )
+                return False
+            if operation == "rest" and not self.project.toolpaths:
+                self.statusBar().showMessage(
+                    "Generate and append roughing/finishing before 3D Rest.",
+                    7000,
+                )
+                return False
+            append_to_job = bool(
+                self.project.toolpaths and (
+                    operation == "rest" or self._cam_append_to_job
+                )
             )
-            return False
-        append_to_job = bool(
-            self.project.toolpaths and (
-                operation == "rest" or self._cam_append_to_job
+            self._cam_append_to_job = False
+            previous_toolpaths = (
+                list(self.project.toolpaths) if append_to_job else None
             )
-        )
-        self._cam_append_to_job = False
+
+        previous_count = len(previous_toolpaths or [])
         request = CamRequest(
             operation=operation,
             cutter=cutter,
@@ -708,9 +955,7 @@ class RibbonCamActionsMixin:
             settings_by_item=specs,
             stock_settings=stock_settings,
             silhouette_settings=silhouette_settings,
-            previous_toolpaths=(
-                list(self.project.toolpaths) if append_to_job else None
-            ),
+            previous_toolpaths=previous_toolpaths,
             rest_min_remaining_mm=float(
                 self._settings.value("cam/rest_min_remaining_mm", 0.15)
             ),
@@ -733,35 +978,72 @@ class RibbonCamActionsMixin:
                 self._toolpath_preview_window = None
 
             self._before_ribbon_mutation(f"calculate {operation}")
+            for path in paths[previous_count:]:
+                path.cam_operation_id = definition.operation_id
+
+            if recalculating:
+                definition.mark_ready()
+            elif append_to_job:
+                self.project.cam_operations.append(definition)
+            else:
+                self.project.cam_operations = [definition]
+
             self.project.toolpaths = paths
-            self._toolpaths_stale_reason = None
+            stale_operations = [
+                saved_operation
+                for saved_operation in self.project.cam_operations
+                if saved_operation.needs_recalculation
+            ]
+            self._toolpaths_stale_reason = (
+                stale_operations[0].stale_reason
+                if stale_operations else None
+            )
             self._prepared_toolpath_geometry = payload["render_geometry"]
             self._prepared_toolpath_stats = payload
             self.viewport.prepare_toolpath_render_cache(
                 paths, self._prepared_toolpath_geometry
             )
-            self.viewport.set_toolpaths_visible(True)
+            self.viewport.set_toolpaths_visible(not stale_operations)
             self.viewport.set_simulation_fraction(1.0)
             self.viewport.update()
             self._after_ribbon_mutation(f"calculate {operation}", True)
 
             count = int(payload["object_count"])
-            self._set_activity_info(
-                f"Toolpaths ready\n{payload['summary']}\n\n"
-                f"Objects: {count}\n"
-                f"Cutter: {cutter.name}\n"
-                f"Paths: {len(paths):,}\n"
-                f"Moves: {int(payload['moves']):,}\n"
-                f"Cut distance: {float(payload['cut_mm']):.1f} mm\n"
-                f"Rapid distance: {float(payload['rapid_mm']):.1f} mm\n"
-                f"Estimated cutting: {float(payload['minutes']):.1f} min"
-            )
+            if stale_operations:
+                self._set_activity_info(
+                    "Machining stage recalculated\n"
+                    f"{self._cam_operation_title(operation)}\n\n"
+                    f"{len(stale_operations)} later operation"
+                    f"{'s' if len(stale_operations) != 1 else ''} still need "
+                    "recalculation."
+                )
+            else:
+                self._set_activity_info(
+                    f"Toolpaths ready\n{payload['summary']}\n\n"
+                    f"Objects: {count}\n"
+                    f"Cutter: {cutter.name}\n"
+                    f"Paths: {len(paths):,}\n"
+                    f"Moves: {int(payload['moves']):,}\n"
+                    f"Cut distance: {float(payload['cut_mm']):.1f} mm\n"
+                    f"Rapid distance: {float(payload['rapid_mm']):.1f} mm\n"
+                    f"Estimated cutting: {float(payload['minutes']):.1f} min"
+                )
             self._sync_toolpath_output_state()
+            generated_count = len(paths) - previous_count
             self.statusBar().showMessage(
-                f"Generated {len(paths)} toolpaths", 6000
+                f"Generated {generated_count} toolpath"
+                f"{'s' if generated_count != 1 else ''}",
+                6000,
             )
 
+            if recalculating:
+                self._cam_recalculate_operation_id = None
+                QTimer.singleShot(60, self._recalculate_next_cam_operation)
+
         def failed(message: str) -> None:
+            if recalculating:
+                self._cam_recalculate_operation_id = None
+                self._cam_recalculate_queue = []
             self._set_activity_info(f"Toolpath calculation failed\n{message}")
             self.statusBar().showMessage(f"Toolpath failed: {message}", 9000)
 

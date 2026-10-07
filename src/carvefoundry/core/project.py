@@ -15,6 +15,7 @@ from .transform import Transform3D
 from .units import ModelUnits
 
 if TYPE_CHECKING:
+    from carvefoundry.cam.operation import CamOperation
     from carvefoundry.cam.toolpath import Toolpath
 
     from .vector_path import VectorPath
@@ -170,6 +171,11 @@ class Project:
     smart_values: SmartValues = field(default_factory=SmartValues)
     fixtures: list[Fixture] = field(default_factory=list)
     toolpaths: list[Toolpath] = field(
+        default_factory=list,
+        repr=False,
+        compare=False,
+    )
+    cam_operations: list[CamOperation] = field(
         default_factory=list,
         repr=False,
         compare=False,
