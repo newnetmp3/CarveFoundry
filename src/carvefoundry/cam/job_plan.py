@@ -53,7 +53,7 @@ def validate_job_order(paths: Sequence[Toolpath]) -> None:
             if path.operation in {
                 "finish", "3d_finish", "3d_finish_raster",
                 "3d_rest_raster", "height_map", "waterline",
-                "3d_waterline", "vcarve", "engrave",
+                "3d_waterline", "v_carving", "engrave",
             }:
                 finished = True
             preceding = preceding or not full_cutout
