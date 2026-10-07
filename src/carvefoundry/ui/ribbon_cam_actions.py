@@ -751,11 +751,25 @@ class RibbonCamActionsMixin:
         if self._background_job is not None:
             self.statusBar().showMessage("Another operation is running", 4000)
             return
+        motion_ids = {
+            path.cam_operation_id
+            for path in self.project.toolpaths
+            if path.cam_operation_id is not None
+        }
         stale = [
             operation.operation_id
             for operation in self.project.cam_operations
-            if operation.enabled and operation.needs_recalculation
+            if operation.enabled and (
+                operation.needs_recalculation
+                or operation.operation_id not in motion_ids
+            )
         ]
+        for operation in self.project.cam_operations:
+            if (
+                operation.operation_id in stale
+                and not operation.needs_recalculation
+            ):
+                operation.mark_stale("Generated motion is missing")
         if not stale:
             self.statusBar().showMessage("No CAM operations need recalculation", 3000)
             return
