@@ -4,8 +4,8 @@ import hashlib
 import json
 import struct
 import tempfile
-from math import isfinite, isnan
 from dataclasses import asdict
+from math import isfinite, isnan
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
