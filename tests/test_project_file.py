@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import trimesh
 
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.fixtures import Fixture
 from carvefoundry.core.mesh import load_stl
@@ -96,7 +97,22 @@ def test_project_round_trip_persists_toolpaths_and_cutter_geometry(
         source_item_id=item.item_id,
         source_item_name=item.name,
     )
-    project = Project(items=[item], toolpaths=[toolpath])
+    cam_operation = CamOperation(
+        operation="profile",
+        cutter=cutter,
+        source_item_ids=(item.item_id,),
+        parameters={
+            "cut_type": "Outside",
+            "feed_mm_min": 900.0,
+            "tabs_enabled": False,
+        },
+    )
+    toolpath.cam_operation_id = cam_operation.operation_id
+    project = Project(
+        items=[item],
+        toolpaths=[toolpath],
+        cam_operations=[cam_operation],
+    )
     manifest = project_to_dict(project, tmp_path / "cam-job.cf3d")
     stored_path = manifest["toolpaths"][0]
     assert "moves" not in stored_path
@@ -114,6 +130,15 @@ def test_project_round_trip_persists_toolpaths_and_cutter_geometry(
     assert restored.moves == toolpath.moves
     assert restored.source_item_id == item.item_id
     assert restored.source_item_name == item.name
+    assert restored.cam_operation_id == cam_operation.operation_id
+    assert len(loaded.cam_operations) == 1
+    restored_operation = loaded.cam_operations[0]
+    assert restored_operation.operation_id == cam_operation.operation_id
+    assert restored_operation.operation == "profile"
+    assert restored_operation.cutter == cutter
+    assert restored_operation.source_item_ids == (item.item_id,)
+    assert restored_operation.parameters == cam_operation.parameters
+    assert not restored_operation.needs_recalculation
 
 
 def test_native_manifest_toolpaths_are_optional_for_older_projects(
