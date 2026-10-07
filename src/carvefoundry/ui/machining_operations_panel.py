@@ -20,12 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam import operation_plan
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.core.tools import Cutter
 
 from .layout_widgets import InspectorSection
-
 
 _OPERATION_ID_ROLE = Qt.ItemDataRole.UserRole + 27
 
