@@ -362,6 +362,11 @@ class WorkspaceSurfaceBuilderMixin:
             self._calculate_toolpath,
             primary=True,
         )
+        self._recalculate_button = generate.add_button(
+            "Recalculate",
+            self._recalculate_stale_cam_operations,
+        )
+        self._recalculate_button.setEnabled(False)
         preview_button = generate.add_button(
             "Preview",
             self._preview_toolpaths,
