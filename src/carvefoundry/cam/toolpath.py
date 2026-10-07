@@ -49,6 +49,7 @@ class Toolpath:
     moves: list[ToolpathMove] = field(default_factory=list)
     source_item_id: str | None = None
     source_item_name: str | None = None
+    cam_operation_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -57,6 +58,8 @@ class Toolpath:
             raise ValueError("Toolpath operation cannot be empty.")
         if not isfinite(self.safe_z_mm):
             raise ValueError("safe_z_mm must be finite.")
+        if self.cam_operation_id is not None and not self.cam_operation_id:
+            raise ValueError("cam_operation_id cannot be blank.")
 
     @property
     def bounds_xyz_mm(
