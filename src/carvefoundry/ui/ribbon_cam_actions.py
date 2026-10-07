@@ -754,7 +754,7 @@ class RibbonCamActionsMixin:
         stale = [
             operation.operation_id
             for operation in self.project.cam_operations
-            if operation.needs_recalculation
+            if operation.enabled and operation.needs_recalculation
         ]
         if not stale:
             self.statusBar().showMessage("No CAM operations need recalculation", 3000)
@@ -992,7 +992,7 @@ class RibbonCamActionsMixin:
             stale_operations = [
                 saved_operation
                 for saved_operation in self.project.cam_operations
-                if saved_operation.needs_recalculation
+                if saved_operation.enabled and saved_operation.needs_recalculation
             ]
             self._toolpaths_stale_reason = (
                 stale_operations[0].stale_reason
@@ -1029,6 +1029,8 @@ class RibbonCamActionsMixin:
                     f"Estimated cutting: {float(payload['minutes']):.1f} min"
                 )
             self._sync_toolpath_output_state()
+            if hasattr(self, "_sync_machining_operations_panel"):
+                self._sync_machining_operations_panel()
             generated_count = len(paths) - previous_count
             self.statusBar().showMessage(
                 f"Generated {generated_count} toolpath"
