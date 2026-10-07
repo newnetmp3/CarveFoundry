@@ -6,10 +6,14 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_OPENGL", "software")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QPushButton
 
+from carvefoundry.cam.operation import CamOperation
+from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem
+from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
@@ -176,5 +180,47 @@ def test_guided_workflow_progress_and_snapshot_does_not_repaint_when_unchanged()
         assert window._guided_workflow_cache != first
         assert window._guided_workflow_progress.value() < progress
         window._guided_workflow_dialog.close()
+    finally:
+        window.close()
+
+
+
+def test_machining_operations_panel_reflects_persistent_job_and_disable_state():
+    window = _model_window()
+    try:
+        item = window.project.items[0]
+        cutter = Cutter("6 mm flat", ToolType.FLAT_END_MILL, 6.0)
+        operation = CamOperation(
+            operation="profile",
+            cutter=cutter,
+            source_item_ids=(item.item_id,),
+            parameters={"feed_mm_min": 1000.0},
+        )
+        path = Toolpath(
+            name="Profile",
+            operation="profile",
+            cutter=cutter,
+            safe_z_mm=1.5,
+            source_item_id=item.item_id,
+            source_item_name=item.name,
+            cam_operation_id=operation.operation_id,
+        )
+        window.project.cam_operations = [operation]
+        window.project.toolpaths = [path]
+        window._sync_toolpath_state_from_project()
+
+        rows = window.machining_operations_list
+        assert rows.count() == 1
+        assert "Profile" in rows.item(0).text()
+        assert "READY" in rows.item(0).text()
+        assert "6 mm flat" in rows.item(0).text()
+        assert rows.item(0).checkState() == Qt.CheckState.Checked
+
+        rows.item(0).setCheckState(Qt.CheckState.Unchecked)
+        _APP.processEvents()
+
+        assert not operation.enabled
+        assert window.project.toolpaths == []
+        assert "DISABLED" in rows.item(0).text()
     finally:
         window.close()
