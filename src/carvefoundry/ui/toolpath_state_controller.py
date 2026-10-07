@@ -23,7 +23,7 @@ class ToolpathStateControllerMixin:
         return [
             operation
             for operation in self.project.cam_operations
-            if operation.needs_recalculation
+            if operation.enabled and operation.needs_recalculation
         ]
 
     def _sync_toolpath_output_state(self) -> None:
@@ -158,6 +158,8 @@ class ToolpathStateControllerMixin:
             self.viewport.set_toolpaths_visible(False)
 
         self._sync_toolpath_output_state()
+        if hasattr(self, "_sync_machining_operations_panel"):
+            self._sync_machining_operations_panel()
         self.viewport.update()
 
     def _invalidate_toolpaths(
@@ -259,5 +261,7 @@ class ToolpathStateControllerMixin:
             )
         )
         self._sync_toolpath_output_state()
+        if hasattr(self, "_sync_machining_operations_panel"):
+            self._sync_machining_operations_panel()
         self.viewport.update()
         return changed
