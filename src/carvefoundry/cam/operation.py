@@ -18,6 +18,7 @@ class CamOperation:
     source_item_ids: tuple[str, ...] = ()
     parameters: dict[str, CamParameter] = field(default_factory=dict)
     operation_id: str = field(default_factory=lambda: uuid4().hex)
+    enabled: bool = True
     stale_reason: str | None = None
 
     def __post_init__(self) -> None:
