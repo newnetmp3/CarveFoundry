@@ -39,7 +39,7 @@ _ICON_CANDIDATES: dict[str, tuple[str, ...]] = {
     "g-code": ("text-x-script", "text-x-generic"),
     "profile": ("draw-bezier-curves", "draw-line"),
     "pocket": ("draw-rectangle", "applications-engineering"),
-    "v-carve": ("draw-triangle", "applications-engineering"),
+    "v-carving": ("draw-triangle", "applications-engineering"),
     "engrave": ("draw-freehand", "document-edit"),
     "drill": ("tools", "applications-engineering"),
     "tabs": ("view-list-tree", "applications-engineering"),
