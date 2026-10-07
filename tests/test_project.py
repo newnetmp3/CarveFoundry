@@ -3,8 +3,10 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.core.mesh import mesh_asset_from_geometry
 from carvefoundry.core.project import Project, ProjectItem
+from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.units import ModelUnits
 
@@ -156,3 +158,19 @@ def test_local_size_uses_units_and_scale_but_not_rotation() -> None:
 
     assert size is not None
     assert np.allclose(size, (50.8, 25.4, 38.1))
+
+
+def test_cam_operation_tracks_recalculation_state() -> None:
+    operation = CamOperation(
+        operation="profile",
+        cutter=Cutter("Quarter inch", ToolType.FLAT_END_MILL, 6.35),
+        source_item_ids=("part-a",),
+        parameters={"feed_mm_min": 1200.0, "tabs_enabled": True},
+    )
+
+    assert not operation.needs_recalculation
+    operation.mark_stale("Model transform")
+    assert operation.needs_recalculation
+    assert operation.stale_reason == "Model transform"
+    operation.mark_ready()
+    assert not operation.needs_recalculation
