@@ -29,7 +29,11 @@ class ProjectEditActionsMixin:
         normalized = label.strip().lower()
         if normalized in {"group", "ungroup", "edit project notes"}:
             return
-        if normalized.startswith("calculate ") or normalized == "reorder machining job":
+        if (
+            normalized.startswith("calculate ")
+            or normalized == "reorder machining job"
+            or normalized.startswith("machining operation ")
+        ):
             return
         self._invalidate_toolpaths("Project geometry")
 
