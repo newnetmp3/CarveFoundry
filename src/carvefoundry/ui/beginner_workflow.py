@@ -394,7 +394,7 @@ class BeginnerWorkflowMixin:
             "Toolpath": "The ordered physical cutter movements generated from your design and chosen operation.",
             "Pocket": "Removes material inside a bounded region; use it to recess a shape.",
             "Profile": "Follows a boundary, potentially outside/inside it; cutouts need secure workholding.",
-            "V-Carve": "Uses a V-shaped cutter to form variable-width lettering and details.",
+            "V-Carving": "Uses a V-shaped cutter to form variable-width lettering and details.",
             "Roughing": "Clears bulk material, leaving some for the finishing cutter.",
             "Finishing": "Adds closer, cutter-compensated passes for the final surface.",
             "Rest machining": "Targets sampled stock that a previous cutter could not remove.",

@@ -5,15 +5,19 @@ import json
 import struct
 import tempfile
 from dataclasses import asdict
+from math import isfinite, isnan
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 import zstandard as zstd
 
+from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
+
 from .fixtures import Fixture
 from .mesh import MeshImportError, load_stl
 from .project import Project, ProjectItem, Stock, TextProperties
 from .smart_values import SmartValueError, SmartValues
+from .tools import Cutter, ToolType
 from .transform import Transform3D
 from .units import ModelUnits
 from .vector_path import VectorPath
@@ -28,6 +32,16 @@ CONTAINER_VERSION = 1
 _HEADER = struct.Struct("<8sIIQQ")
 _HEADER_FLAGS = 0
 _MAX_MANIFEST_SIZE = 64 * 1024 * 1024
+_MAX_TOOLPATHS = 10_000
+_MAX_TOOLPATH_MOVES = 1_000_000
+_TOOLPATH_MOVES_ENCODING = "cfmoves-f64-v1"
+_TOOLPATH_MOVE_STRUCT = struct.Struct("<dddBd")
+_MOVE_KIND_TO_CODE = {
+    MoveKind.RAPID: 0,
+    MoveKind.PLUNGE: 1,
+    MoveKind.CUT: 2,
+}
+_MOVE_CODE_TO_KIND = {code: kind for kind, code in _MOVE_KIND_TO_CODE.items()}
 _ASSET_ZSTD_LEVEL = 19
 _MANIFEST_ZSTD_LEVEL = 12
 
@@ -61,6 +75,327 @@ def _stock_to_dict(stock: Stock) -> dict[str, object]:
         "thickness_mm": stock.thickness_mm,
         "xy_zero": stock.xy_zero,
     }
+
+
+def _finite_float(value: object, *, field_name: str) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ProjectFileError(f"{field_name} must be a finite number.") from exc
+    if not isfinite(result):
+        raise ProjectFileError(f"{field_name} must be a finite number.")
+    return result
+
+
+def _optional_finite_float(
+    value: object,
+    *,
+    field_name: str,
+) -> float | None:
+    if value is None:
+        return None
+    return _finite_float(value, field_name=field_name)
+
+
+def _cutter_to_dict(cutter: Cutter) -> dict[str, object]:
+    return {
+        "name": cutter.name,
+        "tool_type": cutter.tool_type.value,
+        "diameter_mm": cutter.diameter_mm,
+        "angle_deg": cutter.angle_deg,
+        "tip_diameter_mm": cutter.tip_diameter_mm,
+        "taper_angle_deg": cutter.taper_angle_deg,
+        "ball_radius_mm": cutter.ball_radius_mm,
+        "profile_points": (
+            [list(point) for point in cutter.profile_points]
+            if cutter.profile_points is not None
+            else None
+        ),
+    }
+
+
+def _load_cutter(value: object, *, path_index: int) -> Cutter:
+    if not isinstance(value, dict):
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter must be an object."
+        )
+    name = value.get("name")
+    if not isinstance(name, str) or not name:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter name is invalid."
+        )
+    try:
+        tool_type = ToolType(value.get("tool_type"))
+    except (TypeError, ValueError) as exc:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter type is invalid."
+        ) from exc
+
+    profile_value = value.get("profile_points")
+    profile_points: tuple[tuple[float, float], ...] | None = None
+    if profile_value is not None:
+        if not isinstance(profile_value, list):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} custom cutter profile is invalid."
+            )
+        parsed_points: list[tuple[float, float]] = []
+        for point_index, point in enumerate(profile_value):
+            if not isinstance(point, list) or len(point) != 2:
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} cutter profile point "
+                    f"{point_index + 1} is invalid."
+                )
+            parsed_points.append(
+                (
+                    _finite_float(
+                        point[0],
+                        field_name=(
+                            f"Toolpath {path_index + 1} cutter profile radius"
+                        ),
+                    ),
+                    _finite_float(
+                        point[1],
+                        field_name=(
+                            f"Toolpath {path_index + 1} cutter profile height"
+                        ),
+                    ),
+                )
+            )
+        profile_points = tuple(parsed_points)
+
+    try:
+        return Cutter(
+            name=name,
+            tool_type=tool_type,
+            diameter_mm=_finite_float(
+                value.get("diameter_mm"),
+                field_name=f"Toolpath {path_index + 1} cutter diameter",
+            ),
+            angle_deg=_optional_finite_float(
+                value.get("angle_deg"),
+                field_name=f"Toolpath {path_index + 1} cutter angle",
+            ),
+            tip_diameter_mm=_finite_float(
+                value.get("tip_diameter_mm", 0.0),
+                field_name=f"Toolpath {path_index + 1} cutter tip diameter",
+            ),
+            taper_angle_deg=_optional_finite_float(
+                value.get("taper_angle_deg"),
+                field_name=f"Toolpath {path_index + 1} cutter taper angle",
+            ),
+            ball_radius_mm=_optional_finite_float(
+                value.get("ball_radius_mm"),
+                field_name=f"Toolpath {path_index + 1} cutter ball radius",
+            ),
+            profile_points=profile_points,
+        )
+    except ValueError as exc:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} cutter is invalid: {exc}"
+        ) from exc
+
+
+def _encode_toolpath_moves(toolpath: Toolpath) -> bytes:
+    data = bytearray(len(toolpath.moves) * _TOOLPATH_MOVE_STRUCT.size)
+    for index, move in enumerate(toolpath.moves):
+        feed = float("nan") if move.feed_mm_min is None else move.feed_mm_min
+        _TOOLPATH_MOVE_STRUCT.pack_into(
+            data,
+            index * _TOOLPATH_MOVE_STRUCT.size,
+            move.x_mm,
+            move.y_mm,
+            move.z_mm,
+            _MOVE_KIND_TO_CODE[move.kind],
+            feed,
+        )
+    return bytes(data)
+
+
+def _decode_toolpath_moves(
+    data: bytes,
+    *,
+    path_index: int,
+    move_count: int,
+) -> list[ToolpathMove]:
+    expected_size = move_count * _TOOLPATH_MOVE_STRUCT.size
+    if len(data) != expected_size:
+        raise ProjectFileError(
+            f"Toolpath {path_index + 1} motion payload size is invalid."
+        )
+
+    moves: list[ToolpathMove] = []
+    for move_index in range(move_count):
+        offset = move_index * _TOOLPATH_MOVE_STRUCT.size
+        x_mm, y_mm, z_mm, kind_code, feed_value = _TOOLPATH_MOVE_STRUCT.unpack_from(
+            data,
+            offset,
+        )
+        kind = _MOVE_CODE_TO_KIND.get(kind_code)
+        if kind is None:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                "has an invalid move kind."
+            )
+        if isnan(feed_value):
+            feed_mm_min = None
+        elif not isfinite(feed_value):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                "has an invalid feed."
+            )
+        else:
+            feed_mm_min = feed_value
+        try:
+            moves.append(
+                ToolpathMove(
+                    x_mm=x_mm,
+                    y_mm=y_mm,
+                    z_mm=z_mm,
+                    kind=kind,
+                    feed_mm_min=feed_mm_min,
+                )
+            )
+        except ValueError as exc:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move {move_index + 1} "
+                f"is invalid: {exc}"
+            ) from exc
+    return moves
+
+
+def _toolpath_to_dict(
+    toolpath: Toolpath,
+    *,
+    moves_asset_id: str | None,
+) -> dict[str, object]:
+    return {
+        "name": toolpath.name,
+        "operation": toolpath.operation,
+        "cutter": _cutter_to_dict(toolpath.cutter),
+        "safe_z_mm": toolpath.safe_z_mm,
+        "source_item_id": toolpath.source_item_id,
+        "source_item_name": toolpath.source_item_name,
+        "move_count": len(toolpath.moves),
+        "moves_encoding": _TOOLPATH_MOVES_ENCODING,
+        "moves_asset_id": moves_asset_id,
+    }
+
+
+def _optional_text(
+    value: object,
+    *,
+    field_name: str,
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ProjectFileError(f"{field_name} must be a string or null.")
+    return value
+
+
+def _load_toolpaths(
+    value: object,
+    *,
+    handle: BinaryIO,
+    payload_start: int,
+    container_size: int,
+    assets: object,
+) -> list[Toolpath]:
+    if not isinstance(value, list):
+        raise ProjectFileError("Project toolpaths section is invalid.")
+    if len(value) > _MAX_TOOLPATHS:
+        raise ProjectFileError("Project contains too many toolpaths.")
+
+    result: list[Toolpath] = []
+    total_moves = 0
+    for path_index, raw_path in enumerate(value):
+        if not isinstance(raw_path, dict):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} must be an object."
+            )
+        name = raw_path.get("name")
+        operation = raw_path.get("operation")
+        if not isinstance(name, str) or not name:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} name is invalid."
+            )
+        if not isinstance(operation, str) or not operation:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} operation is invalid."
+            )
+
+        raw_move_count = raw_path.get("move_count", 0)
+        if isinstance(raw_move_count, bool) or not isinstance(raw_move_count, int):
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move count is invalid."
+            )
+        move_count = raw_move_count
+        if move_count < 0:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} move count is invalid."
+            )
+        total_moves += move_count
+        if total_moves > _MAX_TOOLPATH_MOVES:
+            raise ProjectFileError("Project contains too many toolpath moves.")
+
+        encoding = raw_path.get("moves_encoding")
+        if encoding != _TOOLPATH_MOVES_ENCODING:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} motion encoding is unsupported."
+            )
+        asset_id = raw_path.get("moves_asset_id")
+        if move_count == 0:
+            if asset_id is not None:
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} has an unexpected motion payload."
+                )
+            moves: list[ToolpathMove] = []
+        else:
+            if not isinstance(asset_id, str) or len(asset_id) != 64:
+                raise ProjectFileError(
+                    f"Toolpath {path_index + 1} motion payload id is invalid."
+                )
+            metadata = _asset_metadata(assets, asset_id)
+            expected_size = move_count * _TOOLPATH_MOVE_STRUCT.size
+            data = _read_asset_data(
+                handle,
+                payload_start=payload_start,
+                container_size=container_size,
+                asset_id=asset_id,
+                metadata=metadata,
+                expected_original_size=expected_size,
+            )
+            moves = _decode_toolpath_moves(
+                data,
+                path_index=path_index,
+                move_count=move_count,
+            )
+
+        try:
+            path = Toolpath(
+                name=name,
+                operation=operation,
+                cutter=_load_cutter(raw_path.get("cutter"), path_index=path_index),
+                safe_z_mm=_finite_float(
+                    raw_path.get("safe_z_mm"),
+                    field_name=f"Toolpath {path_index + 1} safe Z",
+                ),
+                moves=moves,
+                source_item_id=_optional_text(
+                    raw_path.get("source_item_id"),
+                    field_name=f"Toolpath {path_index + 1} source item ID",
+                ),
+                source_item_name=_optional_text(
+                    raw_path.get("source_item_name"),
+                    field_name=f"Toolpath {path_index + 1} source item name",
+                ),
+            )
+        except ValueError as exc:
+            raise ProjectFileError(
+                f"Toolpath {path_index + 1} is invalid: {exc}"
+            ) from exc
+        result.append(path)
+    return result
 
 
 def _text_properties_to_dict(
@@ -204,6 +539,31 @@ def _encode_asset(data: bytes) -> tuple[str, bytes]:
     return "raw", data
 
 
+def _store_payload_asset(
+    assets: dict[str, dict[str, Any]],
+    payloads: list[bytes],
+    data: bytes,
+    *,
+    payload_offset: int,
+    original_name: str,
+) -> tuple[str, int]:
+    asset_id = hashlib.sha256(data).hexdigest()
+    if asset_id in assets:
+        return asset_id, payload_offset
+
+    codec, stored = _encode_asset(data)
+    assets[asset_id] = {
+        "offset": payload_offset,
+        "stored_size": len(stored),
+        "original_size": len(data),
+        "codec": codec,
+        "sha256": asset_id,
+        "original_name": original_name,
+    }
+    payloads.append(stored)
+    return asset_id, payload_offset + len(stored)
+
+
 def _build_container(
     project: Project,
 ) -> tuple[dict[str, Any], list[bytes]]:
@@ -219,19 +579,13 @@ def _build_container(
 
         if asset is not None:
             data, source_name = asset
-            asset_id = hashlib.sha256(data).hexdigest()
-            if asset_id not in assets:
-                codec, stored = _encode_asset(data)
-                assets[asset_id] = {
-                    "offset": payload_offset,
-                    "stored_size": len(stored),
-                    "original_size": len(data),
-                    "codec": codec,
-                    "sha256": asset_id,
-                    "original_name": source_name,
-                }
-                payloads.append(stored)
-                payload_offset += len(stored)
+            asset_id, payload_offset = _store_payload_asset(
+                assets,
+                payloads,
+                data,
+                payload_offset=payload_offset,
+                original_name=source_name,
+            )
 
         items.append(
             {
@@ -261,6 +615,31 @@ def _build_container(
             }
         )
 
+    if len(project.toolpaths) > _MAX_TOOLPATHS:
+        raise ProjectFileError("Project contains too many toolpaths.")
+    total_toolpath_moves = sum(len(toolpath.moves) for toolpath in project.toolpaths)
+    if total_toolpath_moves > _MAX_TOOLPATH_MOVES:
+        raise ProjectFileError("Project contains too many toolpath moves.")
+
+    toolpaths: list[dict[str, object]] = []
+    for path_index, toolpath in enumerate(project.toolpaths):
+        move_data = _encode_toolpath_moves(toolpath)
+        moves_asset_id: str | None = None
+        if move_data:
+            moves_asset_id, payload_offset = _store_payload_asset(
+                assets,
+                payloads,
+                move_data,
+                payload_offset=payload_offset,
+                original_name=f"toolpath-{path_index + 1}.cfmoves",
+            )
+        toolpaths.append(
+            _toolpath_to_dict(
+                toolpath,
+                moves_asset_id=moves_asset_id,
+            )
+        )
+
     manifest: dict[str, Any] = {
         "format": PROJECT_FORMAT,
         "version": PROJECT_FILE_VERSION,
@@ -274,6 +653,7 @@ def _build_container(
         "fixtures": [asdict(fixture) for fixture in project.fixtures],
         "smart_values": dict(project.smart_values.expressions),
         "items": items,
+        "toolpaths": toolpaths,
         "assets": assets,
     }
     return manifest, payloads
@@ -307,6 +687,8 @@ def save_project(project: Project, path: str | Path) -> Path:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    if len(manifest_raw) > _MAX_MANIFEST_SIZE:
+        raise ProjectFileError("Project manifest is too large to save safely.")
     manifest_stored = _compress_zstd(manifest_raw, level=_MANIFEST_ZSTD_LEVEL)
     header = _HEADER.pack(
         PROJECT_FILE_MAGIC,
@@ -584,16 +966,15 @@ def _asset_metadata(
     return metadata
 
 
-def _materialize_asset(
+def _read_asset_data(
     handle: BinaryIO,
     *,
     payload_start: int,
     container_size: int,
     asset_id: str,
     metadata: dict[str, Any],
-    source_name: str | None,
-    workspace: Path,
-) -> Path:
+    expected_original_size: int | None = None,
+) -> bytes:
     try:
         offset = int(metadata["offset"])
         stored_size = int(metadata["stored_size"])
@@ -603,6 +984,11 @@ def _materialize_asset(
 
     if min(offset, stored_size, original_size) < 0:
         raise ProjectFileError(f"Embedded asset {asset_id} sizes are invalid.")
+    if expected_original_size is not None and original_size != expected_original_size:
+        raise ProjectFileError(
+            f"Embedded asset {asset_id} original size is invalid."
+        )
+
     absolute_start = payload_start + offset
     absolute_end = absolute_start + stored_size
     if absolute_start < payload_start or absolute_end > container_size:
@@ -631,6 +1017,26 @@ def _materialize_asset(
         raise ProjectFileError(
             f"Embedded asset {asset_id} failed SHA-256 verification."
         )
+    return data
+
+
+def _materialize_asset(
+    handle: BinaryIO,
+    *,
+    payload_start: int,
+    container_size: int,
+    asset_id: str,
+    metadata: dict[str, Any],
+    source_name: str | None,
+    workspace: Path,
+) -> Path:
+    data = _read_asset_data(
+        handle,
+        payload_start=payload_start,
+        container_size=container_size,
+        asset_id=asset_id,
+        metadata=metadata,
+    )
 
     metadata_name = metadata.get("original_name")
     preferred = source_name if isinstance(source_name, str) and source_name else metadata_name
@@ -826,6 +1232,13 @@ def _load_native_project(project_path: Path) -> Project:
                 )
                 for item in items_value
             ]
+            toolpaths = _load_toolpaths(
+                manifest.get("toolpaths", []),
+                handle=handle,
+                payload_start=payload_start,
+                container_size=container_size,
+                assets=assets,
+            )
     except (OSError, ProjectFileError):
         workspace_owner.cleanup()
         raise
@@ -836,6 +1249,7 @@ def _load_native_project(project_path: Path) -> Project:
         items=items,
         smart_values=smart_values,
         fixtures=fixtures,
+        toolpaths=toolpaths,
         material_name=material_name,
         notes=notes,
         _asset_workspace_owner=workspace_owner,

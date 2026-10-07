@@ -29,7 +29,11 @@ the desktop app. Reopen it anytime from **Help → Welcome / Start Here…**.
    **File → Print CNC Job Setup Sheet…** creates a PDF with cutter stages,
    origin, stock, fixture coordinates and the physical checklist. It includes
    exported filenames only when they match the current project.
-7. Record actual cutting outcomes under **Project → Project Notes / Carving Log…**.
+7. Save the project normally. Calculated CAM plans are retained in the native
+   CF3D file, including cutter geometry, source-object linkage and exact motion,
+   so reopening a job restores its preview/export-ready toolpaths without
+   forcing an unchanged calculation to run again.
+8. Record actual cutting outcomes under **Project → Project Notes / Carving Log…**.
    Notes and the recorded material survive CF3D save/reload and Undo/Redo.
 
 The **Guided CNC Workflow** under Help or Project links these actual actions.

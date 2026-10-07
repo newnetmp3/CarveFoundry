@@ -1048,15 +1048,15 @@ def _deepest_inset_radius(polygon: Polygon, upper: float) -> float:
     return low
 
 
-def geometry_vcarve(
+def geometry_v_carving(
     mesh: trimesh.Trimesh,
     cutter: Cutter,
     settings: CamSettingsLike,
     *,
-    name: str = "V-Carve",
+    name: str = "V-Carving",
 ) -> Toolpath:
     if cutter.tool_type not in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}:
-        raise ValueError("V-Carve requires a V-bit or engraving-cone cutter.")
+        raise ValueError("V-Carving requires a V-bit or engraving-cone cutter.")
     if cutter.angle_deg is None:
         raise ValueError("Selected V-carving cutter has no included angle.")
 
@@ -1067,7 +1067,7 @@ def geometry_vcarve(
     half_angle = radians(cutter.angle_deg / 2.0)
     slope = tan(half_angle)
     if slope <= _EPS or not isfinite(slope):
-        raise ValueError("Selected V-bit angle cannot produce a valid V-carve.")
+        raise ValueError("Selected V-bit angle cannot produce a valid V-carving path.")
 
     tip_radius = cutter.tip_diameter_mm / 2.0
     cutter_depth = cutter.profile_height_mm(cutter.radius_mm)
@@ -1083,7 +1083,7 @@ def geometry_vcarve(
         max_depth = min(max_depth, float(settings.usable_bit_length_mm))
     max_depth = min(max_depth, cutter_depth)
     if max_depth <= _EPS:
-        raise ValueError("No usable V-carve depth is available for this model/tool.")
+        raise ValueError("No usable V-carving depth is available for this model/tool.")
 
     max_radius = min(
         cutter.radius_mm,
@@ -1144,7 +1144,7 @@ def geometry_vcarve(
         )
     return Toolpath(
         name=name,
-        operation="v_carve",
+        operation="v_carving",
         cutter=cutter,
         safe_z_mm=settings.safe_z_mm,
         moves=moves,

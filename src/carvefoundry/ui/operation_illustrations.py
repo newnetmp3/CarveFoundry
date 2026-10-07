@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 _OPERATION_EXPLANATIONS = {
     "profile": "Profile follows the outline of a shape. Choose Inside/Outside in Advanced when cutter radius matters; a cutout needs secure holding.",
     "pocket": "Pocket removes wood INSIDE a closed region, leaving a recessed area.",
-    "vcarve": "V-Carve varies cutting depth across lettering or shapes with a V-bit.",
+    "v_carving": "V-Carving varies cutting depth across lettering or shapes with a V-bit.",
     "engrave": "Engrave traces outlines or linework at the configured depth.",
     "rough": "3D Rough removes bulk material before a smaller or round finishing cutter refines the surface.",
     "finish": "3D Finish follows the modeled top surface. A finer stepover can improve visible detail but takes more passes.",
@@ -142,7 +142,7 @@ class CamOperationIllustration(QWidget):
         op = self._operation
         if op in {"profile", "silhouette"}: self._profile(p, box)
         elif op == "pocket": self._pocket(p, box)
-        elif op == "vcarve": self._linework(p, box, v_bit=True)
+        elif op == "v_carving": self._linework(p, box, v_bit=True)
         elif op == "engrave": self._linework(p, box, v_bit=False)
         elif op in {"rough", "surface", "height_map", "rest", "finish"}: self._raster(p, box, rough=op in {"rough", "rest"})
         elif op in {"drill", "center_drill"}: self._drill(p, box)

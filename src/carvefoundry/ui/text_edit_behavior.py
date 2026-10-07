@@ -345,13 +345,13 @@ class TextEditBehaviorMixin:
             self.text_cnc_hint.setText(
                 f"Machining warning: {self.text_outline_width_spin.value():.3f} mm "
                 f"outline is narrower than the {diameter:.3f} mm active cutter. "
-                "Use a smaller cutter, widen the outline, or use a V-carve strategy."
+                "Use a smaller cutter, widen the outline, or use a V-Carving strategy."
             )
             return
 
         self.text_cnc_hint.setText(
             f"Active cutter: {diameter:.3f} mm. Fine glyph details may require "
-            "a smaller cutter or V-carve; Preview the calculated toolpath before cutting."
+            "a smaller cutter or V-Carving; Preview the calculated toolpath before cutting."
         )
 
     def _text_control_changed(self, *_args) -> None:

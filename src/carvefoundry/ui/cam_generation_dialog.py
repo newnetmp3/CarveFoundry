@@ -99,7 +99,7 @@ class CamGenerationDialogMixin:
         selected_mode = bool(
             self._settings.value("cam/simple_mode", True, type=bool)
         ) and self._active_cam_operation in {
-            "profile", "pocket", "vcarve", "engrave", "rough", "finish",
+            "profile", "pocket", "v_carving", "engrave", "rough", "finish",
         }
         mode_combo.setCurrentIndex(0 if selected_mode else 1)
         mode_combo.setToolTip(
@@ -302,7 +302,7 @@ class CamGenerationDialogMixin:
             "silhouette",
             "pocket",
             "surface",
-            "vcarve",
+            "v_carving",
             "engrave",
             "drill",
             "center_drill",
@@ -334,7 +334,7 @@ class CamGenerationDialogMixin:
                     "Face the stock top. This operation can run with no design "
                     "objects."
                 ),
-                "V-Carve": (
+                "V-Carving": (
                     "Use a V-bit/cone profile to carve vector/detail geometry."
                 ),
                 "Engrave": "Trace projected contours/linework with the cutter.",
@@ -498,7 +498,7 @@ class CamGenerationDialogMixin:
         fields["detail"] = detail
         add_help_row(
             strategy_form,
-            "3D / V-Carve detail",
+            "3D / V-Carving detail",
             "detail",
             detail,
         )
@@ -845,7 +845,7 @@ class CamGenerationDialogMixin:
         simple_form.addRow(simple_intro)
         simple_operation = QComboBox(simple_panel)
         simple_operation.setObjectName("SimpleCamOperation")
-        for op in ("profile", "pocket", "vcarve", "engrave", "rough", "finish"):
+        for op in ("profile", "pocket", "v_carving", "engrave", "rough", "finish"):
             simple_operation.addItem(self._cam_operation_title(op), op)
         op_idx = simple_operation.findData(operation_combo.currentData())
         simple_operation.setCurrentIndex(max(op_idx, 0))
@@ -994,7 +994,7 @@ class CamGenerationDialogMixin:
             else:
                 append_job.setEnabled(bool(self.project.toolpaths))
             uses_cut_type = operation in {"profile", "pocket", "engrave"}
-            uses_detail = is_3d or operation == "vcarve"
+            uses_detail = is_3d or operation == "v_carving"
             uses_entry = operation not in {
                 "rough",
                 "finish",
@@ -1105,14 +1105,14 @@ class CamGenerationDialogMixin:
                     ),
                     "No selected model has already been freed by a cutout",
                 ))
-            if operation == "vcarve":
+            if operation == "v_carving":
                 checks.append(
                     (
                         isinstance(cutter, Cutter)
                         and cutter.tool_type
                         in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}
                         and cutter.angle_deg is not None,
-                        "V-Carve cutter has a V/cone profile and included angle",
+                        "V-Carving cutter has a V/cone profile and included angle",
                     )
                 )
             checks.append(

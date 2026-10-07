@@ -3,6 +3,14 @@
 CarveFoundry is a Linux/Wayland-first Python/PySide6 + Rust/PyO3 CNC CAD/CAM
 desktop application. GitHub: `newnetmp3/CarveFoundry`.
 
+## Vendor-neutral terminology
+
+- Keep project naming, branches, UI, documentation, releases and code-facing
+  feature terminology vendor-neutral. Do not name or compare CarveFoundry
+  features against proprietary CAD/CAM products.
+- Use **V-Carving** only for the generic machining process performed with a
+  V-shaped/conical cutter. Do not use it as product branding or a project name.
+
 ## Delivery standard
 
 - **Never create placeholder UI, inert buttons, fake progress, or partial

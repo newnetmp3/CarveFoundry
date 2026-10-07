@@ -38,10 +38,11 @@ It must not be described as a guarantee of physical safety.
 4. **Persistent multi-tool planning and dependencies:** A session-owned
    multi-cutter job planner now supports appending operations, reordering/removing
    generated paths, cutout/rough-before-finish checks, stage estimates, full
-   preview and preflighted per-cutter export. Native CF3D still does NOT retain
-   calculated paths or tool-stage setup records; full automatic operation
-   dependency generation and stock-aware sequencing remain future work.
-5. **V-carve inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
+   preview and preflighted per-cutter export. Native CF3D now retains calculated toolpaths, including cutter geometry,
+   source linkage, safe Z, move kinds/feeds and exact XYZ motion. Tool-stage
+   setup records, full automatic operation dependency generation and
+   stock-aware sequencing remain future work.
+5. **V-carving inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
    and fit/tolerance validation.
 6. **Beyond sampled stock-aware rest:** 3D Rest now simulates all previously
    generated cutter stages and retains only selected-cutter cleanup passes at

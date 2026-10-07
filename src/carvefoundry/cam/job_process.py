@@ -44,7 +44,7 @@ from carvefoundry.cam.vector_ops import (
     geometry_pocket,
     geometry_profile,
     geometry_silhouette,
-    geometry_vcarve,
+    geometry_v_carving,
 )
 from carvefoundry.core.ai_relief import ReliefRequest, generate_relief
 from carvefoundry.core.fixtures import Fixture
@@ -154,8 +154,8 @@ def _generate_item(
         progress(0.05 + (end - 0.05) * value, status)
 
     progress(0.03, "Preparing geometry")
-    if operation == "vcarve":
-        path = geometry_vcarve(mesh, cutter, settings)
+    if operation == "v_carving":
+        path = geometry_v_carving(mesh, cutter, settings)
     elif operation == "drill":
         path = geometry_drill(mesh, cutter, settings)
     elif operation == "center_drill":

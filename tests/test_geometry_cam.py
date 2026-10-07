@@ -18,7 +18,7 @@ from carvefoundry.cam.vector_ops import (
     geometry_pocket,
     geometry_profile,
     geometry_silhouette,
-    geometry_vcarve,
+    geometry_v_carving,
     projected_regions,
 )
 from carvefoundry.core.tools import Cutter, ToolType
@@ -142,7 +142,7 @@ def test_polygon_pocket_never_links_across_hole() -> None:
         previous = move
 
 
-def test_vcarve_uses_tool_angle_and_region_width_for_depth() -> None:
+def test_v_carving_uses_tool_angle_and_region_width_for_depth() -> None:
     cutter = Cutter(
         "60 degree V",
         ToolType.V_BIT,
@@ -155,12 +155,12 @@ def test_vcarve_uses_tool_angle_and_region_width_for_depth() -> None:
         finish_stepover_fraction=0.04,
     )
 
-    narrow = geometry_vcarve(
+    narrow = geometry_v_carving(
         _extrude(box(0, 0, 3, 15), depth=8.0),
         cutter,
         settings,
     )
-    wide = geometry_vcarve(
+    wide = geometry_v_carving(
         _extrude(box(0, 0, 8, 15), depth=8.0),
         cutter,
         settings,
@@ -190,12 +190,12 @@ def test_vcarve_uses_tool_angle_and_region_width_for_depth() -> None:
     )
 
 
-def test_vcarve_rejects_non_conical_cutters() -> None:
+def test_v_carving_rejects_non_conical_cutters() -> None:
     mesh = _extrude(box(0, 0, 10, 10))
     cutter = Cutter("flat", ToolType.FLAT_END_MILL, 3.0)
 
     with pytest.raises(ValueError, match="V-bit or engraving-cone"):
-        geometry_vcarve(mesh, cutter, _settings())
+        geometry_v_carving(mesh, cutter, _settings())
 
 
 def test_drill_uses_real_circular_features_not_bounds_center() -> None:
