@@ -189,7 +189,7 @@ class WorkspaceSurfaceBuilderMixin:
             ("silhouette", "Silhouette"),
             ("pocket", "Pocket"),
             ("surface", "Surface"),
-            ("vcarve", "V-Carving"),
+            ("v_carving", "V-Carving"),
             ("engrave", "Engrave"),
             ("drill", "Drill Features"),
             ("center_drill", "Center Drill"),
