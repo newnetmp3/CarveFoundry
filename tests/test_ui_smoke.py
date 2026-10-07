@@ -603,7 +603,7 @@ def test_generation_dialog_exposes_extended_milling_methods() -> None:
             "silhouette",
             "pocket",
             "surface",
-            "vcarve",
+            "v_carving",
             "engrave",
             "drill",
             "center_drill",
@@ -672,7 +672,7 @@ def test_text_inspector_exposes_exact_font_verification() -> None:
         window.close()
 
 
-def test_generation_dialog_blocks_incompatible_vcarve_cutter() -> None:
+def test_generation_dialog_blocks_incompatible_v_carving_cutter() -> None:
     window = MainWindow()
     try:
         item = ProjectItem(
@@ -689,7 +689,7 @@ def test_generation_dialog_blocks_incompatible_vcarve_cutter() -> None:
         fields = dialog.generation_fields
 
         fields["operation"].setCurrentIndex(
-            fields["operation"].findData("vcarve")
+            fields["operation"].findData("v_carving")
         )
 
         flat_index = next(
