@@ -676,7 +676,7 @@ class WorkspaceSurfaceBuilderMixin:
                 "cam_silhouette",
                 "cam_pocket",
                 "cam_surface",
-                "cam_vcarve",
+                "cam_v_carving",
                 "cam_engrave",
                 "cam_drill",
                 "cam_center_drill",
