@@ -452,7 +452,7 @@ class RibbonCamActionsMixin:
             "silhouette": "Silhouette",
             "pocket": "Pocket",
             "surface": "Surface / Face",
-            "vcarve": "V-Carving",
+            "v_carving": "V-Carving",
             "engrave": "Engrave",
             "drill": "Drill Features",
             "center_drill": "Center Drill",
@@ -518,7 +518,7 @@ class RibbonCamActionsMixin:
             "engrave",
         }
         uses_direction = is_3d or operation in {"pocket", "surface"}
-        uses_detail = is_3d or operation == "vcarve"
+        uses_detail = is_3d or operation == "v_carving"
 
         for combo in self._cam_selector_widgets.get("cut_type", []):
             combo.setEnabled(uses_cut_type)
@@ -609,7 +609,7 @@ class RibbonCamActionsMixin:
             "silhouette": "Silhouette",
             "pocket": "Pocket",
             "surface": "Surface / Face",
-            "vcarve": "V-Carving",
+            "v_carving": "V-Carving",
             "engrave": "Engrave",
             "drill": "Drill Features",
             "center_drill": "Center Drill",
