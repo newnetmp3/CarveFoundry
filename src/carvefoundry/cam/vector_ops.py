@@ -1048,7 +1048,7 @@ def _deepest_inset_radius(polygon: Polygon, upper: float) -> float:
     return low
 
 
-def geometry_vcarve(
+def geometry_v_carving(
     mesh: trimesh.Trimesh,
     cutter: Cutter,
     settings: CamSettingsLike,
@@ -1144,7 +1144,7 @@ def geometry_vcarve(
         )
     return Toolpath(
         name=name,
-        operation="v_carve",
+        operation="v_carving",
         cutter=cutter,
         safe_z_mm=settings.safe_z_mm,
         moves=moves,
