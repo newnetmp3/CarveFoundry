@@ -15,6 +15,7 @@ from carvefoundry.core.vector_path import (
     apply_vector_edit,
     arc_center,
     arc_sweep_degrees,
+    chamfer_open_line_corner,
     close_path,
     extend_open_line_endpoint,
     fit_open_line_endpoint_to_segment,
@@ -556,3 +557,42 @@ def test_line_fit_world_reference_is_converted_into_source_coordinates() -> None
     )
     assert changed.points_xy[0] == pytest.approx((5, 0))
     assert reference.vector_path == reference_path
+
+
+def test_analytic_chamfer_preserves_unaffected_geometry() -> None:
+    path = VectorPath(
+        ((0, 0), (10, 0), (10, 10), (15, 10)),
+        segments=(
+            VectorSegment.line(), VectorSegment.line(),
+            VectorSegment.cubic((12, 13), (14, 13)),
+        ),
+    )
+    result = chamfer_open_line_corner(path, 1, 2.0)
+    assert result.points_xy == pytest.approx(
+        ((0, 0), (8, 0), (10, 2), (10, 10), (15, 10)),
+    )
+    assert result.segment_count == path.segment_count + 1
+    assert result.resolved_segments()[-1] == path.resolved_segments()[-1]
+    assert result.points_xy[0] == path.points_xy[0]
+
+
+@pytest.mark.parametrize("setback", [0, -1, 10, 15, float("inf"), float("nan")])
+def test_chamfer_rejects_invalid_setback(setback: float) -> None:
+    path = VectorPath(((0, 0), (10, 0), (10, 10)))
+    with pytest.raises(ValueError):
+        chamfer_open_line_corner(path, 1, setback)
+
+
+def test_chamfer_rejects_closed_collinear_and_curved_corners() -> None:
+    with pytest.raises(ValueError):
+        chamfer_open_line_corner(
+            VectorPath(((0, 0), (10, 0), (10, 10)), closed=True), 1, 2,
+        )
+    with pytest.raises(ValueError, match="noncollinear"):
+        chamfer_open_line_corner(VectorPath(((0, 0), (10, 0), (20, 0))), 1, 2)
+    path = VectorPath(
+        ((0, 0), (10, 0), (10, 10)),
+        segments=(VectorSegment.cubic((2, 4), (8, 4)), VectorSegment.line()),
+    )
+    with pytest.raises(ValueError, match="straight"):
+        chamfer_open_line_corner(path, 1, 2)
