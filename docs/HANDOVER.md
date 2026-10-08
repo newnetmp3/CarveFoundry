@@ -17,29 +17,28 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `e1aa01c1f38b965a1ea01df398ef9f3b595c5c8d` (PR #75).
+- Last verified merged feature baseline: `e99e328b0ffff0dfc682a5b0012ff8ba0824cc70` (PR #76).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — finite line-segment intersection trim/extend
+## Active — interactive line intersection trim/extend
 
-- Verified main baseline: `e1aa01c1f38b965a1ea01df398ef9f3b595c5c8d` (PR #75, merged after GitHub Actions run `37813637036` passed).
-- Active branch: `feature/vector-line-intersection-geometry`, based on PR #75.
-- Added pure immutable `fit_open_line_endpoint_to_segment` to compute exact intersections between an open path's straight endpoint and a finite target segment. Explicit `trim` versus `extend` mode, outward-direction validation, target-bounds check and fail-closed rejection of parallel, collinear, zero-length, nonfinite or incompatible curves.
-- Added independent geometric test cases for start/end trim and extend and invalid targets. **No UI integration yet**: operator target segment selection and safe world/local transformations are a next milestone; do not claim this is an interactive trim/extend feature yet.
-- No Rust conversion accompanies this core slice. The existing benchmark/parity harness from PR #72 remains available and should be extended with true hardware measurements.
-- CI for this branch is **unverified** and physical KDE Plasma/Wayland and router validation remain outstanding.
+- PR #76 merged as `e99e328b0ffff0dfc682a5b0012ff8ba0824cc70` after GitHub Actions run `37814346867` passed.
+- Active branch: `feature/interactive-line-fit` based on merged #76.
+- Direct Selection now supplies a two-object target workflow: select the editable source and another retained editable vector, choose a finite straight segment index on the target, then Trim/Extend to the exact intersection. Coordinate transforms convert reference world XY to the source path's local XY; final commit preserves the opposite world endpoint and follows Undo/Redo/CAM invalidation.
+- Rejects references outside the finite line, parallel/collinear segments, curved targets, incompatible Z planes, locked/hidden targets and wrong trim/extend direction. The source object and reference object remain separate.
+- Geometry regression added for transformed world-local target coordinates. **CI and physical KDE Plasma/Wayland interactions are not yet verified; this is not merged or released.**
+- Existing Rust native parity/benchmark infrastructure from PR #72 remains in place; no new Rust code in this branch.
 
 ### Next checkpoints
 
-- [ ] Run PR CI; fix lint/test failures and merge only when green.
-- [ ] Add target-segment selection UI and world/local coordinate mapping with checked Undo/Redo and stale CAM invalidation.
-- [ ] Add finite analytic arc/curve intersection handling without sampling-induced machine errors.
-- [ ] Then fillet/chamfer and live geometric snap indicators.
-- [ ] Continue expanding Rust numerical parity/benchmarks in parallel and maintain safety checks.
+- [ ] Validate CI on Python 3.12/3.14 and fix UI/core integration errors before merge.
+- [ ] Add offscreen two-object selection regression and test transform rotation/scale cases.
+- [ ] Continue analytic circle/arc intersection, fillet/chamfer and live geometric snap feedback.
+- [ ] Expand Rust performance/parity benchmark inputs and retain safe CAM export gates.
 
 ### Known boundaries and safety invariants
 
@@ -77,3 +76,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #74 merged after green CI; added strictly validated straight endpoint extension and Direct Selection integration | Main `8885f24`; branch `feature/analytic-line-endpoint-extension`; CI unverified | Validate follow-on PR |
 | 2026-10-08 | Opened PR #75 and added UI extension regression | Latest UI test commit `a907676`; final CI pending | Verify final CI; merge only when green |
 | 2026-10-08 | PR #75 merged after green CI, finite target line-segment fitting core started | Merge `e1aa01c`; new `feature/vector-line-intersection-geometry` | Validate geometry PR and design world-space editor integration |
+| 2026-10-08 | PR #76 merged green; interactive finite-line trim/extend UI added on new branch | Merge `e99e328`; CI pending on `feature/interactive-line-fit` | Validate UI and merge only if green |
