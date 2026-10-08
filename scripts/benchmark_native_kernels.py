@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import statistics
 import sys
@@ -45,9 +46,8 @@ def _sample(fn, iterations: int) -> float:
 
 def benchmark(size: int, iterations: int, *, rust: bool) -> dict:
     vertices, faces, x_axis, y_axis = _fixture(size)
-    python_fn = lambda: _rasterize_top_surface_python(
-        vertices, faces, x_axis, y_axis,
-    )
+    def python_fn():
+        return _rasterize_top_surface_python(vertices, faces, x_axis, y_axis)
     py_result = python_fn()
     output = {
         "grid": size,
@@ -59,9 +59,8 @@ def benchmark(size: int, iterations: int, *, rust: bool) -> dict:
         "parity": None,
     }
     if rust:
-        rust_fn = lambda: rasterize_top_surface(
-            vertices, faces, x_axis, y_axis,
-        )
+        def rust_fn():
+            return rasterize_top_surface(vertices, faces, x_axis, y_axis)
         native_result = rust_fn()
         if native_result is None:
             raise RuntimeError("Native kernel returned no result.")
@@ -71,7 +70,10 @@ def benchmark(size: int, iterations: int, *, rust: bool) -> dict:
             equal_nan=True,
         )
         finite = np.isfinite(py_result) & np.isfinite(native_result)
-        max_error = float(np.max(np.abs(native_result[finite] - py_result[finite]))) if finite.any() else 0.0
+        max_error = (
+            float(np.max(np.abs(native_result[finite] - py_result[finite])))
+            if finite.any() else 0.0
+        )
         rust_ms = _sample(rust_fn, iterations)
         output.update({
             "rust_median_ms": rust_ms,
@@ -96,11 +98,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Compiled Rust extension is unavailable; install with maturin first.")
     # Bypass an arbitrary user backend override so these runs explicitly
     # compare the selected implementations.
-    import os
     original = os.environ.get("CARVEFOUNDRY_CAM_BACKEND")
     os.environ["CARVEFOUNDRY_CAM_BACKEND"] = "rust" if available else "python"
     try:
-        results = [benchmark(size, args.iterations, rust=available) for size in args.sizes]
+        results = [
+            benchmark(size, args.iterations, rust=available)
+            for size in args.sizes
+        ]
     finally:
         if original is None:
             os.environ.pop("CARVEFOUNDRY_CAM_BACKEND", None)
