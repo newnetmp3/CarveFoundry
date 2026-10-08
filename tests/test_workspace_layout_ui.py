@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_OPENGL", "software")
 
@@ -20,7 +22,7 @@ from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem
 from carvefoundry.core.tools import Cutter, ToolType
-from carvefoundry.core.vector_path import VectorPath
+from carvefoundry.core.vector_path import VectorPath, VectorSegment, segment_world_controls
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
@@ -418,4 +420,30 @@ def test_direct_selection_join_two_paths_retargets_cam_and_undo_restores_both():
         if dialog is not None:
             dialog.close()
         window._settings.remove("vector/snap_tolerance_mm")
+        window.close()
+
+
+def test_native_bezier_handles_retain_selection_and_commit_undoable_curve():
+    path = VectorPath(
+        ((10, 10), (40, 10)),
+        segments=(VectorSegment.cubic((17, 23), (33, 23)),),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window.viewport.set_node_edit_mode(True)
+        native = window.viewport._renderer
+        controls = native._editable_cubic_controls()
+        assert len(controls) == 2
+        assert [(segment, handle) for segment, handle, _, _ in controls] == [
+            (0, 1), (0, 2),
+        ]
+        initial = segment_world_controls(item, 0)[0]
+        window._control_drag_finished(0, 0, 1, initial[0] + 1.5, initial[1] + 2.0)
+        assert item.vector_path.resolved_segments()[0].control1_xy != (17, 23)
+        assert item.vector_path.resolved_segments()[0].control2_xy == (33, 23)
+        moved = segment_world_controls(item, 0)[0]
+        assert moved == pytest.approx((initial[0] + 1.5, initial[1] + 2.0))
+    finally:
         window.close()
