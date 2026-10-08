@@ -5,6 +5,7 @@ import pytest
 from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.vector_path import VectorPath, VectorSegment
 from carvefoundry.core.vector_snapping import (
+    directional_snap_candidate,
     grid_snap_candidate,
     nearest_vector_snap,
     vector_snap_candidates,
@@ -105,3 +106,42 @@ def test_grid_snap_handles_negative_stock_relative_coordinates() -> None:
     snap = grid_snap_candidate((-4.9, -10.1), 5.0, 0.3)
     assert snap is not None
     assert snap.point_xy == pytest.approx((-5.0, -10.0))
+
+
+def test_directional_snapping_projects_to_tangent_and_normal() -> None:
+    tangent = directional_snap_candidate(
+        (8.0, 5.2), (2.0, 5.0), (3.0, 0.0), 0.3,
+    )
+    assert tangent is not None
+    assert tangent.kind == "tangent"
+    assert tangent.point_xy == pytest.approx((8.0, 5.0))
+
+    normal = directional_snap_candidate(
+        (2.1, 12.0), (2.0, 5.0), (3.0, 0.0), 0.3,
+        perpendicular=True,
+    )
+    assert normal is not None
+    assert normal.kind == "perpendicular"
+    assert normal.point_xy == pytest.approx((2.0, 12.0))
+    assert directional_snap_candidate(
+        (4.0, 12.0), (2.0, 5.0), (3.0, 0.0), 0.3,
+        perpendicular=True,
+    ) is None
+
+
+def test_directional_snap_handles_non_axis_aligned_vectors() -> None:
+    candidate = directional_snap_candidate(
+        (4.1, 3.9), (0, 0), (1, 1), 0.2,
+    )
+    assert candidate is not None
+    assert candidate.point_xy == pytest.approx((4, 4))
+
+
+@pytest.mark.parametrize(
+    "direction,tolerance",
+    [((0, 0), 1.0), ((1, 0), 0.0),
+     ((float("nan"), 1), 1.0), ((1, 0), float("inf"))],
+)
+def test_directional_snap_rejects_invalid_inputs(direction, tolerance) -> None:
+    with pytest.raises(ValueError):
+        directional_snap_candidate((1, 1), (0, 0), direction, tolerance)
