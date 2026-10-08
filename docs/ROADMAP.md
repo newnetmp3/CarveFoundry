@@ -61,8 +61,13 @@ reusable toolpath templates, inlay plug/pocket workflows, merged/arrayed
 operations, vector texturing, extension/gadget APIs and safe batch production.
 See [Rust UI capability and acceptance plan](RUST_UI_GAP_PLAN.md).
 No source workspace from this native Rust layout may be mistaken for G-code.
-The new Rust binary must pass its own Cargo tests, Linux build and strict
-clippy gate before this milestone is marked delivered.
+PR #84 merged the first Rust-native layout window after Cargo geometry
+tests, Linux release compilation and strict Clippy CI passed. PR #85 merged
+a read-only CF3D vector-outline and stock snapshot adapter after both Python
+CI lanes passed. The current integration milestone adds the **Import vectors
+(read-only)** Rust UI workflow and a separate KDE launcher; it is not a
+read/write CF3D engine bridge, does not preserve CNC operation metadata, and
+is not yet merged or CI validated.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 

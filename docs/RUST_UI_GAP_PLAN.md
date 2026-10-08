@@ -28,11 +28,19 @@ positioning, editable JSON layout, polygon-aware first-fit arranging, grid
 arrays and SVG interchange. It is not a complete application replacement,
 and its SVG export is not an NC toolpath.
 
-The next engineering slice must establish a testable **read/write CF3D engine
-bridge** or a backwards-compatible project editing service so that a Rust
-interface can safely replace the project editor. Until then, ship the new
-interface alongside the established Linux desktop app. Preserve all known
-machine preflight and G-code release gates.
+PR #84 merged the first native Rust Studio interface and PR #85 merged a
+**read-only** Python-to-Rust snapshot adapter for closed planar vector outlines
+and stock dimensions. The subsequent integration adds the GUI **Import vectors
+(read-only)** control and a second KDE desktop launcher. Snapshot import counts
+unsupported objects and does not read or overwrite CAM operations or fixtures;
+curves are approximated for 2D layout, not preserved as their editable CF3D
+analytic sources.
+
+The next engineering slice must establish a versioned, tested **read/write
+CF3D editing/engine bridge** or equivalent backwards-compatible service with
+stable source UUIDs, native Undo/Redo, toolpath invalidation and preserved
+preflight, so a Rust UI can actually replace the full project editor. Until
+then ship the Rust GUI alongside the trusted Linux CAM application.
 
 ## Acceptance rules
 

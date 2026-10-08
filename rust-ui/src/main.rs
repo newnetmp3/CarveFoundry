@@ -37,6 +37,7 @@ struct Studio {
     array_columns: usize,
     array_gap: f64,
     layout_path: String,
+    cf3d_path: String,
     svg_path: String,
     zoom: f32,
     message: String,
@@ -62,6 +63,7 @@ impl Default for Studio {
             array_columns: 3,
             array_gap: 5.0,
             layout_path: "carvefoundry-layout.json".into(),
+            cf3d_path: "project.cf3d".into(),
             svg_path: "carvefoundry-layout.svg".into(),
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
@@ -195,6 +197,52 @@ impl Studio {
             Err(error) => format!("SVG export rejected: {error}"),
         };
     }
+    fn import_cf3d(&mut self) {
+        // Deliberately read-only. The Python serializer remains the authority
+        // for the native CF3D format; output is an independent layout copy.
+        let executable = std::env::var("CARVEFOUNDRY_PYTHON")
+            .unwrap_or_else(|_| "python3".into());
+        let command = std::process::Command::new(&executable)
+            .args([
+                "-m", "carvefoundry.core.rust_layout_snapshot",
+                self.cf3d_path.as_str(),
+            ])
+            .output();
+        match command {
+            Err(error) => {
+                self.message = format!("Cannot launch CF3D snapshot bridge: {error}");
+            }
+            Ok(output) if !output.status.success() => {
+                let reason = String::from_utf8_lossy(&output.stderr);
+                self.message = format!("CF3D import rejected: {}", reason.trim());
+            }
+            Ok(output) => {
+                let parsed = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+                    .map_err(|error| error.to_string())
+                    .and_then(|value| {
+                        let skipped = value.get("skipped_items").and_then(|v| v.as_u64()).unwrap_or(0);
+                        serde_json::from_value::<Sheet>(value)
+                            .map_err(|error| error.to_string())
+                            .and_then(|sheet| sheet.validate().map(|_| (sheet, skipped)))
+                    });
+                match parsed {
+                    Ok((sheet, skipped)) => {
+                        self.remember();
+                        self.selected = None;
+                        self.sheet = sheet;
+                        self.message = format!(
+                            "Read-only CF3D vector snapshot imported; {skipped} objects skipped. \
+                             CAM, fixtures and cutting settings were not transferred.",
+                        );
+                    }
+                    Err(error) => {
+                        self.message = format!("CF3D snapshot has invalid geometry: {error}");
+                    }
+                }
+            }
+        }
+    }
+
     fn open_legacy_cam(&mut self) {
         // Launch, never impersonate the tested Python CAM preflight.
         match std::process::Command::new("carvefoundry").spawn() {
@@ -219,6 +267,10 @@ impl Studio {
             ui.add(egui::TextEdit::singleline(&mut self.layout_path).desired_width(185.0));
             if ui.button("Open").clicked() { self.load(); }
             if ui.button("Save").clicked() { self.save(); }
+            ui.separator();
+            ui.label("Existing CF3D:");
+            ui.add(egui::TextEdit::singleline(&mut self.cf3d_path).desired_width(155.0));
+            if ui.button("Import vectors (read-only)").clicked() { self.import_cf3d(); }
             ui.separator();
             if ui.button("Open verified CAM ↗").clicked() { self.open_legacy_cam(); }
         });

@@ -17,30 +17,30 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `8375833b85231309d194a8af48bd6e7c2a5bc1ca` (PR #83).
+- Last verified merged feature baseline: `8e0ebbe833fc22bbdad523f3648f44200b46a498` (PR #85).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active — native Rust UI migration and production capability gaps
+## Active — Rust CF3D inspector integration and KDE desktop preview
 
-- Verified baseline: latest main feature PR #83 merged `8375833b85231309d194a8af48bd6e7c2a5bc1ca`, main docs `63e12fed02f3590aa848c031be5a28748131f6a0`. Python 3.12/3.14 CI green.
-- Active branch `feature/rust-native-layout-studio` (initial new UI, not yet merged or tested on KDE/Wayland).
-- Introduced a **separate Rust eframe/egui native desktop layout studio** in `rust-ui/`, with pure Rust 2D geometry, rectangle/ellipse/polygon/star shapes, selection/dragging, exact position and quarter-turn rotation, undo/redo, versioned layout JSON, SVG export, polygon-aware first-fit nesting, clearance/margins and array copy.
-- New UI has independent Cargo build, strict Clippy, geometry/layout/SVG tests in `.github/workflows/native-rust-studio.yml`; no release or performance claim until CI passes.
-- User priority is **tools missing compared with commercial CNC CAD/CAM applications**. See `docs/RUST_UI_GAP_PLAN.md`: sheet nesting, vector textures, reusable templates, automatic plug/cavity inlays, compatible toolpath merging, batch automation.
-- This is **not a full UI replacement yet**: native CF3D projects, 3D viewport, cutters, simulation, machine profiles, fixture-aware preflight, toolpath export and physical CNC remain in the existing Python UI/CAM. Its desktop launcher must remain unchanged; the Rust version launches separately via `scripts/run-rust-studio.sh`.
-- Never copy trademarked third-party product names into project branding, branch names or UI identifiers. Do not weaken CNC safety while migrating.
+- Verified baseline: PR #84 [Rust Studio](https://github.com/newnetmp3/CarveFoundry/pull/84) merged `a6913e454dd3166a2d06fdea735ee762d4828ca7`, with all Rust geometry/Cargo tests, native Linux build, strict Clippy and both Python 3.12/3.14 lanes passing. Native workflow run `37826501535`; Python run `37826501458`. The original PySide6 CAM and KDE launcher remain available.
+- PR #85 [read-only CF3D snapshot](https://github.com/newnetmp3/CarveFoundry/pull/85) merged `8e0ebbe833fc22bbdad523f3648f44200b46a498`, Python CI `37826657668` passed 3.12/3.14. `python -m carvefoundry.core.rust_layout_snapshot input.cf3d` loads the original serializer without modifying the source, exports eligible closed planar retained vector outlines (sampled for curves) and stock dimensions, counts skipped unsupported objects, and omits all CAM and fixture data.
+- Active branch `feature/rust-ui-cf3d-import-and-kde`, **unmerged; native Rust and Python CI not yet verified**.
+- Rust Studio GUI integrates the read-only CF3D snapshot via a clearly labeled import field/button, using the source checkout’s Python environment and explicitly rejecting invalid snapshots; source projects are never written.
+- `scripts/install-rust-studio.sh` compiles a release-mode native Rust binary and registers an additional `~/.local/bin/carvefoundry-studio` and “CarveFoundry Studio (Rust Preview)” KDE launcher; it does **not** overwrite the existing `carvefoundry` CAM desktop launcher. `scripts/run-rust-studio.sh` also points to the matching Python env.
+- Native Rust preview already has 2D vector shape primitives, interactive canvas, stock, deterministic polygon-aware first-fit nesting, array copies, editable JSON and SVG export from #84. **It is not yet an equivalent full CNC application:** cannot safely write CF3D, preserve CAM operation state/fixtures, import arbitrary STL, simulate real cut, verify machine offsets, or post NC. The verified CNC program remains the original application.
+- Developer priority: true shape nesting/production efficiency, reusable toolpath templates, inlay plug/pocket workflows, compatible toolpath merge, procedural vector textures, gadget-style automation. Plan: `docs/RUST_UI_GAP_PLAN.md`.
 
-### Next implementation block
+### Next required steps
 
-- [ ] Fix Rust Studio build/clippy/test errors in Github Actions; merge only on green.
-- [ ] Introduce versioned read/write engine bridge for native CF3D, stable object UUIDs, CAM invalidation and transactional edits; first real Rust-main-UI takeover when these pass parity.
-- [ ] Expand polygon packing to multi-sheet, grain-aware and optimized placement after source-vector import, plus SVG import.
-- [ ] Implement native operation/template workspace with existing preflight and verified export, then inlay and texture tools.
-- [ ] Validate on real KDE Plasma Wayland and router separately from CI.
+- [ ] Open PR for read-only bridge UI integration and side-by-side KDE installer, run Linux Cargo tests/strict Clippy/release build and Python CI, repair errors; merge only when green.
+- [ ] Validate manually on KDE Plasma/Wayland; confirm native window launches, can import closed vector snapshots, save JSON/SVG, original CF3D stays byte-identical and legacy CAM remains available.
+- [ ] Establish safe transactional CF3D write adapter with existing source UUIDs, history, CAM stale invalidation, fixtures and no export bypass.
+- [ ] Expand true-shape nesting, toolpath templates, inlays, textures and verified engine-backed CAM interface in independent PRs; don't claim parity until tested.
+- [ ] Preserve fixture/fence and cutter-radius clearance, stock coordinate conventions, CNC cutter Z re-probe and fail-closed G-code export.
 
 ### Known boundaries and safety invariants
 
@@ -89,3 +89,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #82 merged green; new cutter-contact Python/Rust parity benchmark and tests staged on fresh main base | Merge `d0d2390`; branch `feature/native-contact-parity-rebased` pending CI | Validate and merge parity diagnostic |
 | 2026-10-08 | PR #83 cutter-contact parity diagnostic merged with both Python lanes green after PR #82 tabbed inspector merge | Run `37823171975` success; feature merge `8375833` | Native live snap feedback and stock-sweep parity |
 | 2026-10-08 | Began Rust-native egui desktop workspace replacing UI in verified slices; polygon-aware first-fit layout and arrays, JSON/SVG interchange | Branch `feature/rust-native-layout-studio`; CI unverified | Verify native Cargo CI, then bridge CF3D engine |
+| 2026-10-08 | PR #84 Rust Studio and #85 read-only CF3D snapshot merged green; native Rust preview CF3D import and secondary KDE launcher implemented | Branch `feature/rust-ui-cf3d-import-and-kde`; CI unverified | Open PR, validate Cargo + Python CI, merge green only |
