@@ -46,6 +46,70 @@ work offset, controller travel origin, hold-downs omitted from the project,
 cutter holder envelope, spindle state, or where the machine is currently parked.
 It must not be described as a guarantee of physical safety.
 
+## Parallel architecture track — gradual Rust migration (planned)
+
+**Keep shipping the native 2D CAD / snapping / CAM roadmap above and below.**
+The Rust migration is a parallel, opportunistic modernization track, **not**
+a prerequisite for the next CAD feature and not a reason to halt current PRs.
+
+**Existing foundation:** `rust/` already builds a PyO3/maturin extension with
+Rayon and NumPy interoperability. Its implemented kernels currently accelerate
+specific raster/contact calculations. The UI and most application logic remain
+Python/PySide6. Do not describe the percentages below as measured repository
+language composition.
+
+**Target direction:** Prefer Rust for reliable geometry, motion planning,
+validation and long-running numerical work while retaining the established
+PySide6/native Qt Wayland interface. An eventual approximately 80–85% Rust
+architecture is an aspirational design choice, **not** a delivery milestone,
+guaranteed speedup, or a commitment to rewrite the entire GUI. Keep Python
+AI/PyTorch inference initially.
+
+### Incremental migration order
+
+1. **Benchmark and define compatibility contracts — planned:** Measure
+   representative CAD edit, V-Carving, pocketing, 3D finishing, rest machining,
+   simulation and export workloads, including peak memory and transfer overhead.
+   Compare against existing Python reference implementations and capture known
+   correct outputs and tolerances.
+2. **Native vector geometry — planned:** Migrate analytic line/arc/cubic
+   evaluation, subdivision, contour topology, geometric snapping and
+   trim/extend/fillet primitives behind the existing Python-facing model/API.
+   Keep UI, project serialization, and machining source UUID semantics stable.
+3. **2D/2.5D CAM and path optimization — planned:** Move independently tested
+   profile, pocket, engraving, V-Carving and rest/ordering kernels one strategy
+   at a time, preserving cutter-aware input and output semantics.
+4. **Simulation and verified NC safety — planned:** Port cutter-profile sweeps,
+   sampled stock removal and collision/preflight calculations with independent
+   Python-versus-Rust parity and fail-closed posted-G-code verification.
+   No simulation replacement may silently weaken safety checks.
+5. **Mesh, project and import cores — planned:** Benchmark and selectively
+   migrate mesh processing, project serialization/history, and vector/import
+   parsing while preserving compatibility with existing `.cf3d` projects
+   and Undo/Redo.
+6. **Optional application-level Rust expansion — evaluate later:** Consider
+   background scheduling, plugin ABI and native UI only after core migration
+   proves useful and KDE Plasma/Wayland behavior remains stable. Do not
+   displace the functional Qt interface solely to maximize Rust percentage.
+
+### Acceptance gates for *each* conversion
+
+- Keep Python-facing interfaces and native CF3D file compatibility stable,
+  including project roundtrips and Undo/Redo.
+- Test golden geometry, numerical tolerances, toolpath ordering, cutter stages,
+  operation stale/ready state and emitted/decoded G-code. Retain a trusted
+  Python reference or reproducible golden cases until parity is demonstrated.
+- Run Rust unit/property tests, `cargo fmt`, strict Clippy, Python 3.12/3.14
+  CI and integration/regression tests. Benchmark speed **and memory**, including
+  PyO3 transfer costs; do not claim performance improvements without evidence.
+- Preserve stock XY0/Z0 conventions, fixture/rapid clearance, offline
+  preflight, manual tool-change and Z re-probing, and fail-closed export.
+- Migrate modules in small, reversible PRs, preferably alongside the relevant
+  CAD/CAM feature. Keep explicit Python fallback where practical during
+  validation; remove it only with adequate independent coverage.
+- Update **this roadmap** and `docs/HANDOVER.md` in each PR, distinguishing
+  implemented, validated, and planned Rust functionality.
+
 ## Further development — do not treat proposals as implemented
 
 1. **Live, managed CNC sender:** GRBL planner/serial response tracking, real
