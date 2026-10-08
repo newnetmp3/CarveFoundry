@@ -27,9 +27,9 @@ from carvefoundry.core.tools import Cutter, ToolType
 from carvefoundry.core.vector_path import (
     VectorPath,
     VectorSegment,
+    node_world_points,
     segment_world_controls,
     segment_world_point,
-    node_world_points,
 )
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
