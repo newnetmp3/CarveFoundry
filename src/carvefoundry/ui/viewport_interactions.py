@@ -40,6 +40,7 @@ class ViewportInteractionMixin:
         key = self._control_drag_key
         index = self._node_drag_item
         self._control_angle_constrained = False
+        self._control_constraint_kind = None
         if key is None or index is None or self.project is None:
             return None
         if not 0 <= index < len(self.project.items):
@@ -62,6 +63,7 @@ class ViewportInteractionMixin:
                 if candidate is not None:
                     point[:2] = candidate.point_xy
                     self._control_angle_constrained = True
+                    self._control_constraint_kind = candidate.kind
                     return candidate.kind
         if modifiers & Qt.KeyboardModifier.ShiftModifier:
             for candidate_segment, candidate_handle, _control, anchor in (
@@ -73,6 +75,7 @@ class ViewportInteractionMixin:
                         self._vector_angle_step_degrees,
                     )
                     self._control_angle_constrained = True
+                    self._control_constraint_kind = "angle"
                     return "angle"
         return None
 
@@ -106,6 +109,7 @@ class ViewportInteractionMixin:
                 self._node_drag_world = source.copy()
                 self._interaction_mode = "control-drag"
                 self._control_angle_constrained = False
+                self._control_constraint_kind = None
                 self.requestUpdate()
                 event.accept()
                 return
@@ -431,6 +435,7 @@ class ViewportInteractionMixin:
                 )
             self._control_drag_key = None
             self._control_angle_constrained = False
+            self._control_constraint_kind = None
             self._node_drag_item = None
             self._node_drag_world = None
             self._interaction_mode = None
