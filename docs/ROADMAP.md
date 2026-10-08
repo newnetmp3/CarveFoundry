@@ -70,13 +70,14 @@ shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
 read/write CF3D engine bridge; it does not retain CAM or fixture metadata
 inside the Rust layout, generate NC programs or replace full CNC preflight.
 The original PySide6 application stays available as the CNC authority.
-The current in-progress Rust Studio milestone adds bounded **multi-sheet
-polygon-first-fit nesting**: asynchronous planning, per-sheet read-only preview,
-optional 90° rotation lock, fixed stock margins/cutter gap, versioned plan
-JSON and independent sheet SVG files. This is not a stock-optimized algorithm
-nor a full CNC job: physical fixtures, grain orientation metadata and actual
-toolpath safety remain the verified Python CAM application's responsibility.
-Mark complete only after Cargo tests, Clippy, Linux build and Python CI pass.
+PR #87 merged bounded **multi-sheet polygon-first-fit nesting** after Rust
+Cargo tests, Clippy, native Linux release build and both Python CI lanes passed.
+The Rust UI can compute plans on a background worker, inspect each stock sheet,
+lock quarter-turn rotation to preserve grain orientation, and export a versioned
+plan JSON plus a separate SVG per sheet. Source layout remains unchanged on
+planner failure. This is a bounded heuristic rather than globally optimal
+nesting; machine fixtures, actual grain vectors, cutter kerf, toolpath safety
+and CNC preflight remain responsibilities of the existing CAM application.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
