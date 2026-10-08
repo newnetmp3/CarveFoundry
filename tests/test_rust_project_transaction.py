@@ -1,8 +1,8 @@
 """Safe native CF3D placement transactions preserve intent but invalidate motion."""
 from __future__ import annotations
 
-from hashlib import sha256
 import json
+from hashlib import sha256
 
 import pytest
 
