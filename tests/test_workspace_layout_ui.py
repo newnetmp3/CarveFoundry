@@ -24,6 +24,7 @@ from carvefoundry.core.vector_path import VectorPath
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
+from carvefoundry.ui.project_window import MainWindow as ProjectMainWindow
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -295,7 +296,7 @@ def test_direct_selection_can_create_arc_and_bezier_segments_with_snap_controls(
 
 
 def test_direct_selection_split_updates_cam_sources_and_undo_restores_job():
-    window = MainWindow()
+    window = ProjectMainWindow()
     path = VectorPath(((0.0, 0.0), (10.0, 0.0), (20.0, 0.0)))
     item = ProjectItem(
         "Split me",
@@ -349,7 +350,7 @@ def test_direct_selection_split_updates_cam_sources_and_undo_restores_job():
 
 
 def test_direct_selection_join_two_paths_retargets_cam_and_undo_restores_both():
-    window = MainWindow()
+    window = ProjectMainWindow()
     first_path = VectorPath(((0.0, 0.0), (10.0, 0.0)))
     second_path = VectorPath(((10.5, 0.0), (20.0, 0.0)))
     first = ProjectItem(
