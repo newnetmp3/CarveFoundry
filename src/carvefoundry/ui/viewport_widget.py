@@ -373,6 +373,11 @@ class MeshViewport(QWidget):
     def set_shape_draw_mode(self, mode: str | None) -> None:
         self._renderer.set_shape_draw_mode(mode)
 
+    def set_vector_angle_step(self, degrees: float) -> None:
+        if not 0.0 < degrees <= 180.0:
+            raise ValueError("Angle increment must be between 0 and 180 degrees.")
+        self._renderer._vector_angle_step_degrees = float(degrees)
+
     def set_node_edit_mode(self, enabled: bool) -> None:
         self._renderer.set_node_edit_mode(enabled)
 
