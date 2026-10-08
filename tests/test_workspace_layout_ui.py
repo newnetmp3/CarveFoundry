@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -22,7 +23,12 @@ from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem
 from carvefoundry.core.tools import Cutter, ToolType
-from carvefoundry.core.vector_path import VectorPath, VectorSegment, segment_world_controls
+from carvefoundry.core.vector_path import (
+    VectorPath,
+    VectorSegment,
+    segment_world_controls,
+    segment_world_point,
+)
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
@@ -506,4 +512,42 @@ def test_vector_angle_step_is_persisted_and_forwarded_to_native_viewport():
             window._settings.remove(key)
         else:
             window._settings.setValue(key, original)
+        window.close()
+
+
+def test_ctrl_cubic_handle_drag_previews_and_commits_neighbor_tangent():
+    path = VectorPath(
+        ((0, 0), (10, 0), (20, 5)),
+        segments=(
+            VectorSegment.line(),
+            VectorSegment.cubic((13, 7), (18, 8)),
+        ),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window.viewport.set_node_edit_mode(True)
+        native = window.viewport._renderer
+        native._control_drag_key = (1, 1)
+        native._node_drag_item = 0
+        origin = segment_world_point(item, 1, 0.0)
+        target = np.array((origin[0] + 4, origin[1] + 6, 0.0))
+        kind = native._constrain_cubic_drag(target, Qt.KeyboardModifier.ControlModifier)
+        assert kind == "tangent"
+        assert target[1] == pytest.approx(origin[1])
+        assert native._control_angle_constrained
+        window._control_drag_finished(0, 1, 1, target[0], target[1], kind)
+        world = segment_world_controls(item, 1)
+        assert world is not None
+        assert world[0] == pytest.approx(target[:2])
+        assert item.vector_path.resolved_segments()[1].control2_xy == (18, 8)
+        normal = np.array((origin[0] + 4, origin[1] + 6, 0.0))
+        kind = native._constrain_cubic_drag(
+            normal,
+            Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+        )
+        assert kind == "perpendicular"
+        assert normal[0] == pytest.approx(origin[0])
+    finally:
         window.close()
