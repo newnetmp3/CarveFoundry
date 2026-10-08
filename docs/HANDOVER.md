@@ -17,28 +17,27 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `79fc4bc78beaf36f84a9c6b60d5ed50518eaa599` (PR #87).
+- Last verified merged feature baseline: `d76c1b2b87cf384cb355ec47b5adc534cf9ebb98` (PR #88).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active — safe multi-sheet plan reopen
+## Verified Rust Studio multi-sheet layout batch (PR #87–#88)
 
-- Latest verified merged feature [PR #87](https://github.com/newnetmp3/CarveFoundry/pull/87) `79fc4bc78beaf36f84a9c6b60d5ed50518eaa599`: nonblocking Rust multi-sheet first-fit nesting with grain rotation lock, per-stock SVG export and versioned plan JSON. Native Rust CI `37830509094` passed, Python 3.12/3.14 CI `37830509020` passed.
-- Previous [PR #84–#86](https://github.com/newnetmp3/CarveFoundry/pulls?q=is%3Apr+is%3Amerged+84..86) introduced a separate Rust design UI, read-only planar retained-vector CF3D snapshot and side-by-side KDE launcher; the CNC engine remains Python-backed and retains the original source app.
-- Active branch `feature/rust-multi-sheet-plan-reopen`, **unmerged, CI not verified**.
-- Added bounded `rust-ui/src/plan_io.rs` strict JSON parsing/serialization with version, numeric/geometry/clearance constraints and 8 MiB size limit. Rust Studio can open a saved multi-sheet plan as a read-only preview, navigate sheets, export vectors, and keep its independent editable source layout unchanged even if a plan is rejected.
-- Automated tests cover plan JSON roundtrip with stable part identities, wrong format version, corrupt JSON, invalid clearance/stock, oversized files and fail-closed handling.
-- No native CF3D write, no actual stock clamp keep-outs or G-code; machine safety and preflight remain in the verified CNC application. Physical KDE/Wayland interaction and CNC runtime remain unverified.
+- [PR #87](https://github.com/newnetmp3/CarveFoundry/pull/87) merged `79fc4bc78beaf36f84a9c6b60d5ed50518eaa599`: async bounded multi-sheet polygon first-fit packing with grain rotation lock, independent per-sheet SVG export, nominal material utilization and versioned layout-plan JSON. Native Rust CI `37830509094` passed unit tests, Clippy and release Linux build, Python 3.12/3.14 CI `37830509020` passed.
+- [PR #88](https://github.com/newnetmp3/CarveFoundry/pull/88) merged `d76c1b2b87cf384cb355ec47b5adc534cf9ebb98`: validated read-only multi-sheet plan JSON reopening (`rust-ui/src/plan_io.rs`), with version, geometry, clearance, size limit and duplicate identity checks. Invalid/tampered plans leave current preview and editable source unchanged. Native Rust CI `37831085083` passed tests/Clippy/release build, Python 3.12/3.14 CI `37831085110` passed.
+- Earlier PR #84–#86 delivered the experimental Rust-native 2D editor, source-preserving read-only CF3D vector snapshot bridge and a second KDE application launcher; the established Python CAM project/CNC workflows remain intact.
+- Rust Studio now supports new vector shapes, selection/drag, basic exact placement, 90° rotation, undo/redo, single and multi-sheet first-fit nesting, array layout, editable design JSON, validated read-only plan reopen and independent stock-relative SVG files. **It is not a full CNC desktop replacement:** no native writeback to CF3D, operation/cutter/fixture parity, inlay/texture machining, machine preflight or G-code export.
+- No physical KDE Plasma Wayland interaction or CNC machining test has been performed. No real-world nesting stock-savings, cutting speed or performance gains are claimed. Multi-sheet fit is heuristic and currently supports identical rectangular stock sheets with manual quarter-turn rotation locking.
 
-### Next checkpoints
+### Next functional priorities
 
-- [ ] Run native Rust tests, strict Clippy/Linux release build and both Python CI lanes for plan reopen; repair and merge only on green.
-- [ ] Implement typed transactional CF3D project editing bridge preserving UUIDs, CAD history and stale machining operations.
-- [ ] Add further high-value production workflows: reusable cutter-compatible toolpath templates, inlay cavity/plug pairing and grain-aware stock inventory.
-- [ ] Continue verifying original CNC export blocks on stale CAM and fixture-clearance errors; test both launchers on real KDE Plasma Wayland.
+- [ ] Transactional read/write CF3D engine editing service preserving source UUIDs, project history and stale CAM invalidation. Restrict CNC output to the trusted Python engine until full safety parity.
+- [ ] Reusable cutter-compatible machining parameter templates and cavity/plug inlay operations through that engine, not stand-alone decorative UI controls.
+- [ ] More stock-aware nesting: grain axis metadata, multiple stock dimensions, reserved fixture regions and improved bounded fit heuristics.
+- [ ] Verify Rust Studio and existing CNC desktop side by side on the user's KDE Plasma Wayland system, including SVG import orientation and separate posted CNC preflight.
 
 ### Known boundaries and safety invariants
 
@@ -92,3 +91,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Began multi-sheet Rust vector nesting with worker preview, per-sheet SVG/JSON and bounds tests | Branch `feature/rust-multi-sheet-nesting`; CI pending | Validate and merge only when green |
 | 2026-10-08 | PR #87 multi-sheet Rust nesting merged after Rust CI and Python 3.12/3.14 passed | Rust `37830509094`, Python `37830509020`; merge `79fc4bc` | Plan reopen, CF3D typed editing bridge and toolpath templates |
 | 2026-10-08 | Added validated saved multi-sheet plan reopening in Rust Studio, preserving source layout on errors | Branch `feature/rust-multi-sheet-plan-reopen`; CI pending | Validate and merge after green |
+| 2026-10-08 | PR #88 merged green: strict Rust-native multi-sheet plan save/reopen with fail-closed validation | Native CI `37831085083`, Python CI `37831085110`; merge `d76c1b2` | CF3D transactional bridge, templates/inlays and stock-aware constraints |
