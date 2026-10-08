@@ -46,6 +46,24 @@ work offset, controller travel origin, hold-downs omitted from the project,
 cutter holder envelope, spindle state, or where the machine is currently parked.
 It must not be described as a guarantee of physical safety.
 
+## Rust-native UI replacement — new priority
+
+The product direction is now a native Rust desktop interface using egui/eframe,
+**not a cosmetic PySide6 makeover**. The first isolated implementation lives in
+`rust-ui/` and provides real vector shapes, direct selection, rectangle arrays,
+polygon-aware first-fit stock placement, editable Rust layout JSON and SVG
+interchange. It is intentionally an **experimental companion**, not a completed
+UI replacement, and the legacy CNC workspace remains the sole validated
+CF3D/CAM/preflight/export path until a cross-language engine bridge is proven.
+
+Priorities based on gaps in production CNC tooling are sheet layout/nesting,
+reusable toolpath templates, inlay plug/pocket workflows, merged/arrayed
+operations, vector texturing, extension/gadget APIs and safe batch production.
+See [Rust UI capability and acceptance plan](RUST_UI_GAP_PLAN.md).
+No source workspace from this native Rust layout may be mistaken for G-code.
+The new Rust binary must pass its own Cargo tests, Linux build and strict
+clippy gate before this milestone is marked delivered.
+
 ## Parallel architecture track — gradual Rust migration (planned)
 
 PR #81 merged the expanded native raster parity benchmark with sloped,
@@ -70,8 +88,9 @@ Python/PySide6. Do not describe the percentages below as measured repository
 language composition.
 
 **Target direction:** Prefer Rust for reliable geometry, motion planning,
-validation and long-running numerical work while retaining the established
-PySide6/native Qt Wayland interface. An eventual approximately 80–85% Rust
+validation and long-running numerical work while incrementally replacing the presentation layer with a Rust-native
+Wayland interface, and retaining the established Python CNC runtime until
+CF3D, CAM safety, and controller workflow parity are independently verified. An eventual approximately 80–85% Rust
 architecture is an aspirational design choice, **not** a delivery milestone,
 guaranteed speedup, or a commitment to rewrite the entire GUI. Keep Python
 AI/PyTorch inference initially.
