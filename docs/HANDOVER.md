@@ -17,30 +17,29 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged baseline: `fb6ea1e632dcde033841d773bc1bdcb9ae079bd7` (PR #67).
+- Last verified merged baseline: `583d853c2b0da76e6c911ef57e8e44da513755cc` (PR #68).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active feature development and Rust modernization
+## Active development — directional snapping foundation
 
-- Latest verified merged baseline: PR #67 `fb6ea1e632dcde033841d773bc1bdcb9ae079bd7`, which introduced a **planned** incremental Rust migration track alongside CAD.
-- PR #65 grid snapping merged as `8f092b66aa4b904f4d50c417ba28d91cbe86c26d`; its CI passed on Python 3.12 and 3.14.
-- PR #66 Bézier handle snapping CI run `37803990093` succeeded on Python 3.12 and 3.14 but merge encountered a conflict with the handover edits from PR #67. No incorrect merge success is claimed.
-- This reconciled branch `feature/bezier-handle-snapping-rebased` starts from PR #67's `main`, reapplies the exact code and test changes from PR #66, and retains the newer Rust planning/handover documentation.
-- Bézier control handle release now consults existing geometric and stock-grid snap candidates and preserves retained cubic geometry, Undo/Redo and CAM invalidation behavior.
-- New branch CI is still **unverified**; physical KDE Plasma/Wayland interaction remains unverified.
-- The gradual Rust conversion roadmap is planning only; no additional native kernels are claimed.
+- Latest verified `main`: `583d853c2b0da76e6c911ef57e8e44da513755cc`. PR #68 Bézier handle snapping merged after GitHub Actions run `37805661941` passed both Python lanes.
+- Active branch: `feature/vector-orthogonal-snap-core`.
+- Added `directional_snap_candidate` to vector snapping core with a caller-supplied anchor and explicit reference direction. Projects query XY to a tangent-aligned or perpendicular line within finite tolerance, validates degenerate direction, and returns a typed candidate.
+- Added regression tests for tangent, perpendicular, diagonal and invalid-input cases.
+- **Scope boundary:** This is a tested-by-CI-only-when-green geometry primitive, not yet connected to drawing tools, vector inspector or viewport snap indicators. It does **not** infer tangents to arbitrary curves.
+- Rust conversion stays a parallel *planned* roadmap track; no new Rust implementation in this feature branch.
 
 ### Next checkpoints
 
-- [ ] Run CI for the reconciled Bézier snapping PR and merge when green.
-- [ ] Reconcile or close superseded PR #66 after the replacement merges.
-- [ ] Continue tangent/perpendicular snapping and visual indicators.
-- [ ] Begin the Rust-first benchmark/equivalence harness as an independent bounded migration step, without delaying ongoing CAD.
-- [ ] Keep the roadmap and rolling handover synchronized with actual merged state.
+- [ ] Inspect CI for directional snap core PR and fix issues before merge.
+- [ ] Connect explicit tangent/normal constraints to vector creation and editing using meaningful segment derivatives and selected anchors.
+- [ ] Add visual snap indicators and angle constraints with tests.
+- [ ] Begin independent Rust benchmark/parity foundation for expensive geometry kernels.
+- [ ] Continue trim/extend and fillet/chamfer CAD milestones; verify on KDE/Wayland physically.
 
 ### Known boundaries and safety invariants
 
@@ -67,3 +66,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #64 merged; grid snapping started | Merge `b4edac44`; branch `feature/vector-grid-snapping` | Validate grid snap PR |
 | 2026-10-08 | Added parallel gradual Rust conversion plan while continuing feature milestones | `docs/gradual-rust-migration-roadmap`; roadmap only, no runtime conversion | Validate docs PR and resume #66 |
 | 2026-10-08 | Reconciled green PR #66 implementation with merged PR #67 Rust-roadmap docs | Original #66 merge conflict; new branch based on `fb6ea1e` | Validate replacement PR CI |
+| 2026-10-08 | Merged PR #68 after green CI; added tangent/normal direction snap primitive and tests | Main `583d853`; new branch `feature/vector-orthogonal-snap-core` | Open PR and validate CI |
