@@ -12,6 +12,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
 use carvefoundry_studio::svg;
 use carvefoundry_studio::source_placement::SourcePlacement;
+use carvefoundry_studio::project_session::ProjectSession;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use carvefoundry_studio::plan_io::{deserialize_plan, serialize_plan};
@@ -56,6 +57,9 @@ struct Studio {
     cf3d_path: String,
     cf3d_output_path: String,
     source_link: Option<SourcePlacement>,
+    project_session: Option<ProjectSession>,
+    project_session_path: String,
+    opening_project: Option<Receiver<(String, Result<(ProjectSession, Sheet, SourcePlacement), String>)>>,
     cam_readout: Option<CamReadout>,
     cam_readout_path: String,
     inspecting_cam: Option<Receiver<(String, Result<CamReadout, String>)>>,
@@ -106,6 +110,9 @@ impl Default for Studio {
             cf3d_path: "project.cf3d".into(),
             cf3d_output_path: "project-rust-placement.cf3d".into(),
             source_link: None,
+            project_session: None,
+            project_session_path: String::new(),
+            opening_project: None,
             cam_readout: None,
             cam_readout_path: String::new(),
             inspecting_cam: None,
@@ -403,7 +410,7 @@ impl Studio {
                 self.remember();
                 self.sheet = sheet;
                 self.selected = None;
-                self.source_link = None;
+                self.clear_project_context();
                 self.message = "Editable layout loaded; toolpaths are not part of this format".into();
             }
             Err(error) => self.message = format!("Open rejected: {error}"),
@@ -416,62 +423,90 @@ impl Studio {
             Err(error) => format!("SVG export rejected: {error}"),
         };
     }
-    fn import_cf3d(&mut self) {
-        // Deliberately read-only. The Python serializer remains the authority
-        // for the native CF3D format; output is an independent layout copy.
+    fn start_project_open(&mut self) {
+        if self.opening_project.is_some() {
+            self.message = "CF3D project loading is already in progress".into();
+            return;
+        }
+        let source = self.cf3d_path.clone();
         let executable = std::env::var("CARVEFOUNDRY_PYTHON")
             .unwrap_or_else(|_| "python3".into());
-        let command = std::process::Command::new(&executable)
-            .args([
-                "-m", "carvefoundry.core.rust_layout_snapshot",
-                self.cf3d_path.as_str(),
-            ])
-            .output();
-        match command {
-            Err(error) => {
-                self.message = format!("Cannot launch CF3D snapshot bridge: {error}");
-            }
-            Ok(output) if !output.status.success() => {
-                let reason = String::from_utf8_lossy(&output.stderr);
-                self.message = format!("CF3D import rejected: {}", reason.trim());
-            }
-            Ok(output) => {
-                let parsed = serde_json::from_slice::<serde_json::Value>(&output.stdout)
-                    .map_err(|error| error.to_string())
-                    .and_then(|value| {
-                        let skipped = value.get("skipped_items").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let sheet = serde_json::from_value::<Sheet>(value.clone())
-                            .map_err(|error| error.to_string())?;
-                        sheet.validate()?;
-                        let link = SourcePlacement::from_snapshot(
-                            &value, &sheet, &self.cf3d_path,
-                        )?;
-                        Ok((sheet, skipped, link))
-                    });
-                match parsed {
-                    Ok((sheet, skipped, link)) => {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = Command::new(executable)
+                .args(["-m", "carvefoundry.core.rust_project_session", source.as_str()])
+                .output()
+                .map_err(|e| format!("Could not start CF3D engine: {e}"))
+                .and_then(|output| {
+                    if !output.status.success() {
+                        return Err(format!("Native CF3D inspection rejected: {}",
+                            String::from_utf8_lossy(&output.stderr).trim()));
+                    }
+                    ProjectSession::decode(&output.stdout, &source)
+                });
+            let _ = sender.send((source, result));
+        });
+        self.opening_project = Some(receiver);
+        self.message = "Opening native project with the trusted CF3D engine…".into();
+    }
+
+    fn poll_project_open(&mut self, ui: &egui::Ui) {
+        let response = self.opening_project.as_ref().map(|r| r.try_recv());
+        match response {
+            Some(Ok((source, result))) => {
+                self.opening_project = None;
+                if source != self.cf3d_path {
+                    self.message = "Project path changed during load; no document replaced".into();
+                    return;
+                }
+                match result {
+                    Ok((session, sheet, link)) => {
+                        let skipped = session.layout.get("skipped_items")
+                            .and_then(serde_json::Value::as_u64).unwrap_or(0);
                         self.remember();
-                        self.selected = None;
                         self.sheet = sheet;
-                        let path = std::path::Path::new(&self.cf3d_path);
-                        if let Some(stem) = path.file_stem() {
-                            self.cf3d_output_path = path.with_file_name(
-                                format!("{}-rust-placement.cf3d", stem.to_string_lossy())
-                            ).to_string_lossy().into_owned();
-                        }
+                        self.selected = None;
+                        self.cam_readout = Some(session.cam.clone());
+                        self.cam_readout_path = source.clone();
+                        self.cam_template_operation_id.clear();
+                        self.project_session = Some(session);
+                        self.project_session_path = source.clone();
                         self.source_link = Some(link);
+                        if let Some(stem) = std::path::Path::new(&source).file_stem() {
+                            self.cf3d_output_path = std::path::Path::new(&source)
+                                .with_file_name(format!(
+                                    "{}-rust-placement.cf3d", stem.to_string_lossy()
+                                )).to_string_lossy().into_owned();
+                        }
                         self.message = format!(
-                            "Read-only CF3D vector snapshot imported; {skipped} objects skipped. \
-                             Optional XY moves may be committed only to a NEW project. \
-                             Other geometry and CAM data cannot be edited here.",
+                            "Project opened read-only: {skipped} non-layout objects omitted from                              the 2D canvas but listed in project inventory.                              CAM/fixtures inspected; only guarded XY translations can be saved                              as a NEW CF3D."
                         );
                     }
                     Err(error) => {
-                        self.message = format!("CF3D snapshot has invalid geometry or source identity: {error}");
+                        self.message = format!("Project unchanged; {error}");
                     }
                 }
             }
+            Some(Err(TryRecvError::Disconnected)) => {
+                self.opening_project = None;
+                self.message = "CF3D project engine stopped without a session".into();
+            }
+            Some(Err(TryRecvError::Empty)) => {
+                ui.ctx().request_repaint_after(Duration::from_millis(80));
+            }
+            None => {}
         }
+    }
+
+    fn clear_project_context(&mut self) {
+        self.opening_project = None;
+        self.project_session = None;
+        self.project_session_path.clear();
+        self.source_link = None;
+        self.cam_readout = None;
+        self.cam_readout_path.clear();
+        self.inspecting_cam = None;
+        self.cam_template_operation_id.clear();
     }
 
     fn start_cam_inspection(&mut self) {
@@ -711,7 +746,8 @@ impl Studio {
                 self.remember();
                 self.sheet = Sheet::default();
                 self.selected = None;
-                self.source_link = None;
+                self.clear_project_context();
+                self.message = "New independent layout · No verified CF3D CAM linked".into();
             }
             if ui.button("Undo").clicked() { self.undo(); }
             if ui.button("Redo").clicked() { self.redo(); }
@@ -723,7 +759,10 @@ impl Studio {
             ui.separator();
             ui.label("Existing CF3D:");
             ui.add(egui::TextEdit::singleline(&mut self.cf3d_path).desired_width(155.0));
-            if ui.button("Import vectors (read-only)").clicked() { self.import_cf3d(); }
+            if ui.add_enabled(self.opening_project.is_none(), egui::Button::new(
+                if self.opening_project.is_some() { "Opening CF3D…" }
+                else { "Open CF3D project (read-only)" }
+            )).clicked() { self.start_project_open(); }
             if ui.add_enabled(
                 self.inspecting_cam.is_none(),
                 egui::Button::new(if self.inspecting_cam.is_some() {
@@ -963,6 +1002,50 @@ impl Studio {
     fn properties(&mut self, ui: &mut egui::Ui) {
         ui.heading("JOB SETUP");
         ui.label(egui::RichText::new("Stock XY0: bottom-left").color(Color32::LIGHT_GREEN));
+        if let Some(session) = &self.project_session
+            && self.project_session_path == self.cf3d_path {
+            ui.separator();
+            ui.heading("NATIVE PROJECT SESSION");
+            ui.colored_label(Color32::YELLOW, "READ-ONLY INVENTORY · NOT MACHINING PREFLIGHT");
+            ui.label(format!("Material: {}", session.material_name));
+            ui.label(format!(
+                "Actual stock: {:.2} × {:.2} × {:.2} mm",
+                session.stock.width_mm, session.stock.height_mm,
+                session.stock.thickness_mm,
+            ));
+            ui.small(format!("{} project objects · {} previewable 2D contours · {} fixtures",
+                session.items.len(), self.sheet.parts.len(), session.fixtures.len()));
+            let hidden = session.items.iter().filter(|item| !item.visible).count();
+            let locked = session.items.iter().filter(|item| item.locked).count();
+            ui.small(format!("{hidden} hidden · {locked} locked · {} mesh-backed",
+                session.items.iter().filter(|item| item.has_mesh).count()));
+            egui::CollapsingHeader::new("All CF3D objects (read-only)")
+                .default_open(false).show(ui, |ui| {
+                    for item in &session.items {
+                        ui.label(format!("{} · {}{}{}{}",
+                            item.name, item.kind,
+                            if item.has_vector { " · vector" } else { "" },
+                            if !item.visible { " · hidden" } else { "" },
+                            if item.locked { " · locked" } else { "" }));
+                    }
+                });
+            egui::CollapsingHeader::new("Fixture keep-outs · stock-relative Z")
+                .default_open(session.fixtures.len() <= 3).show(ui, |ui| {
+                    for fixture in &session.fixtures {
+                        ui.group(|ui| {
+                            ui.strong(&fixture.name);
+                            ui.label(format!("X {:.2}..{:.2} · Y {:.2}..{:.2} mm",
+                                fixture.x_min_mm, fixture.x_max_mm,
+                                fixture.y_min_mm, fixture.y_max_mm));
+                            ui.colored_label(Color32::YELLOW, format!(
+                                "Top Z {:.2} mm · extra clearance {:.2} mm",
+                                fixture.top_z_mm, fixture.clearance_mm
+                            ));
+                        });
+                    }
+                });
+            ui.small("Objects not in the 2D snapshot remain in the source CF3D; preview is not a full project edit. No verified toolpath, cutter envelope or physical fence collision check is available here.");
+        }
         if let Some(report) = &self.cam_readout
             && self.cam_readout_path == self.cf3d_path {
             ui.separator();
@@ -1301,6 +1384,7 @@ impl Studio {
 
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_project_open(ui);
         self.poll_multi_nest(ui);
         self.poll_cam_inspection(ui);
         self.poll_cam_template_job(ui);
