@@ -172,18 +172,26 @@ class DirectSelectionMixin:
         node_index: int,
         xy: tuple[float, float],
     ) -> tuple[tuple[float, float], str | None]:
-        enabled = self._settings.value("vector/snap_enabled", True, type=bool)
-        if not enabled:
+        geometry_enabled = self._settings.value(
+            "vector/snap_enabled", True, type=bool,
+        )
+        grid_enabled = self._settings.value(
+            "vector/grid_snap_enabled", False, type=bool,
+        )
+        if not geometry_enabled and not grid_enabled:
             return xy, None
         tolerance = float(self._settings.value("vector/snap_tolerance_mm", 1.0))
-        candidate = nearest_vector_snap(
-            self.project.items,
-            xy,
-            tolerance,
-            exclude_item_id=item_id,
-            exclude_node_index=node_index,
+        candidate = (
+            nearest_vector_snap(
+                self.project.items,
+                xy,
+                tolerance,
+                exclude_item_id=item_id,
+                exclude_node_index=node_index,
+            )
+            if geometry_enabled else None
         )
-        if self._settings.value("vector/grid_snap_enabled", False, type=bool):
+        if grid_enabled:
             spacing = float(self._settings.value("vector/grid_spacing_mm", 5.0))
             grid = grid_snap_candidate(xy, spacing, tolerance)
             if grid is not None and (
