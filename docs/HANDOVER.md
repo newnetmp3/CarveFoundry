@@ -24,19 +24,23 @@
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Verified UI and native parity batch
+## Active — native Rust UI migration and production capability gaps
 
-- [PR #82](https://github.com/newnetmp3/CarveFoundry/pull/82) merged `d0d239037bf4f43bae7c8ea8b4268d1d6a1901ae`, GitHub Actions run `37822611741` success on Python 3.12/3.14: five scrollable Direct Selection tabs (Geometry, Snapping, Topology, Corners, Endpoints), persistent active tab and retained node selection. Offscreen Qt regression tests passed.
-- [PR #83](https://github.com/newnetmp3/CarveFoundry/pull/83) merged `8375833b85231309d194a8af48bd6e7c2a5bc1ca`, GitHub Actions run `37823171975` success on Python 3.12/3.14: `scripts/benchmark_contact_kernel.py` compares Python reference and existing Rust cutter-contact acceleration using synthetic smooth, holes and ridge fields and flat/ball-like footprints, with complete array parity when native extension is available, Python-only fallback, JSON report and median timings.
-- PR #83 changed **no production CAM, stock simulation, preflight or NC output behavior**. Conditional native parity tests do not imply that every target platform or all cutter shapes were benchmarked. No workstation speed or memory gains measured.
-- Physical KDE Plasma/Wayland UX and CNC workholding/clearance remain unverified; continue to preserve fail-closed stale toolpath export.
+- Verified baseline: latest main feature PR #83 merged `8375833b85231309d194a8af48bd6e7c2a5bc1ca`, main docs `63e12fed02f3590aa848c031be5a28748131f6a0`. Python 3.12/3.14 CI green.
+- Active branch `feature/rust-native-layout-studio` (initial new UI, not yet merged or tested on KDE/Wayland).
+- Introduced a **separate Rust eframe/egui native desktop layout studio** in `rust-ui/`, with pure Rust 2D geometry, rectangle/ellipse/polygon/star shapes, selection/dragging, exact position and quarter-turn rotation, undo/redo, versioned layout JSON, SVG export, polygon-aware first-fit nesting, clearance/margins and array copy.
+- New UI has independent Cargo build, strict Clippy, geometry/layout/SVG tests in `.github/workflows/native-rust-studio.yml`; no release or performance claim until CI passes.
+- User priority is **tools missing compared with commercial CNC CAD/CAM applications**. See `docs/RUST_UI_GAP_PLAN.md`: sheet nesting, vector textures, reusable templates, automatic plug/cavity inlays, compatible toolpath merging, batch automation.
+- This is **not a full UI replacement yet**: native CF3D projects, 3D viewport, cutters, simulation, machine profiles, fixture-aware preflight, toolpath export and physical CNC remain in the existing Python UI/CAM. Its desktop launcher must remain unchanged; the Rust version launches separately via `scripts/run-rust-studio.sh`.
+- Never copy trademarked third-party product names into project branding, branch names or UI identifiers. Do not weaken CNC safety while migrating.
 
-### Next coherent development batch
+### Next implementation block
 
-- [ ] General native viewport node/handle snap preview with kind-specific markers consistent with actual Direct Selection snapping and snap configuration.
-- [ ] Expand native Python/Rust parity benchmark to stock-sweep simulation on fixtures with cut/no-cut cases; measure real hardware only after verifying numerical parity.
-- [ ] Fix remaining layout usability issues found by physical KDE Plasma/Wayland testing.
-- [ ] Advance exact analytic curve tools (line/arc corners, retained shape primitives) without weakening CNC safety checks.
+- [ ] Fix Rust Studio build/clippy/test errors in Github Actions; merge only on green.
+- [ ] Introduce versioned read/write engine bridge for native CF3D, stable object UUIDs, CAM invalidation and transactional edits; first real Rust-main-UI takeover when these pass parity.
+- [ ] Expand polygon packing to multi-sheet, grain-aware and optimized placement after source-vector import, plus SVG import.
+- [ ] Implement native operation/template workspace with existing preflight and verified export, then inlay and texture tools.
+- [ ] Validate on real KDE Plasma Wayland and router separately from CI.
 
 ### Known boundaries and safety invariants
 
@@ -84,3 +88,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Grouped Direct Selection controls into five persistent scrollable tabs, with regression tests | Branch `feature/direct-selection-tabbed-inspector`, CI unverified | Validate PR, merge if green, then live snap indicators |
 | 2026-10-08 | PR #82 merged green; new cutter-contact Python/Rust parity benchmark and tests staged on fresh main base | Merge `d0d2390`; branch `feature/native-contact-parity-rebased` pending CI | Validate and merge parity diagnostic |
 | 2026-10-08 | PR #83 cutter-contact parity diagnostic merged with both Python lanes green after PR #82 tabbed inspector merge | Run `37823171975` success; feature merge `8375833` | Native live snap feedback and stock-sweep parity |
+| 2026-10-08 | Began Rust-native egui desktop workspace replacing UI in verified slices; polygon-aware first-fit layout and arrays, JSON/SVG interchange | Branch `feature/rust-native-layout-studio`; CI unverified | Verify native Cargo CI, then bridge CF3D engine |
