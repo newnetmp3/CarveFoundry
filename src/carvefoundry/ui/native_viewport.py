@@ -220,7 +220,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
-    controlMoveRequested = Signal(int, int, int, float, float)
+    controlMoveRequested = Signal(int, int, int, float, float, str)
     nodeEditModeChanged = Signal(bool)
 
     MIN_ZOOM = 0.01
