@@ -39,6 +39,17 @@ environment solely for read-only CF3D inspection.
   this first slice, so large sheets with fine grid spacing can temporarily
   stall the Rust UI.
 - Rectangular array copy with stock and polygon collision validation.
+- **Multi-sheet production layout preview:** background-worker polygon-aware
+  first-fit packing across up to 32 identical stock sheets, fixed edge margins,
+  cutter-outline clearance and optional 90-degree rotation. Inspection provides
+  per-sheet part lists, nominal area utilization, versioned plan JSON and
+  separate SVG output for each sheet (`<prefix>-sheet-01.svg`, etc.).
+  The original editable design stays unchanged. A failure to fit any part
+  within the chosen sheet limit returns an error without partial results.
+  The planner limits sampling density; it is a heuristic and does not account
+  for material thickness, grain vectors beyond rotation locking, physical
+  clamps, cutting tabs, real cutter kerf or machine travel. Each SVG must be
+  imported and separately preflighted in the original CAM app.
 - Export of closed stock-relative SVG contours for import into the established
   CarveFoundry application. The saved Rust layout remains editable separately.
 - **Read-only existing CF3D import** using the original trusted Python serializer:
