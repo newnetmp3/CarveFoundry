@@ -100,8 +100,10 @@ def reorder_operation(
     if target_index == old_index:
         return False
 
-    operation = project.cam_operations.pop(old_index)
-    project.cam_operations.insert(target_index, operation)
+    reordered = list(project.cam_operations)
+    operation = reordered.pop(old_index)
+    reordered.insert(target_index, operation)
+    project.cam_operations = reordered
     invalidate_from(
         project,
         min(old_index, target_index),
@@ -120,7 +122,9 @@ def duplicate_operation(project: Project, operation_id: str) -> CamOperation:
         enabled=True,
         stale_reason="Duplicated operation",
     )
-    project.cam_operations.insert(index + 1, duplicate)
+    updated = list(project.cam_operations)
+    updated.insert(index + 1, duplicate)
+    project.cam_operations = updated
     invalidate_from(
         project,
         index + 1,
@@ -131,7 +135,12 @@ def duplicate_operation(project: Project, operation_id: str) -> CamOperation:
 
 def delete_operation(project: Project, operation_id: str) -> CamOperation:
     index = operation_index(project, operation_id)
-    removed = project.cam_operations.pop(index)
+    removed = project.cam_operations[index]
+    project.cam_operations = [
+        operation
+        for position, operation in enumerate(project.cam_operations)
+        if position != index
+    ]
     project.toolpaths = [
         path
         for path in project.toolpaths
