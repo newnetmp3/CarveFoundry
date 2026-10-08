@@ -195,13 +195,13 @@ AI/PyTorch inference initially.
    two-vector finite line trim/extend interface after passing CI.
    The next **in-progress**, unmerged step adds an equal-setback analytic
    chamfer for open path interior line/line corners, using Direct Selection
-   and the retained-history/CAM invalidation lifecycle. True circular-radius
-   fillets, closed contours and curved junctions still remain future work.
-   PR #78 has now merged the open-path straight-line chamfer with green CI.
-   The next in-progress step adds a true analytic circular-radius fillet
-   for interior open line/line corners with a retained arc, Direct Selection,
-   and history/CAM invalidation. This does not include closed paths or curved
-   adjoining segments and remains unverified until CI and merge.
+   and the retained-history/CAM invalidation lifecycle. PR #78 merged
+   an equal-setback line/line chamfer for open-path interior corners and
+   PR #79 merged an exact circular-radius line/line fillet with retained
+   analytic arc geometry. Both are integrated with Direct Selection,
+   Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
+   Closed-contour corners, curved junctions, broader snap indicators and
+   physical KDE/Wayland pointer validation remain outstanding.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
