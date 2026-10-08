@@ -3,6 +3,9 @@
 use carvefoundry_studio::arrays::array_selected;
 use carvefoundry_studio::geometry::{Part, Sheet, area, ellipse, polygon, rectangle, star};
 use carvefoundry_studio::nesting::{contains, nest};
+use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettings};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::time::Duration;
 use carvefoundry_studio::svg;
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
@@ -42,6 +45,12 @@ struct Studio {
     zoom: f32,
     message: String,
     dragging: bool,
+    plan: Option<MultiSheetPlan>,
+    plan_index: usize,
+    planning: Option<Receiver<Result<MultiSheetPlan, String>>>,
+    nest_max_sheets: usize,
+    nest_allow_rotation: bool,
+    plan_path: String,
 }
 
 impl Default for Studio {
@@ -68,23 +77,38 @@ impl Default for Studio {
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
             dragging: false,
+            plan: None,
+            plan_index: 0,
+            planning: None,
+            nest_max_sheets: 8,
+            nest_allow_rotation: true,
+            plan_path: "carvefoundry-multi-plan.json".into(),
         }
     }
 }
 
 impl Studio {
     fn remember(&mut self) {
+        self.plan = None;
+        self.planning = None;
+        self.plan_index = 0;
         self.undo.push(self.sheet.clone());
         if self.undo.len() > 48 { self.undo.remove(0); }
         self.redo.clear();
     }
     fn undo(&mut self) {
+        self.plan = None;
+        self.planning = None;
+        self.plan_index = 0;
         if let Some(previous) = self.undo.pop() {
             self.redo.push(std::mem::replace(&mut self.sheet, previous));
             self.message = "Reverted previous layout edit".into();
         }
     }
     fn redo(&mut self) {
+        self.plan = None;
+        self.planning = None;
+        self.plan_index = 0;
         if let Some(next) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.sheet, next));
             self.message = "Reapplied layout edit".into();
@@ -143,6 +167,107 @@ impl Studio {
             }
             Err(error) => self.message = format!("Layout rejected: {error}"),
         }
+    }
+    fn start_multi_nest(&mut self) {
+        if self.planning.is_some() {
+            return;
+        }
+        let settings = NestSettings {
+            gap_mm: self.nest_gap,
+            margin_mm: self.stock_margin,
+            step_mm: self.search_step,
+            allow_quarter_turns: self.nest_allow_rotation,
+            max_sheets: self.nest_max_sheets,
+        };
+        if let Err(error) = settings.validate() {
+            self.message = error;
+            return;
+        }
+        let source = self.sheet.clone();
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(nest_multiple(&source, settings));
+        });
+        self.plan = None;
+        self.planning = Some(receiver);
+        self.plan_index = 0;
+        self.message = "Calculating multi-sheet layout on a worker thread…".into();
+    }
+    fn poll_multi_nest(&mut self, ui: &egui::Ui) {
+        let outcome = self.planning.as_ref().map(|receiver| receiver.try_recv());
+        match outcome {
+            Some(Ok(Ok(plan))) => {
+                self.message = format!(
+                    "{} sheets arranged from {} source parts; inspect each sheet before CAM",
+                    plan.sheets.len(), self.sheet.parts.len()
+                );
+                self.plan = Some(plan);
+                self.planning = None;
+                self.plan_index = 0;
+                self.selected = None;
+            }
+            Some(Ok(Err(error))) => {
+                self.message = format!("Multi-sheet nesting rejected: {error}");
+                self.planning = None;
+            }
+            Some(Err(TryRecvError::Disconnected)) => {
+                self.message = "Multi-sheet planning worker failed; source layout unchanged".into();
+                self.planning = None;
+            }
+            Some(Err(TryRecvError::Empty)) => {
+                ui.ctx().request_repaint_after(Duration::from_millis(60));
+            }
+            None => {}
+        }
+    }
+    fn save_multi_plan(&mut self) {
+        let Some(plan) = &self.plan else { return };
+        let result = plan.validate().and_then(|_| {
+            serde_json::to_string_pretty(plan).map_err(|e| e.to_string())
+        }).and_then(|data| {
+            std::fs::write(&self.plan_path, data).map_err(|e| e.to_string())
+        });
+        self.message = match result {
+            Ok(()) => format!("Saved read-only multi-sheet plan to {}", self.plan_path),
+            Err(error) => format!("Multi-sheet plan save rejected: {error}"),
+        };
+    }
+    fn export_multi_svg(&mut self) {
+        let Some(plan) = &self.plan else { return };
+        if let Err(error) = plan.validate() {
+            self.message = format!("Plan export rejected: {error}");
+            return;
+        }
+        let path = std::path::Path::new(&self.svg_path);
+        let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        if stem.is_empty() {
+            self.message = "Supply an SVG filename for sheet exports".into();
+            return;
+        }
+        // Validate all sheets/contours before writing any SVG files.
+        let sources: Result<Vec<String>, String> = plan.sheets.iter().map(svg::export).collect();
+        let sources = match sources {
+            Ok(svg) => svg,
+            Err(error) => {
+                self.message = format!("Sheet export rejected: {error}");
+                return;
+            }
+        };
+        for (i, data) in sources.iter().enumerate() {
+            let output = parent.join(format!("{stem}-sheet-{:02}.svg", i + 1));
+            if let Err(error) = std::fs::write(&output, data) {
+                self.message = format!(
+                    "Export stopped at {}: {error}; previously written SVG files may exist",
+                    output.display()
+                );
+                return;
+            }
+        }
+        self.message = format!(
+            "Exported {} SVG sheets (layout contours only, not CNC toolpaths).",
+            sources.len()
+        );
     }
     fn apply_array(&mut self) {
         if let Some(id) = self.selected {
@@ -321,6 +446,39 @@ impl Studio {
         });
         if ui.button("Arrange all contours").clicked() { self.apply_nest(); }
         ui.separator();
+        ui.heading("MULTI-SHEET NESTING");
+        ui.small("First-fit stock sheets; no CNC tools or fixtures are transferred.");
+        ui.horizontal(|ui| {
+            ui.label("Max sheets");
+            ui.add(egui::DragValue::new(&mut self.nest_max_sheets).range(1..=32));
+        });
+        ui.checkbox(&mut self.nest_allow_rotation, "Allow 90° grain rotation");
+        if ui.add_enabled(self.planning.is_none(), egui::Button::new(
+            if self.planning.is_some() { "Nesting…" } else { "Arrange across sheets" }
+        )).clicked() { self.start_multi_nest(); }
+        if let Some(plan) = &self.plan {
+            ui.strong(format!("{} sheets in current plan", plan.sheets.len()));
+            ui.horizontal(|ui| {
+                ui.label("Sheet");
+                if ui.small_button("◀").clicked() {
+                    self.plan_index = self.plan_index.saturating_sub(1);
+                }
+                ui.label(format!("{} / {}", self.plan_index + 1, plan.sheets.len()));
+                if ui.small_button("▶").clicked() {
+                    self.plan_index = (self.plan_index + 1).min(plan.sheets.len() - 1);
+                }
+            });
+            ui.label("Plan JSON filename");
+            ui.text_edit_singleline(&mut self.plan_path);
+            if ui.button("Save multi-sheet plan").clicked() { self.save_multi_plan(); }
+            if ui.button("Export SVG for every sheet").clicked() { self.export_multi_svg(); }
+            if ui.button("Back to editable design").clicked() {
+                self.plan = None;
+                self.plan_index = 0;
+                self.message = "Back to source design. Multi-sheet preview closed.".into();
+            }
+        }
+        ui.separator();
         ui.heading("ARRAY COPY");
         ui.horizontal(|ui| {
             ui.label("Rows");
@@ -339,6 +497,22 @@ impl Studio {
     fn properties(&mut self, ui: &mut egui::Ui) {
         ui.heading("JOB SETUP");
         ui.label(egui::RichText::new("Stock XY0: bottom-left").color(Color32::LIGHT_GREEN));
+        if let Some(plan) = &self.plan
+            && let Some(sheet) = plan.sheets.get(self.plan_index) {
+            ui.heading(format!("Sheet {} of {}", self.plan_index + 1, plan.sheets.len()));
+            ui.strong("READ-ONLY MULTI-SHEET PREVIEW");
+            ui.label(format!("{} × {} mm", sheet.width_mm, sheet.height_mm));
+            ui.label(format!("{} parts", sheet.parts.len()));
+            if let Some(used) = plan.utilization_percent(self.plan_index) {
+                ui.label(format!("{used:.1}% nominal outline area (excludes kerf)"));
+            }
+            ui.separator();
+            for part in &sheet.parts { ui.label(&part.name); }
+            ui.separator();
+            ui.small("Return to editable design before changing stock or vectors. Export every sheet separately as SVG, then validate all operations in verified CAM.");
+            return;
+        }
+        let stock_before = (self.sheet.width_mm, self.sheet.height_mm);
         ui.horizontal(|ui| {
             ui.label("Width");
             ui.add(egui::DragValue::new(&mut self.sheet.width_mm).range(1.0..=100000.0).suffix(" mm"));
@@ -347,6 +521,10 @@ impl Studio {
             ui.label("Height");
             ui.add(egui::DragValue::new(&mut self.sheet.height_mm).range(1.0..=100000.0).suffix(" mm"));
         });
+        if stock_before != (self.sheet.width_mm, self.sheet.height_mm) {
+            self.planning = None;
+            self.plan = None;
+        }
         ui.separator();
         ui.heading("PARTS");
         egui::ScrollArea::vertical().max_height(190.0).show(ui, |ui| {
@@ -404,18 +582,21 @@ impl Studio {
         ui.small("SVG only; toolpaths, fixtures, cutter radius and CNC preflight are not exported.");
     }
     fn canvas(&mut self, ui: &mut egui::Ui) {
+        let preview = self.plan.as_ref()
+            .and_then(|plan| plan.sheets.get(self.plan_index));
+        let sheet = preview.unwrap_or(&self.sheet);
         ui.horizontal(|ui| {
             ui.heading("2D DESIGN");
             ui.separator();
-            ui.label(format!("{} × {} mm  ·  {} objects", self.sheet.width_mm, self.sheet.height_mm, self.sheet.parts.len()));
+            ui.label(format!("{} × {} mm  ·  {} objects{}", sheet.width_mm, sheet.height_mm, sheet.parts.len(), if preview.is_some() { " · MULTI-SHEET PREVIEW" } else { "" }));
             ui.add(egui::Slider::new(&mut self.zoom, 0.45..=2.8).text("Zoom"));
         });
         let size = ui.available_size().max(Vec2::splat(150.0));
         let (frame, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(frame);
         painter.rect_filled(frame, 0.0, Color32::from_rgb(18, 23, 32));
-        let stock_w = self.sheet.width_mm.max(1.0);
-        let stock_h = self.sheet.height_mm.max(1.0);
+        let stock_w = sheet.width_mm.max(1.0);
+        let stock_h = sheet.height_mm.max(1.0);
         let fit = ((size.x - 70.0) / stock_w as f32)
             .min((size.y - 70.0) / stock_h as f32).max(0.001);
         let scale = fit * self.zoom;
@@ -439,8 +620,8 @@ impl Studio {
                 painter.line_segment([a, b], Stroke::new(0.5, Color32::from_gray(61)));
             }
         }
-        for part in &self.sheet.parts {
-            let selected = Some(part.id) == self.selected;
+        for part in &sheet.parts {
+            let selected = preview.is_none() && Some(part.id) == self.selected;
             let pts: Vec<Pos2> = part.world_points().into_iter().map(&screen).collect();
             let edge = if selected { Color32::from_rgb(255, 197, 88) }
                 else { Color32::from_rgb(106, 222, 179) };
@@ -448,6 +629,9 @@ impl Studio {
         }
         painter.text(screen([0.0, 0.0]) + Vec2::new(5.0, 5.0), egui::Align2::LEFT_TOP, "XY0",
             egui::FontId::monospace(12.0), Color32::from_rgb(189, 222, 236));
+        if preview.is_some() {
+            return; // No accidental moving parts inside read-only plan preview.
+        }
         let mouse = response.interact_pointer_pos();
         let to_world = |pointer: Pos2| -> [f64; 2] {
             [(pointer.x - origin.x) as f64 / scale as f64,
@@ -491,6 +675,7 @@ impl Studio {
 
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_multi_nest(ui);
         egui::Panel::top("studio-toolbar").show(ui, |ui| {
             self.header(ui);
         });
