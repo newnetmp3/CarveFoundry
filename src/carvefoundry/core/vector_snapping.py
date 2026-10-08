@@ -65,6 +65,42 @@ def grid_snap_candidate(
     return candidate if candidate.distance_to(query_xy) <= tolerance_mm else None
 
 
+def directional_snap_candidate(
+    query_xy: tuple[float, float],
+    origin_xy: tuple[float, float],
+    direction_xy: tuple[float, float],
+    tolerance_mm: float,
+    *,
+    perpendicular: bool = False,
+) -> VectorSnapCandidate | None:
+    """Project onto an infinite tangent or normal line through an anchor.
+
+    This primitive takes an explicit reference direction. Callers must select
+    a meaningful anchor and segment tangent; it does not infer curve tangents.
+    """
+    values = (*query_xy, *origin_xy, *direction_xy, tolerance_mm)
+    if not all(isfinite(float(value)) for value in values) or tolerance_mm <= 0:
+        raise ValueError("Directional snap coordinates and tolerance must be finite.")
+    dx, dy = (float(value) for value in direction_xy)
+    magnitude = hypot(dx, dy)
+    if magnitude <= _EPS:
+        raise ValueError("Directional snap requires a nonzero reference direction.")
+    dx, dy = dx / magnitude, dy / magnitude
+    if perpendicular:
+        dx, dy = -dy, dx
+    displacement_x = query_xy[0] - origin_xy[0]
+    displacement_y = query_xy[1] - origin_xy[1]
+    distance_along = displacement_x * dx + displacement_y * dy
+    point = (
+        origin_xy[0] + distance_along * dx,
+        origin_xy[1] + distance_along * dy,
+    )
+    candidate = VectorSnapCandidate(
+        "perpendicular" if perpendicular else "tangent", point,
+    )
+    return candidate if candidate.distance_to(query_xy) <= tolerance_mm else None
+
+
 def vector_snap_candidates(
     items: list[ProjectItem],
     query_xy: tuple[float, float],
