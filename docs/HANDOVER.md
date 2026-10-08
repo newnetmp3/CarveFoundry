@@ -17,31 +17,42 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged baseline: `b4edac447e64354658d0b7ea0fe170c849873da9` (PR #64).
+- Last verified merged baseline: `8f092b66aa4b904f4d50c417ba28d91cbe86c26d` (PR #65).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — stock-relative vector grid snapping
+## Active feature development and Rust modernization
 
-- Verified main after PR #64: `b4edac447e64354658d0b7ea0fe170c849873da9`.
-- [PR #64](https://github.com/newnetmp3/CarveFoundry/pull/64) merged native Bézier handle overlay, picking and drag editing. The pre-docs head passed GitHub Actions run `37800878113` in Python 3.12 and 3.14; physical KDE/Wayland validation is still outstanding.
-- Branch: `feature/vector-grid-snapping` (new milestone).
-- Added pure `grid_snap_candidate` using stock-relative XY0, finite validated spacing and user tolerance.
-- Integrated an opt-in grid candidate into Direct Selection's geometry-snap chooser, prioritizing whichever candidate is closest.
-- Added inspector UI for enabling grid snapping and choosing its spacing, plus isolated grid geometry regression tests.
-- CI for the new branch is **not yet verified**. Grid snapping currently applies to Direct Selection node dragging, not every vector creation tool or Bézier handle drag.
+- Latest verified merged baseline: PR #65, `8f092b66aa4b904f4d50c417ba28d91cbe86c26d`.
+  Its GitHub Actions run `37802892304` passed Python 3.12 and 3.14.
+- Next feature PR: [#66 — Bézier handle snapping](https://github.com/newnetmp3/CarveFoundry/pull/66),
+  branch `feature/bezier-handle-snapping`. It was open when this documentation
+  branch was created. **Verify latest PR state and CI before continuing.**
+- Feature priorities remain: handle snapping → tangent/perpendicular/grid
+  integration → visual snap indicators and angle constraints → trim/extend →
+  fillet/chamfer → retained editable primitives and SVG/DXF vector imports.
+- Separate documentation branch: `docs/gradual-rust-migration-roadmap` adds
+  a **parallel, gradual Rust migration track** to `docs/ROADMAP.md`. This is
+  planning only: no new Rust runtime capabilities are claimed.
+- Keep the existing PySide6/Qt interface and AI inference in Python for now;
+  migrate tested numerical/geometry/CAM/simulation kernels incrementally through
+  the already installed PyO3/maturin extension.
+- Every Rust conversion requires Python reference/golden parity, compatible
+  CF3D save/load, Undo/Redo and machine safety behavior, CI on Python 3.12/3.14,
+  Rust tests, and measured time/memory outcomes before replacing Python logic.
+- Physical KDE Plasma/Wayland interaction testing of recently merged viewport
+  controls is still outstanding. Do not report it as completed.
 
 ### Next checkpoints
 
-- [ ] Open the grid snapping PR, validate Python 3.12/3.14 CI and fix any issues.
-- [ ] Expand UI tests for toggle persistence and snapped node positions; confirm snap indicator status.
-- [ ] Decide and implement consistency for Bézier handle snapping and new-vector drawing tools.
-- [ ] Confirm UI on physical KDE/Wayland when hardware becomes available.
-- [ ] Merge only when CI passes and update the canonical baseline in this file.
-- [ ] Follow with tangent/perpendicular snapping, visual snap indicators, angle constraints and trim/extend.
+- [ ] Open and validate the Rust roadmap documentation PR; merge after checks.
+- [ ] Verify PR #66 current CI and proceed on feature development independently.
+- [ ] As each CAD/CAM milestone lands, identify a bounded Rust kernel candidate
+  and migrate only when its compatibility and performance gates are met.
+- [ ] Keep this handover and the roadmap synchronized with completed changes.
 
 ### Known boundaries and safety invariants
 
@@ -66,3 +77,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Opened PR #64 and added initial offscreen UI regression | CI run `37800820946` queued; no pass claimed | Inspect CI, fix failures and expand tests |
 | 2026-10-08 | PR #64 CI passed both Python lanes; roadmap synchronized | Run `37800878113` success; final docs head CI pending | Verify final CI and merge |
 | 2026-10-08 | PR #64 merged; grid snapping started | Merge `b4edac44`; branch `feature/vector-grid-snapping` | Validate grid snap PR |
+| 2026-10-08 | Added parallel gradual Rust conversion plan while continuing feature milestones | `docs/gradual-rust-migration-roadmap`; roadmap only, no runtime conversion | Validate docs PR and resume #66 |
