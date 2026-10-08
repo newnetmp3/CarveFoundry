@@ -46,7 +46,40 @@ work offset, controller travel origin, hold-downs omitted from the project,
 cutter holder envelope, spindle state, or where the machine is currently parked.
 It must not be described as a guarantee of physical safety.
 
-## Rust-native UI replacement — new priority
+## Rust UI conversion — replacement-first execution program
+
+**Objective:** replace the entire Python/PySide6 presentation layer with a
+unified native Rust desktop, initially retaining the trusted Python CAM,
+CF3D persistence, safety preflight and NC exporter behind a tested boundary.
+Do not conflate "Rust UI replacement" with the later "all engine code in Rust".
+Canonical gate definitions and acceptance tests are in
+[the Rust UI migration execution plan](RUST_UI_GAP_PLAN.md).
+
+- **M0 — Integrated CF3D session (ACTIVE, CI pending):** one source file,
+  one digest, one load exposes native 2D preview, complete project inventory,
+  stock thickness, fixtures and CAM readiness to Rust; no edit/NC grant.
+- **M1 — Transactional CF3D authoring:** Rust actions through a versioned
+  source-UUID/undo-aware validated engine API, retaining all real project
+  objects and invalidating affected CAM stages. Currently only guarded
+  XY source displacements can publish a NEW CF3D.
+- **M2 — Full 2D/vector/text workspace:** precision curve/node and native
+  CAD parity with analytic sources (not approximated sampled paths).
+- **M3 — Real 3D design viewport:** native meshes, materials, imported
+  assets, transform gizmos, layers and stable Wayland camera interaction.
+- **M4 — Native CAM orchestration:** configure all supported strategies,
+  operations, cutters, generation and stage dependencies in Rust while
+  reusing trusted CAM kernels.
+- **M5 — CNC delivery:** simulation, posted-motion/fixture-aware safety
+  preflight, stock removal and per-cutter NC export with explicit cutter
+  change/Z re-probe through the verified safety engine.
+- **M6 — Default desktop cutover:** project golden tests, performance,
+  packaging, real KDE/Wayland and CNC acceptance; rollback preserved.
+
+Rust numerical migration continues in parallel at these boundaries only
+with golden parity and performance evidence. No CNC-critical Python module
+is removed until its replacement passes the same safety contracts.
+
+## Rust-native UI replacement — historical foundation
 
 The product direction is now a native Rust desktop interface using egui/eframe,
 **not a cosmetic PySide6 makeover**. The first isolated implementation lives in
