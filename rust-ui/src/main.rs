@@ -37,6 +37,8 @@ struct DragSnapSession {
     grab_world: [f64; 2],
 }
 
+type ProjectOpenReply = (String, Result<(ProjectSession, Sheet, SourcePlacement), String>);
+
 struct Studio {
     sheet: Sheet,
     selected: Option<u64>,
@@ -59,7 +61,7 @@ struct Studio {
     source_link: Option<SourcePlacement>,
     project_session: Option<ProjectSession>,
     project_session_path: String,
-    opening_project: Option<Receiver<(String, Result<(ProjectSession, Sheet, SourcePlacement), String>)>>,
+    opening_project: Option<Receiver<ProjectOpenReply>>,
     cam_readout: Option<CamReadout>,
     cam_readout_path: String,
     inspecting_cam: Option<Receiver<(String, Result<CamReadout, String>)>>,
