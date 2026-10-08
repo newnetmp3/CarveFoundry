@@ -5,11 +5,13 @@ on:
     paths:
       - "rust-ui/**"
       - "scripts/run-rust-studio.sh"
+      - "scripts/install-rust-studio.sh"
       - ".github/workflows/native-rust-studio.yml"
   push:
     paths:
       - "rust-ui/**"
       - "scripts/run-rust-studio.sh"
+      - "scripts/install-rust-studio.sh"
       - ".github/workflows/native-rust-studio.yml"
 
 jobs:
@@ -37,4 +39,4 @@ jobs:
       - name: Build native Linux studio
         run: cargo build --manifest-path rust-ui/Cargo.toml --release
       - name: Validate launcher shell syntax
-        run: bash -n scripts/run-rust-studio.sh
+        run: bash -n scripts/run-rust-studio.sh scripts/install-rust-studio.sh
