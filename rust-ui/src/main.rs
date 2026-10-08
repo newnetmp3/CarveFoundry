@@ -452,7 +452,7 @@ impl Studio {
             ui.label("Max sheets");
             ui.add(egui::DragValue::new(&mut self.nest_max_sheets).range(1..=32));
         });
-        ui.checkbox(&mut self.nest_allow_rotation, "Allow 90° grain rotation");
+        ui.checkbox(&mut self.nest_allow_rotation, "Allow 90° rotation (disable to preserve grain)");
         if ui.add_enabled(self.planning.is_none(), egui::Button::new(
             if self.planning.is_some() { "Nesting…" } else { "Arrange across sheets" }
         )).clicked() { self.start_multi_nest(); }
@@ -471,6 +471,8 @@ impl Studio {
             ui.label("Plan JSON filename");
             ui.text_edit_singleline(&mut self.plan_path);
             if ui.button("Save multi-sheet plan").clicked() { self.save_multi_plan(); }
+            ui.label("SVG output filename prefix");
+            ui.text_edit_singleline(&mut self.svg_path);
             if ui.button("Export SVG for every sheet").clicked() { self.export_multi_svg(); }
             if ui.button("Back to editable design").clicked() {
                 self.plan = None;
