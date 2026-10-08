@@ -69,15 +69,18 @@ fn within_limit(p: [f64; 2], radius_mm: f64) -> bool {
 fn preferred(candidate: &SnapMatch, prior: &SnapMatch) -> bool {
     let d_new = candidate.separation_mm;
     let d_old = prior.separation_mm;
-    // Ranking is distance first, then feature specificity and source ID.
-    // The 1nm tie tolerance is only for numerical round-off, never a user
-    // visible distance-boost for vertices compared with edges.
+    // Design-tool priority is vertex > midpoint > edge within the small
+    // screen-pixel snap radius. Between equal features, choose the closest
+    // and then the stable source part ID regardless of draw order.
+    if candidate.kind != prior.kind {
+        return candidate.kind.priority() < prior.kind.priority();
+    }
     if d_new + EPS < d_old { return true; }
     if d_old + EPS < d_new { return false; }
-    (candidate.kind.priority(), candidate.target_part_id,
-     candidate.target_xy[0].to_bits(), candidate.target_xy[1].to_bits())
-        < (prior.kind.priority(), prior.target_part_id,
-           prior.target_xy[0].to_bits(), prior.target_xy[1].to_bits())
+    (candidate.target_part_id, candidate.target_xy[0].to_bits(),
+     candidate.target_xy[1].to_bits())
+        < (prior.target_part_id, prior.target_xy[0].to_bits(),
+           prior.target_xy[1].to_bits())
 }
 impl SnapIndex {
     /// Cache only fixed, source-distinct line-segment targets. Strict size
@@ -133,9 +136,8 @@ impl SnapIndex {
             ] {
                 let d = distance_sq(pointer_world, candidate);
                 if d > radius_sq { continue; }
-                let ranking = (d, kind.priority());
                 if closest.is_none_or(|(prev, priority, _)| {
-                    ranking.0 + EPS < prev || ((ranking.0 - prev).abs() <= EPS && ranking.1 < priority)
+                    kind.priority() < priority || (kind.priority() == priority && d + EPS < prev)
                 }) {
                     closest = Some((d, kind.priority(), candidate));
                 }
