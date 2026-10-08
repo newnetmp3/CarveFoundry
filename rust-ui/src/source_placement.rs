@@ -103,13 +103,12 @@ mod tests {
     use crate::geometry::{Part, rectangle};
 
     fn source() -> (SourcePlacement, Sheet) {
-        let mut baseline = Sheet::default();
-        baseline.parts = vec![
+        let baseline = Sheet { parts: vec![
             Part { id: 2, name: "Panel".into(), outline: rectangle(15.0, 8.0),
                 x: 10.0, y: 20.0, quarter_turns: 0 },
             Part { id: 5, name: "Frame".into(), outline: rectangle(7.0, 8.0),
                 x: 45.0, y: 20.0, quarter_turns: 0 },
-        ];
+        ], ..Sheet::default() };
         let raw = json!({
             "source_sha256": "a".repeat(64),
             "parts": [
