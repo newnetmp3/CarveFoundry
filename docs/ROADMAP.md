@@ -67,11 +67,15 @@ AI/PyTorch inference initially.
 
 ### Incremental migration order
 
-1. **Benchmark and define compatibility contracts — planned:** Measure
-   representative CAD edit, V-Carving, pocketing, 3D finishing, rest machining,
-   simulation and export workloads, including peak memory and transfer overhead.
-   Compare against existing Python reference implementations and capture known
-   correct outputs and tolerances.
+1. **Benchmark and define compatibility contracts — in progress:**
+   The initial raster kernel benchmark is available in
+   `scripts/benchmark_native_kernels.py`: deterministic triangles, grid sizes,
+   Python-reference/native parity checking, repeated warmup/median wall-time
+   samples, and JSON output. Results must be measured on target hardware; CI
+   asserts behavior, not speed. Expand to CAD edit, V-Carving, pocketing, 3D
+   finishing, rest machining, simulation and export workloads, including peak
+   memory and Python/Rust transfer overhead. Capture numerical tolerances and
+   representative correct outputs before each conversion.
 2. **Native vector geometry — planned:** Migrate analytic line/arc/cubic
    evaluation, subdivision, contour topology, geometric snapping and
    trim/extend/fillet primitives behind the existing Python-facing model/API.
