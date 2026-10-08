@@ -173,9 +173,14 @@ AI/PyTorch inference initially.
    PR #73 CI passed both Python 3.12 and 3.14; physical KDE/Wayland
    modifier interactions still require real-device verification.
    Remaining native vector-CAD work includes wider draw-time snapping,
-   geometric live snap indicators, trim/extend, fillet/chamfer, editable
-   circle/ellipse/polygon primitives, retained SVG/DXF contours, group
+   geometric live snap indicators, intersection-aware trim/extend,
+   fillet/chamfer, editable circle/ellipse/polygon primitives, retained
+   SVG/DXF contours, group
    cutouts and text-on-path.
+   An in-progress milestone adds exact fractional *open endpoint trimming*
+   to line, arc, and cubic paths with Direct Selection UI and Undo/CAM
+   invalidation. This is not yet intersection-aware trim/extend, and it
+   must not be marked delivered until CI passes and the PR merges.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
