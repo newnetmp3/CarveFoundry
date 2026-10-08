@@ -751,11 +751,25 @@ class RibbonCamActionsMixin:
         if self._background_job is not None:
             self.statusBar().showMessage("Another operation is running", 4000)
             return
+        motion_ids = {
+            path.cam_operation_id
+            for path in self.project.toolpaths
+            if path.cam_operation_id is not None
+        }
         stale = [
             operation.operation_id
             for operation in self.project.cam_operations
-            if operation.needs_recalculation
+            if operation.enabled and (
+                operation.needs_recalculation
+                or operation.operation_id not in motion_ids
+            )
         ]
+        for operation in self.project.cam_operations:
+            if (
+                operation.operation_id in stale
+                and not operation.needs_recalculation
+            ):
+                operation.mark_stale("Generated motion is missing")
         if not stale:
             self.statusBar().showMessage("No CAM operations need recalculation", 3000)
             return
@@ -917,7 +931,8 @@ class RibbonCamActionsMixin:
             if (
                 getattr(self, "_cam_append_to_job", False)
                 and any(
-                    saved_operation.needs_recalculation
+                    saved_operation.enabled
+                    and saved_operation.needs_recalculation
                     for saved_operation in self.project.cam_operations
                 )
             ):
@@ -992,7 +1007,7 @@ class RibbonCamActionsMixin:
             stale_operations = [
                 saved_operation
                 for saved_operation in self.project.cam_operations
-                if saved_operation.needs_recalculation
+                if saved_operation.enabled and saved_operation.needs_recalculation
             ]
             self._toolpaths_stale_reason = (
                 stale_operations[0].stale_reason
@@ -1029,6 +1044,8 @@ class RibbonCamActionsMixin:
                     f"Estimated cutting: {float(payload['minutes']):.1f} min"
                 )
             self._sync_toolpath_output_state()
+            if hasattr(self, "_sync_machining_operations_panel"):
+                self._sync_machining_operations_panel()
             generated_count = len(paths) - previous_count
             self.statusBar().showMessage(
                 f"Generated {generated_count} toolpath"

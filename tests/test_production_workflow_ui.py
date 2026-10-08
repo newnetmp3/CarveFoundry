@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from time import monotonic, sleep
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
+from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.toolpath import MoveKind, Toolpath, ToolpathMove
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem, Stock
@@ -82,31 +82,40 @@ def test_two_sided_setup_is_a_real_menu_command_and_background_export(tmp_path):
         window.close()
 
 
-def test_real_job_planner_reorders_paths_and_keeps_machining_sequence_valid():
+def test_job_planner_entry_opens_persistent_machining_operations_panel():
     window = MainWindow()
     flat = Cutter("Flat", ToolType.FLAT_END_MILL, 6)
-    ball = Cutter("Ball", ToolType.BALL_NOSE, 3)
+    model = _models()[0]
+    operation = CamOperation(
+        operation="rough",
+        cutter=flat,
+        source_item_ids=(model.item_id,),
+        parameters={"feed_mm_min": 1000.0},
+    )
     rough = _path("Rough", "rough", flat)
-    finish = _path("Finish", "finish", ball)
+    rough.source_item_id = model.item_id
+    rough.source_item_name = model.name
+    rough.cam_operation_id = operation.operation_id
     try:
-        window._set_project(Project(items=_models()), project_path=None)
-        window.project.toolpaths = [rough, finish]
-        window._sync_toolpath_state_from_project()
-        assert window._ui_actions["job_planner"].text() == "Machining Job Planner…"
+        window._set_project(
+            Project(
+                items=[model],
+                toolpaths=[rough],
+                cam_operations=[operation],
+            ),
+            project_path=None,
+        )
+        assert window._ui_actions["job_planner"].text() == "Machining Operations"
+        window._show_job_planner()
+        assert window.machining_operations_panel is not None
+        assert window.machining_operations_list.count() == 1
+        assert "Rough" in window.machining_operations_list.item(0).text()
+
         dialog = window._build_toolpath_generation_dialog()
         try:
             assert dialog.generation_fields["append_job"].isEnabled()
         finally:
             dialog.close()
-        with pytest.raises(ValueError, match="roughing"):
-            window._apply_job_plan([finish, rough])
-        assert window.project.toolpaths == [rough, finish]
-        assert window._apply_job_plan([rough])
-        _finish(window)
-        assert window.project.toolpaths == [rough]
-        assert window._prepared_toolpath_geometry is not None
-        window._undo()
-        assert window.project.toolpaths == [rough, finish]
     finally:
         window.close()
 

@@ -20,10 +20,18 @@ class ToolpathStateControllerMixin:
         self.cam_status_label.style().polish(self.cam_status_label)
 
     def _stale_cam_operations(self):
+        motion_ids = {
+            path.cam_operation_id
+            for path in self.project.toolpaths
+            if path.cam_operation_id is not None
+        }
         return [
             operation
             for operation in self.project.cam_operations
-            if operation.needs_recalculation
+            if operation.enabled and (
+                operation.needs_recalculation
+                or operation.operation_id not in motion_ids
+            )
         ]
 
     def _sync_toolpath_output_state(self) -> None:
@@ -158,6 +166,8 @@ class ToolpathStateControllerMixin:
             self.viewport.set_toolpaths_visible(False)
 
         self._sync_toolpath_output_state()
+        if hasattr(self, "_sync_machining_operations_panel"):
+            self._sync_machining_operations_panel()
         self.viewport.update()
 
     def _invalidate_toolpaths(
@@ -259,5 +269,7 @@ class ToolpathStateControllerMixin:
             )
         )
         self._sync_toolpath_output_state()
+        if hasattr(self, "_sync_machining_operations_panel"):
+            self._sync_machining_operations_panel()
         self.viewport.update()
         return changed

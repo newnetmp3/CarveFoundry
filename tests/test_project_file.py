@@ -138,6 +138,7 @@ def test_project_round_trip_persists_toolpaths_and_cutter_geometry(
     assert restored_operation.cutter == cutter
     assert restored_operation.source_item_ids == (item.item_id,)
     assert restored_operation.parameters == cam_operation.parameters
+    assert restored_operation.enabled
     assert not restored_operation.needs_recalculation
 
 
@@ -375,3 +376,22 @@ def test_older_native_project_without_fixtures_loads_empty(tmp_path: Path) -> No
     project = Project(name="Before fixture editor")
     path = save_project(project, tmp_path / "old.cf3d")
     assert load_project(path).fixtures == []
+
+
+
+def test_disabled_cam_operation_round_trip(tmp_path: Path) -> None:
+    operation = CamOperation(
+        operation="pocket",
+        cutter=Cutter("6 mm flat", ToolType.FLAT_END_MILL, 6.0),
+        enabled=False,
+        parameters={"feed_mm_min": 900.0},
+    )
+    project = Project(cam_operations=[operation])
+
+    loaded = load_project(save_project(project, tmp_path / "disabled-cam.cf3d"))
+
+    assert len(loaded.cam_operations) == 1
+    restored = loaded.cam_operations[0]
+    assert not restored.enabled
+    assert restored.operation_id == operation.operation_id
+    assert restored.parameters == operation.parameters

@@ -291,6 +291,7 @@ def _cam_operation_to_dict(operation: CamOperation) -> dict[str, object]:
         "cutter": _cutter_to_dict(operation.cutter),
         "source_item_ids": list(operation.source_item_ids),
         "parameters": dict(operation.parameters),
+        "enabled": operation.enabled,
         "stale_reason": operation.stale_reason,
     }
 
@@ -345,6 +346,10 @@ def _load_cam_operations(value: object) -> list[CamOperation]:
                 )
             parsed_parameters[key] = parameter_value
 
+        enabled = raw_operation.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ProjectFileError(f"{label} enabled state is invalid.")
+
         stale_reason = raw_operation.get("stale_reason")
         if stale_reason is not None and (
             not isinstance(stale_reason, str) or not stale_reason.strip()
@@ -363,6 +368,7 @@ def _load_cam_operations(value: object) -> list[CamOperation]:
                     source_item_ids=tuple(source_item_ids),
                     parameters=parsed_parameters,
                     operation_id=operation_id,
+                    enabled=enabled,
                     stale_reason=stale_reason,
                 )
             )

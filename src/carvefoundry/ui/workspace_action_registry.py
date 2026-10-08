@@ -125,7 +125,7 @@ class WorkspaceActionRegistryMixin:
             ("calculator", "Feeds && Speeds Calculator", self._feeds_speeds_calculator),
             ("advanced_cam", "Advanced CAM…", self._toolpath_design_advanced),
             ("calculate", "Generate Toolpaths…", self._calculate_toolpath),
-            ("job_planner", "Machining Job Planner…", self._show_job_planner),
+            ("job_planner", "Machining Operations", self._show_job_planner),
             ("preview", "Preview", self._preview_toolpaths),
             ("stock_simulation", "Simulate Material Removal…", self._simulate_stock_removal),
             ("export_toolpath", "Export G-code", self._export_gcode),

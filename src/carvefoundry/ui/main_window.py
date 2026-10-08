@@ -36,6 +36,7 @@ from .inspector_controls import InspectorControlsMixin
 from .interface_settings import InterfaceSettingsMixin
 from .job_planner import JobPlannerMixin
 from .layers_popup import LayersPanel
+from .machining_operations_panel import MachiningOperationsPanelMixin
 from .planar_operations_actions import PlanarOperationsMixin
 from .project_file_controller import ProjectFileControllerMixin
 from .project_inspector_controller import ProjectInspectorControllerMixin
@@ -105,6 +106,7 @@ class MainWindow(
     ProjectRecoveryMixin,
     TextEditorMixin,
     ToolpathStateControllerMixin,
+    MachiningOperationsPanelMixin,
     TwoSidedSetupMixin,
     JobPlannerMixin,
     InterfaceSettingsMixin,
@@ -671,6 +673,11 @@ class MainWindow(
         activity_heading.setObjectName("SectionHeading")
         self.properties_panel.body_layout.addWidget(activity_heading)
 
+        self.machining_operations_panel = self._build_machining_operations_panel()
+        self.properties_panel.body_layout.addWidget(
+            self.machining_operations_panel
+        )
+
         self.activity_info = QLabel(
             "No calculated toolpath. Choose an operation on Toolpaths when ready."
         )
@@ -746,6 +753,7 @@ class MainWindow(
             self.stock_widget.sizeHint().width(),
             self.text_widget.sizeHint().width(),
             self.transform_widget.sizeHint().width(),
+            self.machining_operations_panel.sizeHint().width(),
         )
         return max(300, min(370, content_width + outer_padding))
 

@@ -315,7 +315,7 @@ secure it, confirm fence heights/clearances and work offsets, **re-probe the
 newly exposed stock face as Z0**, then run the back setup. The wizard does not
 control the machine, measure a physical turnover or guarantee alignment.
 
-## Session multi-cutter machining job
+## Persistent multi-cutter machining operations
 
 In **Generate Toolpaths**, check **Append to existing machining job** when
 adding rough, finish, detail or cutout passes. The CPU worker generates the
@@ -323,16 +323,23 @@ new operation, validates rough-before-finish and cutout-last dependencies,
 and builds the complete combined preview. Failure leaves the previous job
 untouched.
 
-Use **Toolpaths → Machining Job Planner…** to inspect each actual operation,
-its cutter, source part, estimated feed-only cutting time and move count;
-reorder and remove operations. The existing GRBL export groups consecutive
-same-cutter operations into separate numbered files when a cutter change
-occurs. Re-probe Z after changing cutters. Mandatory preflight remains in
-force for the entire exported plan.
+The Inspector's **Machining Operations** section is the persistent job editor.
+Every saved operation retains its operation type, cutter, source objects and
+calculation settings independently from generated machine motion. The list
+shows READY, RECALCULATE or DISABLED state and supports editing, selective
+recalculation, reordering, duplication, deletion and enable/disable.
 
-**The generated paths/job order are session-owned; they are not yet persisted
-inside .cf3d.** Regenerate toolpaths after reopening, and keep separate
-front/back projects from two-sided setup.
+Changes that can alter material state invalidate the affected operation and
+the dependent operations after it. Earlier unaffected motion is retained.
+Preview and export stay blocked while an enabled operation needs recalculation.
+Disabling an operation removes its machine motion from the active job without
+deleting its saved setup; re-enabling it requires fresh calculation.
+
+CF3D projects persist both the operation stack and calculated toolpaths.
+Reopening an unchanged project therefore restores a preview/export-ready job.
+GRBL export still splits cutter stages into separate numbered files when a
+manual tool change is required. Stop, change the cutter and re-probe Z between
+files, and run mandatory CNC preflight before export.
 
 ## Batch production grid
 
