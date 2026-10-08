@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import hypot, isfinite
+from math import floor, hypot, isfinite
 
 from shapely.geometry import GeometryCollection, LineString, MultiPoint, Point
 
@@ -41,6 +41,28 @@ def _intersection_points(geometry) -> list[tuple[float, float]]:
             result.extend(_intersection_points(part))
         return result
     return []
+
+
+def grid_snap_candidate(
+    query_xy: tuple[float, float],
+    spacing_mm: float,
+    tolerance_mm: float,
+    *,
+    origin_xy: tuple[float, float] = (0.0, 0.0),
+) -> VectorSnapCandidate | None:
+    """Find the closest stock-relative grid intersection within tolerance."""
+    if (
+        not isfinite(spacing_mm) or spacing_mm <= 0
+        or not isfinite(tolerance_mm) or tolerance_mm <= 0
+        or not all(isfinite(float(v)) for v in (*query_xy, *origin_xy))
+    ):
+        raise ValueError("Grid spacing, tolerance and coordinates must be finite.")
+    snapped = tuple(
+        origin + floor((coordinate - origin) / spacing_mm + 0.5) * spacing_mm
+        for coordinate, origin in zip(query_xy, origin_xy, strict=True)
+    )
+    candidate = VectorSnapCandidate("grid", snapped)
+    return candidate if candidate.distance_to(query_xy) <= tolerance_mm else None
 
 
 def vector_snap_candidates(

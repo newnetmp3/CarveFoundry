@@ -4,7 +4,11 @@ import pytest
 
 from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.vector_path import VectorPath, VectorSegment
-from carvefoundry.core.vector_snapping import nearest_vector_snap, vector_snap_candidates
+from carvefoundry.core.vector_snapping import (
+    grid_snap_candidate,
+    nearest_vector_snap,
+    vector_snap_candidates,
+)
 
 
 def _item(name: str, path: VectorPath) -> ProjectItem:
@@ -78,3 +82,26 @@ def test_snap_rejects_invalid_tolerance(tolerance: float) -> None:
     path = _item("Line", VectorPath(((0, 0), (10, 0))))
     with pytest.raises(ValueError):
         vector_snap_candidates([path], (0.0, 0.0), tolerance)
+
+
+def test_grid_snap_respects_spacing_origin_and_tolerance() -> None:
+    snap = grid_snap_candidate((9.7, 15.2), 5.0, 0.5)
+    assert snap is not None
+    assert snap.kind == "grid"
+    assert snap.point_xy == pytest.approx((10.0, 15.0))
+    assert grid_snap_candidate((9.0, 14.0), 5.0, 0.5) is None
+    offset = grid_snap_candidate((12.2, 17.2), 5.0, 0.5, origin_xy=(2, 2))
+    assert offset is not None
+    assert offset.point_xy == pytest.approx((12, 17))
+
+
+@pytest.mark.parametrize("spacing", [0.0, -2.0, float("inf"), float("nan")])
+def test_grid_snap_rejects_invalid_spacing(spacing: float) -> None:
+    with pytest.raises(ValueError):
+        grid_snap_candidate((1, 2), spacing, 0.5)
+
+
+def test_grid_snap_handles_negative_stock_relative_coordinates() -> None:
+    snap = grid_snap_candidate((-4.9, -10.1), 5.0, 0.3)
+    assert snap is not None
+    assert snap.point_xy == pytest.approx((-5.0, -10.0))

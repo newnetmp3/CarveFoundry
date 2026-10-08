@@ -38,7 +38,7 @@ from carvefoundry.core.vector_path import (
     world_xy_to_local,
     world_xy_to_local_point,
 )
-from carvefoundry.core.vector_snapping import nearest_vector_snap
+from carvefoundry.core.vector_snapping import grid_snap_candidate, nearest_vector_snap
 
 
 class DirectSelectionMixin:
@@ -172,17 +172,32 @@ class DirectSelectionMixin:
         node_index: int,
         xy: tuple[float, float],
     ) -> tuple[tuple[float, float], str | None]:
-        enabled = self._settings.value("vector/snap_enabled", True, type=bool)
-        if not enabled:
+        geometry_enabled = self._settings.value(
+            "vector/snap_enabled", True, type=bool,
+        )
+        grid_enabled = self._settings.value(
+            "vector/grid_snap_enabled", False, type=bool,
+        )
+        if not geometry_enabled and not grid_enabled:
             return xy, None
         tolerance = float(self._settings.value("vector/snap_tolerance_mm", 1.0))
-        candidate = nearest_vector_snap(
-            self.project.items,
-            xy,
-            tolerance,
-            exclude_item_id=item_id,
-            exclude_node_index=node_index,
+        candidate = (
+            nearest_vector_snap(
+                self.project.items,
+                xy,
+                tolerance,
+                exclude_item_id=item_id,
+                exclude_node_index=node_index,
+            )
+            if geometry_enabled else None
         )
+        if grid_enabled:
+            spacing = float(self._settings.value("vector/grid_spacing_mm", 5.0))
+            grid = grid_snap_candidate(xy, spacing, tolerance)
+            if grid is not None and (
+                candidate is None or grid.distance_to(xy) < candidate.distance_to(xy)
+            ):
+                candidate = grid
         if candidate is None:
             return xy, None
         return candidate.point_xy, candidate.kind
@@ -565,6 +580,27 @@ class DirectSelectionMixin:
         snap_row.addWidget(QLabel("Tolerance:", dialog))
         snap_row.addWidget(snap_tolerance)
         layout.addLayout(snap_row)
+        grid_row = QHBoxLayout()
+        grid_enabled = QCheckBox("Snap to stock grid", dialog)
+        grid_enabled.setObjectName("VectorGridSnapEnabled")
+        grid_enabled.setChecked(
+            self._settings.value("vector/grid_snap_enabled", False, type=bool)
+        )
+        grid_spacing = QDoubleSpinBox(dialog)
+        grid_spacing.setObjectName("VectorGridSpacing")
+        grid_spacing.setRange(0.1, 1000.0)
+        grid_spacing.setDecimals(2)
+        grid_spacing.setSuffix(" mm")
+        grid_spacing.setValue(
+            float(self._settings.value("vector/grid_spacing_mm", 5.0))
+        )
+        grid_spacing.setToolTip(
+            "Grid intersection spacing measured from stock bottom-left XY0."
+        )
+        grid_row.addWidget(grid_enabled)
+        grid_row.addWidget(QLabel("Spacing:", dialog))
+        grid_row.addWidget(grid_spacing)
+        layout.addLayout(grid_row)
 
         segment_heading = QLabel("Segment after selected node", dialog)
         segment_heading.setObjectName("SectionHeading")
@@ -842,6 +878,16 @@ class DirectSelectionMixin:
         )
         snap_tolerance.valueChanged.connect(
             lambda value: self._settings.setValue("vector/snap_tolerance_mm", value)
+        )
+        grid_enabled.toggled.connect(
+            lambda enabled: self._settings.setValue(
+                "vector/grid_snap_enabled", enabled,
+            )
+        )
+        grid_spacing.valueChanged.connect(
+            lambda value: self._settings.setValue(
+                "vector/grid_spacing_mm", value,
+            )
         )
         segment_kind.currentIndexChanged.connect(
             lambda _index: segment_kind_changed()
