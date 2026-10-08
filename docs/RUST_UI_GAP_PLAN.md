@@ -36,14 +36,14 @@ unsupported objects and does not read or overwrite CAM operations or fixtures;
 curves are approximated for 2D layout, not preserved as their editable CF3D
 analytic sources.
 
-The in-progress `feature/rust-multi-sheet-nesting` milestone adds
+PR #87 delivered
 nonblocking bounded multi-sheet first-fit packing, optional right-angle
 rotation lock, per-stock preview, nominal area reports, independent plan JSON
 and separate SVG contours. It does not yet implement optimal nesting,
 variable-size stocks, cutting tabs, clamps, grain direction metadata or CNC
 toolpath planning. The original design is preserved transactionally.
 
-The subsequent `feature/rust-ui-guarded-cf3d-placement` connects
+PR #90 connected
 source-fingerprinted snapshots and permanent object UUIDs to an explicit
 **save as new project** action in the Rust Studio. Allowed changes are
 only XY translations; changed vector outlines, object identity, names,
@@ -51,11 +51,11 @@ stock dimensions or rotation are rejected. The original remains immutable
 and all new CF3D machine toolpaths must be regenerated in Python CAM.
 This is not general writeback of 3D objects or full CAM editing parity.
 
-The in-progress `feature/rust-cf3d-placement-transactions` introduces the
+PR #89 introduced the
 first **bounded native CF3D write boundary** for checked XY movement only:
 SHA-256 precondition, stable item UUID, locked object validation, exclusive
 new output project, all prior NC motion removed and every CAM operation marked
-stale. It is not yet integrated into Rust Studio and is not full CF3D parity.
+stale. PR #90 integrated this protected XY-only write as a separate new-file action. It is not full CF3D parity.
 
 The next engineering slice must establish a versioned, tested **read/write
 CF3D editing/engine bridge** or equivalent backwards-compatible service with
