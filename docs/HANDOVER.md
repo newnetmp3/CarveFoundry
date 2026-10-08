@@ -17,28 +17,28 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `9930cef58b041d91f120ef20df96787eada1425a` (PR #79).
+- Last verified merged feature baseline: `158c3d2fa3927ff1f440caaa4db1dbf357135916` (PR #80).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — closed-contour corner tools
+## Active — expanded native raster parity fixtures
 
-- Last verified merged feature: PR #79 `9930cef58b041d91f120ef20df96787eada1425a`, GitHub Actions run `37819700239` passed Python 3.12/3.14.
-- Active branch: `feature/closed-vector-corner-editing`; not yet CI validated or merged.
-- Added `edit_line_corner` to retain exact chamfer lines and circular fillet arcs on **closed** line/line corners, including the cyclic node-0 seam. Original unaffected segments remain analytic and node-limit/bad-input checks fail closed.
-- Direct Selection now enables chamfer/fillet for eligible closed corner nodes, preserves an unaffected world-space anchor despite mesh pivot changes, and uses existing Undo/Redo/CAM invalidation.
-- Regression tests cover seam and other nodes, retained arc radius, curved junction rejection, and offscreen Qt editing.
-- This does not extend to curve/line corners or prove physical KDE/Wayland interactions or real-router operation. Rust migration remains separate; existing raster parity benchmark is unchanged.
+- PR #80 closed-contour chamfer/fillet merged `158c3d2fa3927ff1f440caaa4db1dbf357135916`; final CI run `37821221016` passed Python 3.12 and 3.14 after fixing unused imports. Physically unverified under KDE/Wayland and on CNC.
+- Active branch: `feature/native-raster-scene-parity`.
+- Extended opt-in `scripts/benchmark_native_kernels.py` from a single sloped quadrilateral to deterministic **sloped**, **sparse** and **overlap** triangle fixtures. Comparison evaluates full float Z rasters (including uncovered cells) with PyO3 output parity and median wall-time reports per grid/scene.
+- Added tests for fixture determinism, Python-only behavior, native parity when available, invalid scene handling. No measured workstation speedup or production behavior change claimed.
+- Rust migration remains a measured, parity-first parallel track. CNC cutter-contact, stock-sweep, fixture safeguards and G-code paths have not been altered in this branch. This branch is CI unverified.
 
 ### Next checkpoints
 
-- [ ] Check CI Python 3.12/3.14 and Rust/lint; correct issues and merge only on green.
-- [ ] Add live geometric snap feedback and reorganize the dense Direct Selection inspector.
-- [ ] Expand parity benchmark to cutter-contact/stock-sweep cases before additional Rust ports.
-- [ ] Preserve stock-origin, fixture clearance, stale toolpath preflight and cutter change policies.
+- [ ] Run and fix CI on Python 3.12/3.14 and Rust/lint.
+- [ ] Merge only after both lanes pass; update rolling docs and baseline.
+- [ ] Extend benchmarks to cutter-contact and stock-sweep with exact parity and bounded memory measurements.
+- [ ] Continue native CAD live snap feedback and Direct Selection inspector organization.
+- [ ] Physically verify KDE Plasma/Wayland pointer behavior and CNC safety before machine claims.
 
 ### Known boundaries and safety invariants
 
@@ -81,3 +81,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #78 chamfer merged green, analytic line fillet with UI and tests implemented | Main `1874f49`; branch `feature/analytic-line-fillet` | Validate PR CI before merge |
 | 2026-10-08 | Merged PR #79 after both Python CI lanes passed; interactive line-corner fillet completes three-PR CAD batch | Run `37819700239` success; merge `9930cef` | Live geometric indicators, safe closed-contour corners, Rust parity expansion |
 | 2026-10-08 | Implemented closed-contour chamfer/fillet for wrapped seam and interior nodes | Branch `feature/closed-vector-corner-editing`; CI pending | Validate and merge if green |
+| 2026-10-08 | PR #80 merged green and expanded native raster parity to sparse/overlap fixtures | Main `158c3d2`, branch `feature/native-raster-scene-parity` pending CI | Validate and merge fixture benchmark PR |
