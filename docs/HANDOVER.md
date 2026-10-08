@@ -17,7 +17,7 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `28a00cea268e87005c57075a9b45caa2e46523ce` (PR #92).
+- Last verified merged feature baseline: `399b0d71304c77c2a361d2d192721d9e564e7c29` (PR #93).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
@@ -40,11 +40,26 @@
 - Regression coverage includes cross-project settings transfers, cutter mismatch, invalid or extra parameter, changed SHA-256, output overwrite refusal and native Rust safe asynchronous UI wiring.
 - No toolpath merge, spindle control, G-code generation, physical KDE Plasma/Wayland QA or real CNC machining has been verified by these PRs. Rust Studio is not a full native CAM replacement.
 
+### Verified paired inlay design-only workflow (PR #93)
+
+- [PR #93](https://github.com/newnetmp3/CarveFoundry/pull/93) merged
+  `399b0d71304c77c2a361d2d192721d9e564e7c29` after [Rust/Linux CI
+  `37853384040`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37853384040)
+  passed 35 native tests, strict Clippy, release build and launcher checks, and
+  [Python CI `37853384068`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37853384068)
+  passed Python 3.12/3.14.
+- Rust Studio offers strictly convex polygon paired pocket/plug *design*
+  contours, adjustable conical tool/depth/clearance/material data, in-canvas
+  preview and new-directory paired SVG and JSON output. CF3D-linked sources
+  are fingerprinted and UUID-linked; design export refuses changed source.
+- **Not CAM-integrated:** no physical face mirroring, fit certification,
+  cutting simulation, fixture-aware preflight, NC generation or hardware QA.
+
 ### Next functional milestones
 
-- [~] Paired pocket/plug **design-only** contour generator is in progress on `feature/rust-paired-inlay-design`: strict convex polygons, typed depth/angle/fit limits, preview, paired SVGs and JSON in a new output directory, CF3D source SHA guard. Requires CI and code review; no NC posting, automatic flip mirroring, physical fit certification or CAM integration.
+- [x] Paired pocket/plug **design-only** convex-contour generator merged in PR #93 with Rust/Python CI; production CNC integration, physical fit and mirroring are still [ ] milestones.
 - [ ] Extend settings templates with user-managed versions and strategy-specific parameter semantics; test application from both Rust and PySide6 workspaces.
-- [ ] Add native live snapping, object precision controls and broader 3D scene support, preserving existing stock/fixture/work-zero invariants.
+- [~] Add native live snapping and object precision controls: next in-progress Rust grid snapping aligns object translations to bottom-left stock XY0 using absolute drag displacement and Undo/Redo. Segment/node snapping and broader 3D scene support remain future goals.
 - [ ] Test native Rust Studio on KDE Plasma Wayland and verify the save-as-new CF3D, template and stale-CAM behavior against physical workflows.
 
 ### Known boundaries and safety invariants
@@ -57,22 +72,20 @@
 
 ## Active development — next slice (not merged)
 
-- Base main: `cd310bf5ced30e1201946691afa089fd9a7ec553`, after #92 documentation cleanup.
-- Branch: `feature/rust-paired-inlay-design`, [PR #93](https://github.com/newnetmp3/CarveFoundry/pull/93).
-- Scope: Rust `inlay.rs` strictly convex pocket/plug geometry preview with typed
-  material/tool/depth/fit checks and exclusive three-file design export. CF3D-linked
-  output carries source UUID and source SHA-256 and refuses changed-source files.
-- CNC authority: original PySide6 CAM, stock Z0/XY0 conventions, fixture/fence
-  preflight, separate cutter programs and re-probe rules are unchanged.
-- Validation: local Rust toolchain unavailable in chat runtime. First native CI
-  exposed a collapsing inset accepted by the planner (33 passed, 1 failed);
-  fixed using offset half-plane checks. Follow-up tests passed 34/34, then
-  strict Clippy reported `collapsible_if` and `field_reassign_with_default`;
-  both fixed on branch. Added source-linked SHA and source-outline mismatch
-  regressions (final CI pending). **Do not claim CI green until latest run is inspected.**
-- Next: verify Rust formatting/Clippy/tests and Python CI, resolve failures, then
-  broaden toward concave vector geometry, verified plug/pocket toolpath roles and
-  physical fit/mirroring checks. Never post NC from the inlay preview.
+- Current merged main: `399b0d71304c77c2a361d2d192721d9e564e7c29` (PR #93).
+- Branch: `feature/rust-stock-grid-precision`. PR number and final CI pending.
+- Scope: pure Rust precision grid module with 0.05–100 mm spacing, finite
+  range guards, absolute-delta world-coordinate dragging and an explicit
+  align-to-grid action in the native Studio tools panel. Inspector retains
+  unrestricted finite precision X/Y fields when snap is not enabled.
+- UX/history: maintain stock-origin XY0 and Undo/Redo; invalidate stale inlay
+  design previews on document Undo/Redo; no change to CF3D serialization.
+- Safety: source-linked new CF3D placement continues through authoritative
+  Python SHA/UUID transaction, clearing motion and marking CAM stale.
+- Validation: Rust + Python workflows **pending**; no physical KDE/Wayland
+  mouse or CNC QA. Merge only after green CI.
+- Next: verify Clippy/tests/release/Python, then merge when green; follow on
+  with node and live geometric snapping/precision constraints.
 
 ## Append-only checkpoint log
 
@@ -127,3 +140,5 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #92 reusable versioned CAM settings templates merged after Rust and both Python CI lanes passed; completed two-PR safety-preserving CAM UI batch | Rust `37851354891`, Python `37851354914`, merge `28a00ce` | Paired inlay model/CAM workflow and native precision controls |
 | 2026-10-08 | Began design-only paired inlay preview and guarded pocket/plug SVG + JSON export in Rust Studio | [PR #93](https://github.com/newnetmp3/CarveFoundry/pull/93), first native run failed collapsing-inset unit test, then strict Clippy; addressed on later commits | Inspect latest native and Python lanes before merge |
 | 2026-10-08 | Enforced offset halfplanes, source-geometry/digest integrity and strict Clippy cleanups for inlay design | Fix commits `e8da9fd`, `f70849f`, `ca7b5a6`; latest workflows pending | Verify green Rust, Python and launch build |
+| 2026-10-08 | PR #93 paired inlay design merged after full Rust/Python CI | Rust `37853384040`, Python `37853384068`, main `399b0d7` | Native precision controls |
+| 2026-10-08 | Started stock-origin precision grid for native Rust layout placements, absolute drag deltas and rollback preservation | `feature/rust-stock-grid-precision`, CI pending | Verify native/Qt compatibility and merge if green |
