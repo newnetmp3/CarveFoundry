@@ -706,21 +706,24 @@ def _build_container(
                         "width_mm": item.vector_path.width_mm,
                         "depth_mm": item.vector_path.depth_mm,
                         "closed": item.vector_path.closed,
-                        "segments": [
-                            {
-                                "kind": segment.kind,
-                                "control1_xy": (
-                                    list(segment.control1_xy)
-                                    if segment.control1_xy is not None else None
-                                ),
-                                "control2_xy": (
-                                    list(segment.control2_xy)
-                                    if segment.control2_xy is not None else None
-                                ),
-                                "bulge": segment.bulge,
-                            }
-                            for segment in item.vector_path.resolved_segments()
-                        ],
+                        "segments": (
+                            [
+                                {
+                                    "kind": segment.kind,
+                                    "control1_xy": (
+                                        list(segment.control1_xy)
+                                        if segment.control1_xy is not None else None
+                                    ),
+                                    "control2_xy": (
+                                        list(segment.control2_xy)
+                                        if segment.control2_xy is not None else None
+                                    ),
+                                    "bulge": segment.bulge,
+                                }
+                                for segment in item.vector_path.segments
+                            ]
+                            if item.vector_path.segments is not None else None
+                        ),
                     }
                     if item.vector_path is not None else None
                 ),
