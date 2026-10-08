@@ -121,3 +121,28 @@ cargo build --manifest-path rust-ui/Cargo.toml --release
 
 The `Native Rust Studio` GitHub Actions workflow runs on changes to this tree.
 Tests and compilation on GitHub are not a physical KDE Wayland verification.
+
+## Experimental paired pocket/plug inlay designs
+
+Select a closed strictly convex vector in the native Rust Studio, open **Paired
+Inlay · Design Only** in the Inspector, set a conical cutter's included angle,
+diameter/tip, pocket and plug depth, intended engagement, clearance, glue
+allowance and material thickness. **Preview paired contours**, then export into
+a **new** output directory. The preview overlays the smaller plug contour on
+the original pocket contour and outputs `pocket-outline.svg`,
+`plug-outline.svg` and `inlay-design.json`.
+
+This geometric preview uses inward plug setback equal to
+`fit clearance + engagement * tan(included angle / 2)`. It only supports
+strictly convex polygons and conservatively rejects collapsed contours,
+oversized tool envelopes, nonfinite values and through-material depths. For a
+CF3D-imported contour the original SHA-256 and item UUID are recorded; changes
+to the original file invalidate the export. It never overwrites an existing
+folder or changes the CF3D file.
+
+**Important:** This is an exploratory *design contour* pairing, not a certified
+V-inlay fit. It does not mirror parts for physical flipping, compute actual
+toolpaths, guarantee mating fit, validate clamps/fixture clearance or emit NC.
+Import into established CAM, validate taper geometry and physical mirroring,
+test on scrap, regenerate each cutter stage, simulate and run full preflight
+before any machining.

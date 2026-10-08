@@ -42,7 +42,7 @@
 
 ### Next functional milestones
 
-- [ ] Design and implement paired pocket/plug inlay geometry with explicit fit clearance, cutter angle/depth compatibility, material constraints and source-fingerprint safety; no NC posting until verified CAM integration.
+- [~] Paired pocket/plug **design-only** contour generator is in progress on `feature/rust-paired-inlay-design`: strict convex polygons, typed depth/angle/fit limits, preview, paired SVGs and JSON in a new output directory, CF3D source SHA guard. Requires CI and code review; no NC posting, automatic flip mirroring, physical fit certification or CAM integration.
 - [ ] Extend settings templates with user-managed versions and strategy-specific parameter semantics; test application from both Rust and PySide6 workspaces.
 - [ ] Add native live snapping, object precision controls and broader 3D scene support, preserving existing stock/fixture/work-zero invariants.
 - [ ] Test native Rust Studio on KDE Plasma Wayland and verify the save-as-new CF3D, template and stale-CAM behavior against physical workflows.
@@ -54,6 +54,25 @@
 - Keep distinct NC files for physical cutter stages; manual cutter swaps require Z re-probing.
 - Preview/export must fail closed if enabled machining intent is stale or missing motion.
 - Offline preflight cannot confirm actual machine work offsets, unknown clamps, holder collisions or controller state.
+
+## Active development — next slice (not merged)
+
+- Base main: `cd310bf5ced30e1201946691afa089fd9a7ec553`, after #92 documentation cleanup.
+- Branch: `feature/rust-paired-inlay-design`, [PR #93](https://github.com/newnetmp3/CarveFoundry/pull/93).
+- Scope: Rust `inlay.rs` strictly convex pocket/plug geometry preview with typed
+  material/tool/depth/fit checks and exclusive three-file design export. CF3D-linked
+  output carries source UUID and source SHA-256 and refuses changed-source files.
+- CNC authority: original PySide6 CAM, stock Z0/XY0 conventions, fixture/fence
+  preflight, separate cutter programs and re-probe rules are unchanged.
+- Validation: local Rust toolchain unavailable in chat runtime. First native CI
+  exposed a collapsing inset accepted by the planner (33 passed, 1 failed);
+  fixed using offset half-plane checks. Follow-up tests passed 34/34, then
+  strict Clippy reported `collapsible_if` and `field_reassign_with_default`;
+  both fixed on branch. Added source-linked SHA and source-outline mismatch
+  regressions (final CI pending). **Do not claim CI green until latest run is inspected.**
+- Next: verify Rust formatting/Clippy/tests and Python CI, resolve failures, then
+  broaden toward concave vector geometry, verified plug/pocket toolpath roles and
+  physical fit/mirroring checks. Never post NC from the inlay preview.
 
 ## Append-only checkpoint log
 
@@ -106,3 +125,5 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Typed read-only CF3D CAM status inspector in Rust Studio and guarded Python report implemented | Branch `feature/rust-cam-readiness-inspector`, CI unverified | Validate/merge then typed strategy templates |
 | 2026-10-08 | PR #91 Rust CAM stage readout merged after all CI lanes passed; reusable CAM parameter template export/apply engine and Rust UI implemented | Main `5adc90c`; `feature/rust-cam-operation-templates` CI pending | Validate PR, then proceed to inlay workflow |
 | 2026-10-08 | PR #92 reusable versioned CAM settings templates merged after Rust and both Python CI lanes passed; completed two-PR safety-preserving CAM UI batch | Rust `37851354891`, Python `37851354914`, merge `28a00ce` | Paired inlay model/CAM workflow and native precision controls |
+| 2026-10-08 | Began design-only paired inlay preview and guarded pocket/plug SVG + JSON export in Rust Studio | [PR #93](https://github.com/newnetmp3/CarveFoundry/pull/93), first native run failed collapsing-inset unit test, then strict Clippy; addressed on later commits | Inspect latest native and Python lanes before merge |
+| 2026-10-08 | Enforced offset halfplanes, source-geometry/digest integrity and strict Clippy cleanups for inlay design | Fix commits `e8da9fd`, `f70849f`, `ca7b5a6`; latest workflows pending | Verify green Rust, Python and launch build |

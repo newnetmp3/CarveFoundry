@@ -114,8 +114,22 @@ operation only when strategy, cutter geometry and parameter key/type schema
 match. A new CF3D file is exclusively published, original files remain
 untouched, all generated motion is removed and every operation is stale.
 This is a parameter preset workflow, not toolpath merging, G-code export or a
-verified CNC machining plan. Inlay geometry and full Rust-native CAM remain
-future milestones.
+verified CNC machining plan. Full Rust-native CAM remains a future milestone.
+
+**Paired inlay design milestone — feature branch, not yet released:** Native Rust
+Studio now has a strictly-convex polygon-only pocket/plug outline planner in
+`rust-ui/src/inlay.rs`, typed included cutter angle, tip diameter, cutter
+envelope, depth, engagement, material thickness, glue gap and fit clearance.
+The derived plug contour uses an inward design setback of
+`clearance + engagement × tan(included_angle / 2)` and rejects malformed,
+concave, collapsing and out-of-stock outlines. It previews the plug outline
+and creates paired SVG designs plus a JSON manifest only in a NEW directory,
+guarding CF3D-linked sources with the original SHA-256 and UUID. **These are
+design contours, NOT certified mating geometry or toolpaths**: face mirroring,
+stock registration, cutter-angle/toolpath pairing, real material fit, CNC
+simulation, fixture-aware preflight and NC export remain unimplemented here.
+Do not describe this feature as production-ready until CI and integration
+verification pass.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
