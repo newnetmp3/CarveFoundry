@@ -51,7 +51,18 @@ editable versioned layout JSON and stock-relative SVG export.
 ```bash
 cd /mnt/moar/Downloads/git/CarveFoundry
 bash scripts/run-rust-studio.sh
+
+# Optional: build and register a separate KDE application-menu launcher
+bash scripts/install-rust-studio.sh
+~/.local/bin/carvefoundry-studio
 ```
+
+The Rust window can read existing CF3D **vector outlines only** through a
+read-only project snapshot. Provide a CF3D path and select **Import vectors
+(read-only)**; the operation never overwrites native CNC project files.
+Open and mesh-only objects, original fixtures and all CAM stages are excluded.
+Save Rust layouts separately as JSON or SVG; both still require the existing
+application's CNC preflight and separate NC export.
 
 This **does not yet replace** the established full CNC/CAM application.
 The original `carvefoundry` desktop launch remains unchanged until the Rust
