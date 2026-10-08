@@ -63,6 +63,14 @@ stable source UUIDs, native Undo/Redo, toolpath invalidation and preserved
 preflight, so a Rust UI can actually replace the full project editor. Until
 then ship the Rust GUI alongside the trusted Linux CAM application.
 
+## Current planned engine read boundary
+
+The next Rust UI slice adds nonblocking, **read-only CAM readiness inspection**
+using a typed Python CF3D report, guarded by SHA-256 and validated by a Rust
+schema. Stored motion is explicitly marked *unverified*. This does not replace
+fixture-aware CNC preflight and cannot authorize G-code export. Persistent
+toolpath templates and paired inlay geometry remain the next production gaps.
+
 ## Acceptance rules
 
 - Must build as a native Linux binary and launch on KDE Plasma/Wayland.
