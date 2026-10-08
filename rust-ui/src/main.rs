@@ -444,10 +444,10 @@ impl Studio {
 
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("studio-toolbar").show_inside(ui, |ui| {
+        egui::Panel::top("studio-toolbar").show(ui, |ui| {
             self.header(ui);
         });
-        egui::TopBottomPanel::bottom("studio-status").show_inside(ui, |ui| {
+        egui::Panel::bottom("studio-status").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new("LAYOUT-ONLY").color(Color32::YELLOW).strong());
                 ui.label(&self.message);
@@ -456,11 +456,11 @@ impl eframe::App for Studio {
                 ui.weak(format!("Nominal area: {:.1}% of sheet", area_mm2 / (self.sheet.width_mm * self.sheet.height_mm) * 100.0));
             });
         });
-        egui::SidePanel::left("studio-tools").resizable(true).default_width(250.0).min_width(205.0)
-            .show_inside(ui, |ui| { egui::ScrollArea::vertical().show(ui, |ui| self.tools(ui)); });
-        egui::SidePanel::right("studio-properties").resizable(true).default_width(260.0).min_width(220.0)
-            .show_inside(ui, |ui| { egui::ScrollArea::vertical().show(ui, |ui| self.properties(ui)); });
-        egui::CentralPanel::default().show_inside(ui, |ui| self.canvas(ui));
+        egui::Panel::left("studio-tools").resizable(true).default_size(250.0).min_size(205.0)
+            .show(ui, |ui| { egui::ScrollArea::vertical().show(ui, |ui| self.tools(ui)); });
+        egui::Panel::right("studio-properties").resizable(true).default_size(260.0).min_size(220.0)
+            .show(ui, |ui| { egui::ScrollArea::vertical().show(ui, |ui| self.properties(ui)); });
+        egui::CentralPanel::default().show(ui, |ui| self.canvas(ui));
     }
 }
 
