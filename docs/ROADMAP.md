@@ -161,10 +161,19 @@ AI/PyTorch inference initially.
    viewport cubic handles, anchor guide lines, hit testing and drag-to-edit
    through the existing Undo/Redo and CAM invalidation workflow. Both Python
    CI lanes passed for PR #64; physical KDE/Wayland interaction testing is
-   still outstanding. Remaining vector-CAD work includes tangent/perpendicular/
-   grid snapping, visual snap indicators, angle constraints, trim/extend,
-   fillet/chamfer, editable circle/ellipse/polygon primitives, retained SVG/DXF
-   contours, group cutouts and text-on-path.
+   still outstanding. PR #65 adds optional stock-origin grid snapping;
+   PR #68 applies geometry/grid snaps to cubic handles; PR #69 adds directional
+   tangent/normal projection math; PRs #70-71 add Shift angle increments and
+   in-viewport active constraint feedback.
+   PR #73 (upon merge) aligns cubic handles with the adjoining segment's
+   tangent via Ctrl or its perpendicular via Ctrl+Shift, with typed visual
+   markers and retained Undo/CAM invalidation. This is limited to cubic
+   handle editing where an adjacent segment provides a reference; it is NOT
+   general all-tool tangent snapping or automatic curvature continuity.
+   Remaining native vector-CAD work includes wider draw-time snapping,
+   geometric live snap indicators, trim/extend, fillet/chamfer, editable
+   circle/ellipse/polygon primitives, retained SVG/DXF contours, group
+   cutouts and text-on-path.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
