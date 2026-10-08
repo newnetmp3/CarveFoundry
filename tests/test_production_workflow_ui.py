@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from time import monotonic, sleep
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
 from carvefoundry.cam.operation import CamOperation
