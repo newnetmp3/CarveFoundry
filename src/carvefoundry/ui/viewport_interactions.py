@@ -6,10 +6,10 @@ event forwarding or extra GL contexts are introduced on Wayland.
 from __future__ import annotations
 
 import numpy as np
-
-from carvefoundry.core.vector_snapping import constrain_angle
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
+
+from carvefoundry.core.vector_snapping import constrain_angle
 
 
 class ViewportInteractionMixin:
