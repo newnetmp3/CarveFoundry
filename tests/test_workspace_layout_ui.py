@@ -537,6 +537,7 @@ def test_ctrl_cubic_handle_drag_previews_and_commits_neighbor_tangent():
         assert kind == "tangent"
         assert target[1] == pytest.approx(origin[1])
         assert native._control_angle_constrained
+        assert native._control_constraint_kind == "tangent"
         window._control_drag_finished(0, 1, 1, target[0], target[1], kind)
         world = segment_world_controls(item, 1)
         assert world is not None
@@ -549,6 +550,7 @@ def test_ctrl_cubic_handle_drag_previews_and_commits_neighbor_tangent():
             Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
         )
         assert kind == "perpendicular"
+        assert native._control_constraint_kind == "perpendicular"
         assert normal[0] == pytest.approx(updated_origin[0])
     finally:
         window.close()
