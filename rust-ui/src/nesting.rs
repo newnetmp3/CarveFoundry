@@ -123,6 +123,11 @@ pub fn nest(sheet: &Sheet, gap: f64, margin: f64, step_mm: f64) -> Result<Sheet,
             }
             let count_x = ((usable_x - margin) / step_mm).floor() as usize;
             let count_y = ((usable_y - margin) / step_mm).floor() as usize;
+            // Bound synchronous search so an accidentally tiny grid cannot freeze
+            // the editor for enormous CNC sheets.
+            if (count_x + 2).saturating_mul(count_y + 2) > 150_000 {
+                return Err("Nesting search is too dense for the sheet. Increase search step.".into());
+            }
             // Always evaluate the last legal boundary, not only grid points.
             for row in 0..=count_y + 1 {
                 let y = if row == count_y + 1 { usable_y } else { margin + row as f64 * step_mm };
@@ -186,6 +191,12 @@ mod tests {
             assert!(valid_placement(p, &result.parts[..index], &result, 2.0, 3.0));
         }
         assert_eq!(sheet.parts[0].x, 0.0);
+    }
+    #[test]
+    fn dense_search_is_rejected_before_ui_work_can_stall() {
+        let mut sheet = Sheet { width_mm: 10_000.0, height_mm: 10_000.0, ..Sheet::default() };
+        sheet.parts.push(part(1, rectangle(10.0, 10.0)));
+        assert!(nest(&sheet, 1.0, 1.0, 0.5).unwrap_err().contains("too dense"));
     }
     #[test]
     fn impossible_nest_fails_without_mutating_sheet() {
