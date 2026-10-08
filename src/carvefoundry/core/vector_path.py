@@ -668,6 +668,58 @@ def fillet_open_line_corner(
     return result
 
 
+def edit_line_corner(
+    path: VectorPath,
+    node_index: int,
+    amount_mm: float,
+    *,
+    operation: str,
+) -> VectorPath:
+    """Edit a line-line corner on either an open or closed retained contour.
+
+    Closed seam corners use cyclic neighbors and segment ordering. Other
+    segments are copied exactly; no source arcs or cubics are flattened.
+    """
+    path.validate()
+    if operation not in {"chamfer", "fillet"}:
+        raise ValueError("Corner operation must be chamfer or fillet.")
+    if not 0 <= node_index < len(path.points_xy):
+        raise IndexError("Corner node index out of range.")
+    if not path.closed:
+        fn = chamfer_open_line_corner if operation == "chamfer" else fillet_open_line_corner
+        return fn(path, node_index, amount_mm)
+    if len(path.points_xy) >= MAX_VECTOR_NODES:
+        raise ValueError("Vector node limit reached.")
+    count = len(path.points_xy)
+    before_index = (node_index - 1) % count
+    after_index = (node_index + 1) % count
+    segments = list(path.resolved_segments())
+    if (
+        segments[before_index].kind != "line"
+        or segments[node_index].kind != "line"
+    ):
+        raise ValueError("Closed corner editing requires adjoining straight segments.")
+    local = VectorPath(
+        (
+            path.points_xy[before_index],
+            path.points_xy[node_index],
+            path.points_xy[after_index],
+        ),
+        width_mm=path.width_mm,
+        depth_mm=path.depth_mm,
+    )
+    edit = chamfer_open_line_corner if operation == "chamfer" else fillet_open_line_corner
+    corner = edit(local, 1, amount_mm)
+    points = list(path.points_xy)
+    points[node_index:node_index + 1] = list(corner.points_xy[1:3])
+    segments.insert(node_index, corner.resolved_segments()[1])
+    result = replace(
+        path, points_xy=tuple(points), segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:
