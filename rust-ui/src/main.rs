@@ -1091,16 +1091,16 @@ impl Studio {
                 else { Color32::from_rgb(106, 222, 179) };
             painter.add(egui::Shape::closed_line(pts, Stroke::new(if selected { 2.5 } else { 1.5 }, edge)));
         }
-        if preview.is_none() {
-            if let Some(pair) = &self.inlay_plan
-                && Some(pair.part_id) == self.selected
-                && self.sheet.parts.iter().find(|p| Some(p.id) == self.selected)
-                    .is_some_and(|p| p.world_points() == pair.pocket_xy) {
-                painter.add(egui::Shape::closed_line(
-                    pair.plug_xy.iter().copied().map(&screen).collect(),
-                    Stroke::new(2.0, Color32::from_rgb(251, 132, 112)),
-                ));
-            }
+        if preview.is_none()
+            && let Some(pair) = &self.inlay_plan
+            && Some(pair.part_id) == self.selected
+            && self.sheet.parts.iter().find(|p| Some(p.id) == self.selected)
+                .is_some_and(|p| p.world_points() == pair.pocket_xy)
+        {
+            painter.add(egui::Shape::closed_line(
+                pair.plug_xy.iter().copied().map(&screen).collect(),
+                Stroke::new(2.0, Color32::from_rgb(251, 132, 112)),
+            ));
         }
         painter.text(screen([0.0, 0.0]) + Vec2::new(5.0, 5.0), egui::Align2::LEFT_TOP, "XY0",
             egui::FontId::monospace(12.0), Color32::from_rgb(189, 222, 236));
