@@ -84,6 +84,7 @@ pub fn overlaps(a: &[[f64; 2]], b: &[[f64; 2]], gap: f64) -> bool {
     }
     false
 }
+#[cfg(test)]
 fn moved(local: &[[f64; 2]], x: f64, y: f64) -> Vec<[f64; 2]> {
     local.iter().map(|p| [p[0] + x, p[1] + y]).collect()
 }
