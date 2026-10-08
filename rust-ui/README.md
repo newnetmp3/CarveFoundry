@@ -161,3 +161,27 @@ positions even when snap is disabled.
 These are design-space placements, not machine-coordinate verification. The
 standard CF3D save-as-new path still invalidates existing toolpaths and
 requires fresh CAM generation, simulation and fixture-aware preflight.
+
+## Live contour snapping (Rust Studio, experimental)
+
+In the left **Precision / Stock Grid** section, toggle **Snap selected contours
+to other vectors** (enabled by default) and choose a **Live snap radius**
+from 4 to 24 pixels. Select a layout part, click/drag close to one of its
+outline's vertices, segment midpoints, or edges, and approach a feature on
+another layout part. A highlighted crosshair and **VERTEX / MIDPOINT / EDGE**
+label show the world-coordinate target while dragging. Target priority
+inside the radius is vertex, then midpoint, then the closest edge point.
+The entire polygon moves as a rigid part; no node or curve is reshaped.
+
+The contour target index is built once when the drag begins and bounded to
+32,768 edges. If the source grab is deep within a shape, no geometry snap
+is applied; if there is no matching target, the existing optional stock-grid
+snap (or free movement) remains in effect. Screen-pixel tolerance is converted
+to stock millimetres by the current canvas zoom, not by arbitrary work offsets.
+Undo/Redo and the existing layout save format retain their normal behavior.
+
+**CNC limitation:** These are layout-only object translations. A source-linked
+CF3D translation still creates a NEW file through the guarded Python engine,
+clears old toolpaths and marks all CAM operations stale. No new NC generation,
+cutter compensation, machine preflight or physical KDE/Onefinity acceptance
+is implied by this feature.
