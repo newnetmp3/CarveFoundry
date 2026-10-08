@@ -141,7 +141,9 @@ fn inward_offset(points: &[[f64; 2]], distance: f64) -> Result<Vec<[f64; 2]>, St
     for p in &shifted {
         for i in 0..points.len() {
             let e = subtract(points[(i + 1) % points.len()], points[i]);
-            if cross(e, subtract(*p, points[i])) * winding <= EPS {
+            let signed_distance = cross(e, subtract(*p, points[i])) * winding
+                / e[0].hypot(e[1]);
+            if signed_distance < distance - EPS {
                 return Err("Plug setback is larger than the available contour width".into());
             }
         }
