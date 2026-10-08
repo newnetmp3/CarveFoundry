@@ -24,6 +24,7 @@ from carvefoundry.core.vector_path import (
     arc_sweep_degrees,
     close_path,
     extend_open_line_endpoint,
+    fit_open_line_endpoint_to_segment,
     insert_node,
     join_paths,
     move_cubic_control,
@@ -721,6 +722,26 @@ class DirectSelectionMixin:
         extend_row.addWidget(extend_distance)
         extend_row.addWidget(extend_endpoint_button)
         layout.addLayout(extend_row)
+        intersect_row = QHBoxLayout()
+        target_segment = QDoubleSpinBox(dialog)
+        target_segment.setObjectName("VectorFitTargetSegment")
+        target_segment.setRange(0, 11999)
+        target_segment.setDecimals(0)
+        target_segment.setSingleStep(1)
+        target_segment.setToolTip(
+            "0-based segment index of the other selected editable vector."
+        )
+        intersect_mode = QComboBox(dialog)
+        intersect_mode.setObjectName("VectorFitMode")
+        intersect_mode.addItem("Trim to intersection", "trim")
+        intersect_mode.addItem("Extend to intersection", "extend")
+        intersect_button = QPushButton("Fit to Selected Vector", dialog)
+        intersect_button.setObjectName("VectorFitIntersection")
+        intersect_row.addWidget(QLabel("Other segment:", dialog))
+        intersect_row.addWidget(target_segment)
+        intersect_row.addWidget(intersect_mode)
+        intersect_row.addWidget(intersect_button)
+        layout.addLayout(intersect_row)
 
         def current():
             selected = self._editable_vector_item()
@@ -760,6 +781,34 @@ class DirectSelectionMixin:
                 ].kind == "line"
             )
             selected_indices = self._selected_design_indices()
+            source_ready = (
+                path is not None
+                and not path.closed
+                and index in (0, len(path.points_xy) - 1)
+                and path.resolved_segments()[
+                    0 if index == 0 else -1
+                ].kind == "line"
+            )
+            other_items = [
+                self.project.items[item_index]
+                for item_index in selected_indices
+                if 0 <= item_index < len(self.project.items)
+                and (selected is None or self.project.items[item_index].item_id != selected.item_id)
+            ]
+            eligible_target = (
+                len(selected_indices) == 2 and len(other_items) == 1
+                and other_items[0].visible and not other_items[0].locked
+                and other_items[0].vector_path is not None
+                and abs(
+                    other_items[0].transform.translation_mm[2]
+                    - selected.transform.translation_mm[2]
+                ) < 1e-7
+            ) if selected is not None else False
+            target_count = (
+                other_items[0].vector_path.segment_count if eligible_target else 0
+            )
+            target_segment.setMaximum(max(0, target_count - 1))
+            intersect_button.setEnabled(source_ready and eligible_target)
             join_paths_button.setEnabled(
                 len(selected_indices) == 2
                 and all(
@@ -949,6 +998,71 @@ class DirectSelectionMixin:
             )
             refresh_topology_actions()
 
+        def fit_selected_endpoint():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            selected_indices = self._selected_design_indices()
+            if len(selected_indices) != 2:
+                return
+            other = [
+                self.project.items[i] for i in selected_indices
+                if 0 <= i < len(self.project.items)
+                and self.project.items[i].item_id != selected.item_id
+            ]
+            if len(other) != 1 or other[0].vector_path is None:
+                return
+            reference = other[0]
+            if (
+                not reference.visible or reference.locked
+                or abs(reference.transform.translation_mm[2]
+                       - selected.transform.translation_mm[2]) >= 1e-7
+            ):
+                return
+            other_segment = int(target_segment.value())
+            if not 0 <= other_segment < reference.vector_path.segment_count:
+                return
+            # The target can be a curved retained segment in principle, but
+            # that requires a separate analytic curve-intersection solver.
+            if reference.vector_path.resolved_segments()[other_segment].kind != "line":
+                QMessageBox.warning(
+                    dialog, "Invalid reference segment",
+                    "Choose a straight segment on the other selected vector.",
+                )
+                return
+            path = selected.vector_path
+            at_start = index == 0
+            if (
+                path.closed or index not in (0, len(path.points_xy) - 1)
+                or path.resolved_segments()[0 if at_start else -1].kind != "line"
+            ):
+                return
+            opposite = len(path.points_xy) - 1 if at_start else 0
+            fixed = node_world_points(selected)[opposite]
+            target_a = world_xy_to_local_point(
+                selected, segment_world_point(reference, other_segment, 0.0),
+            )
+            target_b = world_xy_to_local_point(
+                selected, segment_world_point(reference, other_segment, 1.0),
+            )
+            try:
+                edited = fit_open_line_endpoint_to_segment(
+                    path, at_start=at_start,
+                    target_start_xy=target_a,
+                    target_end_xy=target_b,
+                    operation=str(intersect_mode.currentData()),
+                )
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Intersection rejected", str(exc))
+                return
+            self._commit_vector_path(
+                selected.item_id, edited,
+                label=f"{intersect_mode.currentData()} to line intersection",
+                target_node=opposite,
+                target_world_xy=(float(fixed[0]), float(fixed[1])),
+            )
+            refresh_topology_actions()
+
         def split_selected():
             _selected, index = current()
             if self._split_selected_vector_path(index):
@@ -1030,6 +1144,7 @@ class DirectSelectionMixin:
         split_path.clicked.connect(split_selected)
         trim_endpoint_button.clicked.connect(trim_selected_endpoint)
         extend_endpoint_button.clicked.connect(extend_selected_endpoint)
+        intersect_button.clicked.connect(fit_selected_endpoint)
         join_paths_button.clicked.connect(join_selected)
         move.clicked.connect(lambda: edit("move"))
         add.clicked.connect(lambda: edit("insert"))
