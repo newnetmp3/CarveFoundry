@@ -53,6 +53,10 @@ sparse and overlapping triangle scenes. Both Python CI lanes passed and
 full-array numerical equivalence checks are available. These results do
 not establish speed improvements on the developer's machine, and cutter
 contact/stock-sweep performance and parity remain separate future steps.
+An unmerged benchmark branch now compares Python and Rust cutter-contact
+compensation against smooth, missing-data and ridge height fields with
+flat/ball-like radial profiles. This benchmark changes no production CAM
+implementation and does not establish target-hardware speedups.
 
 **Keep shipping the native 2D CAD / snapping / CAM roadmap above and below.**
 The Rust migration is a parallel, opportunistic modernization track, **not**
@@ -208,10 +212,10 @@ AI/PyTorch inference initially.
    Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
    PR #80 merged closed-contour line/line corner chamfer and fillet,
    including seam-aware regression coverage, with both Python CI lanes green.
-   The next in-progress inspector milestone groups Direct Selection into
-   five scrollable tabs (Geometry, Snapping, Topology, Corners, Endpoints).
-   It retains the selected node and existing callbacks and persists the
-   active tab, but remains unverified until CI passes.
+   PR #82 merged the Direct Selection inspector into five scrollable
+   tabs (Geometry, Snapping, Topology, Corners, Endpoints), retaining the
+   selected node and callbacks and persisting the active tab. Both Python
+   CI lanes and the offscreen UI regressions passed.
    Curved junctions, general live snap indicators and physical KDE/Wayland
    pointer validation remain outstanding.
    Planar Union/Subtract/Intersect and signed Offset currently produce
