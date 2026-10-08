@@ -17,37 +17,31 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged baseline: `4964e3a9e2934812d78f04ca4f37d9cf4d9dbc85` (PR #63).
+- Last verified merged baseline: `b4edac447e64354658d0b7ea0fe170c849873da9` (PR #64).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — graphical cubic Bézier handles
+## Active development — stock-relative vector grid snapping
 
-- Previous [PR #63](https://github.com/newnetmp3/CarveFoundry/pull/63) merged successfully as `4964e3a9e2934812d78f04ca4f37d9cf4d9dbc85`. GitHub Actions run `37798718397` passed both Python 3.12 and Python 3.14 jobs.
-- Current branch: `feature/bezier-viewport-handles` from the merged `main` baseline. Active [PR #64](https://github.com/newnetmp3/CarveFoundry/pull/64).
-- Goal: display, pick and drag individual cubic Bézier controls using the existing native Wayland-compatible viewport input and Direct Selection event flow.
+- Verified main after PR #64: `b4edac447e64354658d0b7ea0fe170c849873da9`.
+- [PR #64](https://github.com/newnetmp3/CarveFoundry/pull/64) merged native Bézier handle overlay, picking and drag editing. The pre-docs head passed GitHub Actions run `37800878113` in Python 3.12 and 3.14; physical KDE/Wayland validation is still outstanding.
+- Branch: `feature/vector-grid-snapping` (new milestone).
+- Added pure `grid_snap_candidate` using stock-relative XY0, finite validated spacing and user tolerance.
+- Integrated an opt-in grid candidate into Direct Selection's geometry-snap chooser, prioritizing whichever candidate is closest.
+- Added inspector UI for enabling grid snapping and choosing its spacing, plus isolated grid geometry regression tests.
+- CI for the new branch is **not yet verified**. Grid snapping currently applies to Direct Selection node dragging, not every vector creation tool or Bézier handle drag.
 
-### Completed checkpoints on active branch
+### Next checkpoints
 
-1. Render amber cubic handles and gray anchor-to-control guide lines in native OpenGL overlay, retaining green anchor markers.
-2. Add pixel-distance handle hit testing and native pointer drag preview, with no separate event/proxy layer.
-3. Forward handle drag completion through a new signal in `native_viewport.py`, `viewport_widget.py` and `main_window.py`.
-4. Apply world-to-local drag through the merged `move_cubic_control` primitive. Keep transform-pivot compensation *inside* the undo/CAM invalidation transaction instead of correcting the transform afterward.
-5. Added an offscreen UI regression test for native control discovery, drag edit, and retained untouched opposite control.
-6. Opened PR #64. GitHub Actions run `37800878113` (run #1775) completed **successfully** for Python 3.12 and Python 3.14; physical KDE/Wayland GUI behavior remains **unverified**.
-7. Updated `docs/ROADMAP.md` with delivered Bézier interaction and the outstanding physical verification requirement.
-
-### Remaining checkpoints
-
-- [ ] Expand viewport/Direct Selection regression tests for screen-space picking, Undo/Redo and stale CAM behavior (initial handle discovery/drag test added).
-- [x] Both CI Python lanes passed for run `37800878113` on the pre-roadmap-edit head. Verify CI again after documentation changes.
-- [ ] Verify KDE/Wayland real mouse dragging when a physical environment is available.
-- [ ] Update roadmap wording only after integrated behavior passes CI.
-- [ ] Merge the active PR when green; update merged baseline and handover.
-- [ ] Continue with tangent/perpendicular/grid snapping, angle constraints and snap indicators; then trim/extend, fillet/chamfer and editable vector primitives.
+- [ ] Open the grid snapping PR, validate Python 3.12/3.14 CI and fix any issues.
+- [ ] Expand UI tests for toggle persistence and snapped node positions; confirm snap indicator status.
+- [ ] Decide and implement consistency for Bézier handle snapping and new-vector drawing tools.
+- [ ] Confirm UI on physical KDE/Wayland when hardware becomes available.
+- [ ] Merge only when CI passes and update the canonical baseline in this file.
+- [ ] Follow with tangent/perpendicular snapping, visual snap indicators, angle constraints and trim/extend.
 
 ### Known boundaries and safety invariants
 
@@ -71,3 +65,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Added Bézier viewport control drawing, picking and drag wiring | Branch `feature/bezier-viewport-handles`; tests and CI pending | Add UI regressions and validate |
 | 2026-10-08 | Opened PR #64 and added initial offscreen UI regression | CI run `37800820946` queued; no pass claimed | Inspect CI, fix failures and expand tests |
 | 2026-10-08 | PR #64 CI passed both Python lanes; roadmap synchronized | Run `37800878113` success; final docs head CI pending | Verify final CI and merge |
+| 2026-10-08 | PR #64 merged; grid snapping started | Merge `b4edac44`; branch `feature/vector-grid-snapping` | Validate grid snap PR |
