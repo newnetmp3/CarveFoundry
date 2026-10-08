@@ -5,6 +5,7 @@
 pub mod arrays;
 pub mod cam_readout;
 pub mod geometry;
+pub mod inlay;
 pub mod nesting;
 pub mod multi_sheet;
 pub mod plan_io;
