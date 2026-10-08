@@ -264,6 +264,8 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_world: np.ndarray | None = None
         self._node_drag_item: int | None = None
         self._control_drag_key: tuple[int, int] | None = None
+        self._control_angle_constrained = False
+        self._vector_angle_step_degrees = 45.0
 
         self._last_mouse_pos: QPointF | None = None
         self._press_pos: QPointF | None = None
@@ -749,6 +751,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_world = None
         self._node_drag_item = None
         self._control_drag_key = None
+        self._control_angle_constrained = False
         if enabled:
             self._camera_control_mode = False
             self._shape_draw_mode = None
@@ -879,6 +882,25 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
                 color=QVector4D(1.0, 0.7, 0.18, 1.0),
                 line_width=2.5,
             )
+            if (
+                self._control_angle_constrained
+                and self._control_drag_key is not None
+                and self._node_drag_world is not None
+            ):
+                x, y, z = (float(value) for value in self._node_drag_world)
+                marker = radius * 1.8
+                edges = np.asarray([
+                    [x - marker, y, z + 0.2], [x, y + marker, z + 0.2],
+                    [x, y + marker, z + 0.2], [x + marker, y, z + 0.2],
+                    [x + marker, y, z + 0.2], [x, y - marker, z + 0.2],
+                    [x, y - marker, z + 0.2], [x - marker, y, z + 0.2],
+                ], dtype=np.float32)
+                self._draw_lines(
+                    edges,
+                    view_projection=matrix,
+                    color=QVector4D(0.27, 0.84, 1.0, 1.0),
+                    line_width=3.0,
+                )
 
     def set_pen_sample_spacing(self, spacing_mm: float) -> None:
         self._pen_sample_spacing_mm = max(0.02, float(spacing_mm))

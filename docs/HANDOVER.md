@@ -17,29 +17,30 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged baseline: `a799d320c5bc45e93f24f7f7c38bbf9e2af88ae1` (PR #69).
+- Last verified merged baseline: `66450ec2c2547caa84a7b7e6aa795e268d8b0fd4` (PR #70).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — constrained Bézier handle drag
+## Active development — angle constraint feedback and configuration
 
-- Verified `main`: `a799d320c5bc45e93f24f7f7c38bbf9e2af88ae1`, PR #69 tangent/perpendicular geometry primitive merged with Python 3.12 and 3.14 CI green.
-- Active branch: `feature/bezier-angle-constraint`.
-- Added a pure `constrain_angle` helper snapping the direction from an explicit anchor to the nearest 45° increment while retaining radial distance, with validation and unit tests.
-- Holding **Shift** during native viewport Bézier control drag now previews and commits the angularly constrained world position. Regular unconstrained drag and its existing snap resolution remain available.
-- This does not yet connect tangent/perpendicular candidate acquisition, nor provide visual on-canvas snap indicators. The new interaction has not been physically tested on KDE/Wayland.
-- Rust conversion remains a parallel *planned* track; no Rust algorithms were migrated as part of this feature.
+- Last verified merged `main`: `66450ec2c2547caa84a7b7e6aa795e268d8b0fd4` (PR #70).
+- PR #70 Shift-constrained cubic handle dragging was merged after GitHub Actions run `37806907987` passed Python 3.12 and 3.14. Prior lint failure was fixed on that PR.
+- Active branch: `feature/angle-constraint-ui-feedback`.
+- Added blue angular-constraint marker to native control-handle overlay, shown only while Shift is constraining a control.
+- Added configurable angular increment (1-180 degrees, default 45) in Direct Selection. The setting is persisted in `QSettings` and forwarded to the embedded native viewport. Preview and commit use the same configured increment.
+- Added UI regression coverage for angle-step persistence and propagation. **CI and real KDE/Wayland interaction still unverified on this branch**.
+- This does not claim true automatic tangent/perpendicular snapping or all-vector preview snapping. Rust conversion remains a separate planned parallel track.
 
 ### Next checkpoints
 
-- [ ] Open PR and validate Python 3.12 and 3.14 CI; fix any regressions before merge.
-- [ ] Add Qt event-path interaction tests for modifier-sensitive cursor placement.
-- [ ] Connect tangent/perpendicular constraints with meaningful reference segment/anchor selection and visual indicators.
-- [ ] Add benchmark/parity harness for existing Python/Rust geometry and CAM kernels without delaying current CAD work.
-- [ ] Continue trim/extend and fillet/chamfer milestones.
+- [ ] Validate CI and merge angle configuration/feedback milestone.
+- [ ] Fix any Qt regression or wrong mouse modifier behavior.
+- [ ] Add true tangent/perpendicular acquisition with derivative-aware reference geometry.
+- [ ] Build Rust-vs-Python performance/parity baseline, without changing proven machine export behavior.
+- [ ] Continue trim/extend, fillet/chamfer and editable primitives; physical Wayland manual tests remain outstanding.
 
 ### Known boundaries and safety invariants
 
@@ -68,3 +69,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Reconciled green PR #66 implementation with merged PR #67 Rust-roadmap docs | Original #66 merge conflict; new branch based on `fb6ea1e` | Validate replacement PR CI |
 | 2026-10-08 | Merged PR #68 after green CI; added tangent/normal direction snap primitive and tests | Main `583d853`; new branch `feature/vector-orthogonal-snap-core` | Open PR and validate CI |
 | 2026-10-08 | Merged PR #69 and started Shift-constrained Bézier drag | Main `a799d32`; branch `feature/bezier-angle-constraint`; CI pending | Validate interaction PR |
+| 2026-10-08 | PR #70 merged with green CI; implemented configurable angular handle constraint and visual indicator | Merge `66450ec`; branch `feature/angle-constraint-ui-feedback` | Validate UI PR and integrate derivative snapping |
