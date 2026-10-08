@@ -200,8 +200,10 @@ AI/PyTorch inference initially.
    PR #79 merged an exact circular-radius line/line fillet with retained
    analytic arc geometry. Both are integrated with Direct Selection,
    Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
-   Closed-contour corners, curved junctions, broader snap indicators and
-   physical KDE/Wayland pointer validation remain outstanding.
+   Closed-contour line/line corner chamfer and fillet are in progress with
+   cyclic seam support and regression tests, but are not yet merged or
+   CI-verified. Curved junctions, broader snap indicators and physical
+   KDE/Wayland pointer validation remain outstanding.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
