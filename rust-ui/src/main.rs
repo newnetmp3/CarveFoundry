@@ -401,31 +401,26 @@ impl Studio {
             [(pointer.x - origin.x) as f64 / scale as f64,
             (origin.y - pointer.y) as f64 / scale as f64]
         };
-        if response.clicked() {
-            if let Some(pointer) = mouse {
-                let world = to_world(pointer);
-                self.selected = self.sheet.parts.iter().rev()
-                    .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
+        if response.clicked() && let Some(pointer) = mouse {
+            let world = to_world(pointer);
+            self.selected = self.sheet.parts.iter().rev()
+                .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
+        }
+        if response.drag_started() && let Some(pointer) = mouse {
+            let world = to_world(pointer);
+            self.selected = self.sheet.parts.iter().rev()
+                .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
+            if self.selected.is_some() {
+                self.remember();
+                self.dragging = true;
             }
         }
-        if response.drag_started() {
-            if let Some(pointer) = mouse {
-                let world = to_world(pointer);
-                self.selected = self.sheet.parts.iter().rev()
-                    .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
-                if self.selected.is_some() {
-                    self.remember();
-                    self.dragging = true;
-                }
-            }
-        }
-        if self.dragging && response.dragged() {
-            if let Some(id) = self.selected {
-                let delta = ui.input(|input| input.pointer.delta());
-                if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
-                    part.x += delta.x as f64 / scale as f64;
-                    part.y -= delta.y as f64 / scale as f64;
-                }
+        if self.dragging && response.dragged()
+            && let Some(id) = self.selected {
+            let delta = ui.input(|input| input.pointer.delta());
+            if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
+                part.x += delta.x as f64 / scale as f64;
+                part.y -= delta.y as f64 / scale as f64;
             }
         }
         if response.drag_stopped() {
