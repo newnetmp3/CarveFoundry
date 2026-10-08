@@ -130,13 +130,13 @@ stock registration, cutter-angle/toolpath pairing, real material fit, CNC
 simulation, fixture-aware preflight and NC export remain unimplemented here.
 Full CNC production integration, fit certification and physical QA still require separate validation.
 
-**Native precision stock grid — feature branch, pending CI:** A pure Rust
+**Native precision stock grid — PR #94 merged and CI passed:** A pure Rust
 stock-XY0 snapping primitive uses finite bounded millimetre grid pitch and
 absolute pointer displacement to prevent sub-grid per-frame rounding loss.
 Rust Studio adds an opt-in drag-to-grid toggle and selected-object alignment.
 Undo/Redo and the existing guarded placement transaction are retained.
 This does not implement vector node snapping, CAM path constraints, new
-CF3D editing semantics or NC safety parity. Do not call it merged before CI.
+CF3D editing semantics or NC safety parity. PR #94 passed 39 Rust unit tests, strict Clippy, Linux release compilation and Python 3.12/3.14 CI. Native node, midpoint and edge snapping remain open milestones.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
