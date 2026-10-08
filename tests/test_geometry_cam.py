@@ -11,6 +11,8 @@ from carvefoundry.cam.basic_ops import (
 from carvefoundry.cam.raster import RasterLinkMode
 from carvefoundry.cam.toolpath import MoveKind
 from carvefoundry.cam.vector_ops import (
+    editable_vector_centerline,
+    editable_vector_regions,
     geometry_center_drill,
     geometry_drill,
     geometry_engrave,
@@ -21,7 +23,9 @@ from carvefoundry.cam.vector_ops import (
     geometry_v_carving,
     projected_regions,
 )
+from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.tools import Cutter, ToolType
+from carvefoundry.core.vector_path import VectorPath, VectorSegment
 
 
 def _extrude(geometry, depth: float = 3.0) -> trimesh.Trimesh:
@@ -341,3 +345,51 @@ def test_center_drill_uses_each_disconnected_region_centroid() -> None:
         and move.z_mm == pytest.approx(1.5)
     ]
     assert len(safe_rapids) == 2
+
+
+def test_retained_curve_geometry_feeds_2d_cam_without_mesh_reprojection() -> None:
+    path = VectorPath(
+        ((0, 0), (10, 0), (20, 0)),
+        width_mm=1.0,
+        depth_mm=2.0,
+        segments=(
+            VectorSegment.arc(180.0),
+            VectorSegment.cubic((12, 6), (18, 6)),
+        ),
+    )
+    item = ProjectItem(
+        "Curved path",
+        kind="pen",
+        mesh=path.mesh_asset(),
+        vector_path=path,
+    )
+    centerline = editable_vector_centerline(item)
+    regions = editable_vector_regions(item)
+
+    assert centerline is not None
+    assert regions is not None
+    assert regions.area > 15.0
+    assert np.min(centerline[:, 1]) == pytest.approx(-5.0, abs=0.03)
+    assert np.max(centerline[:, 1]) > 4.0
+
+    cutter = Cutter("1 mm flat", ToolType.FLAT_END_MILL, 1.0)
+    settings = _settings(overall_depth_mm=0.5)
+    engrave = geometry_engrave(
+        item.transformed_mesh(),
+        cutter,
+        settings,
+        paths_xy=[centerline],
+    )
+    profile = geometry_profile(
+        item.transformed_mesh(),
+        cutter,
+        settings,
+        offset_mode="outside",
+        regions=regions,
+    )
+
+    engrave_xy = _cut_xy(engrave)
+    profile_xy = _cut_xy(profile)
+    assert np.min(engrave_xy[:, 1]) == pytest.approx(-5.0, abs=0.05)
+    assert np.max(engrave_xy[:, 1]) > 4.0
+    assert len(profile_xy) > 20
