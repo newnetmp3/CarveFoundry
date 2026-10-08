@@ -586,3 +586,27 @@ def test_direct_selection_endpoint_trim_updates_retained_curve_and_ui():
         assert not item.vector_path.closed
     finally:
         window.close()
+
+
+def test_direct_selection_line_extension_preserves_opposite_world_endpoint():
+    path = VectorPath(((0, 0), (20, 0)), segments=(VectorSegment.line(),))
+    item = ProjectItem("Line", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        extend = dialog.findChild(QPushButton, "VectorExtendEndpoint")
+        amount = dialog.findChild(QDoubleSpinBox, "VectorEndpointExtendDistance")
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        assert extend is not None and amount is not None and table is not None
+        table.setCurrentCell(0, 0)
+        opposite_before = tuple(node_world_points(item)[-1, :2])
+        amount.setValue(6.0)
+        assert extend.isEnabled()
+        extend.click()
+        assert item.vector_path.points_xy[0] == pytest.approx((-6.0, 0.0))
+        assert tuple(node_world_points(item)[-1, :2]) == pytest.approx(opposite_before)
+    finally:
+        window.close()
