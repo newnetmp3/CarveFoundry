@@ -22,11 +22,9 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.vector_path import (
     VectorSegment,
     arc_sweep_degrees,
-    chamfer_open_line_corner,
     close_path,
     edit_line_corner,
     extend_open_line_endpoint,
-    fillet_open_line_corner,
     fit_open_line_endpoint_to_segment,
     insert_node,
     join_paths,
