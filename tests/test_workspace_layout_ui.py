@@ -672,3 +672,30 @@ def test_direct_selection_chamfer_corner_preserves_fixed_world_anchor():
         assert tuple(node_world_points(item)[0, :2]) == pytest.approx(before)
     finally:
         window.close()
+
+
+def test_direct_selection_fillet_creates_retained_arc_and_fixed_anchor():
+    path = VectorPath(((0, 0), (10, 0), (10, 10)))
+    item = ProjectItem("Fillet", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        button = dialog.findChild(QPushButton, "VectorFilletCorner")
+        radius = dialog.findChild(QDoubleSpinBox, "VectorFilletRadius")
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        assert button is not None and radius is not None and table is not None
+        table.setCurrentCell(1, 0)
+        radius.setValue(2.0)
+        assert button.isEnabled()
+        before = tuple(node_world_points(item)[0, :2])
+        button.click()
+        assert item.vector_path.resolved_segments()[1].kind == "arc"
+        assert np.asarray(item.vector_path.points_xy[1:3]) == pytest.approx(
+            np.asarray(((8, 0), (10, 2)))
+        )
+        assert tuple(node_world_points(item)[0, :2]) == pytest.approx(before)
+    finally:
+        window.close()
