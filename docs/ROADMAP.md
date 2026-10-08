@@ -138,7 +138,7 @@ Undo/Redo and the existing guarded placement transaction are retained.
 This does not implement vector node snapping, CAM path constraints, new
 CF3D editing semantics or NC safety parity. PR #94 passed 39 Rust unit tests, strict Clippy, Linux release compilation and Python 3.12/3.14 CI. Native node, midpoint and edge snapping remain open milestones.
 
-**Rust Studio live contour alignment — feature branch, CI pending:** A
+**Rust Studio live contour alignment — PR #96 merged with green CI:** A
 bounded snap index in `rust-ui/src/vector_snap.rs` searches vertices, edge
 midpoints and edge projections of **other** layout polygons. The Studio
 dragging workflow grabs a nearby feature of the selected part, calculates
@@ -150,8 +150,9 @@ rejected, preserving free/grid movement. Tests cover vertex/midpoint/edge
 results, source exclusion, deterministic part order, malformed coordinates
 and resource limits. This does **not** implement direct editing of individual
 vector nodes, retention of imported analytic curves in the Rust format,
-CF3D topology writeback or any new CNC preflight capability. Do not mark
-merged until required Rust/Python CI passes.
+CF3D topology writeback or any new CNC preflight capability. PR #96 passed native Rust tests/strict Clippy/release, plus Python
+3.12/3.14 CI. Individual native vertex editing and protected analytic
+CF3D node writeback remain separate unimplemented milestones.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
