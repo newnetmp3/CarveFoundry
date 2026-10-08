@@ -103,6 +103,12 @@ planner failure. This is a bounded heuristic rather than globally optimal
 nesting; machine fixtures, actual grain vectors, cutter kerf, toolpath safety
 and CNC preflight remain responsibilities of the existing CAM application.
 
+The next active Rust-UI milestone adds **read-only typed CAM readiness inspection**
+backed by the original Python CF3D loader. It distinguishes disabled/stale/
+missing motion/stored but unverified motion, and explicitly forbids interpreting
+the report as a preflight or G-code authorization. The milestone is not merged
+or CI-validated until the Python and Rust workflows pass.
+
 ## Parallel architecture track — gradual Rust migration (planned)
 
 PR #81 merged the expanded native raster parity benchmark with sloped,
