@@ -204,15 +204,17 @@ class DirectSelectionMixin:
 
     def _control_drag_finished(
         self, item_index: int, segment_index: int, handle: int,
-        x_mm: float, y_mm: float,
+        x_mm: float, y_mm: float, constraint_kind: str = "",
     ) -> None:
         if not 0 <= item_index < len(self.project.items):
             return
         item = self.project.items[item_index]
         if item.locked or item.vector_path is None:
             return
-        snapped_xy, snap_kind = self._snap_vector_world_xy(
-            item.item_id, -1, (x_mm, y_mm),
+        snapped_xy, snap_kind = (
+            ((x_mm, y_mm), constraint_kind)
+            if constraint_kind in {"tangent", "perpendicular", "angle"}
+            else self._snap_vector_world_xy(item.item_id, -1, (x_mm, y_mm))
         )
         x_mm, y_mm = snapped_xy
         try:
@@ -617,7 +619,7 @@ class DirectSelectionMixin:
         angle_step.setDecimals(1)
         angle_step.setSuffix(" deg")
         angle_step.setToolTip(
-            "Hold Shift while dragging a Bezier control handle to constrain its angle."
+            "Shift: angle increment; Ctrl: adjacent tangent; Ctrl+Shift: normal."
         )
         angle_step.setValue(
             float(self._settings.value("vector/angle_step_degrees", 45.0))
