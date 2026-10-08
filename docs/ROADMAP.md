@@ -64,10 +64,12 @@ No source workspace from this native Rust layout may be mistaken for G-code.
 PR #84 merged the first Rust-native layout window after Cargo geometry
 tests, Linux release compilation and strict Clippy CI passed. PR #85 merged
 a read-only CF3D vector-outline and stock snapshot adapter after both Python
-CI lanes passed. The current integration milestone adds the **Import vectors
-(read-only)** Rust UI workflow and a separate KDE launcher; it is not a
-read/write CF3D engine bridge, does not preserve CNC operation metadata, and
-is not yet merged or CI validated.
+CI lanes passed. PR #86 merged the **Import vectors (read-only)** Rust UI workflow and a
+separate KDE launcher, with passing native Rust geometry/Clippy/release tests,
+shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
+read/write CF3D engine bridge; it does not retain CAM or fixture metadata
+inside the Rust layout, generate NC programs or replace full CNC preflight.
+The original PySide6 application stays available as the CNC authority.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
