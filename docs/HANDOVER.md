@@ -17,28 +17,29 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `1874f4946efd3cb6ef1efc4728f7046f1b215305` (PR #78).
+- Last verified merged feature baseline: `9930cef58b041d91f120ef20df96787eada1425a` (PR #79).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — retained circular fillet
+## Verified shipped CAD milestone batch — line trim/extend, chamfer and fillet
 
-- Verified merged baseline: PR #78, merge `1874f4946efd3cb6ef1efc4728f7046f1b215305`, GitHub Actions run `37819209001` passed Python 3.12 and 3.14.
-- Active branch `feature/analytic-line-fillet`; CI unverified, not merged.
-- Implemented `fillet_open_line_corner` for an interior line/line junction of an open retained contour. It calculates exact tangent endpoints from a supplied radius and stores the circular fillet as an analytic arc bulge (both clockwise and counterclockwise).
-- Direct Selection fillet radius/button use the existing history, mesh regeneration and CAM invalidation pipeline; the first world anchor is preserved across mesh pivot changes.
-- Tests cover exact center, radius, tangent endpoints, signed sweep, invalid radii/geometry, and offscreen Qt interaction.
-- Scope excludes closed-path fillets, curve/arc junctions, machine cutting and actual KDE/Wayland interaction verification. Gradual Rust conversion remains parallel, with the existing raster benchmark but no additional engine changes in this PR.
+- PR #77: interactive two-vector finite-line trim/extend, merged `f0319ed021b3374229b061aed89f0b1aa5742cbf`, GitHub Actions run `37816032041` passed.
+- PR #78: open-path line/line equal-setback chamfer with Direct Selection, merged `1874f4946efd3cb6ef1efc4728f7046f1b215305`; run `37819209001` passed Python 3.12 and Python 3.14.
+- PR #79: open-path line/line exact circular-radius fillet, Direct Selection, retained analytic bulge/arc and regression tests, merged `9930cef58b041d91f120ef20df96787eada1425a`; run `37819700239` passed both Python 3.12 and Python 3.14.
+- Current verified feature baseline: PR #79 merge `9930cef58b041d91f120ef20df96787eada1425a`.
+- These are **CI/offscreen verified only**. Physical KDE Plasma/Wayland interaction, actual router cutting, curved-segment junctions, and closed-contour chamfer/fillet are not verified or implemented.
+- The Rust migration track stays parallel; benchmark/parity harness landed earlier in PR #72, and representative hardware speed/memory results are still outstanding.
 
-### Next checkpoints
+### Next milestones
 
-- [ ] Confirm Python 3.12/3.14 CI and repair failures before merging.
-- [ ] Expand chamfer/fillet to closed contours and analytic curve junctions when safe.
-- [ ] Add broader live geometric snapping indicators and simplify inspector UI.
-- [ ] Expand Rust numerical parity benchmark cases and record representative hardware measurements.
+- [ ] Improve geometric snap previews and on-canvas snap-kind indicators beyond constrained cubic handles.
+- [ ] Extend analytic corner tools to closed contours with safe node count and wrap-around behavior, or validate arc/line fillets in a bounded slice.
+- [ ] Refine the crowded Direct Selection inspector into navigable geometry, topology and snap sections.
+- [ ] Add more Rust/Python parity fixtures for stock sweeps and cutter contact before moving additional kernels.
+- [ ] Verify CNC fixture/stock zero, stale CAM gating, and physical Wayland viewport behavior before any machining claim.
 
 ### Known boundaries and safety invariants
 
@@ -79,3 +80,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #76 merged green; interactive finite-line trim/extend UI added on new branch | Merge `e99e328`; CI pending on `feature/interactive-line-fit` | Validate UI and merge only if green |
 | 2026-10-08 | PR #77 merged after green CI; bounded open-line chamfer implemented with UI/tests | Main `f0319ed`; feature `feature/analytic-line-chamfer`, CI pending | Validate and merge chamfer PR |
 | 2026-10-08 | PR #78 chamfer merged green, analytic line fillet with UI and tests implemented | Main `1874f49`; branch `feature/analytic-line-fillet` | Validate PR CI before merge |
+| 2026-10-08 | Merged PR #79 after both Python CI lanes passed; interactive line-corner fillet completes three-PR CAD batch | Run `37819700239` success; merge `9930cef` | Live geometric indicators, safe closed-contour corners, Rust parity expansion |
