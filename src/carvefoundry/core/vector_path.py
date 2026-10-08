@@ -553,6 +553,55 @@ def fit_open_line_endpoint_to_segment(
     return result
 
 
+def chamfer_open_line_corner(
+    path: VectorPath, node_index: int, setback_mm: float,
+) -> VectorPath:
+    """Replace an open polyline's interior line/line corner with a chamfer.
+
+    The setback is measured on each adjoining segment from the old corner.
+    All other analytic segments are retained, and zero-length or oversize
+    setbacks fail before any project state can be changed.
+    """
+    path.validate()
+    if path.closed:
+        raise ValueError("Open the contour before chamfering a corner.")
+    if not 0 < node_index < len(path.points_xy) - 1:
+        raise ValueError("Chamfer requires an interior node.")
+    if not isfinite(setback_mm) or setback_mm <= 0:
+        raise ValueError("Chamfer setback must be positive and finite.")
+    segments = list(path.resolved_segments())
+    if (
+        segments[node_index - 1].kind != "line"
+        or segments[node_index].kind != "line"
+    ):
+        raise ValueError("Chamfer currently supports two adjoining straight segments.")
+    previous = _xy(path.points_xy[node_index - 1])
+    corner = _xy(path.points_xy[node_index])
+    following = _xy(path.points_xy[node_index + 1])
+    before = previous - corner
+    after = following - corner
+    length_before = float(np.linalg.norm(before))
+    length_after = float(np.linalg.norm(after))
+    if min(length_before, length_after) <= _EPS:
+        raise ValueError("Chamfer cannot use zero-length adjoining segments.")
+    if setback_mm >= min(length_before, length_after) - _EPS:
+        raise ValueError("Chamfer setback must be shorter than both segments.")
+    cross = float(before[0] * after[1] - before[1] * after[0])
+    if abs(cross) <= 1e-10 * length_before * length_after:
+        raise ValueError("Chamfer requires a genuine noncollinear corner.")
+    first = corner + before * (setback_mm / length_before)
+    second = corner + after * (setback_mm / length_after)
+    points = list(path.points_xy)
+    points[node_index:node_index + 1] = [
+        (float(first[0]), float(first[1])),
+        (float(second[0]), float(second[1])),
+    ]
+    segments.insert(node_index, VectorSegment.line())
+    result = replace(path, points_xy=tuple(points), segments=_canonical_segments(segments))
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:
