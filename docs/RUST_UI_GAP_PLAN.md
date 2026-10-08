@@ -1,24 +1,63 @@
-# Rust-native UI replacement — functional capability gap plan
+# Rust UI replacement — delivery-driven migration program
 
-The future UI is a **Rust-first desktop workspace**. CNC-critical data and
-machining behavior remain on the existing verified engine until equivalent
-cross-language functionality has passed direct parity, project roundtrip,
-preflight, and physical KDE Plasma/Wayland testing.
+The goal is to **retire the PySide6 interface**, not to duplicate one-off
+controls in an unrelated layout preview. Retain the Python CF3D serializer,
+CAM generation, machine-safety preflight and postprocessors behind strictly
+typed, versioned desktop↔engine boundaries until independently proven Rust
+equivalents exist. A Rust desktop with a Python CAM backend **counts as a full
+Python UI replacement**, not as a complete Python-language elimination.
 
-The order favors major production gaps rather than cosmetic button parity.
-Do not use external product names in UI or feature identifiers.
+**Measured replacement coverage: not yet established.** Prior ~25–30% visual/
+feature estimates were qualitative, not tests. The following phases have
+binary acceptance gates; work toward the earliest missing end-to-end workflow.
 
-| Priority | Area | Existing baseline | Rust-native delivery criterion |
+## Migration delivery gates (priority order)
+
+| Gate | Customer-visible workflow | Current state | Acceptance evidence |
 |---|---|---|---|
-| P0 | Sheet layout and nesting | Python rectangular batch grids; manual layer placement | Polygon-aware contour placement with real cuttable stock margins; expand from first-fit heuristic to rotation/grain, multiple sheets and waste reports |
-| P0 | Authoring primitives and array tools | Existing PySide6 shape and vector editor | Rust-native editable vector objects, stock XY0, direct manipulation, array-copy, shared CF3D editing |
-| P0 | Trusted engine boundary | Rust numerical PyO3 kernels and Python CAM | Versioned IPC/API with operation metadata, undo transactions, source UUID, signed stale-CAM state; no unverified G-code |
-| P1 | Inlay workflow | Generic two-sided/engraving jobs | Paired cavity/plug setup, typed clearance, consistent mirroring and simulation |
-| P1 | Toolpath templates | Persistent project operation settings | Saved, versioned reusable parameter/tool templates with safe cutter compatibility checks |
-| P1 | Toolpath merging/arrays | Current per-cutter NC stages | Validated compatible-op merge/order and repeated source mapping, never cross-tool silent merge |
-| P1 | Vector textures and editing | Curves, node editing, chamfer, fillet | Procedural texture fill, vector smoothing/distortion, accurate on-canvas trim and snapping |
-| P2 | Production automation | Existing user workflows and CarveWork | Permission-scoped script/extension points and batch recipe execution |
-| P2 | CNC view/simulation parity | Python simulated stock, posted NC preflight | Rust-side display and editing with the exact existing collision, stale-CAM, keep-out gates |
+| M0 | Open existing CF3D and see stock, all object identities, visible 2D vectors, 3D object inventory, fixtures and live CAM readiness in one Rust session | **In implementation** — `feature/rust-unified-cf3d-session` | One source deserialization/digest; safe background load; same-hash sections; no partial overwrite; no machine authorization |
+| M1 | Edit and save a complete native project from Rust | **Missing** except source-guarded XY-only new-file placement | Versioned atomic project edit API, UUIDs, analytic vectors, transformations, layers, stock/fixtures, full undo/redo, stale CAM and project roundtrips |
+| M2 | Author 2D vectors and manage parts in Rust, at Python CAD parity | **Partial** — native layout, arrays, nesting, object snapping | Direct node and curve editing, Pen/text, SVG/DXF import, groups/layers, constraints and all legacy project commands |
+| M3 | Manipulate and inspect actual 3D geometry from Rust | **Missing** (inventory is not a renderer) | Interactive mesh viewport, camera/gizmos/layers, import and undo, suitable real-world GPU performance on KDE Wayland |
+| M4 | Configure and generate all standard machining jobs from Rust UI | **Read-only CAM stage inspector and settings templates only** | Profile/pocket/engrave/V-Carving/3D/rest, cutter library, progress/cancel, op templates/arrays, project save/stale semantics; Python CAM can compute |
+| M5 | Preview, preflight and export full jobs without opening PySide6 | **Missing in Rust UI** | Toolpath + stock-removal view, source/work-zero/safety conditions, cutter-aware clamps/fences, posted-motion preflight, per-tool programs with explicit Z re-probe; no bypass |
+| M6 | Replace primary Linux launcher and retire Python GUI | **Not permitted yet** | CF3D golden corpus, Python/Rust workflow equivalence, crash recovery, accessibility, performance, physical KDE Plasma/Wayland and scrap-cut QA, rollback path |
+
+**The dependency order is M0 → M1 → M2/M3 → M4 → M5 → M6.**
+Move reusable numeric kernels to Rust alongside those gates when benchmarks
+and roundtrip parity warrant it. Do **not** prioritize Rust percentages,
+isolated UI cosmetics or unsafe direct CNC output over closing these gates.
+
+### Immediate execution batch — unified CF3D project context (M0)
+
+- Implement `carvefoundry.core.rust_project_session` using one trusted Python
+  load and one consistent SHA-256. Return typed stock, loss-aware 2D preview,
+  comprehensive item inventory, stock-relative fixture keep-outs and read-only
+  CAM-stage report. Reject oversized or internally inconsistent responses.
+- Open that session **on a worker** in `rust-ui`, update the whole document
+  atomically after validation; show missing 3D objects/fixtures/CAM truth in
+  a Job Setup panel, never fake editable 3D or preflight.
+- Preserve existing SHA-guarded **new-file-only XY transaction** and
+  conservative full CAM stale invalidation. No new CNC machine output.
+- Add Python and Rust tests for digest mismatch, invalid fixture data, source
+  change races, stable object identity and absence of motion/preflight claims.
+  Native Rust build/Clippy and Python 3.12/3.14 CI are required; real KDE
+  acceptance is a separate explicit gate.
+
+### First follow-on batch — M1 typed mutations
+
+Move from one-off Python subprocess commands to a **single versioned,
+auditable transaction protocol**: allowlisted commands, source SHA check,
+object UUIDs, immutable originals, atomic new file, direct validation in the
+Python domain model and forced downstream CAM invalidation. Add transaction
+preview, undo grouping and Rust-native conflict/reload UI. Start with stock
+and object transformations only where validated; **never** silently flatten
+analytic line/arc/Bézier geometry or ignore locked/hidden objects.
+
+## Historic capability gap inventory (retained for reference)
+
+The earlier feature-priority matrix is maintained below as a historical
+feature inventory, but the delivery gates above control execution.
 
 ## Initial migration slice
 
