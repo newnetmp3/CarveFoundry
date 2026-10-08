@@ -53,10 +53,11 @@ sparse and overlapping triangle scenes. Both Python CI lanes passed and
 full-array numerical equivalence checks are available. These results do
 not establish speed improvements on the developer's machine, and cutter
 contact/stock-sweep performance and parity remain separate future steps.
-An unmerged benchmark branch now compares Python and Rust cutter-contact
-compensation against smooth, missing-data and ridge height fields with
-flat/ball-like radial profiles. This benchmark changes no production CAM
-implementation and does not establish target-hardware speedups.
+PR #83 merged an opt-in Python/Rust cutter-contact benchmark for smooth,
+missing-data and ridge height fields with flat and ball-like radial footprints.
+Python 3.12/3.14 CI passed; native parity tests run when the PyO3 extension is
+available. It changes no production CAM code and does not establish real
+hardware speedups or memory savings.
 
 **Keep shipping the native 2D CAD / snapping / CAM roadmap above and below.**
 The Rust migration is a parallel, opportunistic modernization track, **not**
