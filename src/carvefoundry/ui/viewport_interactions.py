@@ -45,6 +45,20 @@ class ViewportInteractionMixin:
             and self._node_edit_mode
             and not event.modifiers() & Qt.KeyboardModifier.AltModifier
         ):
+            control = self._pick_cubic_control(event.position())
+            if control is not None:
+                self._control_drag_key = control
+                self._node_drag_item = self.selected_item_index
+                source = next(
+                    point for segment, handle, point, _anchor
+                    in self._editable_cubic_controls()
+                    if (segment, handle) == control
+                )
+                self._node_drag_world = source.copy()
+                self._interaction_mode = "control-drag"
+                self.requestUpdate()
+                event.accept()
+                return
             picked = self._pick_vector_node(event.position())
             if picked is not None:
                 self._node_drag_index = picked
@@ -214,7 +228,7 @@ class ViewportInteractionMixin:
 
         if (
             event.buttons() & Qt.MouseButton.LeftButton
-            and self._interaction_mode == "node-drag"
+            and self._interaction_mode in {"node-drag", "control-drag"}
             and self._node_drag_world is not None
         ):
             point = self._stock_plane_point(event.position())
@@ -345,6 +359,27 @@ class ViewportInteractionMixin:
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._interaction_mode == "control-drag"
+        ):
+            point = self._stock_plane_point(event.position())
+            if (
+                point is not None and self._control_drag_key is not None
+                and self._node_drag_item is not None
+            ):
+                segment, handle = self._control_drag_key
+                self.controlMoveRequested.emit(
+                    self._node_drag_item, segment, handle,
+                    float(point[0]), float(point[1]),
+                )
+            self._control_drag_key = None
+            self._node_drag_item = None
+            self._node_drag_world = None
+            self._interaction_mode = None
+            self.requestUpdate()
+            event.accept()
+            return
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self._interaction_mode == "node-drag"
