@@ -27,10 +27,20 @@ existing `carvefoundry` launcher remains unchanged. The installer rebuilds
 the Rust binary in release mode and configures the matching project's Python
 environment solely for read-only CF3D inspection.
 
-The in-progress CAM-status addition provides **Inspect CAM (read-only)**
+The merged CAM-status addition provides **Inspect CAM (read-only)**
 from the top toolbar. It reports saved operation identities, cutter types,
 stale/missing motion and disabled stages; no CNC output or preflight is exposed.
 This is informational only and runs on a worker thread.
+
+The next experimental production tool lets you choose a saved CAM stage and
+**export settings as JSON**, then apply those settings to a matching operation
+in another existing CF3D. It accepts only the same operation strategy, exact
+cutter geometry and parameter names/types. Both actions require a current
+source SHA-256. Applying settings creates a **new CF3D**; all previous
+toolpaths are deleted and all machining operations marked stale. This is
+not compatible with arbitrary cutters, does not create additional machining
+operations, and still requires generation and CNC preflight in the established
+application.
 
 ## Working tools in this slice
 

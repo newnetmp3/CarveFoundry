@@ -103,11 +103,16 @@ planner failure. This is a bounded heuristic rather than globally optimal
 nesting; machine fixtures, actual grain vectors, cutter kerf, toolpath safety
 and CNC preflight remain responsibilities of the existing CAM application.
 
-The next active Rust-UI milestone adds **read-only typed CAM readiness inspection**
-backed by the original Python CF3D loader. It distinguishes disabled/stale/
-missing motion/stored but unverified motion, and explicitly forbids interpreting
-the report as a preflight or G-code authorization. The milestone is not merged
-or CI-validated until the Python and Rust workflows pass.
+PR #91 merged the read-only Rust CAM stage inspector after Python
+3.12/3.14 and Rust/Linux CI passed. Its stored motion counts remain explicitly
+unverified; this is NOT a posted-G-code or fixture-aware preflight certificate.
+
+The active next production slice adds **versioned reusable CAM settings
+templates**. It exports parameters from one existing operation and can apply
+them to another existing operation with exactly matching strategy, cutter
+geometry and parameter schema. Applying always writes a NEW CF3D with all
+stored motion cleared and CAM intents stale; the Rust UI cannot export NC.
+This feature is not yet merged or CI validated.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 

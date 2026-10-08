@@ -17,7 +17,7 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `f53c72ed0a670c97c8ea71ec2b31e28861c84255` (PR #90).
+- Last verified merged feature baseline: `5adc90c33e40387e2a4b46bca74dc3582e7c19ec` (PR #91).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
@@ -32,19 +32,20 @@
 - The output CF3D is a **new project**. Users MUST open it in the existing CNC application, regenerate all paths and run full fixture-aware preflight before exporting any G-code. The native Rust UI is **not** a general-purpose CF3D editor, cannot rewrite analytic curves or 3D objects and does not bypass NC safety.
 - The companion Rust UI still supports read-only 3D-project vector snapshot, design shapes, single/multi-sheet layout and SVG output from PR #84–#88. Physical KDE Plasma Wayland and actual CNC router testing are unverified.
 
-### Active next milestone — typed CAM status in Rust Studio
+### Active next milestone — reusable validated CAM settings templates
 
-- New branch `feature/rust-cam-readiness-inspector` (unmerged; CI not yet verified). Last verified feature PR #90 `f53c72ed0a670c97c8ea71ec2b31e28861c84255`.
-- Added `src/carvefoundry/core/rust_cam_readout.py` using the authoritative CF3D loader and source SHA-256 recheck. Reports stable operation UUIDs, cutter identity/type/diameter, persisted motion counts, fixture count and states: disabled, stale, missing motion, motion present but **unverified**. No project or G-code write occurs.
-- Added strict Rust `cam_readout.rs` schema with count/fingerprint/safety-flag validation. The Studio's nonblocking **Inspect CAM (read-only)** action displays per-stage detail and rejects a mismatch with imported source fingerprint.
-- Added Python fixture tests and Rust schema regression tests. CNC preflight cannot be inferred from a saved motion list; Rust inspection always reports `preflight_verified=false` and `export_allowed_from_rust=false`.
+- Verified merged feature baseline: PR #91 `5adc90c33e40387e2a4b46bca74dc3582e7c19ec`. Native Rust CI `37850546540` passed tests/Clippy/release build; Python CI `37850546512` passed both 3.12 and 3.14. Rust CAM readout distinguishes stale, disabled, missing stored motion and stored-but-unverified stage output, never certifies preflight or permits NC export.
+- Active branch `feature/rust-cam-operation-templates` (no CI validation or merge yet). Adds `core/cam_settings_template.py` to export versioned JSON from a saved CF3D machining operation and apply its **parameter values only** to an existing operation of the exact same strategy, cutter geometry and parameter-key/type schema.
+- The Rust CAM inspector now selects a stage and exposes Export settings / Apply template to **NEW CF3D**. Actions execute the authoritative Python engine off the UI thread and use the current inspected source SHA-256 to refuse stale/mutated projects.
+- Applying settings preserves existing project object UUIDs, cutters, source links, stock and fixtures; all old saved toolpaths are removed and **every CAM stage is marked stale**. The source project is never overwritten. Fresh generation/simulation/fixture-aware preflight is mandatory in established CAM.
+- Tests cover cross-project settings transfer with same cutter, cutter mismatch, unknown/invalid parameter, stale source SHA and exclusive template/project outputs. These are **not yet verified by CI**. No inlay generator, CNC posting or complete Rust CAM engine is claimed.
 
 ### Next functional milestones
 
-- [ ] Run Rust unit/Clippy/release build and Python 3.12/3.14 CI. Fix failures, merge only on green.
-- [ ] Create reusable, versioned CAM parameter templates in the Python engine, validated against strategy, cutter type and source, then integrate with Rust without permitting unverified NC output.
-- [ ] Implement paired inlay pocket/plug setup with tool-radius/fit tolerance and geometric verification.
-- [ ] Precision snapping and grain/fixture aware nesting; real KDE Plasma/Wayland user testing.
+- [ ] Run and repair both Python CI lanes plus Rust tests/Clippy/Linux release for the template PR; merge only after green.
+- [ ] Add reusable templates to the original PySide6 machining panel or extend native Rust presets with user-defined labels and recognized strategy-specific semantic validation.
+- [ ] Implement paired pocket/plug inlay geometry and typed cutter/fit checks, still delegated to authoritative CAM before G-code.
+- [ ] Continue native snap precision, stock/grain/fixture-aware sheet optimization, and physical KDE/Wayland verification.
 
 ### Known boundaries and safety invariants
 
@@ -103,3 +104,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #89 merged guarded CF3D placement transaction engine; Rust Studio placement import/save-as-new UI and source validation added | Branch `feature/rust-ui-guarded-cf3d-placement`, CI pending | Verify both CI workflows, merge if green |
 | 2026-10-08 | PR #90 merged after Rust + both Python CI lanes passed; Rust Studio save-as-new CF3D XY placement bridge is active | Rust `37843070925`; Python `37843070724`; merge `f53c72ed` | Operation templates/inlay engine, physical KDE/CNC verification |
 | 2026-10-08 | Typed read-only CF3D CAM status inspector in Rust Studio and guarded Python report implemented | Branch `feature/rust-cam-readiness-inspector`, CI unverified | Validate/merge then typed strategy templates |
+| 2026-10-08 | PR #91 Rust CAM stage readout merged after all CI lanes passed; reusable CAM parameter template export/apply engine and Rust UI implemented | Main `5adc90c`; `feature/rust-cam-operation-templates` CI pending | Validate PR, then proceed to inlay workflow |
