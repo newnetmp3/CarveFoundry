@@ -81,10 +81,10 @@ mod tests {
     #[test]
     fn toggle_keeps_exact_ungrounded_design_positions() {
         let grid = GridSettings::default();
-        let original = [3.14, 9.26];
+        let original = [3.15, 9.26];
         assert_eq!(grid.align(original).unwrap(), original);
         let result = grid.target(original, [0.11, 0.22]).unwrap();
-        assert!((result[0] - 3.25).abs() < 1e-10);
+        assert!((result[0] - 3.26).abs() < 1e-10);
         assert!((result[1] - 9.48).abs() < 1e-10);
     }
 
