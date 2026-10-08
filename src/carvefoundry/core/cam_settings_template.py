@@ -66,7 +66,7 @@ def _validate_parameters(parameters: object) -> dict:
         if value is not None and type(value) not in {bool, int, float, str}:
             raise TemplateError(f"Unsupported parameter type: {name}")
         if isinstance(value, (float, int)) and not isinstance(value, bool):
-            if not isfinite(value) or abs(value) > 100_000:
+            if abs(value) > 100_000 or not isfinite(value):
                 raise TemplateError(f"Parameter {name} is nonfinite or exceeds bounds.")
         if isinstance(value, str) and len(value) > 2048:
             raise TemplateError(f"Text parameter {name} is too long.")
