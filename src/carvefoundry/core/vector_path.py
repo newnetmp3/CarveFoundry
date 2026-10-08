@@ -399,6 +399,61 @@ def _split_cubic(
     return middle, left, right
 
 
+def trim_open_endpoint(
+    path: VectorPath,
+    *,
+    at_start: bool,
+    fraction: float,
+) -> VectorPath:
+    """Shorten the first/last analytic segment to a parametric fraction.
+
+    Start trim keeps [fraction, 1]; end trim keeps [0, fraction].
+    This never silently flattens arcs/cubics into polylines. The caller
+    commits the edited path using normal project history/CAM invalidation.
+    """
+    path.validate()
+    if path.closed:
+        raise ValueError("Open the contour before trimming an endpoint.")
+    if not isfinite(fraction) or not 0.0 < fraction < 1.0:
+        raise ValueError("Trim fraction must be finite and strictly between 0 and 1.")
+    segment_index = 0 if at_start else path.segment_count - 1
+    current = path.resolved_segments()[segment_index]
+    start = _xy(path.points_xy[segment_index])
+    end = _xy(path.points_xy[segment_index + 1])
+    cut = _xy(segment_point(path, segment_index, fraction))
+    if np.linalg.norm(cut - (start if at_start else end)) <= _EPS:
+        raise ValueError("Trim would create a degenerate endpoint.")
+    if current.kind == "cubic":
+        p1 = _xy(current.control1_xy)
+        p2 = _xy(current.control2_xy)
+        ab = start + fraction * (p1 - start)
+        bc = p1 + fraction * (p2 - p1)
+        cd = p2 + fraction * (end - p2)
+        abc = ab + fraction * (bc - ab)
+        bcd = bc + fraction * (cd - bc)
+        new_segment = (
+            VectorSegment.cubic(tuple(bcd), tuple(cd))
+            if at_start else VectorSegment.cubic(tuple(ab), tuple(abc))
+        )
+    elif current.kind == "arc":
+        sweep = 4.0 * atan(current.bulge)
+        remaining_sweep = sweep * (1.0 - fraction if at_start else fraction)
+        new_segment = VectorSegment("arc", bulge=tan(remaining_sweep / 4.0))
+    else:
+        new_segment = VectorSegment.line()
+    points = list(path.points_xy)
+    points[segment_index if at_start else segment_index + 1] = (
+        float(cut[0]), float(cut[1]),
+    )
+    segments = list(path.resolved_segments())
+    segments[segment_index] = new_segment
+    result = replace(
+        path, points_xy=tuple(points), segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:

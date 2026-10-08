@@ -17,31 +17,29 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `d842c072c5434bd9cbf1cf2cd2f645aaa5bceda7` (PR #73).
+- Last verified main baseline: `c750eaac2845d5f79aac00a058274ae153a5cfc3` (after PR #73).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Verified batch: Bézier constraints and first Rust parity benchmark
+## Active development — analytic endpoint trim
 
-- PR #70 merged as `66450ec2c2547caa84a7b7e6aa795e268d8b0fd4`: Shift angle-constrained Bézier control dragging.
-- PR #71 merged as `5fc460f60f41a08c6f58c9ae3cf67c7ecc6c3d1f`: configurable angle step and active constraint indicator.
-- PR #72 merged as `c89b5872f9a514d33fab26a505036f7d544c9546`: optional Python/Rust raster parity benchmark and JSON report, with regression tests. GitHub Actions run `37809124842` passed Python 3.12 and 3.14; no workstation speedups or memory savings measured yet.
-- PR #73 merged as `d842c072c5434bd9cbf1cf2cd2f645aaa5bceda7`: Ctrl adjacent-tangent and Ctrl+Shift perpendicular alignment for cubic handles, typed Qt signal/Direct Selection commit, and green/cyan/purple modifier indicators. GitHub Actions run `37809732554` passed Python 3.12 and 3.14.
-- Superseded PR #66 was closed; equivalent reconciled work was merged earlier in PR #68.
-- These successes are CI/offscreen verification only: **physical KDE Plasma/Wayland pointer testing and real-machine machining remain unverified**. The directional snap uses the neighboring segment as reference; it does not enforce general exact C1/G1 continuity.
-- Existing CNC safety and export requirements remain in place. No production NC output is claimed newly validated by these CAD edits.
+- Verified starting main: `c750eaac2845d5f79aac00a058274ae153a5cfc3` (post-PR #73 roadmap checkpoint).
+- Active branch: `feature/analytic-endpoint-trim`, [PR #74](https://github.com/newnetmp3/CarveFoundry/pull/74).
+- Added immutable `trim_open_endpoint(path, at_start, fraction)`: trims first/last segment of an **open** path, preserving exact line, circular arc sweep, and cubic Bézier de Casteljau subcurve. Rejects closed paths, invalid fractions and degenerate cuts.
+- Added Direct Selection inspector UI with percentage input and Trim Selected Endpoint button, enabled only for open-path endpoints. Commits through existing Undo/Redo, regenerated mesh, and CAM invalidation. The opposite endpoint stays fixed in world XY despite bounding-box pivot shifts.
+- Added parametrized exact-curve tests, offscreen Qt UI regression and CF3D/history roundtrip coverage. GitHub Actions runs `37812523999` (initial head) and `37812647174` (latest tests head) have not reported pass yet; **this branch is not merged.** Real KDE/Wayland pointer and real CNC tests still outstanding.
+- The Rust migration track continues in parallel. PR #72 added an opt-in Python/Rust raster parity/benchmark harness; no developer-machine performance measurements or speedup claims have been recorded.
 
-### Next development milestones (start from current main)
+### Next checkpoints
 
-- [ ] General-purpose live geometric snap acquisition and accurate on-canvas indicators for vectors, not only cubic modifier constraints.
-- [ ] Native 2D trim/extend with line/arc/Bézier preservation and Undo/Redo/CAM source invalidation.
-- [ ] Fillet/chamfer operations with explicit radius and corner validation.
-- [ ] Editable circle/ellipse/polygon primitives and retained SVG/DXF contours.
-- [ ] Expand Rust migration: benchmark cutter-contact/stock-sweep kernels, compare parity and memory, then select a bounded numerical conversion rather than rewriting Qt.
-- [ ] Verify the native pointer interactions on physical KDE Plasma/Wayland and keep workshop fixture/preflight behavior unchanged.
+- [ ] Open PR and run Python 3.12/3.14 CI plus Ruff and Rust checks; fix any failures.
+- [ ] Merge only after required checks pass, then update verified main baseline here.
+- [ ] Extend trim toward intersection-aware segment trim and extend, including arc/curve intersection correctness.
+- [ ] Implement validated fillet/chamfer and broader live geometric snap indicators.
+- [ ] Expand numerical Python/Rust parity and benchmark coverage; preserve CNC preflight.
 
 ### Known boundaries and safety invariants
 
@@ -74,3 +72,5 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #71 merged after green CI; added Python/Rust raster benchmark infrastructure and regression tests | Main `5fc460f`; branch `feature/native-raster-parity-baseline`; CI pending | Validate benchmark PR and collect representative measurements |
 | 2026-10-08 | PR #72 benchmark/parity infrastructure merged after both CI lanes passed; adjacent tangent/normal handle constraints implemented on fresh branch | Merge `c89b587`; branch `feature/adjacent-tangent-normal-handle-drag` | Open PR, validate CI, review GUI interaction |
 | 2026-10-08 | PR #73 modifier-driven cubic tangent/normal alignment merged; rolling batch handover finalized | Run `37809732554` green both Python lanes; feature merge `d842c072` | Live snap indicators and trim/extend; expand Rust parity benchmarking |
+| 2026-10-08 | Began exact line/arc/Bézier open endpoint trim with Direct Selection UI and tests | Branch `feature/analytic-endpoint-trim`; CI pending | Open PR, validate, merge only when green |
+| 2026-10-08 | PR #74 opened; added CF3D/history trim regression and verified latest CI run queued | Commit `d631bb4`; run `37812647174` pending | Review results and merge only when green |

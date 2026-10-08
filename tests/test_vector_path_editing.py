@@ -27,6 +27,7 @@ from carvefoundry.core.vector_path import (
     segment_point,
     set_segment,
     split_path_at_node,
+    trim_open_endpoint,
     world_xy_to_local,
 )
 
@@ -349,3 +350,73 @@ def test_move_cubic_handle_roundtrips_project_and_history(tmp_path):
     assert load_project(save_project(project, tmp_path / "handles.cf3d")).items[0].vector_path == edited
     restore_workspace(project, snapshot)
     assert project.items[0].vector_path == source
+
+
+@pytest.mark.parametrize("kind", ["line", "arc", "cubic"])
+@pytest.mark.parametrize("at_start", [True, False])
+def test_endpoint_trim_preserves_analytic_segment_and_original_subcurve(
+    kind: str, at_start: bool,
+) -> None:
+    segment = {
+        "line": VectorSegment.line(),
+        "arc": VectorSegment.arc(120.0),
+        "cubic": VectorSegment.cubic((3, 8), (7, -3)),
+    }[kind]
+    original = VectorPath(((0, 0), (10, 0)), segments=(segment,))
+    fraction = 0.35
+    trimmed = trim_open_endpoint(
+        original, at_start=at_start, fraction=fraction,
+    )
+    assert trimmed.resolved_segments()[0].kind == kind
+    assert trimmed.points_xy[0 if at_start else 1] == pytest.approx(
+        segment_point(original, 0, fraction)
+    )
+    assert trimmed.points_xy[1 if at_start else 0] == original.points_xy[
+        1 if at_start else 0
+    ]
+    for index in range(11):
+        t = index / 10.0
+        source_t = fraction + (1 - fraction) * t if at_start else fraction * t
+        assert segment_point(trimmed, 0, t) == pytest.approx(
+            segment_point(original, 0, source_t), abs=1e-7,
+        )
+
+
+def test_endpoint_trim_keeps_unedited_segments_and_refuses_closed_path() -> None:
+    original = VectorPath(
+        ((0, 0), (10, 0), (20, 5)),
+        segments=(VectorSegment.line(), VectorSegment.cubic((12, 4), (18, 8))),
+    )
+    edited = trim_open_endpoint(original, at_start=True, fraction=0.4)
+    assert edited.resolved_segments()[1] == original.resolved_segments()[1]
+    assert edited.points_xy[-1] == original.points_xy[-1]
+    closed = VectorPath(
+        ((0, 0), (10, 0), (10, 10)), closed=True,
+    )
+    with pytest.raises(ValueError):
+        trim_open_endpoint(closed, at_start=True, fraction=0.5)
+
+
+@pytest.mark.parametrize("fraction", [0, 1, -0.1, 1.1, float("nan"), float("inf")])
+def test_endpoint_trim_rejects_invalid_fraction(fraction: float) -> None:
+    with pytest.raises(ValueError):
+        trim_open_endpoint(
+            VectorPath(((0, 0), (10, 0))),
+            at_start=True, fraction=fraction,
+        )
+
+
+def test_trimmed_analytic_curve_roundtrips_and_history_restores(tmp_path) -> None:
+    original = VectorPath(
+        ((0, 0), (10, 0)),
+        segments=(VectorSegment.cubic((2, 8), (8, -5)),),
+    )
+    item = ProjectItem("Trim", kind="pen", mesh=original.mesh_asset(), vector_path=original)
+    project = Project(items=[item])
+    snapshot = capture_workspace(project)
+    changed = trim_open_endpoint(original, at_start=True, fraction=0.4)
+    apply_vector_edit(item, changed)
+    saved = save_project(project, tmp_path / "trimmed-curve.cf3d")
+    assert load_project(saved).items[0].vector_path == changed
+    restore_workspace(project, snapshot)
+    assert project.items[0].vector_path == original
