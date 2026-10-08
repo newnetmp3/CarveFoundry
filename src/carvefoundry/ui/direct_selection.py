@@ -571,6 +571,21 @@ class DirectSelectionMixin:
         actions.addWidget(delete)
         layout.addLayout(actions)
 
+        topology_heading = QLabel("Path topology", dialog)
+        topology_heading.setObjectName("SectionHeading")
+        layout.addWidget(topology_heading)
+        topology_actions = QHBoxLayout()
+        open_close = QPushButton("Close Path", dialog)
+        open_close.setObjectName("VectorOpenClosePath")
+        split_path = QPushButton("Split at Node", dialog)
+        split_path.setObjectName("VectorSplitPath")
+        join_paths_button = QPushButton("Join 2 Selected", dialog)
+        join_paths_button.setObjectName("VectorJoinPaths")
+        topology_actions.addWidget(open_close)
+        topology_actions.addWidget(split_path)
+        topology_actions.addWidget(join_paths_button)
+        layout.addLayout(topology_actions)
+
         def current():
             selected = self._editable_vector_item()
             index = table.currentRow()
@@ -579,6 +594,33 @@ class DirectSelectionMixin:
             if not 0 <= index < len(selected.vector_path.points_xy):
                 return None, -1
             return selected, index
+
+        def refresh_topology_actions():
+            selected, index = current()
+            path = selected.vector_path if selected is not None else None
+            if path is None:
+                open_close.setEnabled(False)
+                split_path.setEnabled(False)
+            else:
+                open_close.setText(
+                    "Open at Node" if path.closed else "Close Path"
+                )
+                open_close.setEnabled(path.closed or len(path.points_xy) >= 3)
+                split_path.setEnabled(
+                    not path.closed
+                    and 0 < index < len(path.points_xy) - 1
+                )
+            selected_indices = self._selected_design_indices()
+            join_paths_button.setEnabled(
+                len(selected_indices) == 2
+                and all(
+                    0 <= item_index < len(self.project.items)
+                    and not self.project.items[item_index].locked
+                    and self.project.items[item_index].vector_path is not None
+                    and not self.project.items[item_index].vector_path.closed
+                    for item_index in selected_indices
+                )
+            )
 
         def refresh_segment_fields():
             selected, index = current()
@@ -634,6 +676,7 @@ class DirectSelectionMixin:
             x.setValue(float(point[0]))
             y.setValue(float(point[1]))
             refresh_segment_fields()
+            refresh_topology_actions()
 
         def segment_kind_changed():
             kind = str(segment_kind.currentData())
@@ -676,6 +719,46 @@ class DirectSelectionMixin:
                 target_world_xy=anchor,
             )
             refresh_segment_fields()
+
+        def toggle_open_closed():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            anchor = node_world_points(selected)[index]
+            target_xy = (float(anchor[0]), float(anchor[1]))
+            try:
+                if selected.vector_path.closed:
+                    changed = open_path_at_node(selected.vector_path, index)
+                    target_node = 0
+                    label = "open vector path"
+                else:
+                    changed = close_path(selected.vector_path)
+                    target_node = index
+                    label = "close vector path"
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid vector topology", str(exc))
+                return
+            if self._commit_vector_path(
+                selected.item_id,
+                changed,
+                label=label,
+                target_node=target_node,
+                target_world_xy=target_xy,
+            ):
+                table.setCurrentCell(target_node, 0)
+                refresh_topology_actions()
+
+        def split_selected():
+            _selected, index = current()
+            if self._split_selected_vector_path(index):
+                self._refresh_vector_node_inspector()
+                refresh_topology_actions()
+
+        def join_selected():
+            if self._join_selected_vector_paths():
+                self._refresh_vector_node_inspector()
+                table.setCurrentCell(0, 0)
+                refresh_topology_actions()
 
         def edit(kind: str):
             selected, index = current()
@@ -726,14 +809,18 @@ class DirectSelectionMixin:
             lambda _index: segment_kind_changed()
         )
         apply_segment.clicked.connect(apply_selected_segment)
+        open_close.clicked.connect(toggle_open_closed)
+        split_path.clicked.connect(split_selected)
+        join_paths_button.clicked.connect(join_selected)
         move.clicked.connect(lambda: edit("move"))
         add.clicked.connect(lambda: edit("insert"))
         delete.clicked.connect(lambda: edit("delete"))
 
         footer = QLabel(
             "Retained paths support line, circular-arc and cubic Bezier segments. "
-            "Imported and Boolean-result meshes are not silently converted. "
-            "On a 3D-tilted path, reset X/Y tilt before editing XY geometry."
+            "Open/close/split preserve analytic segments; Join uses the snap tolerance "
+            "and requires planar paths with compatible stroke geometry. Imported and "
+            "Boolean-result meshes are not silently converted."
         )
         footer.setWordWrap(True)
         layout.addWidget(footer)
