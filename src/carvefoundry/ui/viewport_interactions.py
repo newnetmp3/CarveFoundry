@@ -58,6 +58,7 @@ class ViewportInteractionMixin:
                 )
                 self._node_drag_world = source.copy()
                 self._interaction_mode = "control-drag"
+                self._control_angle_constrained = False
                 self.requestUpdate()
                 event.accept()
                 return
@@ -235,16 +236,20 @@ class ViewportInteractionMixin:
         ):
             point = self._stock_plane_point(event.position())
             if point is not None:
-                if (
+                self._control_angle_constrained = bool(
                     self._interaction_mode == "control-drag"
-                    and self._control_drag_key is not None
                     and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                )
+                if (
+                    self._control_angle_constrained
+                    and self._control_drag_key is not None
                 ):
                     for segment, handle, _control, anchor in self._editable_cubic_controls():
                         if (segment, handle) == self._control_drag_key:
                             point[:2] = constrain_angle(
                                 (float(point[0]), float(point[1])),
                                 (float(anchor[0]), float(anchor[1])),
+                                self._vector_angle_step_degrees,
                             )
                             break
                 self._node_drag_world[:2] = point[:2]
@@ -388,6 +393,7 @@ class ViewportInteractionMixin:
                         point[:2] = constrain_angle(
                             (float(point[0]), float(point[1])),
                             (float(anchor[0]), float(anchor[1])),
+                            self._vector_angle_step_degrees,
                         )
                         break
             if (
@@ -400,6 +406,7 @@ class ViewportInteractionMixin:
                     float(point[0]), float(point[1]),
                 )
             self._control_drag_key = None
+            self._control_angle_constrained = False
             self._node_drag_item = None
             self._node_drag_world = None
             self._interaction_mode = None
