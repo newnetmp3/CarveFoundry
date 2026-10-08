@@ -9,7 +9,11 @@ import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
 
-from carvefoundry.core.vector_snapping import constrain_angle
+from carvefoundry.core.vector_snapping import (
+    adjacent_control_reference,
+    constrain_angle,
+    directional_snap_candidate,
+)
 
 
 class ViewportInteractionMixin:
@@ -28,6 +32,52 @@ class ViewportInteractionMixin:
         )
         pan = np.asarray(self.camera.pan_world, dtype=float) + world_delta
         self.camera.pan_world = tuple(float(value) for value in pan)
+
+    def _constrain_cubic_drag(
+        self, point: np.ndarray, modifiers: Qt.KeyboardModifier,
+    ) -> str | None:
+        """Apply visible modifier constraints before committing retained XY."""
+        key = self._control_drag_key
+        index = self._node_drag_item
+        self._control_angle_constrained = False
+        self._control_constraint_kind = None
+        if key is None or index is None or self.project is None:
+            return None
+        if not 0 <= index < len(self.project.items):
+            return None
+        segment, handle = key
+        target = (float(point[0]), float(point[1]))
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            reference = adjacent_control_reference(
+                self.project.items[index], segment, handle,
+            )
+            if reference is not None:
+                anchor, direction = reference
+                tolerance = float(np.hypot(
+                    target[0] - anchor[0], target[1] - anchor[1],
+                )) + 1e-6
+                candidate = directional_snap_candidate(
+                    target, anchor, direction, tolerance,
+                    perpendicular=bool(modifiers & Qt.KeyboardModifier.ShiftModifier),
+                )
+                if candidate is not None:
+                    point[:2] = candidate.point_xy
+                    self._control_angle_constrained = True
+                    self._control_constraint_kind = candidate.kind
+                    return candidate.kind
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            for candidate_segment, candidate_handle, _control, anchor in (
+                self._editable_cubic_controls()
+            ):
+                if (candidate_segment, candidate_handle) == key:
+                    point[:2] = constrain_angle(
+                        target, (float(anchor[0]), float(anchor[1])),
+                        self._vector_angle_step_degrees,
+                    )
+                    self._control_angle_constrained = True
+                    self._control_constraint_kind = "angle"
+                    return "angle"
+        return None
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         self._last_mouse_pos = event.position()
@@ -59,6 +109,7 @@ class ViewportInteractionMixin:
                 self._node_drag_world = source.copy()
                 self._interaction_mode = "control-drag"
                 self._control_angle_constrained = False
+                self._control_constraint_kind = None
                 self.requestUpdate()
                 event.accept()
                 return
@@ -236,22 +287,8 @@ class ViewportInteractionMixin:
         ):
             point = self._stock_plane_point(event.position())
             if point is not None:
-                self._control_angle_constrained = bool(
-                    self._interaction_mode == "control-drag"
-                    and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
-                )
-                if (
-                    self._control_angle_constrained
-                    and self._control_drag_key is not None
-                ):
-                    for segment, handle, _control, anchor in self._editable_cubic_controls():
-                        if (segment, handle) == self._control_drag_key:
-                            point[:2] = constrain_angle(
-                                (float(point[0]), float(point[1])),
-                                (float(anchor[0]), float(anchor[1])),
-                                self._vector_angle_step_degrees,
-                            )
-                            break
+                if self._interaction_mode == "control-drag":
+                    self._constrain_cubic_drag(point, event.modifiers())
                 self._node_drag_world[:2] = point[:2]
                 self.requestUpdate()
             event.accept()
@@ -383,19 +420,10 @@ class ViewportInteractionMixin:
             and self._interaction_mode == "control-drag"
         ):
             point = self._stock_plane_point(event.position())
-            if (
-                point is not None and self._control_drag_key is not None
-                and self._node_drag_item is not None
-                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
-            ):
-                for segment, handle, _control, anchor in self._editable_cubic_controls():
-                    if (segment, handle) == self._control_drag_key:
-                        point[:2] = constrain_angle(
-                            (float(point[0]), float(point[1])),
-                            (float(anchor[0]), float(anchor[1])),
-                            self._vector_angle_step_degrees,
-                        )
-                        break
+            constraint = (
+                self._constrain_cubic_drag(point, event.modifiers())
+                if point is not None else None
+            )
             if (
                 point is not None and self._control_drag_key is not None
                 and self._node_drag_item is not None
@@ -403,10 +431,11 @@ class ViewportInteractionMixin:
                 segment, handle = self._control_drag_key
                 self.controlMoveRequested.emit(
                     self._node_drag_item, segment, handle,
-                    float(point[0]), float(point[1]),
+                    float(point[0]), float(point[1]), constraint or "",
                 )
             self._control_drag_key = None
             self._control_angle_constrained = False
+            self._control_constraint_kind = None
             self._node_drag_item = None
             self._node_drag_world = None
             self._interaction_mode = None
