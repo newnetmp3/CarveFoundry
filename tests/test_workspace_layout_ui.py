@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QPushButton,
+    QTableWidget,
 )
 
 from carvefoundry.cam.operation import CamOperation
@@ -28,6 +29,7 @@ from carvefoundry.core.vector_path import (
     VectorSegment,
     segment_world_controls,
     segment_world_point,
+    node_world_points,
 )
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
@@ -552,5 +554,35 @@ def test_ctrl_cubic_handle_drag_previews_and_commits_neighbor_tangent():
         assert kind == "perpendicular"
         assert native._control_constraint_kind == "perpendicular"
         assert normal[0] == pytest.approx(updated_origin[0])
+    finally:
+        window.close()
+
+
+def test_direct_selection_endpoint_trim_updates_retained_curve_and_ui():
+    path = VectorPath(
+        ((0, 0), (20, 0)),
+        segments=(VectorSegment.cubic((4, 7), (16, 7)),),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        trim = dialog.findChild(QPushButton, "VectorTrimEndpoint")
+        fraction = dialog.findChild(QDoubleSpinBox, "VectorEndpointTrimPercent")
+        assert trim is not None and fraction is not None
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        assert table is not None
+        table.setCurrentCell(0, 0)
+        fraction.setValue(30.0)
+        assert trim.isEnabled()
+        opposite_before = tuple(node_world_points(item)[-1, :2])
+        trim.click()
+        assert item.vector_path.points_xy[0] != (0, 0)
+        assert item.vector_path.resolved_segments()[0].kind == "cubic"
+        assert tuple(node_world_points(item)[-1, :2]) == pytest.approx(opposite_before)
+        assert not item.vector_path.closed
     finally:
         window.close()
