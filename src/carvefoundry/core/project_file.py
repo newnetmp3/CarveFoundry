@@ -1243,8 +1243,8 @@ def _load_native_item(
                     if not isinstance(kind, str):
                         raise TypeError("Vector segment kind must be text.")
 
-                    def control(name: str):
-                        raw_control = raw_segment.get(name)
+                    def control(name: str, segment_data=raw_segment):
+                        raw_control = segment_data.get(name)
                         if raw_control is None:
                             return None
                         if (
