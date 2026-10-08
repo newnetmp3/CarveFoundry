@@ -38,3 +38,16 @@ def test_raster_benchmark_cli_can_write_machine_readable_report(tmp_path, monkey
     content = path.read_text(encoding="utf-8")
     assert '"kernel": "rasterize_top_surface"' in content
     assert '"rust_available": false' in content
+
+
+def test_raster_benchmark_checks_compiled_kernel_parity_when_available(monkeypatch):
+    from carvefoundry.cam.native import native_available
+
+    if not native_available():
+        pytest.skip("Compiled native kernel is unavailable")
+    monkeypatch.setenv("CARVEFOUNDRY_CAM_BACKEND", "rust")
+    result = benchmark(16, 1, rust=True)
+    assert result["parity"] == "pass"
+    assert result["max_abs_error_mm"] is not None
+    assert result["max_abs_error_mm"] < 1e-8
+    assert result["rust_median_ms"] >= 0.0
