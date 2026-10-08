@@ -292,10 +292,10 @@ pub fn export_pair(
         fs::write(directory.join("plug-outline.svg"), document(plan, &plan.plug_xy, "plug-outline"))
             .map_err(|e| e.to_string())?;
         fs::write(directory.join("inlay-design.json"), json).map_err(|e| e.to_string())?;
-        if let Some(link) = source {
-            if sha256_file(Path::new(&link.source_path))? != link.source_sha256 {
-                return Err("Source CF3D changed while exporting; design output discarded".into());
-            }
+        if let Some(link) = source
+            && sha256_file(Path::new(&link.source_path))? != link.source_sha256
+        {
+            return Err("Source CF3D changed while exporting; design output discarded".into());
         }
         Ok(())
     })();
@@ -351,17 +351,13 @@ mod tests {
         let (s, p) = sheet_and_part(rectangle(2.0, 2.0));
         assert!(plan(&s, &p, &InlaySettings::default()).is_err());
         let (s, p) = sheet_and_part(rectangle(50.0, 30.0));
-        let mut config = InlaySettings::default();
-        config.fit_clearance_mm = f64::NAN;
+        let config = InlaySettings { fit_clearance_mm: f64::NAN, ..Default::default() };
         assert!(plan(&s, &p, &config).is_err());
-        config = InlaySettings::default();
-        config.plug_depth_mm = 30.0;
+        let config = InlaySettings { plug_depth_mm: 30.0, ..Default::default() };
         assert!(plan(&s, &p, &config).is_err());
-        config = InlaySettings::default();
-        config.engagement_mm = 4.0;
+        let config = InlaySettings { engagement_mm: 4.0, ..Default::default() };
         assert!(plan(&s, &p, &config).is_err());
-        config = InlaySettings::default();
-        config.pocket_stock_thickness_mm = 1.0;
+        let config = InlaySettings { pocket_stock_thickness_mm: 1.0, ..Default::default() };
         assert!(plan(&s, &p, &config).is_err());
     }
     #[test]
