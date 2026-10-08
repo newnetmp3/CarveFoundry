@@ -17,28 +17,27 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `85aa914cb809023909ccebfbd9f40ac5499f36c7` (PR #81).
+- Last verified merged feature baseline: `d0d239037bf4f43bae7c8ea8b4268d1d6a1901ae` (PR #82).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — Direct Selection inspector navigation
+## Active development — cutter-contact numerical parity benchmark
 
-- Verified base: PR #81 merge `85aa914cb809023909ccebfbd9f40ac5499f36c7`, followed by main doc checkpoint `a75e43a8a6b1167dca7b8c8af71aff3c785fbf26`. GitHub Actions run `37821725814` passed Python 3.12 and 3.14.
-- Active branch: `feature/direct-selection-tabbed-inspector`; no merge or CI result yet.
-- Refactored the Direct Selection dialog into five scrollable tabs — Geometry, Snapping, Topology, Corners, Endpoints. The selected-node table and exact XY controls stay visible while switching panels. All existing widget object names, editing callbacks and CAM invalidation behavior are retained.
-- Persist selected tab with `QSettings` (clamped to valid tab count), retaining selected node across switches. Added offscreen tests for tab hierarchy, saved preference and editing a chamfer after changing tabs.
-- Existing code still needs physical KDE Plasma/Wayland interaction and CNC verification. No CAM kernel or machining behavior changes are proposed here.
+- Verified latest feature merge: [PR #82](https://github.com/newnetmp3/CarveFoundry/pull/82), `d0d239037bf4f43bae7c8ea8b4268d1d6a1901ae`, GitHub Actions run `37822611741` passed both Python 3.12 and 3.14. The Direct Selection inspector now has five scrollable tabs, persistent active tab and retained node selection with offscreen regression coverage.
+- Active branch: `feature/native-contact-parity-rebased` based on merged #82.
+- Added opt-in `scripts/benchmark_contact_kernel.py` to compare the Python `_compensate_height_field_python` reference and the existing PyO3 Rust `compensate_height_field` kernel. Includes deterministic smooth, missing-data and ridge scenes, flat and ball-like footprint samples, strict full-array parity checking, repeated median wall-time and optional JSON output.
+- `tests/test_native_contact_benchmark.py` covers deterministic inputs, missing/nonfinite height samples, Python-only fallback, conditional Rust parity and CLI output.
+- This is diagnostic only; no production CAM/export changes, measured workstation speedup or CNC verification claimed. This branch is **CI unverified and unmerged**.
 
 ### Next checkpoints
 
-- [ ] Run CI on Python 3.12/3.14; fix import/layout/test failures and merge only if green.
-- [ ] Refine ergonomic labels and tab size/scrolling while keeping layout stable.
-- [ ] Implement broader visual snap indicators in native viewport, beyond cubic-handle modifiers.
-- [ ] Continue Rust/Python cutter-contact and stock-sweep numerical parity testing.
-- [ ] Retain stock XY0, stock-top Z0, fixture clearance and fail-closed stale CAM export.
+- [ ] Validate both Python CI lanes, Rust checks and Ruff; resolve discrepancies and merge only on green.
+- [ ] Expand benchmark coverage to stock-sweep kernels, then obtain representative workstation performance and memory measurements.
+- [ ] Implement broader live geometric snapping feedback and selected-node UX improvements.
+- [ ] Maintain stock-origin, fixture-clearance, stale CAM and per-cutter NC export invariants.
 
 ### Known boundaries and safety invariants
 
@@ -84,3 +83,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #80 merged green and expanded native raster parity to sparse/overlap fixtures | Main `158c3d2`, branch `feature/native-raster-scene-parity` pending CI | Validate and merge fixture benchmark PR |
 | 2026-10-08 | PR #81 native raster parity scene expansion passed both CI lanes and merged | Run `37821725814` green, merge `85aa914` | Inspector organization, live snap feedback and cutter-contact parity |
 | 2026-10-08 | Grouped Direct Selection controls into five persistent scrollable tabs, with regression tests | Branch `feature/direct-selection-tabbed-inspector`, CI unverified | Validate PR, merge if green, then live snap indicators |
+| 2026-10-08 | PR #82 merged green; new cutter-contact Python/Rust parity benchmark and tests staged on fresh main base | Merge `d0d2390`; branch `feature/native-contact-parity-rebased` pending CI | Validate and merge parity diagnostic |
