@@ -70,6 +70,13 @@ shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
 read/write CF3D engine bridge; it does not retain CAM or fixture metadata
 inside the Rust layout, generate NC programs or replace full CNC preflight.
 The original PySide6 application stays available as the CNC authority.
+The next **in-progress**, unmerged engine milestone introduces typed SHA-256-
+guarded, stable-UUID placement transactions against the original CF3D
+serializer. The only supported mutation is a checked XY translation of an
+eligible retained vector. It writes a new CF3D, invalidates all generated
+toolpaths, marks every CAM operation stale, and leaves the source untouched.
+It is not wired to Rust UI yet and does not authorize machine export.
+
 PR #88 merged strict versioned multi-sheet plan JSON reopening with
 validated stock geometry, source part identities, placement clearance and
 file-size limits; Rust/Clippy/native release CI and Python 3.12/3.14 CI passed.

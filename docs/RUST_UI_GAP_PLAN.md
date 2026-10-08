@@ -43,6 +43,12 @@ and separate SVG contours. It does not yet implement optimal nesting,
 variable-size stocks, cutting tabs, clamps, grain direction metadata or CNC
 toolpath planning. The original design is preserved transactionally.
 
+The in-progress `feature/rust-cf3d-placement-transactions` introduces the
+first **bounded native CF3D write boundary** for checked XY movement only:
+SHA-256 precondition, stable item UUID, locked object validation, exclusive
+new output project, all prior NC motion removed and every CAM operation marked
+stale. It is not yet integrated into Rust Studio and is not full CF3D parity.
+
 The next engineering slice must establish a versioned, tested **read/write
 CF3D editing/engine bridge** or equivalent backwards-compatible service with
 stable source UUIDs, native Undo/Redo, toolpath invalidation and preserved
