@@ -197,6 +197,11 @@ AI/PyTorch inference initially.
    chamfer for open path interior line/line corners, using Direct Selection
    and the retained-history/CAM invalidation lifecycle. True circular-radius
    fillets, closed contours and curved junctions still remain future work.
+   PR #78 has now merged the open-path straight-line chamfer with green CI.
+   The next in-progress step adds a true analytic circular-radius fillet
+   for interior open line/line corners with a retained arc, Direct Selection,
+   and history/CAM invalidation. This does not include closed paths or curved
+   adjoining segments and remains unverified until CI and merge.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
