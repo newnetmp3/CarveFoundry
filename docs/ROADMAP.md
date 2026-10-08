@@ -107,12 +107,15 @@ PR #91 merged the read-only Rust CAM stage inspector after Python
 3.12/3.14 and Rust/Linux CI passed. Its stored motion counts remain explicitly
 unverified; this is NOT a posted-G-code or fixture-aware preflight certificate.
 
-The active next production slice adds **versioned reusable CAM settings
-templates**. It exports parameters from one existing operation and can apply
-them to another existing operation with exactly matching strategy, cutter
-geometry and parameter schema. Applying always writes a NEW CF3D with all
-stored motion cleared and CAM intents stale; the Rust UI cannot export NC.
-This feature is not yet merged or CI validated.
+PR #92 merged **versioned reusable CAM settings templates** after Rust
+Cargo/Clippy/native release and both Python CI lanes passed. It exports
+parameters from an existing operation and applies them to another existing
+operation only when strategy, cutter geometry and parameter key/type schema
+match. A new CF3D file is exclusively published, original files remain
+untouched, all generated motion is removed and every operation is stale.
+This is a parameter preset workflow, not toolpath merging, G-code export or a
+verified CNC machining plan. Inlay geometry and full Rust-native CAM remain
+future milestones.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
