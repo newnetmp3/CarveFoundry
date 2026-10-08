@@ -22,6 +22,7 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.vector_path import (
     VectorSegment,
     arc_sweep_degrees,
+    chamfer_open_line_corner,
     close_path,
     extend_open_line_endpoint,
     fit_open_line_endpoint_to_segment,
@@ -689,6 +690,22 @@ class DirectSelectionMixin:
         topology_actions.addWidget(split_path)
         topology_actions.addWidget(join_paths_button)
         layout.addLayout(topology_actions)
+        chamfer_row = QHBoxLayout()
+        chamfer_setback = QDoubleSpinBox(dialog)
+        chamfer_setback.setObjectName("VectorChamferSetback")
+        chamfer_setback.setRange(0.01, 100000.0)
+        chamfer_setback.setDecimals(2)
+        chamfer_setback.setSuffix(" mm")
+        chamfer_setback.setValue(2.0)
+        chamfer_setback.setToolTip(
+            "Set back each adjoining straight segment by this distance."
+        )
+        chamfer_button = QPushButton("Chamfer Selected Corner", dialog)
+        chamfer_button.setObjectName("VectorChamferCorner")
+        chamfer_row.addWidget(QLabel("Corner setback:", dialog))
+        chamfer_row.addWidget(chamfer_setback)
+        chamfer_row.addWidget(chamfer_button)
+        layout.addLayout(chamfer_row)
         trim_row = QHBoxLayout()
         trim_fraction = QDoubleSpinBox(dialog)
         trim_fraction.setObjectName("VectorEndpointTrimPercent")
@@ -767,6 +784,13 @@ class DirectSelectionMixin:
                     not path.closed
                     and 0 < index < len(path.points_xy) - 1
                 )
+            chamfer_button.setEnabled(
+                path is not None
+                and not path.closed
+                and 0 < index < len(path.points_xy) - 1
+                and path.resolved_segments()[index - 1].kind == "line"
+                and path.resolved_segments()[index].kind == "line"
+            )
             trim_endpoint_button.setEnabled(
                 path is not None
                 and not path.closed
@@ -1063,6 +1087,29 @@ class DirectSelectionMixin:
             )
             refresh_topology_actions()
 
+        def chamfer_selected_corner():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            old_path = selected.vector_path
+            if old_path.closed or not 0 < index < len(old_path.points_xy) - 1:
+                return
+            fixed = node_world_points(selected)[0]
+            try:
+                new_path = chamfer_open_line_corner(
+                    old_path, index, chamfer_setback.value(),
+                )
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid corner chamfer", str(exc))
+                return
+            if self._commit_vector_path(
+                selected.item_id, new_path, label="chamfer vector corner",
+                target_node=0,
+                target_world_xy=(float(fixed[0]), float(fixed[1])),
+            ):
+                table.setCurrentCell(index, 0)
+                refresh_topology_actions()
+
         def split_selected():
             _selected, index = current()
             if self._split_selected_vector_path(index):
@@ -1142,6 +1189,7 @@ class DirectSelectionMixin:
         apply_segment.clicked.connect(apply_selected_segment)
         open_close.clicked.connect(toggle_open_closed)
         split_path.clicked.connect(split_selected)
+        chamfer_button.clicked.connect(chamfer_selected_corner)
         trim_endpoint_button.clicked.connect(trim_selected_endpoint)
         extend_endpoint_button.clicked.connect(extend_selected_endpoint)
         intersect_button.clicked.connect(fit_selected_endpoint)

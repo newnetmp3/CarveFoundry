@@ -191,7 +191,12 @@ AI/PyTorch inference initially.
    straight segment of a second selected vector, converting from its world
    coordinates to the source's local coordinate space. That UI remains
    unverified until tests and CI pass. General analytic curve intersections
-   and direct mouse target picking remain future work.
+   and direct mouse target picking remain future work. PR #77 merged the
+   two-vector finite line trim/extend interface after passing CI.
+   The next **in-progress**, unmerged step adds an equal-setback analytic
+   chamfer for open path interior line/line corners, using Direct Selection
+   and the retained-history/CAM invalidation lifecycle. True circular-radius
+   fillets, closed contours and curved junctions still remain future work.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
