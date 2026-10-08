@@ -8,15 +8,15 @@ toolpaths are discarded and *all* saved CAM intents are marked stale.
 from __future__ import annotations
 
 import argparse
-from hashlib import sha256
 import json
-from math import isfinite
 import os
-from pathlib import Path
 import sys
+from hashlib import sha256
+from math import isfinite
+from pathlib import Path
 from uuid import uuid4
 
-from .project_file import ProjectFileError, load_project, save_project
+from .project_file import load_project, save_project
 from .units import ModelUnits
 
 PROTOCOL_VERSION = 1
