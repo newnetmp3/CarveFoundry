@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Reproducible Python/Rust raster-kernel parity and wall-time baseline.
 
 Run after installing CarveFoundry with its Maturin native extension. This
