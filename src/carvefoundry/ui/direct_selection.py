@@ -444,7 +444,7 @@ class DirectSelectionMixin:
             try:
                 path = selected.vector_path
                 if kind == "move":
-                    target_xy, snap_kind = self._snap_vector_world_xy(
+                    target_xy, _snap_kind = self._snap_vector_world_xy(
                         selected.item_id,
                         index,
                         (x.value(), y.value()),
