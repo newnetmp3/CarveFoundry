@@ -24,22 +24,21 @@
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Verified shipped CAD milestone batch — line trim/extend, chamfer and fillet
+## Active development — closed-contour corner tools
 
-- PR #77: interactive two-vector finite-line trim/extend, merged `f0319ed021b3374229b061aed89f0b1aa5742cbf`, GitHub Actions run `37816032041` passed.
-- PR #78: open-path line/line equal-setback chamfer with Direct Selection, merged `1874f4946efd3cb6ef1efc4728f7046f1b215305`; run `37819209001` passed Python 3.12 and Python 3.14.
-- PR #79: open-path line/line exact circular-radius fillet, Direct Selection, retained analytic bulge/arc and regression tests, merged `9930cef58b041d91f120ef20df96787eada1425a`; run `37819700239` passed both Python 3.12 and Python 3.14.
-- Current verified feature baseline: PR #79 merge `9930cef58b041d91f120ef20df96787eada1425a`.
-- These are **CI/offscreen verified only**. Physical KDE Plasma/Wayland interaction, actual router cutting, curved-segment junctions, and closed-contour chamfer/fillet are not verified or implemented.
-- The Rust migration track stays parallel; benchmark/parity harness landed earlier in PR #72, and representative hardware speed/memory results are still outstanding.
+- Last verified merged feature: PR #79 `9930cef58b041d91f120ef20df96787eada1425a`, GitHub Actions run `37819700239` passed Python 3.12/3.14.
+- Active branch: `feature/closed-vector-corner-editing`; not yet CI validated or merged.
+- Added `edit_line_corner` to retain exact chamfer lines and circular fillet arcs on **closed** line/line corners, including the cyclic node-0 seam. Original unaffected segments remain analytic and node-limit/bad-input checks fail closed.
+- Direct Selection now enables chamfer/fillet for eligible closed corner nodes, preserves an unaffected world-space anchor despite mesh pivot changes, and uses existing Undo/Redo/CAM invalidation.
+- Regression tests cover seam and other nodes, retained arc radius, curved junction rejection, and offscreen Qt editing.
+- This does not extend to curve/line corners or prove physical KDE/Wayland interactions or real-router operation. Rust migration remains separate; existing raster parity benchmark is unchanged.
 
-### Next milestones
+### Next checkpoints
 
-- [ ] Improve geometric snap previews and on-canvas snap-kind indicators beyond constrained cubic handles.
-- [ ] Extend analytic corner tools to closed contours with safe node count and wrap-around behavior, or validate arc/line fillets in a bounded slice.
-- [ ] Refine the crowded Direct Selection inspector into navigable geometry, topology and snap sections.
-- [ ] Add more Rust/Python parity fixtures for stock sweeps and cutter contact before moving additional kernels.
-- [ ] Verify CNC fixture/stock zero, stale CAM gating, and physical Wayland viewport behavior before any machining claim.
+- [ ] Check CI Python 3.12/3.14 and Rust/lint; correct issues and merge only on green.
+- [ ] Add live geometric snap feedback and reorganize the dense Direct Selection inspector.
+- [ ] Expand parity benchmark to cutter-contact/stock-sweep cases before additional Rust ports.
+- [ ] Preserve stock-origin, fixture clearance, stale toolpath preflight and cutter change policies.
 
 ### Known boundaries and safety invariants
 
@@ -81,3 +80,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #77 merged after green CI; bounded open-line chamfer implemented with UI/tests | Main `f0319ed`; feature `feature/analytic-line-chamfer`, CI pending | Validate and merge chamfer PR |
 | 2026-10-08 | PR #78 chamfer merged green, analytic line fillet with UI and tests implemented | Main `1874f49`; branch `feature/analytic-line-fillet` | Validate PR CI before merge |
 | 2026-10-08 | Merged PR #79 after both Python CI lanes passed; interactive line-corner fillet completes three-PR CAD batch | Run `37819700239` success; merge `9930cef` | Live geometric indicators, safe closed-contour corners, Rust parity expansion |
+| 2026-10-08 | Implemented closed-contour chamfer/fillet for wrapped seam and interior nodes | Branch `feature/closed-vector-corner-editing`; CI pending | Validate and merge if green |
