@@ -21,7 +21,7 @@ from .smart_values import SmartValueError, SmartValues
 from .tools import Cutter, ToolType
 from .transform import Transform3D
 from .units import ModelUnits
-from .vector_path import VectorPath
+from .vector_path import VectorPath, VectorSegment
 
 PROJECT_FILE_VERSION = 2
 LEGACY_PROJECT_FILE_VERSION = 1
@@ -706,6 +706,21 @@ def _build_container(
                         "width_mm": item.vector_path.width_mm,
                         "depth_mm": item.vector_path.depth_mm,
                         "closed": item.vector_path.closed,
+                        "segments": [
+                            {
+                                "kind": segment.kind,
+                                "control1_xy": (
+                                    list(segment.control1_xy)
+                                    if segment.control1_xy is not None else None
+                                ),
+                                "control2_xy": (
+                                    list(segment.control2_xy)
+                                    if segment.control2_xy is not None else None
+                                ),
+                                "bulge": segment.bulge,
+                            }
+                            for segment in item.vector_path.resolved_segments()
+                        ],
                     }
                     if item.vector_path is not None else None
                 ),
@@ -1215,11 +1230,59 @@ def _load_native_item(
                 or isinstance(depth, bool) or not isinstance(depth, (int, float))
             ):
                 raise TypeError("Width/depth must be numbers.")
+            raw_segments = vector_value.get("segments")
+            segments = None
+            if raw_segments is not None:
+                if not isinstance(raw_segments, list):
+                    raise TypeError("Vector segments must be a list.")
+                parsed_segments: list[VectorSegment] = []
+                for raw_segment in raw_segments:
+                    if not isinstance(raw_segment, dict):
+                        raise TypeError("Vector segment must be an object.")
+                    kind = raw_segment.get("kind", "line")
+                    if not isinstance(kind, str):
+                        raise TypeError("Vector segment kind must be text.")
+
+                    def control(name: str):
+                        raw_control = raw_segment.get(name)
+                        if raw_control is None:
+                            return None
+                        if (
+                            not isinstance(raw_control, list)
+                            or len(raw_control) != 2
+                            or any(
+                                isinstance(value, bool)
+                                or not isinstance(value, (int, float))
+                                for value in raw_control
+                            )
+                        ):
+                            raise TypeError(
+                                f"Vector segment {name} must be an XY pair."
+                            )
+                        return tuple(float(value) for value in raw_control)
+
+                    raw_bulge = raw_segment.get("bulge", 0.0)
+                    if (
+                        isinstance(raw_bulge, bool)
+                        or not isinstance(raw_bulge, (int, float))
+                    ):
+                        raise TypeError("Vector arc bulge must be numeric.")
+                    parsed_segments.append(
+                        VectorSegment(
+                            kind=kind,
+                            control1_xy=control("control1_xy"),
+                            control2_xy=control("control2_xy"),
+                            bulge=float(raw_bulge),
+                        )
+                    )
+                segments = tuple(parsed_segments)
+
             vector_path = VectorPath(
                 points_xy=tuple(tuple(float(v) for v in pair) for pair in raw_points),
                 width_mm=float(width),
                 depth_mm=float(depth),
                 closed=closed,
+                segments=segments,
             )
             vector_path.validate()
         except (ValueError, TypeError, KeyError) as exc:
