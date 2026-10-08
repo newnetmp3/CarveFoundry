@@ -455,6 +455,182 @@ def remove_node(path: VectorPath, index: int) -> VectorPath:
     edited.validate()
     return edited
 
+def _reverse_segment(segment: VectorSegment) -> VectorSegment:
+    if segment.kind == "line":
+        return VectorSegment.line()
+    if segment.kind == "arc":
+        return VectorSegment("arc", bulge=-segment.bulge)
+    return VectorSegment.cubic(
+        segment.control2_xy,
+        segment.control1_xy,
+    )
+
+
+def reverse_path(path: VectorPath) -> VectorPath:
+    """Reverse anchor order while preserving exact analytic segment geometry."""
+
+    path.validate()
+    points = tuple(reversed(path.points_xy))
+    segments = path.resolved_segments()
+    if path.closed:
+        count = len(segments)
+        reversed_segments = tuple(
+            _reverse_segment(segments[(count - 2 - index) % count])
+            for index in range(count)
+        )
+    else:
+        reversed_segments = tuple(
+            _reverse_segment(segment)
+            for segment in reversed(segments)
+        )
+    result = replace(
+        path,
+        points_xy=points,
+        segments=_canonical_segments(reversed_segments),
+    )
+    result.validate()
+    return result
+
+
+def close_path(path: VectorPath) -> VectorPath:
+    """Close an open contour with one explicit straight segment."""
+
+    path.validate()
+    if path.closed:
+        raise ValueError("Vector path is already closed.")
+    if len(path.points_xy) < 3:
+        raise ValueError("Closing a vector path requires at least three anchors.")
+    segments = list(path.resolved_segments())
+    segments.append(VectorSegment.line())
+    result = replace(
+        path,
+        closed=True,
+        segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
+def open_path_at_node(path: VectorPath, node_index: int) -> VectorPath:
+    """Open a closed contour at *node_index*, preserving all other segments."""
+
+    path.validate()
+    if not path.closed:
+        raise ValueError("Vector path is already open.")
+    count = len(path.points_xy)
+    if not 0 <= node_index < count:
+        raise IndexError("Vector node index out of range.")
+
+    points = tuple(
+        path.points_xy[(node_index + offset) % count]
+        for offset in range(count)
+    )
+    segments = tuple(
+        path.resolved_segments()[(node_index + offset) % count]
+        for offset in range(count - 1)
+    )
+    result = replace(
+        path,
+        points_xy=points,
+        closed=False,
+        segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
+def split_path_at_node(
+    path: VectorPath,
+    node_index: int,
+) -> tuple[VectorPath, VectorPath]:
+    """Split one open path at an interior anchor into two independent paths."""
+
+    path.validate()
+    if path.closed:
+        raise ValueError("Open a closed contour before splitting it.")
+    if not 0 < node_index < len(path.points_xy) - 1:
+        raise ValueError("Split requires an interior vector node.")
+
+    segments = path.resolved_segments()
+    left = replace(
+        path,
+        points_xy=tuple(path.points_xy[:node_index + 1]),
+        segments=_canonical_segments(segments[:node_index]),
+    )
+    right = replace(
+        path,
+        points_xy=tuple(path.points_xy[node_index:]),
+        segments=_canonical_segments(segments[node_index:]),
+    )
+    left.validate()
+    right.validate()
+    return left, right
+
+
+def join_paths(
+    first: VectorPath,
+    second: VectorPath,
+    *,
+    first_endpoint: str = "end",
+    second_endpoint: str = "start",
+    max_gap_mm: float = 1.0,
+) -> VectorPath:
+    """Join two compatible open paths at selected endpoints.
+
+    Geometry is never silently flattened. If endpoint coordinates differ, a
+    straight connector is inserted, provided the gap is within *max_gap_mm*.
+    """
+
+    first.validate()
+    second.validate()
+    if first.closed or second.closed:
+        raise ValueError("Only open vector paths can be joined.")
+    if first_endpoint not in {"start", "end"}:
+        raise ValueError("First endpoint must be 'start' or 'end'.")
+    if second_endpoint not in {"start", "end"}:
+        raise ValueError("Second endpoint must be 'start' or 'end'.")
+    if (
+        abs(first.width_mm - second.width_mm) > 1e-7
+        or abs(first.depth_mm - second.depth_mm) > 1e-7
+    ):
+        raise ValueError("Joined paths must use the same stroke width and depth.")
+    if not isfinite(max_gap_mm) or max_gap_mm < 0:
+        raise ValueError("Join tolerance must be finite and non-negative.")
+
+    left = reverse_path(first) if first_endpoint == "start" else first
+    right = reverse_path(second) if second_endpoint == "end" else second
+    left_end = left.points_xy[-1]
+    right_start = right.points_xy[0]
+    gap = hypot(
+        left_end[0] - right_start[0],
+        left_end[1] - right_start[1],
+    )
+    if gap > max_gap_mm + _EPS:
+        raise ValueError(
+            f"Nearest vector endpoints are {gap:.3f} mm apart, beyond the "
+            f"{max_gap_mm:.3f} mm join tolerance."
+        )
+
+    points = list(left.points_xy)
+    segments = list(left.resolved_segments())
+    if gap <= _EPS:
+        points.extend(right.points_xy[1:])
+    else:
+        segments.append(VectorSegment.line())
+        points.extend(right.points_xy)
+    segments.extend(right.resolved_segments())
+
+    result = VectorPath(
+        points_xy=tuple(points),
+        width_mm=left.width_mm,
+        depth_mm=left.depth_mm,
+        closed=False,
+        segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
 def apply_vector_edit(item: ProjectItem, path: VectorPath) -> None:
     """Commit a validated fresh mesh, preserving the item's actual transform."""
     if item.vector_path is None:
