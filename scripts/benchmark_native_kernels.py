@@ -21,14 +21,28 @@ from carvefoundry.cam.heightfield import _rasterize_top_surface_python
 from carvefoundry.cam.native import native_available, rasterize_top_surface
 
 
-def _fixture(size: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _fixture(
+    size: int, scene: str = "sloped",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     if size < 2:
         raise ValueError("Grid size must be at least two.")
+    if scene not in {"sloped", "sparse", "overlap"}:
+        raise ValueError("Unknown raster benchmark scene.")
     vertices = np.array([
         [0.0, 0.0, 0.0], [10.0, 0.0, 1.0],
         [10.0, 10.0, 4.0], [0.0, 10.0, 2.0],
     ], dtype=np.float64)
     faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+    if scene == "sparse":
+        # Leave uncovered cells on all four sides to verify empty-region parity.
+        vertices[:, :2] = vertices[:, :2] * 0.4 + 3.0
+    elif scene == "overlap":
+        # A raised triangle competes with both lower triangles for top Z.
+        extra = np.array([
+            [1.0, 1.0, 6.0], [9.0, 1.0, 7.0], [5.0, 9.0, 8.0],
+        ], dtype=np.float64)
+        vertices = np.vstack((vertices, extra))
+        faces = np.vstack((faces, [[4, 5, 6]]))
     axis = np.linspace(0.0, 10.0, size, dtype=np.float64)
     return vertices, faces, axis, axis.copy()
 
@@ -43,13 +57,14 @@ def _sample(fn, iterations: int) -> float:
     return statistics.median(durations)
 
 
-def benchmark(size: int, iterations: int, *, rust: bool) -> dict:
-    vertices, faces, x_axis, y_axis = _fixture(size)
+def benchmark(size: int, iterations: int, *, rust: bool, scene: str = "sloped") -> dict:
+    vertices, faces, x_axis, y_axis = _fixture(size, scene=scene)
     def python_fn():
         return _rasterize_top_surface_python(vertices, faces, x_axis, y_axis)
     py_result = python_fn()
     output = {
         "grid": size,
+        "scene": scene,
         "cells": size * size,
         "python_median_ms": _sample(python_fn, iterations),
         "rust_median_ms": None,
@@ -87,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sizes", type=int, nargs="+", default=[64, 128, 256])
     parser.add_argument("--iterations", type=int, default=5)
+    parser.add_argument(
+        "--scenes", choices=["sloped", "sparse", "overlap"],
+        nargs="+", default=["sloped", "sparse", "overlap"],
+    )
     parser.add_argument("--require-rust", action="store_true")
     parser.add_argument("--json", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -101,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["CARVEFOUNDRY_CAM_BACKEND"] = "rust" if available else "python"
     try:
         results = [
-            benchmark(size, args.iterations, rust=available)
+            benchmark(size, args.iterations, rust=available, scene=scene)
+            for scene in args.scenes
             for size in args.sizes
         ]
     finally:
@@ -115,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         "platform": platform.platform(),
         "rust_available": available,
         "iterations": args.iterations,
+        "scenes": args.scenes,
         "results": results,
         "note": "Measured wall times include Python/Rust boundary overhead; machine-dependent.",
     }

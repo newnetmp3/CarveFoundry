@@ -63,3 +63,40 @@ def test_raster_benchmark_checks_compiled_kernel_parity_when_available(monkeypat
     assert result["max_abs_error_mm"] is not None
     assert result["max_abs_error_mm"] < 1e-8
     assert result["rust_median_ms"] >= 0.0
+
+
+@pytest.mark.parametrize(
+    "scene,expected_vertices,expected_faces",
+    [("sloped", 4, 2), ("sparse", 4, 2), ("overlap", 7, 3)],
+)
+def test_raster_parity_scenes_are_deterministic(scene, expected_vertices, expected_faces):
+    vertices, faces, x, y = _fixture(24, scene)
+    again = _fixture(24, scene)
+    assert vertices.shape == (expected_vertices, 3)
+    assert faces.shape == (expected_faces, 3)
+    for first, second in zip((vertices, faces, x, y), again, strict=True):
+        np.testing.assert_array_equal(first, second)
+
+
+@pytest.mark.parametrize("scene", ["sparse", "overlap"])
+def test_raster_parity_scene_python_reference(scene):
+    result = benchmark(17, 1, rust=False, scene=scene)
+    assert result["scene"] == scene
+    assert result["parity"] is None
+
+
+@pytest.mark.parametrize("scene", ["sparse", "overlap"])
+def test_raster_parity_scene_compares_native_when_available(scene, monkeypatch):
+    from carvefoundry.cam.native import native_available
+
+    if not native_available():
+        pytest.skip("Compiled native kernel unavailable")
+    monkeypatch.setenv("CARVEFOUNDRY_CAM_BACKEND", "rust")
+    result = benchmark(17, 1, rust=True, scene=scene)
+    assert result["parity"] == "pass"
+    assert result["max_abs_error_mm"] <= 1e-8
+
+
+def test_raster_benchmark_rejects_unknown_scene():
+    with pytest.raises(ValueError, match="scene"):
+        _fixture(8, "not-a-scene")

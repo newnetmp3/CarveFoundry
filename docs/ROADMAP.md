@@ -48,6 +48,11 @@ It must not be described as a guarantee of physical safety.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
+The native raster parity benchmark extension in `feature/native-raster-scene-parity`
+adds sloped, sparse and overlapping triangle scenes; it remains unmerged and
+must pass CI before the roadmap can treat it as completed. Performance claims
+require actual workstation measurements.
+
 **Keep shipping the native 2D CAD / snapping / CAM roadmap above and below.**
 The Rust migration is a parallel, opportunistic modernization track, **not**
 a prerequisite for the next CAD feature and not a reason to halt current PRs.
@@ -202,8 +207,10 @@ AI/PyTorch inference initially.
    Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
    Closed-contour line/line corner chamfer and fillet are in progress with
    cyclic seam support and regression tests, but are not yet merged or
-   CI-verified. Curved junctions, broader snap indicators and physical
-   KDE/Wayland pointer validation remain outstanding.
+   CI-verified. PR #80 subsequently merged closed-contour line/line
+   chamfer and fillet editing with seam-aware regression coverage.
+   Curved junctions, broader snap indicators and physical KDE/Wayland
+   pointer validation remain outstanding.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
