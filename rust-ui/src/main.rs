@@ -2,6 +2,7 @@
 //! to be a CF3D project and SVG export contains no machine instructions.
 use carvefoundry_studio::arrays::array_selected;
 use carvefoundry_studio::cam_readout::CamReadout;
+use carvefoundry_studio::inlay::{InlayPlan, InlaySettings, export_pair, plan as plan_inlay};
 use carvefoundry_studio::geometry::{Part, Sheet, area, ellipse, polygon, rectangle, star};
 use carvefoundry_studio::nesting::{contains, nest};
 use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettings};
@@ -65,6 +66,9 @@ struct Studio {
     nest_max_sheets: usize,
     nest_allow_rotation: bool,
     plan_path: String,
+    inlay_settings: InlaySettings,
+    inlay_plan: Option<InlayPlan>,
+    inlay_dir: String,
 }
 
 impl Default for Studio {
@@ -106,12 +110,16 @@ impl Default for Studio {
             nest_max_sheets: 8,
             nest_allow_rotation: true,
             plan_path: "carvefoundry-multi-plan.json".into(),
+            inlay_settings: InlaySettings::default(),
+            inlay_plan: None,
+            inlay_dir: "carvefoundry-inlay-design".into(),
         }
     }
 }
 
 impl Studio {
     fn remember(&mut self) {
+        self.inlay_plan = None;
         self.plan = None;
         self.planning = None;
         self.plan_index = 0;
@@ -789,6 +797,90 @@ impl Studio {
         });
         if ui.button("Create selected array").clicked() { self.apply_array(); }
     }
+
+    fn preview_inlay(&mut self) {
+        let candidate = self.sheet.parts.iter().find(|p| Some(p.id) == self.selected);
+        match candidate.map(|part| plan_inlay(&self.sheet, part, &self.inlay_settings)) {
+            None => self.message = "Select a single contour before planning an inlay".into(),
+            Some(Ok(pair)) => {
+                self.message = "Design contours calculated. Fit, mirror and CNC clearance unverified".into();
+                self.inlay_plan = Some(pair);
+            }
+            Some(Err(reason)) => {
+                self.inlay_plan = None;
+                self.message = format!("Inlay design rejected: {reason}");
+            }
+        }
+    }
+    fn export_inlay(&mut self) {
+        let result = self.sheet.parts.iter().find(|p| Some(p.id) == self.selected)
+            .ok_or_else(|| "Select an inlay contour".to_owned())
+            .and_then(|part| {
+                if let Some(source) = &self.source_link {
+                    let baseline = source.baseline.parts.iter().find(|p| p.id == part.id)
+                        .ok_or("Contour is not in the imported CF3D source")?;
+                    if part.outline != baseline.outline
+                        || part.quarter_turns != baseline.quarter_turns
+                        || part.name != baseline.name {
+                        return Err("CF3D-linked inlay geometry cannot be renamed, rotated or reshaped".into());
+                    }
+                }
+                plan_inlay(&self.sheet, part, &self.inlay_settings)
+            })
+            .and_then(|pair| {
+                export_pair(std::path::Path::new(&self.inlay_dir), &pair, self.source_link.as_ref())
+            });
+        self.message = match result {
+            Ok(()) => format!(
+                "Saved paired SVG designs and JSON manifest in NEW folder {}. Validate in CAM.",
+                self.inlay_dir
+            ),
+            Err(error) => format!("Inlay export rejected: {error}"),
+        };
+    }
+    fn inlay_controls(&mut self, ui: &mut egui::Ui) {
+        if self.selected.is_none() { return; }
+        ui.separator();
+        egui::CollapsingHeader::new("PAIRED INLAY · DESIGN ONLY")
+            .default_open(false).show(ui, |ui| {
+                ui.colored_label(Color32::YELLOW, "UNVERIFIED FIT · NO G-CODE");
+                ui.small("Strictly convex closed polygon; plug setback = clearance + engagement × tan(half-angle). No mirror applied.");
+                let before = self.inlay_settings.clone();
+                let config = &mut self.inlay_settings;
+                for (label, value, angle) in [
+                    ("Cutter diameter", &mut config.cutter_diameter_mm, false),
+                    ("Included angle", &mut config.included_angle_deg, true),
+                    ("Tip diameter", &mut config.tip_diameter_mm, false),
+                    ("Pocket depth", &mut config.pocket_depth_mm, false),
+                    ("Plug depth", &mut config.plug_depth_mm, false),
+                    ("Engagement", &mut config.engagement_mm, false),
+                    ("Fit clearance", &mut config.fit_clearance_mm, false),
+                    ("Glue gap", &mut config.glue_gap_mm, false),
+                    ("Pocket thickness", &mut config.pocket_stock_thickness_mm, false),
+                    ("Plug thickness", &mut config.plug_stock_thickness_mm, false),
+                ] {
+                    ui.horizontal(|ui| {
+                        ui.label(label);
+                        ui.add(egui::DragValue::new(value).speed(0.05)
+                            .suffix(if angle { "°" } else { " mm" }));
+                    });
+                }
+                if self.inlay_settings != before { self.inlay_plan = None; }
+                if ui.button("Preview paired contours").clicked() { self.preview_inlay(); }
+                if let Some(pair) = &self.inlay_plan
+                    && Some(pair.part_id) == self.selected {
+                    ui.label(format!("Taper allowance: {:.3} mm", pair.taper_allowance_mm));
+                    ui.label(format!("Plug setback: {:.3} mm", pair.total_plug_setback_mm));
+                    ui.label(format!("Plug area: {:.2} mm²", pair.plug_area_mm2));
+                    ui.label("NEW output directory:");
+                    ui.text_edit_singleline(&mut self.inlay_dir);
+                    if ui.button("Export paired SVGs + JSON manifest").clicked() {
+                        self.export_inlay();
+                    }
+                }
+                ui.small("Design only: import into established CAM, validate fit/mirroring, regenerate, simulate and perform fixture-aware preflight.");
+            });
+    }
     fn properties(&mut self, ui: &mut egui::Ui) {
         ui.heading("JOB SETUP");
         ui.label(egui::RichText::new("Stock XY0: bottom-left").color(Color32::LIGHT_GREEN));
@@ -945,6 +1037,7 @@ impl Studio {
                 }
             });
         }
+        self.inlay_controls(ui);
         ui.separator();
         ui.heading("INTERCHANGE");
         ui.label("SVG import to existing CNC workspace");
@@ -997,6 +1090,17 @@ impl Studio {
             let edge = if selected { Color32::from_rgb(255, 197, 88) }
                 else { Color32::from_rgb(106, 222, 179) };
             painter.add(egui::Shape::closed_line(pts, Stroke::new(if selected { 2.5 } else { 1.5 }, edge)));
+        }
+        if preview.is_none() {
+            if let Some(pair) = &self.inlay_plan
+                && Some(pair.part_id) == self.selected
+                && self.sheet.parts.iter().find(|p| Some(p.id) == self.selected)
+                    .is_some_and(|p| p.world_points() == pair.pocket_xy) {
+                painter.add(egui::Shape::closed_line(
+                    pair.plug_xy.iter().copied().map(&screen).collect(),
+                    Stroke::new(2.0, Color32::from_rgb(251, 132, 112)),
+                ));
+            }
         }
         painter.text(screen([0.0, 0.0]) + Vec2::new(5.0, 5.0), egui::Align2::LEFT_TOP, "XY0",
             egui::FontId::monospace(12.0), Color32::from_rgb(189, 222, 236));
