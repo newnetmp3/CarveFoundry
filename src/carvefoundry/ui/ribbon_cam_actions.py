@@ -931,7 +931,8 @@ class RibbonCamActionsMixin:
             if (
                 getattr(self, "_cam_append_to_job", False)
                 and any(
-                    saved_operation.needs_recalculation
+                    saved_operation.enabled
+                    and saved_operation.needs_recalculation
                     for saved_operation in self.project.cam_operations
                 )
             ):
