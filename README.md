@@ -473,24 +473,36 @@ session's recovery checkpoint. The checkpoint preserves the same design,
 stock, fixture and mesh information as a normal CF3D Save; session-owned
 generated toolpaths and machining-job order must be regenerated after restore.
 
-## Direct Selection — real editable pen/line nodes
+## Direct Selection — analytic line, arc and Bezier paths
 
-Newly drawn **Pen Strokes and Lines** now retain editable centerline XY knots
-alongside the cutter-facing 3D mesh. Select ONE eligible object, then use the
-new **Direct Selection** tool in the left rail or **Design → Draw/Vector →
-Direct Selection**. Green knot crosses appear in the OpenGL viewport. Drag a
-knot on the stock plane (Top view recommended); a modeless inspector also
-allows exact XY coordinates, midpoint insertion and node deletion. All edits
-rebuild actual mesh geometry, invalidate stale CAM paths, support Undo/Redo,
-and persist the knot data inside normal CF3D files. Duplication, copy/paste
-and the batch grid retain the independent vector metadata.
+Newly drawn **Pen Strokes and Lines** retain editable centerline XY anchors
+alongside the cutter-facing 3D mesh. Select one eligible object, then use
+**Direct Selection** from the left rail or **Design → Draw/Vector → Direct
+Selection**. Green anchor crosses appear in the OpenGL viewport. Drag an
+anchor on the stock plane (Top view recommended), or use the modeless
+inspector for exact XY coordinates and segment editing.
 
-This feature does **not** pretend that arbitrary imported STL, raster traces
-or baked silhouette/Boolean meshes contain editable vector control points.
-Existing projects whose strokes were saved before this update lack retained
-nodes; newly drawn Pen/Line objects have them. Paths with X/Y tilt must be
-untilted before XY knot editing. Edited Line end caps become rounded like
-other polyline strokes.
+A segment after the selected anchor can be a straight **Line**, a
+**Circular Arc** with an exact signed sweep, or a **Cubic Bezier** with two
+exact control points. Curves remain analytic in the project and are flattened
+only at viewport/CAM boundaries using a deterministic tolerance. Midpoint
+insertion splits arcs and Beziers at their exact parametric midpoint instead
+of baking them into arbitrary line fragments.
+
+Direct Selection can snap dragged/moved anchors to nearby retained-vector
+**nodes, segment midpoints, arc centers and intersections** with a configurable
+millimeter tolerance. All edits rebuild actual machinable geometry, invalidate
+dependent CAM operations, support Undo/Redo, and persist inside normal CF3D
+files. Planar retained vectors are also supplied directly to Profile, Pocket,
+Engrave and V-Carving CAM; mesh projection remains the fallback for
+non-vector or out-of-plane geometry.
+
+This feature does **not** pretend arbitrary imported STL, raster traces or
+baked silhouette/Boolean meshes contain editable vector source geometry.
+Editable imported SVG/DXF contours, graphical Bezier-handle dragging,
+trim/extend, join/split, fillet/chamfer, tangent/grid snapping and text-on-path
+remain follow-on vector-CAD work. Paths with X/Y tilt must be untilted before
+XY source editing.
 
 ## Guided CNC workflow
 
