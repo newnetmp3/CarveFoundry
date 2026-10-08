@@ -10,6 +10,7 @@ pub mod nesting;
 pub mod multi_sheet;
 pub mod plan_io;
 pub mod precision;
+pub mod project_session;
 pub mod vector_snap;
 pub mod svg;
 pub mod source_placement;
