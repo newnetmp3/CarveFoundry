@@ -12,9 +12,9 @@ from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.vector_path import (
     VectorPath,
     VectorSegment,
+    apply_vector_edit,
     arc_center,
     arc_sweep_degrees,
-    apply_vector_edit,
     insert_node,
     move_node,
     node_world_points,
