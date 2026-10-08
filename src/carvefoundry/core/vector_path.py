@@ -315,6 +315,15 @@ def sampled_points_xy(
     return tuple(result)
 
 
+def _canonical_segments(
+    segments: list[VectorSegment] | tuple[VectorSegment, ...],
+) -> tuple[VectorSegment, ...] | None:
+    resolved = tuple(segments)
+    if all(segment == VectorSegment.line() for segment in resolved):
+        return None
+    return resolved
+
+
 def move_node(path: VectorPath, index: int, xy: tuple[float, float]) -> VectorPath:
     if not 0 <= index < len(path.points_xy):
         raise IndexError("Vector node index out of range.")
@@ -335,7 +344,7 @@ def set_segment(
     segment.validate()
     segments = list(path.resolved_segments())
     segments[index] = segment
-    edited = replace(path, segments=tuple(segments))
+    edited = replace(path, segments=_canonical_segments(segments))
     edited.validate()
     return edited
 
@@ -388,7 +397,11 @@ def insert_node(path: VectorPath, segment: int) -> VectorPath:
     points.insert(segment + 1, (float(middle[0]), float(middle[1])))
     segments = list(path.resolved_segments())
     segments[segment:segment + 1] = [left, right]
-    edited = replace(path, points_xy=tuple(points), segments=tuple(segments))
+    edited = replace(
+        path,
+        points_xy=tuple(points),
+        segments=_canonical_segments(segments),
+    )
     edited.validate()
     return edited
 
@@ -399,39 +412,46 @@ def remove_node(path: VectorPath, index: int) -> VectorPath:
     if len(path.points_xy) <= (3 if path.closed else 2):
         raise ValueError("Cannot remove the last required nodes.")
 
-    segments = list(path.resolved_segments())
-    points = list(path.points_xy)
-    if not path.closed and index == 0:
-        segments.pop(0)
-        points.pop(0)
-    elif not path.closed and index == len(points) - 1:
-        segments.pop()
-        points.pop()
-    else:
-        incoming = (index - 1) % len(segments)
-        outgoing = index % len(segments)
+    old_points = list(path.points_xy)
+    old_segments = list(path.resolved_segments())
+    last_index = len(old_points) - 1
+    if path.closed or index not in {0, last_index}:
+        incoming = (index - 1) % len(old_segments)
+        outgoing = index % len(old_segments)
         if (
-            segments[incoming].kind != "line"
-            or segments[outgoing].kind != "line"
+            old_segments[incoming].kind != "line"
+            or old_segments[outgoing].kind != "line"
         ):
             raise ValueError(
                 "Convert adjacent curve segments to lines before deleting this node."
             )
-        points.pop(index)
-        if path.closed:
-            if outgoing > incoming:
-                segments.pop(outgoing)
-                segments[incoming] = VectorSegment.line()
-            else:
-                segments.pop(incoming)
-                segments[0] = VectorSegment.line()
-        else:
-            segments[incoming:outgoing + 1] = [VectorSegment.line()]
 
-    edited = replace(path, points_xy=tuple(points), segments=tuple(segments))
+    remaining_old_indices = [
+        old_index
+        for old_index in range(len(old_points))
+        if old_index != index
+    ]
+    points = [old_points[old_index] for old_index in remaining_old_indices]
+    segment_count = len(points) if path.closed else len(points) - 1
+    segments: list[VectorSegment] = []
+    for new_index in range(segment_count):
+        start_old = remaining_old_indices[new_index]
+        end_old = remaining_old_indices[
+            (new_index + 1) % len(remaining_old_indices)
+        ]
+        expected_end = (start_old + 1) % len(old_points)
+        if end_old == expected_end:
+            segments.append(old_segments[start_old])
+        else:
+            segments.append(VectorSegment.line())
+
+    edited = replace(
+        path,
+        points_xy=tuple(points),
+        segments=_canonical_segments(segments),
+    )
     edited.validate()
     return edited
-
 
 def apply_vector_edit(item: ProjectItem, path: VectorPath) -> None:
     """Commit a validated fresh mesh, preserving the item's actual transform."""
