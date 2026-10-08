@@ -23,6 +23,14 @@ def cam_readout(path: Path) -> dict:
         raise ValueError("CAM inspector accepts native .cf3d projects only.")
     source_hash = _file_sha256(path)
     project = load_project(path)
+    report = cam_readout_from_project(project, source_hash)
+    if _file_sha256(path) != source_hash:
+        raise ValueError("CF3D project changed during CAM readout; inspect again.")
+    return report
+
+
+def cam_readout_from_project(project, source_hash: str) -> dict:
+    """Generate the existing strict inspection schema from one loaded project."""
     if len(project.cam_operations) > MAX_OPERATIONS:
         raise ValueError("CAM operation count exceeds inspection limit.")
     paths_by_operation: dict[str, int] = {}
@@ -60,8 +68,6 @@ def cam_readout(path: Path) -> dict:
             "state": state,
             "stale_reason": operation.stale_reason,
         })
-    if _file_sha256(path) != source_hash:
-        raise ValueError("CF3D project changed during CAM readout; inspect again.")
     return {
         "protocol_version": PROTOCOL_VERSION,
         "source_sha256": source_hash,
