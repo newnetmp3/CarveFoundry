@@ -253,6 +253,17 @@ pub fn export_pair(
         if baseline.name != plan.part_name {
             return Err("Inlay part was renamed since CF3D inspection".into());
         }
+        let original = baseline.world_points();
+        if original.len() != plan.pocket_xy.len() {
+            return Err("Inlay source polygon topology differs from the linked CF3D".into());
+        }
+        let delta = subtract(plan.pocket_xy[0], original[0]);
+        if original.iter().zip(&plan.pocket_xy).any(|(a, b)| {
+            (a[0] + delta[0] - b[0]).abs() > 1e-7
+                || (a[1] + delta[1] - b[1]).abs() > 1e-7
+        }) {
+            return Err("Inlay geometry differs from the source CF3D; placement-only edits permitted".into());
+        }
         if sha256_file(Path::new(&link.source_path))? != link.source_sha256 {
             return Err("Source CF3D changed; re-import before exporting inlay design".into());
         }
@@ -352,6 +363,39 @@ mod tests {
         config = InlaySettings::default();
         config.pocket_stock_thickness_mm = 1.0;
         assert!(plan(&s, &p, &config).is_err());
+    }
+    #[test]
+    fn linked_cf3d_export_requires_unchanged_source_digest_and_geometry() {
+        let (sheet, part) = sheet_and_part(rectangle(50.0, 30.0));
+        let mut job = plan(&sheet, &part, &InlaySettings::default()).unwrap();
+        let unique = format!(
+            "cf-inlay-guard-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        );
+        let source_path = std::env::temp_dir().join(format!("{unique}.cf3d"));
+        fs::write(&source_path, b"source-project-original").unwrap();
+        let link = SourcePlacement {
+            source_path: source_path.to_string_lossy().into_owned(),
+            source_sha256: sha256_file(&source_path).unwrap(),
+            baseline: sheet.clone(),
+            uuid_by_part_id: std::collections::BTreeMap::from([(part.id, "uuid-seven".into())]),
+        };
+        let output = std::env::temp_dir().join(format!("{unique}-result"));
+        job.pocket_xy[1][0] += 0.5;
+        assert!(export_pair(&output, &job, Some(&link)).is_err());
+        assert!(!output.exists());
+        job = plan(&sheet, &part, &InlaySettings::default()).unwrap();
+        export_pair(&output, &job, Some(&link)).unwrap();
+        let data = fs::read_to_string(output.join("inlay-design.json")).unwrap();
+        assert!(data.contains("uuid-seven"));
+        assert!(data.contains(&link.source_sha256));
+        fs::write(&source_path, b"source-project-edited").unwrap();
+        let stale_output = std::env::temp_dir().join(format!("{unique}-stale"));
+        assert!(export_pair(&stale_output, &job, Some(&link)).is_err());
+        assert!(!stale_output.exists());
+        fs::remove_dir_all(output).unwrap();
+        fs::remove_file(source_path).unwrap();
     }
     #[test]
     fn exclusive_svg_pair_export_has_no_nc_and_refuses_overwrite() {
