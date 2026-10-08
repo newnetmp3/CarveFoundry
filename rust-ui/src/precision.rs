@@ -83,7 +83,9 @@ mod tests {
         let grid = GridSettings::default();
         let original = [3.14, 9.26];
         assert_eq!(grid.align(original).unwrap(), original);
-        assert_eq!(grid.target(original, [0.11, 0.22]).unwrap(), [3.25, 9.48]);
+        let result = grid.target(original, [0.11, 0.22]).unwrap();
+        assert!((result[0] - 3.25).abs() < 1e-10);
+        assert!((result[1] - 9.48).abs() < 1e-10);
     }
 
     #[test]
