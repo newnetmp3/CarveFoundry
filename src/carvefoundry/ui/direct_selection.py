@@ -207,6 +207,7 @@ class DirectSelectionMixin:
         item = self._editable_vector_item()
         if dialog is None or table is None or item is None:
             return
+        selected_row = table.currentRow()
         table.setRowCount(len(item.vector_path.points_xy))
         for index, point in enumerate(node_world_points(item)):
             values = (f"{index + 1}", f"{point[0]:.3f}", f"{point[1]:.3f}")
@@ -217,6 +218,11 @@ class DirectSelectionMixin:
                     | Qt.ItemFlag.ItemIsSelectable
                 )
                 table.setItem(index, column, cell)
+        if table.rowCount():
+            table.setCurrentCell(
+                min(max(selected_row, 0), table.rowCount() - 1),
+                0,
+            )
 
     def _show_vector_node_inspector(self) -> None:
         item = self._editable_vector_item()
