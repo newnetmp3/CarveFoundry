@@ -160,6 +160,34 @@ mod tests {
         assert!(json.contains("format_version"));
     }
     #[test]
+    fn read_only_cf3d_snapshot_is_accepted_without_cnc_metadata() {
+        let snapshot = serde_json::json!({
+            "format_version": 1,
+            "name": "Plaque (read-only vector snapshot)",
+            "width_mm": 250.0,
+            "height_mm": 150.0,
+            "parts": [{
+                "id": 1,
+                "name": "Closed vector",
+                "outline": [[0.0, 0.0], [30.0, 0.0], [30.0, 20.0], [0.0, 20.0]],
+                "x": 6.0,
+                "y": 10.0,
+                "quarter_turns": 0
+            }],
+            "skipped_items": 3,
+            "source_was_read_only": true,
+            "excluded_cam_and_fixtures": true
+        });
+        let sheet: Sheet = serde_json::from_value(snapshot).unwrap();
+        sheet.validate().unwrap();
+        assert_eq!(sheet.parts.len(), 1);
+        assert_eq!(sheet.parts[0].world_points()[0], [6.0, 10.0]);
+        // A layout save excludes all CF3D metadata; this must never be used
+        // to reconstruct or overwrite CNC project toolpaths.
+        let document = serde_json::to_value(&sheet).unwrap();
+        assert!(document.get("excluded_cam_and_fixtures").is_none());
+    }
+    #[test]
     fn invalid_geometry_and_duplicate_identifiers_are_rejected() {
         let mut sheet = Sheet::default();
         sheet.parts.push(Part { id: 1, name: "A".into(), outline: rectangle(5.0, 5.0), x: 0.0, y: 0.0, quarter_turns: 0 });
