@@ -610,6 +610,22 @@ class DirectSelectionMixin:
         grid_row.addWidget(QLabel("Spacing:", dialog))
         grid_row.addWidget(grid_spacing)
         layout.addLayout(grid_row)
+        angle_row = QHBoxLayout()
+        angle_step = QDoubleSpinBox(dialog)
+        angle_step.setObjectName("VectorAngleStep")
+        angle_step.setRange(1.0, 180.0)
+        angle_step.setDecimals(1)
+        angle_step.setSuffix(" deg")
+        angle_step.setToolTip(
+            "Hold Shift while dragging a Bezier control handle to constrain its angle."
+        )
+        angle_step.setValue(
+            float(self._settings.value("vector/angle_step_degrees", 45.0))
+        )
+        self.viewport.set_vector_angle_step(angle_step.value())
+        angle_row.addWidget(QLabel("Shift angle increment:", dialog))
+        angle_row.addWidget(angle_step)
+        layout.addLayout(angle_row)
 
         segment_heading = QLabel("Segment after selected node", dialog)
         segment_heading.setObjectName("SectionHeading")
@@ -896,6 +912,12 @@ class DirectSelectionMixin:
         grid_spacing.valueChanged.connect(
             lambda value: self._settings.setValue(
                 "vector/grid_spacing_mm", value,
+            )
+        )
+        angle_step.valueChanged.connect(
+            lambda value: (
+                self._settings.setValue("vector/angle_step_degrees", value),
+                self.viewport.set_vector_angle_step(value),
             )
         )
         segment_kind.currentIndexChanged.connect(
