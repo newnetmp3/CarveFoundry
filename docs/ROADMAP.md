@@ -70,6 +70,13 @@ shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
 read/write CF3D engine bridge; it does not retain CAM or fixture metadata
 inside the Rust layout, generate NC programs or replace full CNC preflight.
 The original PySide6 application stays available as the CNC authority.
+The current in-progress Rust Studio milestone adds bounded **multi-sheet
+polygon-first-fit nesting**: asynchronous planning, per-sheet read-only preview,
+optional 90° rotation lock, fixed stock margins/cutter gap, versioned plan
+JSON and independent sheet SVG files. This is not a stock-optimized algorithm
+nor a full CNC job: physical fixtures, grain orientation metadata and actual
+toolpath safety remain the verified Python CAM application's responsibility.
+Mark complete only after Cargo tests, Clippy, Linux build and Python CI pass.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 
