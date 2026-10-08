@@ -32,7 +32,7 @@ from the top toolbar. It reports saved operation identities, cutter types,
 stale/missing motion and disabled stages; no CNC output or preflight is exposed.
 This is informational only and runs on a worker thread.
 
-The next experimental production tool lets you choose a saved CAM stage and
+The native Rust preview now lets you choose a saved CAM stage and
 **export settings as JSON**, then apply those settings to a matching operation
 in another existing CF3D. It accepts only the same operation strategy, exact
 cutter geometry and parameter names/types. Both actions require a current
