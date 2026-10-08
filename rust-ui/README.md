@@ -44,7 +44,11 @@ environment solely for read-only CF3D inspection.
   cutter-outline clearance and optional 90-degree rotation. Inspection provides
   per-sheet part lists, nominal area utilization, versioned plan JSON and
   separate SVG output for each sheet (`<prefix>-sheet-01.svg`, etc.).
-  The original editable design stays unchanged. A failure to fit any part
+  The plan JSON can be reopened in the Rust Studio with **Open saved plan
+(read-only)**, after strict version, shape, clearance and count validation.
+Invalid files leave the current source and preview unchanged. The plan remains
+separate from the original editable CF3D and Rust source layout.
+The original editable design stays unchanged. A failure to fit any part
   within the chosen sheet limit returns an error without partial results.
   The planner limits sampling density; it is a heuristic and does not account
   for material thickness, grain vectors beyond rotation locking, physical
