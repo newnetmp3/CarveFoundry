@@ -11,11 +11,17 @@ from carvefoundry.core.project_file import load_project, save_project
 from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.vector_path import (
     VectorPath,
+    VectorSegment,
+    arc_center,
+    arc_sweep_degrees,
     apply_vector_edit,
     insert_node,
     move_node,
     node_world_points,
     remove_node,
+    sampled_points_xy,
+    segment_point,
+    set_segment,
     world_xy_to_local,
 )
 
@@ -125,3 +131,86 @@ def test_old_mesh_without_nodes_is_not_claimed_editable():
     )
     with pytest.raises(ValueError, match="no retained"):
         apply_vector_edit(item, VectorPath(((0, 0), (10, 20))))
+
+
+def test_arc_segment_is_analytic_and_splits_without_changing_shape():
+    source = VectorPath(
+        ((0, 0), (10, 0)),
+        segments=(VectorSegment.arc(180.0),),
+    )
+    source.validate()
+    assert arc_center(source, 0) == pytest.approx((5.0, 0.0))
+    assert arc_sweep_degrees(source, 0) == pytest.approx(180.0)
+    midpoint = segment_point(source, 0, 0.5)
+    assert midpoint == pytest.approx((5.0, -5.0))
+    samples = sampled_points_xy(source, tolerance_mm=0.01)
+    assert samples[0] == pytest.approx((0.0, 0.0))
+    assert samples[-1] == pytest.approx((10.0, 0.0))
+    assert min(point[1] for point in samples) == pytest.approx(-5.0, abs=0.01)
+
+    split = insert_node(source, 0)
+    assert len(split.points_xy) == 3
+    assert split.points_xy[1] == pytest.approx(midpoint)
+    assert split.segment_count == 2
+    assert all(segment.kind == "arc" for segment in split.resolved_segments())
+    assert sum(
+        arc_sweep_degrees(split, index)
+        for index in range(split.segment_count)
+    ) == pytest.approx(180.0)
+
+
+def test_cubic_bezier_sampling_and_exact_midpoint_split():
+    source = VectorPath(
+        ((0, 0), (12, 0)),
+        segments=(VectorSegment.cubic((2, 8), (10, 8)),),
+    )
+    midpoint = segment_point(source, 0, 0.5)
+    assert midpoint == pytest.approx((6.0, 6.0))
+    samples = sampled_points_xy(source, tolerance_mm=0.01)
+    assert max(point[1] for point in samples) == pytest.approx(6.0, abs=0.02)
+
+    split = insert_node(source, 0)
+    assert split.points_xy[1] == pytest.approx(midpoint)
+    assert [segment.kind for segment in split.resolved_segments()] == [
+        "cubic",
+        "cubic",
+    ]
+    with pytest.raises(ValueError, match="Convert adjacent curve"):
+        remove_node(split, 1)
+
+
+def test_all_line_paths_remain_legacy_canonical_after_insert_delete():
+    source = VectorPath(((0, 0), (10, 0), (20, 0)))
+    inserted = insert_node(source, 0)
+    assert inserted.segments is None
+    restored = remove_node(inserted, 1)
+    assert restored == source
+    assert restored.segments is None
+
+
+def test_set_segment_back_to_lines_recovers_compact_legacy_form():
+    source = VectorPath(
+        ((0, 0), (10, 0)),
+        segments=(VectorSegment.arc(90.0),),
+    )
+    changed = set_segment(source, 0, VectorSegment.line())
+    assert changed.segments is None
+    assert changed == VectorPath(((0, 0), (10, 0)))
+
+
+def test_native_project_preserves_arc_and_bezier_segments(tmp_path):
+    path = VectorPath(
+        ((0, 0), (10, 0), (20, 0)),
+        width_mm=1.25,
+        depth_mm=2.5,
+        segments=(
+            VectorSegment.arc(-90.0),
+            VectorSegment.cubic((12, 5), (18, 5)),
+        ),
+    )
+    item = ProjectItem("Curves", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    filename = save_project(Project(items=[item]), tmp_path / "curves.cf3d")
+    loaded = load_project(filename).items[0].vector_path
+    assert loaded == path
+    assert loaded.resolved_segments()[0].kind == "arc"
+    assert loaded.resolved_segments()[1].kind == "cubic"
