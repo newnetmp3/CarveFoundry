@@ -27,10 +27,10 @@
 ## Active development — analytic endpoint trim
 
 - Verified starting main: `c750eaac2845d5f79aac00a058274ae153a5cfc3` (post-PR #73 roadmap checkpoint).
-- Active branch: `feature/analytic-endpoint-trim`.
+- Active branch: `feature/analytic-endpoint-trim`, [PR #74](https://github.com/newnetmp3/CarveFoundry/pull/74).
 - Added immutable `trim_open_endpoint(path, at_start, fraction)`: trims first/last segment of an **open** path, preserving exact line, circular arc sweep, and cubic Bézier de Casteljau subcurve. Rejects closed paths, invalid fractions and degenerate cuts.
 - Added Direct Selection inspector UI with percentage input and Trim Selected Endpoint button, enabled only for open-path endpoints. Commits through existing Undo/Redo, regenerated mesh, and CAM invalidation. The opposite endpoint stays fixed in world XY despite bounding-box pivot shifts.
-- Added parametrized exact-curve tests and an offscreen Qt UI regression. **CI has not passed yet; this branch is not merged.** Real KDE/Wayland pointer and real CNC tests still outstanding.
+- Added parametrized exact-curve tests, offscreen Qt UI regression and CF3D/history roundtrip coverage. GitHub Actions runs `37812523999` (initial head) and `37812647174` (latest tests head) have not reported pass yet; **this branch is not merged.** Real KDE/Wayland pointer and real CNC tests still outstanding.
 - The Rust migration track continues in parallel. PR #72 added an opt-in Python/Rust raster parity/benchmark harness; no developer-machine performance measurements or speedup claims have been recorded.
 
 ### Next checkpoints
@@ -73,3 +73,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #72 benchmark/parity infrastructure merged after both CI lanes passed; adjacent tangent/normal handle constraints implemented on fresh branch | Merge `c89b587`; branch `feature/adjacent-tangent-normal-handle-drag` | Open PR, validate CI, review GUI interaction |
 | 2026-10-08 | PR #73 modifier-driven cubic tangent/normal alignment merged; rolling batch handover finalized | Run `37809732554` green both Python lanes; feature merge `d842c072` | Live snap indicators and trim/extend; expand Rust parity benchmarking |
 | 2026-10-08 | Began exact line/arc/Bézier open endpoint trim with Direct Selection UI and tests | Branch `feature/analytic-endpoint-trim`; CI pending | Open PR, validate, merge only when green |
+| 2026-10-08 | PR #74 opened; added CF3D/history trim regression and verified latest CI run queued | Commit `d631bb4`; run `37812647174` pending | Review results and merge only when green |
