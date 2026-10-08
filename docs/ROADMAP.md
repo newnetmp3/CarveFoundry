@@ -89,12 +89,14 @@ It must not be described as a guarantee of physical safety.
    CAM boundary directly, with mesh projection retained as a fallback.
    PR #62 adds close/open-at-node, split-at-node and two-object endpoint join
    operations with CAM source retargeting.
-   A follow-on core change introduces immutable cubic handle movement with
-   input validation and save/Undo regression coverage; graphical handle
-   hit-testing, dragging and snap indicators are not yet wired into the viewport. Remaining vector-CAD work includes
-   interactive viewport Bezier-handle dragging, tangent/perpendicular/grid snapping,
-   trim/extend, fillet/chamfer, first-class editable circle/ellipse/polygon primitives,
-   editable imported SVG/DXF contours, group cutouts and text-on-path.
+   PR #63 adds validated immutable cubic control editing; PR #64 adds native
+   viewport cubic handles, anchor guide lines, hit testing and drag-to-edit
+   through the existing Undo/Redo and CAM invalidation workflow. Both Python
+   CI lanes passed for PR #64; physical KDE/Wayland interaction testing is
+   still outstanding. Remaining vector-CAD work includes tangent/perpendicular/
+   grid snapping, visual snap indicators, angle constraints, trim/extend,
+   fillet/chamfer, editable circle/ellipse/polygon primitives, retained SVG/DXF
+   contours, group cutouts and text-on-path.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.

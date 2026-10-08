@@ -25,6 +25,7 @@ from carvefoundry.core.vector_path import (
     close_path,
     insert_node,
     join_paths,
+    move_cubic_control,
     move_node,
     node_world_points,
     open_path_at_node,
@@ -110,6 +111,7 @@ class DirectSelectionMixin:
         self, item_id: str, path, *, label: str,
         target_node: int | None = None,
         target_world_xy: tuple[float, float] | None = None,
+        target_control: tuple[int, int] | None = None,
     ) -> bool:
         indices = [
             index for index, item in enumerate(self.project.items)
@@ -143,6 +145,17 @@ class DirectSelectionMixin:
                 ty + target_world_xy[1] - float(actual[1]),
                 tz,
             )
+        if target_world_xy is not None and target_control is not None:
+            segment_index, handle = target_control
+            controls = segment_world_controls(item, segment_index)
+            if controls is not None:
+                actual = controls[handle - 1]
+                tx, ty, tz = item.transform.translation_mm
+                item.transform.translation_mm = (
+                    tx + target_world_xy[0] - actual[0],
+                    ty + target_world_xy[1] - actual[1],
+                    tz,
+                )
         self._after_ribbon_mutation(label, True)
         self.viewport.update()
         self._refresh_vector_node_inspector()
@@ -173,6 +186,31 @@ class DirectSelectionMixin:
         if candidate is None:
             return xy, None
         return candidate.point_xy, candidate.kind
+
+    def _control_drag_finished(
+        self, item_index: int, segment_index: int, handle: int,
+        x_mm: float, y_mm: float,
+    ) -> None:
+        if not 0 <= item_index < len(self.project.items):
+            return
+        item = self.project.items[item_index]
+        if item.locked or item.vector_path is None:
+            return
+        try:
+            local = world_xy_to_local_point(item, (x_mm, y_mm))
+            edited = move_cubic_control(
+                item.vector_path, segment_index, handle, local,
+            )
+            if edited == item.vector_path:
+                return
+        except (ValueError, IndexError) as exc:
+            self.statusBar().showMessage(f"Bezier handle drag rejected: {exc}", 7500)
+            return
+        self._commit_vector_path(
+            item.item_id, edited, label="drag Bezier handle",
+            target_world_xy=(x_mm, y_mm),
+            target_control=(segment_index, handle),
+        )
 
     def _node_drag_finished(
         self, item_index: int, node_index: int, x_mm: float, y_mm: float,
