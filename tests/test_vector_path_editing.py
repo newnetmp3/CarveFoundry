@@ -418,5 +418,5 @@ def test_trimmed_analytic_curve_roundtrips_and_history_restores(tmp_path) -> Non
     apply_vector_edit(item, changed)
     saved = save_project(project, tmp_path / "trimmed-curve.cf3d")
     assert load_project(saved).items[0].vector_path == changed
-    restored, *_rest = restore_workspace(snapshot)
-    assert restored.items[0].vector_path == original
+    restore_workspace(project, snapshot)
+    assert project.items[0].vector_path == original
