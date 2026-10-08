@@ -291,3 +291,130 @@ def test_direct_selection_can_create_arc_and_bezier_segments_with_snap_controls(
         window._settings.remove("vector/snap_enabled")
         window._settings.remove("vector/snap_tolerance_mm")
         window.close()
+
+
+
+def test_direct_selection_split_updates_cam_sources_and_undo_restores_job():
+    window = MainWindow()
+    path = VectorPath(((0.0, 0.0), (10.0, 0.0), (20.0, 0.0)))
+    item = ProjectItem(
+        "Split me",
+        kind="pen",
+        mesh=path.mesh_asset(),
+        vector_path=path,
+    )
+    cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+    operation = CamOperation(
+        operation="profile",
+        cutter=cutter,
+        source_item_ids=(item.item_id,),
+    )
+    try:
+        window._set_project(
+            Project(items=[item], cam_operations=[operation]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_direct_selection()
+        dialog = window._vector_node_dialog
+        table = window._vector_nodes_table
+        split_button = dialog.findChild(QPushButton, "VectorSplitPath")
+        assert split_button is not None
+
+        table.setCurrentCell(1, 0)
+        _APP.processEvents()
+        assert split_button.isEnabled()
+        split_button.click()
+        _APP.processEvents()
+
+        assert len(window.project.items) == 2
+        first, second = window.project.items
+        assert first.vector_path.points_xy == ((0.0, 0.0), (10.0, 0.0))
+        assert second.vector_path.points_xy == ((10.0, 0.0), (20.0, 0.0))
+        assert window.project.cam_operations[0].source_item_ids == (
+            first.item_id,
+            second.item_id,
+        )
+        assert window.project.cam_operations[0].needs_recalculation
+
+        window._undo()
+        assert len(window.project.items) == 1
+        assert window.project.items[0].item_id == item.item_id
+        assert window.project.cam_operations[0].source_item_ids == (item.item_id,)
+    finally:
+        dialog = getattr(window, "_vector_node_dialog", None)
+        if dialog is not None:
+            dialog.close()
+        window.close()
+
+
+def test_direct_selection_join_two_paths_retargets_cam_and_undo_restores_both():
+    window = MainWindow()
+    first_path = VectorPath(((0.0, 0.0), (10.0, 0.0)))
+    second_path = VectorPath(((10.5, 0.0), (20.0, 0.0)))
+    first = ProjectItem(
+        "First",
+        kind="pen",
+        mesh=first_path.mesh_asset(),
+        vector_path=first_path,
+    )
+    second = ProjectItem(
+        "Second",
+        kind="pen",
+        mesh=second_path.mesh_asset(),
+        vector_path=second_path,
+    )
+    cutter = Cutter("3 mm flat", ToolType.FLAT_END_MILL, 3.0)
+    operation = CamOperation(
+        operation="engrave",
+        cutter=cutter,
+        source_item_ids=(first.item_id, second.item_id),
+    )
+    try:
+        window._set_project(
+            Project(items=[first, second], cam_operations=[operation]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._settings.setValue("vector/snap_tolerance_mm", 1.0)
+        window._select_project_indices([0, 1], primary=0)
+        window._activate_direct_selection()
+        dialog = window._vector_node_dialog
+        join_button = dialog.findChild(QPushButton, "VectorJoinPaths")
+        assert join_button is not None
+        assert join_button.isEnabled()
+
+        join_button.click()
+        _APP.processEvents()
+
+        assert len(window.project.items) == 1
+        joined_item = window.project.items[0]
+        assert joined_item.item_id == first.item_id
+        assert joined_item.vector_path is not None
+        assert not joined_item.vector_path.closed
+        assert joined_item.vector_path.points_xy == (
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (10.5, 0.0),
+            (20.0, 0.0),
+        )
+        assert window.project.cam_operations[0].source_item_ids == (
+            first.item_id,
+        )
+        assert window.project.cam_operations[0].needs_recalculation
+
+        window._undo()
+        assert [item.item_id for item in window.project.items] == [
+            first.item_id,
+            second.item_id,
+        ]
+        assert window.project.cam_operations[0].source_item_ids == (
+            first.item_id,
+            second.item_id,
+        )
+    finally:
+        dialog = getattr(window, "_vector_node_dialog", None)
+        if dialog is not None:
+            dialog.close()
+        window._settings.remove("vector/snap_tolerance_mm")
+        window.close()
