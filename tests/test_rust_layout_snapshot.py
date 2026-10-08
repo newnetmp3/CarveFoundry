@@ -34,6 +34,7 @@ def test_snapshot_keeps_stock_and_contour_but_does_not_modify_source():
     assert len(output["parts"]) == 1
     item = output["parts"][0]
     assert item["name"] == "Panel"
+    assert item["source_item_id"] == kept.item_id
     assert item["x"] == pytest.approx(0)
     assert item["y"] == pytest.approx(0)
     assert len(item["outline"]) >= 4
@@ -54,12 +55,17 @@ def test_snapshot_handles_arc_sampling_without_mutating_analytic_curve():
     assert item.vector_path == path
 
 
-def test_cf3d_source_roundtrip_remains_identical_when_snapshot_used(tmp_path: Path):
+def test_cf3d_source_roundtrip_remains_identical_when_snapshot_used(tmp_path: Path, capsys):
     original = Project(items=[_vector_item("Original")])
     path = tmp_path / "source.cf3d"
     save_project(original, path)
     prior = path.read_bytes()
     assert main([str(path)]) == 0
+    from hashlib import sha256
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_sha256"] == sha256(prior).hexdigest()
+    assert payload["parts"][0]["source_item_id"] == original.items[0].item_id
     assert path.read_bytes() == prior
     assert load_project(path).items[0].name == "Original"
 

@@ -43,6 +43,14 @@ and separate SVG contours. It does not yet implement optimal nesting,
 variable-size stocks, cutting tabs, clamps, grain direction metadata or CNC
 toolpath planning. The original design is preserved transactionally.
 
+The subsequent `feature/rust-ui-guarded-cf3d-placement` connects
+source-fingerprinted snapshots and permanent object UUIDs to an explicit
+**save as new project** action in the Rust Studio. Allowed changes are
+only XY translations; changed vector outlines, object identity, names,
+stock dimensions or rotation are rejected. The original remains immutable
+and all new CF3D machine toolpaths must be regenerated in Python CAM.
+This is not general writeback of 3D objects or full CAM editing parity.
+
 The in-progress `feature/rust-cf3d-placement-transactions` introduces the
 first **bounded native CF3D write boundary** for checked XY movement only:
 SHA-256 precondition, stable item UUID, locked object validation, exclusive

@@ -56,6 +56,16 @@ The original editable design stays unchanged. A failure to fit any part
   imported and separately preflighted in the original CAM app.
 - Export of closed stock-relative SVG contours for import into the established
   CarveFoundry application. The saved Rust layout remains editable separately.
+- **Guarded vector XY placement to NEW CF3D:** after importing a source CF3D,
+  move eligible retained vectors and use **Save XY placements as NEW CF3D**
+  in Job Setup. The Rust UI checks original source SHA-256 and UUIDs and
+  refuses if objects, outlines, names, stock dimensions or rotations changed.
+  The Python engine revalidates source hash, object locks and requested XY
+  translations, and writes a distinct new native CF3D without overwriting
+  the original. All generated machine toolpaths are removed and all stored
+  CAM operations marked stale. Open the new CF3D in the original CNC
+  application, regenerate toolpaths, preview and run fixture-aware preflight
+  before exporting anything. Do NOT expect native CF3D topology/3D edits.
 - **Read-only existing CF3D import** using the original trusted Python serializer:
   supply the existing project path in the top toolbar and choose **Import
   vectors (read-only)**. The new Rust layout contains only eligible closed
@@ -71,7 +81,8 @@ Import the exported SVG there, review its geometry and orientation, assign
 cutters, regenerate toolpaths, preview, run CNC preflight and export separate
 NC files as usual. **Never treat SVG or the Rust layout JSON as G-code.**
 
-This initial Rust UI **does not write CF3D**, display/edit CAM operations,
+The Rust UI only creates **new CF3D files for strictly guarded XY placement**.
+It still does not write vector topology, display/edit CAM operations,
 import arbitrary SVG/STL, drive a controller, calculate actual cut time, perform
 inlays, merge toolpaths, store CAM templates, check clamps/fences, or verify CNC
 safety. The read-only snapshot service exports no fixtures, cutters, CAM stages
