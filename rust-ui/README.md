@@ -146,3 +146,18 @@ toolpaths, guarantee mating fit, validate clamps/fixture clearance or emit NC.
 Import into established CAM, validate taper geometry and physical mirroring,
 test on scrap, regenerate each cutter stage, simulate and run full preflight
 before any machining.
+
+## Stock-origin precision grid (experimental)
+
+In the native Studio's **Precision / Stock Grid** section, enable
+**Snap XY drags to grid** and choose spacing from 0.05 to 100 mm. Dragged
+objects snap their numeric translations against the fixed lower-left stock
+XY0. The drag calculation uses the **total movement from drag start**, rather
+than rounding every mouse frame, so fine mouse motion is not lost. The
+**Align selected origin to grid** action snaps an existing object's stored
+X/Y translation. Direct numeric X/Y fields remain available for precise
+positions even when snap is disabled.
+
+These are design-space placements, not machine-coordinate verification. The
+standard CF3D save-as-new path still invalidates existing toolpaths and
+requires fresh CAM generation, simulation and fixture-aware preflight.

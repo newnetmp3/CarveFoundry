@@ -9,5 +9,6 @@ pub mod inlay;
 pub mod nesting;
 pub mod multi_sheet;
 pub mod plan_io;
+pub mod precision;
 pub mod svg;
 pub mod source_placement;

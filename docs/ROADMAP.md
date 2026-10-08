@@ -116,7 +116,7 @@ untouched, all generated motion is removed and every operation is stale.
 This is a parameter preset workflow, not toolpath merging, G-code export or a
 verified CNC machining plan. Full Rust-native CAM remains a future milestone.
 
-**Paired inlay design milestone — feature branch, not yet released:** Native Rust
+**Paired inlay design milestone — PR #93 merged and CI passed:** Native Rust
 Studio now has a strictly-convex polygon-only pocket/plug outline planner in
 `rust-ui/src/inlay.rs`, typed included cutter angle, tip diameter, cutter
 envelope, depth, engagement, material thickness, glue gap and fit clearance.
@@ -128,8 +128,15 @@ guarding CF3D-linked sources with the original SHA-256 and UUID. **These are
 design contours, NOT certified mating geometry or toolpaths**: face mirroring,
 stock registration, cutter-angle/toolpath pairing, real material fit, CNC
 simulation, fixture-aware preflight and NC export remain unimplemented here.
-Do not describe this feature as production-ready until CI and integration
-verification pass.
+Full CNC production integration, fit certification and physical QA still require separate validation.
+
+**Native precision stock grid — feature branch, pending CI:** A pure Rust
+stock-XY0 snapping primitive uses finite bounded millimetre grid pitch and
+absolute pointer displacement to prevent sub-grid per-frame rounding loss.
+Rust Studio adds an opt-in drag-to-grid toggle and selected-object alignment.
+Undo/Redo and the existing guarded placement transaction are retained.
+This does not implement vector node snapping, CAM path constraints, new
+CF3D editing semantics or NC safety parity. Do not call it merged before CI.
 
 ## Parallel architecture track — gradual Rust migration (planned)
 

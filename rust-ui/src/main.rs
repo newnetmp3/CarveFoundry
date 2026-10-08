@@ -5,6 +5,7 @@ use carvefoundry_studio::cam_readout::CamReadout;
 use carvefoundry_studio::inlay::{InlayPlan, InlaySettings, export_pair, plan as plan_inlay};
 use carvefoundry_studio::geometry::{Part, Sheet, area, ellipse, polygon, rectangle, star};
 use carvefoundry_studio::nesting::{contains, nest};
+use carvefoundry_studio::precision::GridSettings;
 use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettings};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
@@ -60,6 +61,8 @@ struct Studio {
     zoom: f32,
     message: String,
     dragging: bool,
+    drag_anchor: Option<[f64; 2]>,
+    precision: GridSettings,
     plan: Option<MultiSheetPlan>,
     plan_index: usize,
     planning: Option<Receiver<Result<MultiSheetPlan, String>>>,
@@ -104,6 +107,8 @@ impl Default for Studio {
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
             dragging: false,
+            drag_anchor: None,
+            precision: GridSettings::default(),
             plan: None,
             plan_index: 0,
             planning: None,
@@ -119,6 +124,8 @@ impl Default for Studio {
 
 impl Studio {
     fn remember(&mut self) {
+        self.drag_anchor = None;
+        self.dragging = false;
         self.inlay_plan = None;
         self.plan = None;
         self.planning = None;
@@ -128,6 +135,9 @@ impl Studio {
         self.redo.clear();
     }
     fn undo(&mut self) {
+        self.drag_anchor = None;
+        self.dragging = false;
+        self.inlay_plan = None;
         self.plan = None;
         self.planning = None;
         self.plan_index = 0;
@@ -137,6 +147,9 @@ impl Studio {
         }
     }
     fn redo(&mut self) {
+        self.drag_anchor = None;
+        self.dragging = false;
+        self.inlay_plan = None;
         self.plan = None;
         self.planning = None;
         self.plan_index = 0;
@@ -700,6 +713,30 @@ impl Studio {
             if ui.button("Open verified CAM ↗").clicked() { self.open_legacy_cam(); }
         });
     }
+    fn align_selected_to_grid(&mut self) {
+        let Some(id) = self.selected else {
+            self.message = "Select a vector before aligning to stock grid".into();
+            return;
+        };
+        let Some(part) = self.sheet.parts.iter().find(|p| p.id == id) else {
+            self.message = "Selected vector is no longer in the design".into();
+            return;
+        };
+        match self.precision.align([part.x, part.y]) {
+            Err(reason) => self.message = format!("Precision placement rejected: {reason}"),
+            Ok([x, y]) if x == part.x && y == part.y => {
+                self.message = "Selected vector origin is already on the stock grid".into();
+            }
+            Ok([x, y]) => {
+                self.remember();
+                if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
+                    part.x = x;
+                    part.y = y;
+                }
+                self.message = format!("Selected origin aligned to X {x:.3}, Y {y:.3} mm");
+            }
+        }
+    }
     fn tools(&mut self, ui: &mut egui::Ui) {
         ui.heading("DRAW / DESIGN");
         ui.label("Native vector geometry");
@@ -728,6 +765,21 @@ impl Studio {
             });
         }
         if ui.button("＋ Add vector").clicked() { self.add(); }
+        ui.separator();
+        ui.heading("PRECISION / STOCK GRID");
+        ui.checkbox(&mut self.precision.enabled, "Snap XY drags to grid");
+        ui.horizontal(|ui| {
+            ui.label("Grid spacing");
+            ui.add(egui::DragValue::new(&mut self.precision.step_mm)
+                .range(0.05..=100.0).speed(0.05).suffix(" mm"));
+        });
+        ui.small("Absolute stock XY0 is bottom-left. Grid snapping affects object placement, not vector shape or CNC preflight.");
+        if ui.add_enabled(
+            self.precision.enabled && self.selected.is_some(),
+            egui::Button::new("Align selected origin to grid"),
+        ).clicked() {
+            self.align_selected_to_grid();
+        }
         ui.separator();
         ui.heading("PRODUCTION LAYOUT");
         ui.strong("Polygon-aware sheet packing");
@@ -1121,22 +1173,36 @@ impl Studio {
             let world = to_world(pointer);
             self.selected = self.sheet.parts.iter().rev()
                 .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
-            if self.selected.is_some() {
+            if let Some(id) = self.selected
+                && let Some(anchor) = self.sheet.parts.iter()
+                    .find(|p| p.id == id).map(|p| [p.x, p.y])
+            {
                 self.remember();
                 self.dragging = true;
+                self.drag_anchor = Some(anchor);
             }
         }
         if self.dragging && response.dragged()
-            && let Some(id) = self.selected {
-            let delta = ui.input(|input| input.pointer.delta());
-            if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
-                part.x += delta.x as f64 / scale as f64;
-                part.y -= delta.y as f64 / scale as f64;
+            && let Some(id) = self.selected
+            && let Some(anchor) = self.drag_anchor
+        {
+            let total = response.drag_delta();
+            let displacement = [total.x as f64 / scale as f64,
+                                -total.y as f64 / scale as f64];
+            match self.precision.target(anchor, displacement) {
+                Ok([x, y]) => {
+                    if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
+                        part.x = x;
+                        part.y = y;
+                    }
+                }
+                Err(reason) => self.message = format!("Precision drag rejected: {reason}"),
             }
         }
         if response.drag_stopped() {
             self.dragging = false;
-            self.message = "Moved layout vector · Verify sheet boundary before exporting".into();
+            self.drag_anchor = None;
+            self.message = "Moved design vector · Verify stock and fixtures before CAM".into();
         }
         if let Some(pointer) = response.hover_pos() {
             let world = to_world(pointer);
