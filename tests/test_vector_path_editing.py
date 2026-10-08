@@ -568,8 +568,8 @@ def test_analytic_chamfer_preserves_unaffected_geometry() -> None:
         ),
     )
     result = chamfer_open_line_corner(path, 1, 2.0)
-    assert result.points_xy == pytest.approx(
-        ((0, 0), (8, 0), (10, 2), (10, 10), (15, 10)),
+    assert np.asarray(result.points_xy) == pytest.approx(
+        np.asarray(((0, 0), (8, 0), (10, 2), (10, 10), (15, 10))),
     )
     assert result.segment_count == path.segment_count + 1
     assert result.resolved_segments()[-1] == path.resolved_segments()[-1]
