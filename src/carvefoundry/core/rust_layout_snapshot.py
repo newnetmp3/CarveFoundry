@@ -16,6 +16,7 @@ import numpy as np
 
 from .project import Project
 from .project_file import load_project
+from .rust_project_transaction import _file_sha256
 from .vector_path import sampled_world_points
 
 MAX_PARTS = 512
@@ -76,6 +77,7 @@ def project_to_layout_snapshot(project: Project) -> dict:
             raise ValueError("Rust Studio snapshot exceeds the 512-part limit.")
         items.append({
             "id": index + 1,
+            "source_item_id": item.item_id,
             "name": item.name[:256],
             "outline": local.tolist(),
             "x": float(origin[0]),
@@ -101,8 +103,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cf3d.suffix.lower() != ".cf3d":
             raise ValueError("Input must be a CF3D project.")
+        source_hash = _file_sha256(args.cf3d)
         source = load_project(args.cf3d)
         snapshot = project_to_layout_snapshot(source)
+        if _file_sha256(args.cf3d) != source_hash:
+            raise ValueError("Source project changed during vector inspection.")
+        snapshot["source_sha256"] = source_hash
     except (ValueError, OSError, TypeError) as exc:
         print(f"CF3D snapshot rejected: {exc}", file=sys.stderr)
         return 2
