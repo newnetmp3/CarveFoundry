@@ -447,3 +447,33 @@ def test_native_bezier_handles_retain_selection_and_commit_undoable_curve():
         assert moved == pytest.approx((initial[0] + 1.5, initial[1] + 2.0))
     finally:
         window.close()
+
+
+def test_bezier_handle_drag_uses_stock_grid_when_geometry_snapping_disabled():
+    path = VectorPath(
+        ((10, 10), (40, 10)),
+        segments=(VectorSegment.cubic((17, 23), (33, 23)),),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    keys = ("vector/snap_enabled", "vector/grid_snap_enabled",
+            "vector/snap_tolerance_mm", "vector/grid_spacing_mm")
+    original = {key: window._settings.value(key) for key in keys}
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._settings.setValue("vector/snap_enabled", False)
+        window._settings.setValue("vector/grid_snap_enabled", True)
+        window._settings.setValue("vector/snap_tolerance_mm", 1.0)
+        window._settings.setValue("vector/grid_spacing_mm", 5.0)
+        window._control_drag_finished(0, 0, 1, 20.3, 24.7)
+        world = segment_world_controls(item, 0)
+        assert world is not None
+        assert world[0] == pytest.approx((20.0, 25.0))
+        assert item.vector_path.resolved_segments()[0].control2_xy == (33, 23)
+    finally:
+        for key, value in original.items():
+            if value is None:
+                window._settings.remove(key)
+            else:
+                window._settings.setValue(key, value)
+        window.close()

@@ -211,6 +211,10 @@ class DirectSelectionMixin:
         item = self.project.items[item_index]
         if item.locked or item.vector_path is None:
             return
+        snapped_xy, snap_kind = self._snap_vector_world_xy(
+            item.item_id, -1, (x_mm, y_mm),
+        )
+        x_mm, y_mm = snapped_xy
         try:
             local = world_xy_to_local_point(item, (x_mm, y_mm))
             edited = move_cubic_control(
@@ -221,11 +225,16 @@ class DirectSelectionMixin:
         except (ValueError, IndexError) as exc:
             self.statusBar().showMessage(f"Bezier handle drag rejected: {exc}", 7500)
             return
-        self._commit_vector_path(
+        changed = self._commit_vector_path(
             item.item_id, edited, label="drag Bezier handle",
             target_world_xy=(x_mm, y_mm),
             target_control=(segment_index, handle),
         )
+        if changed and snap_kind is not None:
+            self.statusBar().showMessage(
+                f"Bezier handle snapped to {snap_kind}. Toolpaths must be regenerated.",
+                5000,
+            )
 
     def _node_drag_finished(
         self, item_index: int, node_index: int, x_mm: float, y_mm: float,
