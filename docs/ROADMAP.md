@@ -183,7 +183,11 @@ AI/PyTorch inference initially.
    was merged after passing CI. The next in-progress milestone extends open
    straight-line endpoints by a specified distance without affecting their
    other segments, through Direct Selection and Undo/CAM invalidation. It
-   does not extrapolate arcs or cubic curves, and is not intersection-aware.
+   does not extrapolate arcs or cubic curves. PR #75 is merged after CI.
+   Finite straight-segment trim/extend intersection geometry is now in
+   development, with explicit trim/extend direction and bounds validation.
+   Target selection UI and general analytic curve intersections remain future
+   work; the core algorithm alone is not a completed CAD user workflow.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
