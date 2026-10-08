@@ -5,6 +5,7 @@ import pytest
 from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.vector_path import VectorPath, VectorSegment
 from carvefoundry.core.vector_snapping import (
+    adjacent_control_reference,
     constrain_angle,
     directional_snap_candidate,
     grid_snap_candidate,
@@ -161,3 +162,33 @@ def test_angle_constraint_uses_anchor_and_preserves_radius() -> None:
 def test_angle_constraint_rejects_invalid_increment(step: float) -> None:
     with pytest.raises(ValueError):
         constrain_angle((1, 2), (0, 0), step)
+
+
+def test_adjacent_cubic_handle_reference_uses_neighbor_world_tangent():
+    path = VectorPath(
+        ((0.0, 0.0), (10.0, 0.0), (20.0, 5.0), (30.0, 5.0)),
+        segments=(
+            VectorSegment.line(),
+            VectorSegment.cubic((13, 5), (18, 8)),
+            VectorSegment.line(),
+        ),
+    )
+    item = _item("Joined", path)
+    first = adjacent_control_reference(item, 1, 1)
+    second = adjacent_control_reference(item, 1, 2)
+    assert first is not None and second is not None
+    assert first[1][0] > 0
+    assert abs(first[1][1]) < 1e-7
+    assert second[1][0] > 0
+    assert abs(second[1][1]) < 1e-7
+
+
+def test_adjacent_reference_does_not_invent_open_end_continuity():
+    path = VectorPath(
+        ((0.0, 0.0), (10.0, 0.0)),
+        segments=(VectorSegment.cubic((2, 5), (8, 5)),),
+    )
+    item = _item("Standalone", path)
+    assert adjacent_control_reference(item, 0, 1) is None
+    assert adjacent_control_reference(item, 0, 2) is None
+    assert adjacent_control_reference(item, 9, 1) is None
