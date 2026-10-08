@@ -41,6 +41,26 @@ For definitions of jargon, use **Help → Search CNC Glossary…**. CarveFoundry
 cannot verify physical clamps, live work offsets, holder reach or spindle
 condition; operator checks are required even after a passing software preflight.
 
+## New Rust-native layout workspace (experimental)
+
+A separate **native Rust/egui** layout studio now lives in `rust-ui/`.
+It has editable rectangles, ellipses, polygons and stars; mouse selection and
+dragging; undo/redo; polygon-aware first-fit sheet placement; array duplication;
+editable versioned layout JSON and stock-relative SVG export.
+
+```bash
+cd /mnt/moar/Downloads/git/CarveFoundry
+bash scripts/run-rust-studio.sh
+```
+
+This **does not yet replace** the established full CNC/CAM application.
+The original `carvefoundry` desktop launch remains unchanged until the Rust
+editor can preserve native CF3D projects, toolpaths, preflight and all
+machine-safety gates. Import the exported SVG into the established CAM workspace
+and review its XY orientation and toolpaths before any machining.
+See [Rust Studio installation and limits](rust-ui/README.md) and the
+[capability gap plan](docs/RUST_UI_GAP_PLAN.md).
+
 ## Install on Linux (KDE Plasma / Wayland)
 
 CarveFoundry has a **user-local native desktop installer**. After installation
