@@ -7,6 +7,7 @@ use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettin
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
 use carvefoundry_studio::svg;
+use carvefoundry_studio::plan_io::{deserialize_plan, serialize_plan};
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
 
@@ -222,15 +223,44 @@ impl Studio {
     }
     fn save_multi_plan(&mut self) {
         let Some(plan) = &self.plan else { return };
-        let result = plan.validate().and_then(|_| {
-            serde_json::to_string_pretty(plan).map_err(|e| e.to_string())
-        }).and_then(|data| {
+        let result = serialize_plan(plan).and_then(|data| {
             std::fs::write(&self.plan_path, data).map_err(|e| e.to_string())
         });
         self.message = match result {
             Ok(()) => format!("Saved read-only multi-sheet plan to {}", self.plan_path),
             Err(error) => format!("Multi-sheet plan save rejected: {error}"),
         };
+    }
+    fn load_multi_plan(&mut self) {
+        // Read-only plan preview. This is never a source CF3D project load.
+        let source = std::path::Path::new(&self.plan_path);
+        let parsed = std::fs::metadata(source)
+            .map_err(|e| e.to_string())
+            .and_then(|metadata| {
+                if metadata.len() > 8 * 1024 * 1024 {
+                    Err("Multi-sheet plan file exceeds the 8 MiB limit".to_owned())
+                } else {
+                    std::fs::read_to_string(source).map_err(|e| e.to_string())
+                }
+            })
+            .and_then(|content| deserialize_plan(&content));
+        match parsed {
+            Ok(plan) => {
+                self.planning = None;
+                self.plan_index = 0;
+                self.selected = None;
+                self.message = format!(
+                    "Opened {}-sheet read-only plan from {}. Original editable vectors unchanged.",
+                    plan.sheets.len(), self.plan_path
+                );
+                self.plan = Some(plan);
+            }
+            Err(error) => {
+                self.message = format!(
+                    "Plan file rejected: {error}. Existing source and preview unchanged."
+                );
+            }
+        }
     }
     fn export_multi_svg(&mut self) {
         let Some(plan) = &self.plan else { return };
@@ -456,6 +486,9 @@ impl Studio {
         if ui.add_enabled(self.planning.is_none(), egui::Button::new(
             if self.planning.is_some() { "Nesting…" } else { "Arrange across sheets" }
         )).clicked() { self.start_multi_nest(); }
+        ui.label("Plan JSON filename");
+        ui.text_edit_singleline(&mut self.plan_path);
+        if ui.button("Open saved plan (read-only)").clicked() { self.load_multi_plan(); }
         if let Some(plan) = &self.plan {
             ui.strong(format!("{} sheets in current plan", plan.sheets.len()));
             ui.horizontal(|ui| {
@@ -468,8 +501,6 @@ impl Studio {
                     self.plan_index = (self.plan_index + 1).min(plan.sheets.len() - 1);
                 }
             });
-            ui.label("Plan JSON filename");
-            ui.text_edit_singleline(&mut self.plan_path);
             if ui.button("Save multi-sheet plan").clicked() { self.save_multi_plan(); }
             ui.label("SVG output filename prefix");
             ui.text_edit_singleline(&mut self.svg_path);
