@@ -70,14 +70,16 @@ shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
 read/write CF3D engine bridge; it does not retain CAM or fixture metadata
 inside the Rust layout, generate NC programs or replace full CNC preflight.
 The original PySide6 application stays available as the CNC authority.
-PR #89 merged the first guarded, source-UUID-aware placement-only native
-CF3D transaction engine after Python 3.12/3.14 CI passed. The next
-in-progress Rust Studio milestone integrates a **Save XY placements as NEW
-CF3D** action, using a checked source SHA-256, original retained-vector
-identity and strict no-topology/no-rotation constraints. It requires Rust
-Cargo tests/strict Clippy/native release build and Python CI before merge.
-The user must reopen the new project in trusted CAM to regenerate motion
-and repeat fixture-aware preflight.
+PR #89 merged the SHA-256 and stable-UUID guarded, placement-only
+native CF3D transaction service after green Python CI. PR #90 completed the
+**Save XY placements as NEW CF3D** Rust UI workflow and passed independent
+Rust Cargo, strict Clippy, Linux release-build and Python 3.12/3.14 CI.
+The interface rejects unsupported geometry/topology, object set, name,
+rotation and stock changes; its new output file discards generated
+toolpaths and marks all persisted CAM operations stale. The existing
+application must then regenerate, simulate and preflight machining.
+This does not yet supply a full Rust-native CF3D project authoring/3D-CAM
+editing interface, NC exporter or machine-tested workflow.
 
 The next **in-progress**, unmerged engine milestone introduces typed SHA-256-
 guarded, stable-UUID placement transactions against the original CF3D
