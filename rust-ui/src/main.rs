@@ -51,6 +51,10 @@ struct Studio {
     cam_readout: Option<CamReadout>,
     cam_readout_path: String,
     inspecting_cam: Option<Receiver<(String, Result<CamReadout, String>)>>,
+    cam_template_path: String,
+    cam_template_output: String,
+    cam_template_operation_id: String,
+    cam_template_job: Option<Receiver<(String, Result<String, String>)>>,
     svg_path: String,
     zoom: f32,
     message: String,
@@ -88,6 +92,10 @@ impl Default for Studio {
             cam_readout: None,
             cam_readout_path: String::new(),
             inspecting_cam: None,
+            cam_template_path: "carvefoundry-cam-settings.json".into(),
+            cam_template_output: "job-with-template.cf3d".into(),
+            cam_template_operation_id: String::new(),
+            cam_template_job: None,
             svg_path: "carvefoundry-layout.svg".into(),
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
@@ -492,6 +500,90 @@ impl Studio {
         }
     }
 
+    fn start_cam_template_job(&mut self, apply: bool) {
+        if self.cam_template_job.is_some() { return; }
+        let Some(report) = self.cam_readout.as_ref() else {
+            self.message = "Inspect the source CF3D CAM operations first".into();
+            return;
+        };
+        if self.cam_readout_path != self.cf3d_path
+            || !report.operations.iter().any(|op| op.operation_id == self.cam_template_operation_id) {
+            self.message = "Select an inspected operation from the current CF3D first".into();
+            return;
+        }
+        let source = self.cf3d_path.clone();
+        let expected = report.source_sha256.clone();
+        let op_id = self.cam_template_operation_id.clone();
+        let template = self.cam_template_path.clone();
+        let output_path = self.cam_template_output.clone();
+        let python = std::env::var("CARVEFOUNDRY_PYTHON")
+            .unwrap_or_else(|_| "python3".into());
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut command = Command::new(python);
+            command.args([
+                "-m", "carvefoundry.core.cam_settings_template",
+                if apply { "apply" } else { "export" },
+                source.as_str(), op_id.as_str(), template.as_str(),
+                "--expected-sha", expected.as_str(),
+            ]);
+            if apply {
+                command.args(["--output", output_path.as_str()]);
+            }
+            let result = command.output().map_err(|e| e.to_string()).and_then(|output| {
+                if !output.status.success() {
+                    return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+                }
+                let report: serde_json::Value = serde_json::from_slice(&output.stdout)
+                    .map_err(|e| format!("Template engine returned invalid JSON: {e}"))?;
+                if apply {
+                    if report["requires_regeneration_and_preflight"] != true
+                        || report["template_applied"] != true {
+                        return Err("Template engine did not certify CAM invalidation".into());
+                    }
+                    Ok(format!(
+                        "NEW CF3D created: {}. All paths invalidated. Open in verified CAM, regenerate, preflight and export there.",
+                        output_path
+                    ))
+                } else if report["is_gcode"] == false {
+                    Ok(format!("Saved reusable settings JSON: {template}. No toolpath or NC motion exported."))
+                } else {
+                    Err("Template engine returned an unsafe or unknown response".into())
+                }
+            });
+            let _ = sender.send((source, result));
+        });
+        self.cam_template_job = Some(receiver);
+        self.message = if apply {
+            "Applying CAM settings to a NEW CF3D; original stays unchanged…".into()
+        } else { "Exporting a reusable CAM settings template…".into() };
+    }
+
+    fn poll_cam_template_job(&mut self, ui: &egui::Ui) {
+        let response = self.cam_template_job.as_ref().map(|r| r.try_recv());
+        match response {
+            Some(Ok((source, outcome))) => {
+                self.cam_template_job = None;
+                self.message = if source == self.cf3d_path {
+                    match outcome {
+                        Ok(message) => message,
+                        Err(error) => format!("CAM template rejected: {error}"),
+                    }
+                } else {
+                    "Source path changed while template operation was running; inspect output in verified CAM".into()
+                };
+            }
+            Some(Err(TryRecvError::Disconnected)) => {
+                self.cam_template_job = None;
+                self.message = "CAM template process stopped without confirmation".into();
+            }
+            Some(Err(TryRecvError::Empty)) => {
+                ui.ctx().request_repaint_after(Duration::from_millis(80));
+            }
+            None => {}
+        }
+    }
+
     fn save_cf3d_placements(&mut self) {
         let Some(link) = &self.source_link else {
             self.message = "Import a source CF3D project before requesting a placement transaction".into();
@@ -717,6 +809,7 @@ impl Studio {
             ui.label(format!(
                 "Stored motion (unverified): {}", report.counts.motion_present_unverified
             ));
+            let mut chosen_template_stage = None;
             egui::ScrollArea::vertical().max_height(230.0).show(ui, |ui| {
                 for stage in &report.operations {
                     ui.group(|ui| {
@@ -730,10 +823,38 @@ impl Studio {
                         if let Some(reason) = &stage.stale_reason {
                             ui.colored_label(Color32::YELLOW, reason);
                         }
+                        if ui.small_button("Use operation for settings template").clicked() {
+                            chosen_template_stage = Some(stage.operation_id.clone());
+                        }
                     });
                 }
             });
+            if let Some(id) = chosen_template_stage {
+                self.cam_template_operation_id = id;
+            }
             ui.small("Read-only state; all CNC export requires verified CAM and current preflight.");
+            ui.separator();
+            ui.heading("REUSABLE CAM SETTINGS");
+            ui.small("Settings only: same operation strategy, identical cutter geometry and parameter schema required.");
+            ui.label(format!(
+                "Selected operation UUID: {}",
+                if self.cam_template_operation_id.is_empty() {
+                    "None"
+                } else { self.cam_template_operation_id.as_str() }
+            ));
+            ui.label("Template JSON path:");
+            ui.text_edit_singleline(&mut self.cam_template_path);
+            ui.label("New project output (.cf3d):");
+            ui.text_edit_singleline(&mut self.cam_template_output);
+            let can_run = self.cam_template_job.is_none()
+                && !self.cam_template_operation_id.is_empty();
+            if ui.add_enabled(can_run, egui::Button::new("Export operation settings")).clicked() {
+                self.start_cam_template_job(false);
+            }
+            if ui.add_enabled(can_run, egui::Button::new("Apply template to NEW CF3D")).clicked() {
+                self.start_cam_template_job(true);
+            }
+            ui.small("Template application removes saved motion, marks every CAM stage stale and NEVER exports G-code.");
         }
         if let Some(source) = &self.source_link {
             ui.separator();
@@ -927,6 +1048,7 @@ impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_multi_nest(ui);
         self.poll_cam_inspection(ui);
+        self.poll_cam_template_job(ui);
         egui::Panel::top("studio-toolbar").show(ui, |ui| {
             self.header(ui);
         });
