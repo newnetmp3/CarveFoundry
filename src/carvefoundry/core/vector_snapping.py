@@ -89,6 +89,55 @@ def constrain_angle(
     )
 
 
+def adjacent_control_reference(
+    item: ProjectItem,
+    segment_index: int,
+    control_index: int,
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """World-space reference tangent from the segment adjoining a cubic handle.
+
+    Control 1 uses the preceding segment's ending tangent; control 2 uses
+    the following segment's starting tangent. No reference exists at an open
+    path boundary. Derivative direction is sampled close to the endpoint,
+    preserving transforms and analytic curve shape.
+    """
+    path = item.vector_path
+    if (
+        path is None or control_index not in (1, 2)
+        or not 0 <= segment_index < path.segment_count
+        or path.resolved_segments()[segment_index].kind != "cubic"
+    ):
+        return None
+    count = path.segment_count
+    if control_index == 1:
+        neighbor = segment_index - 1
+        if neighbor < 0:
+            if not path.closed:
+                return None
+            neighbor = count - 1
+        if neighbor == segment_index:
+            return None
+        anchor = segment_world_point(item, segment_index, 0.0)
+        near = segment_world_point(item, neighbor, 1.0 - 1e-4)
+        end = segment_world_point(item, neighbor, 1.0)
+        direction = (end[0] - near[0], end[1] - near[1])
+    else:
+        neighbor = segment_index + 1
+        if neighbor >= count:
+            if not path.closed:
+                return None
+            neighbor = 0
+        if neighbor == segment_index:
+            return None
+        anchor = segment_world_point(item, segment_index, 1.0)
+        start = segment_world_point(item, neighbor, 0.0)
+        near = segment_world_point(item, neighbor, 1e-4)
+        direction = (near[0] - start[0], near[1] - start[1])
+    if hypot(*direction) <= _EPS:
+        return None
+    return anchor, direction
+
+
 def directional_snap_candidate(
     query_xy: tuple[float, float],
     origin_xy: tuple[float, float],
