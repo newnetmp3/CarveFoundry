@@ -528,3 +528,31 @@ def test_fit_line_endpoint_requires_correct_operation_direction():
             path, at_start=False, target_start_xy=(14, -2),
             target_end_xy=(14, 2), operation="trim",
         )
+
+
+def test_line_fit_world_reference_is_converted_into_source_coordinates() -> None:
+    from carvefoundry.core.vector_path import (
+        fit_open_line_endpoint_to_segment,
+        segment_world_point,
+        world_xy_to_local_point,
+    )
+
+    source_path = VectorPath(((0, 0), (10, 0)))
+    reference_path = VectorPath(((5, -6), (5, 6)))
+    source = ProjectItem(
+        "Source", kind="pen", mesh=source_path.mesh_asset(), vector_path=source_path,
+    )
+    reference = ProjectItem(
+        "Reference", kind="pen", mesh=reference_path.mesh_asset(),
+        vector_path=reference_path,
+    )
+    source.transform.translation_mm = (25, 12, 0)
+    reference.transform.translation_mm = (25, 12, 0)
+    a = world_xy_to_local_point(source, segment_world_point(reference, 0, 0))
+    b = world_xy_to_local_point(source, segment_world_point(reference, 0, 1))
+    changed = fit_open_line_endpoint_to_segment(
+        source_path, at_start=True, target_start_xy=a,
+        target_end_xy=b, operation="trim",
+    )
+    assert changed.points_xy[0] == pytest.approx((5, 0))
+    assert reference.vector_path == reference_path
