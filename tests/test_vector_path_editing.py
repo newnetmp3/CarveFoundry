@@ -404,3 +404,19 @@ def test_endpoint_trim_rejects_invalid_fraction(fraction: float) -> None:
             VectorPath(((0, 0), (10, 0))),
             at_start=True, fraction=fraction,
         )
+
+
+def test_trimmed_analytic_curve_roundtrips_and_history_restores(tmp_path) -> None:
+    original = VectorPath(
+        ((0, 0), (10, 0)),
+        segments=(VectorSegment.cubic((2, 8), (8, -5)),),
+    )
+    item = ProjectItem("Trim", kind="pen", mesh=original.mesh_asset(), vector_path=original)
+    project = Project(items=[item])
+    snapshot = capture_workspace(project)
+    changed = trim_open_endpoint(original, at_start=True, fraction=0.4)
+    apply_vector_edit(item, changed)
+    saved = save_project(project, tmp_path / "trimmed-curve.cf3d")
+    assert load_project(saved).items[0].vector_path == changed
+    restored, *_rest = restore_workspace(snapshot)
+    assert restored.items[0].vector_path == original
