@@ -185,3 +185,22 @@ CF3D translation still creates a NEW file through the guarded Python engine,
 clears old toolpaths and marks all CAM operations stale. No new NC generation,
 cutter compensation, machine preflight or physical KDE/Onefinity acceptance
 is implied by this feature.
+
+## Unified CF3D project session (migration gate M0)
+
+Use **Open CF3D project (read-only)** in the Rust toolbar. An asynchronous
+single authoritative Python project load now provides a consistent native
+session: a loss-aware 2D preview of eligible closed vectors, a complete list
+of project objects including hidden/locked items and non-rendered 3D meshes,
+actual stock dimensions and thickness, stock-relative fixture/fence keep-outs,
+and typed CAM operation status. Every section shares one original source
+SHA-256; Rust validates the envelope before replacing any UI state.
+A changed, corrupt or incompatible source does not replace the document.
+
+The extra 3D items are **inventory metadata, not interactive rendered meshes**.
+Fixture values are **not simulated cutter-holder collisions**. A source-linked
+XY translation remains the ONLY supported CF3D write, requires a different
+NEW output project and invalidates all generated motion. Continue to use the
+existing CAM application for regenerated operation paths, verified fixture
+preflight, simulation and safe per-tool NC export. Replacing the PySide6 UI
+is planned in M0–M6 gates in `docs/RUST_UI_GAP_PLAN.md`.
