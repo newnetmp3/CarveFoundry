@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import floor, hypot, isfinite
+from math import atan2, cos, floor, hypot, isfinite, pi, sin
 
 from shapely.geometry import GeometryCollection, LineString, MultiPoint, Point
 
@@ -63,6 +63,30 @@ def grid_snap_candidate(
     )
     candidate = VectorSnapCandidate("grid", snapped)
     return candidate if candidate.distance_to(query_xy) <= tolerance_mm else None
+
+
+def constrain_angle(
+    query_xy: tuple[float, float],
+    anchor_xy: tuple[float, float],
+    increment_degrees: float = 45.0,
+) -> tuple[float, float]:
+    """Constrain handle direction about its anchor to nearest angular step."""
+    if (
+        not isfinite(increment_degrees) or not 0 < increment_degrees <= 180
+        or not all(isfinite(float(v)) for v in (*query_xy, *anchor_xy))
+    ):
+        raise ValueError("Angle constraint requires finite coordinates and a valid step.")
+    dx = query_xy[0] - anchor_xy[0]
+    dy = query_xy[1] - anchor_xy[1]
+    radius = hypot(dx, dy)
+    if radius <= _EPS:
+        return (float(anchor_xy[0]), float(anchor_xy[1]))
+    step = increment_degrees * pi / 180.0
+    angle = floor(atan2(dy, dx) / step + 0.5) * step
+    return (
+        anchor_xy[0] + radius * cos(angle),
+        anchor_xy[1] + radius * sin(angle),
+    )
 
 
 def directional_snap_candidate(
