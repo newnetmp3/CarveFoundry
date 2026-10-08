@@ -7,14 +7,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_OPENGL", "software")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QPushButton,
+)
 
 from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem
-from carvefoundry.core.vector_path import VectorPath
 from carvefoundry.core.tools import Cutter, ToolType
+from carvefoundry.core.vector_path import VectorPath
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
