@@ -36,6 +36,13 @@ unsupported objects and does not read or overwrite CAM operations or fixtures;
 curves are approximated for 2D layout, not preserved as their editable CF3D
 analytic sources.
 
+The in-progress `feature/rust-multi-sheet-nesting` milestone adds
+nonblocking bounded multi-sheet first-fit packing, optional right-angle
+rotation lock, per-stock preview, nominal area reports, independent plan JSON
+and separate SVG contours. It does not yet implement optimal nesting,
+variable-size stocks, cutting tabs, clamps, grain direction metadata or CNC
+toolpath planning. The original design is preserved transactionally.
+
 The next engineering slice must establish a versioned, tested **read/write
 CF3D editing/engine bridge** or equivalent backwards-compatible service with
 stable source UUIDs, native Undo/Redo, toolpath invalidation and preserved
