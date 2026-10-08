@@ -491,17 +491,21 @@ of baking them into arbitrary line fragments.
 
 Direct Selection can snap dragged/moved anchors to nearby retained-vector
 **nodes, segment midpoints, arc centers and intersections** with a configurable
-millimeter tolerance. All edits rebuild actual machinable geometry, invalidate
-dependent CAM operations, support Undo/Redo, and persist inside normal CF3D
-files. Planar retained vectors are also supplied directly to Profile, Pocket,
-Engrave and V-Carving CAM; mesh projection remains the fallback for
-non-vector or out-of-plane geometry.
+millimeter tolerance. It also supports **Close Path**, **Open at Node**,
+**Split at Node**, and **Join 2 Selected**. Split/join retain analytic curve
+segments, update persistent CAM source-object IDs, and participate in normal
+Undo/Redo and stale-operation invalidation. All edits rebuild actual machinable
+geometry and persist inside normal CF3D files. Planar retained vectors are also
+supplied directly to Profile, Pocket, Engrave and V-Carving CAM; mesh
+projection remains the fallback for non-vector or out-of-plane geometry.
 
 This feature does **not** pretend arbitrary imported STL, raster traces or
 baked silhouette/Boolean meshes contain editable vector source geometry.
 Editable imported SVG/DXF contours, graphical Bezier-handle dragging,
-trim/extend, join/split, fillet/chamfer, tangent/grid snapping and text-on-path
-remain follow-on vector-CAD work. Paths with X/Y tilt must be untilted before
+trim/extend, fillet/chamfer, tangent/perpendicular/grid snapping,
+first-class editable imported contours and text-on-path remain follow-on
+vector-CAD work. Cross-object Join currently requires planar compatible paths
+and an endpoint gap within the configured snap tolerance. Paths with X/Y tilt must be untilted before
 XY source editing.
 
 ## Guided CNC workflow

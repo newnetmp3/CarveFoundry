@@ -15,13 +15,17 @@ from carvefoundry.core.vector_path import (
     apply_vector_edit,
     arc_center,
     arc_sweep_degrees,
+    close_path,
     insert_node,
+    join_paths,
     move_node,
     node_world_points,
+    open_path_at_node,
     remove_node,
     sampled_points_xy,
     segment_point,
     set_segment,
+    split_path_at_node,
     world_xy_to_local,
 )
 
@@ -214,3 +218,86 @@ def test_native_project_preserves_arc_and_bezier_segments(tmp_path):
     assert loaded == path
     assert loaded.resolved_segments()[0].kind == "arc"
     assert loaded.resolved_segments()[1].kind == "cubic"
+
+
+
+def test_close_and_open_contour_preserve_analytic_segments():
+    source = VectorPath(
+        ((0, 0), (10, 0), (10, 10)),
+        segments=(
+            VectorSegment.arc(90.0),
+            VectorSegment.cubic((12, 3), (12, 7)),
+        ),
+    )
+    closed = close_path(source)
+    assert closed.closed
+    assert closed.segment_count == 3
+    assert [segment.kind for segment in closed.resolved_segments()] == [
+        "arc", "cubic", "line",
+    ]
+
+    opened = open_path_at_node(closed, 1)
+    assert not opened.closed
+    assert opened.points_xy == ((10, 0), (10, 10), (0, 0))
+    assert [segment.kind for segment in opened.resolved_segments()] == [
+        "cubic", "line",
+    ]
+
+
+def test_split_open_path_preserves_curve_geometry_on_both_sides():
+    source = VectorPath(
+        ((0, 0), (10, 0), (20, 0), (30, 0)),
+        segments=(
+            VectorSegment.arc(90.0),
+            VectorSegment.cubic((12, 5), (18, 5)),
+            VectorSegment.line(),
+        ),
+    )
+    left, right = split_path_at_node(source, 2)
+
+    assert left.points_xy == ((0, 0), (10, 0), (20, 0))
+    assert right.points_xy == ((20, 0), (30, 0))
+    assert [segment.kind for segment in left.resolved_segments()] == [
+        "arc", "cubic",
+    ]
+    assert [segment.kind for segment in right.resolved_segments()] == ["line"]
+
+
+def test_join_paths_orients_endpoints_and_keeps_curves_analytic():
+    first = VectorPath(
+        ((0, 0), (10, 0)),
+        width_mm=1.5,
+        depth_mm=2.0,
+        segments=(VectorSegment.arc(90.0),),
+    )
+    second = VectorPath(
+        ((20, 0), (10, 0)),
+        width_mm=1.5,
+        depth_mm=2.0,
+        segments=(VectorSegment.cubic((18, 4), (12, 4)),),
+    )
+
+    joined = join_paths(
+        first,
+        second,
+        first_endpoint="end",
+        second_endpoint="end",
+        max_gap_mm=0.01,
+    )
+
+    assert joined.points_xy == ((0, 0), (10, 0), (20, 0))
+    segments = joined.resolved_segments()
+    assert [segment.kind for segment in segments] == ["arc", "cubic"]
+    assert segments[1].control1_xy == pytest.approx((12, 4))
+    assert segments[1].control2_xy == pytest.approx((18, 4))
+
+
+def test_join_paths_rejects_far_or_incompatible_geometry():
+    first = VectorPath(((0, 0), (10, 0)), width_mm=1.0, depth_mm=1.0)
+    far = VectorPath(((20, 0), (30, 0)), width_mm=1.0, depth_mm=1.0)
+    with pytest.raises(ValueError, match="beyond"):
+        join_paths(first, far, max_gap_mm=2.0)
+
+    different = VectorPath(((10, 0), (20, 0)), width_mm=2.0, depth_mm=1.0)
+    with pytest.raises(ValueError, match="same stroke width"):
+        join_paths(first, different)

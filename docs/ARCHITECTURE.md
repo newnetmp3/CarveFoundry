@@ -37,7 +37,7 @@ owns shutdown. Feature behavior belongs in narrower controllers/mixins.
 | `cam/gcode_verify.py` / `cam/virtual_machining.py` | Fail-closed independent NC decoding, posted-motion/fixture verification and verified-G-code-driven stock simulation. |
 | `ui/project_recovery.py` / `core/recovery.py` | Atomic CF3D idle checkpoints, checksum verification and restore/cleanup. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
-| `ui/direct_selection.py` / `core/vector_path.py` / `core/vector_snapping.py` | Retained analytic line/arc/cubic-Bezier source geometry, Direct Selection, exact segment editing and geometric snap candidates. Curve source stays analytic; deterministic tessellation occurs only at rendering/CAM boundaries. |
+| `ui/direct_selection.py` / `core/vector_path.py` / `core/vector_snapping.py` | Retained analytic line/arc/cubic-Bezier source geometry, Direct Selection, exact segment editing, geometric snap candidates, and topology operations (close/open/split/join). Curve source stays analytic; deterministic tessellation occurs only at rendering/CAM boundaries. Split/join retarget persistent CAM source IDs. |
 | `ui/guided_workflow.py` | Modeless design-to-CAM workflow with derived live statuses and preflight fingerprint. |
 | `ui/interface_settings.py` | Persistent layout/viewport preferences and migration. |
 | `ui/planar_operations_actions.py` | Background orchestration and commit of planar Boolean/Offset results. |

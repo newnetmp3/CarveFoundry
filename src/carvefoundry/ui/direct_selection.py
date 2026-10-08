@@ -17,16 +17,23 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from carvefoundry.core.project import ProjectItem
+from carvefoundry.core.transform import Transform3D
 from carvefoundry.core.vector_path import (
     VectorSegment,
     arc_sweep_degrees,
+    close_path,
     insert_node,
+    join_paths,
     move_node,
     node_world_points,
+    open_path_at_node,
     remove_node,
     segment_world_controls,
     segment_world_point,
     set_segment,
+    split_path_at_node,
+    vector_path_in_world_xy,
     world_xy_to_local,
     world_xy_to_local_point,
 )
@@ -224,6 +231,233 @@ class DirectSelectionMixin:
                 0,
             )
 
+    @staticmethod
+    def _copy_transform(transform) -> Transform3D:
+        return Transform3D(
+            translation_mm=tuple(transform.translation_mm),
+            rotation_deg=tuple(transform.rotation_deg),
+            scale_xyz=tuple(transform.scale_xyz),
+        )
+
+    @staticmethod
+    def _preserve_anchor_world(
+        item: ProjectItem,
+        node_index: int,
+        target_xy: tuple[float, float],
+    ) -> None:
+        actual = node_world_points(item)[node_index]
+        tx, ty, tz = item.transform.translation_mm
+        item.transform.translation_mm = (
+            tx + target_xy[0] - float(actual[0]),
+            ty + target_xy[1] - float(actual[1]),
+            tz,
+        )
+
+    def _retarget_cam_sources_after_split(
+        self,
+        original_item_id: str,
+        new_item_id: str,
+    ) -> None:
+        for operation in self.project.cam_operations:
+            if original_item_id not in operation.source_item_ids:
+                continue
+            updated: list[str] = []
+            for source_id in operation.source_item_ids:
+                updated.append(source_id)
+                if source_id == original_item_id:
+                    updated.append(new_item_id)
+            operation.source_item_ids = tuple(dict.fromkeys(updated))
+
+    def _retarget_cam_sources_after_join(
+        self,
+        retained_item_id: str,
+        removed_item_id: str,
+    ) -> None:
+        for operation in self.project.cam_operations:
+            if removed_item_id not in operation.source_item_ids:
+                continue
+            updated = [
+                retained_item_id if source_id == removed_item_id else source_id
+                for source_id in operation.source_item_ids
+            ]
+            operation.source_item_ids = tuple(dict.fromkeys(updated))
+
+    def _split_selected_vector_path(self, node_index: int) -> bool:
+        item = self._editable_vector_item()
+        if item is None or item.vector_path is None:
+            return False
+        try:
+            left, right = split_path_at_node(item.vector_path, node_index)
+        except (ValueError, IndexError) as exc:
+            self.statusBar().showMessage(f"Vector split rejected: {exc}", 6500)
+            return False
+
+        item_index = next(
+            (
+                index
+                for index, candidate in enumerate(self.project.items)
+                if candidate.item_id == item.item_id
+            ),
+            None,
+        )
+        if item_index is None:
+            return False
+        target = node_world_points(item)[node_index]
+        target_xy = (float(target[0]), float(target[1]))
+        original_transform = self._copy_transform(item.transform)
+
+        self._before_ribbon_mutation("split vector path")
+        item.vector_path = left
+        item.mesh = left.mesh_asset()
+        item.source_path = None
+        self._preserve_anchor_world(
+            item,
+            len(left.points_xy) - 1,
+            target_xy,
+        )
+
+        new_item = ProjectItem(
+            name=self._unique_item_name(f"{item.name} split"),
+            source_path=None,
+            kind=item.kind,
+            visible=item.visible,
+            locked=False,
+            mesh=right.mesh_asset(),
+            transform=original_transform,
+            source_units=item.source_units,
+            group_id=item.group_id,
+            vector_path=right,
+        )
+        self._preserve_anchor_world(new_item, 0, target_xy)
+        self.project.items.insert(item_index + 1, new_item)
+        self._retarget_cam_sources_after_split(item.item_id, new_item.item_id)
+
+        self._refresh_project_list(item_index + 1)
+        self._after_ribbon_mutation("split vector path", True)
+        self.viewport.update()
+        self._refresh_vector_node_inspector()
+        self.statusBar().showMessage(
+            f"Split {item.name} into two editable vector paths.", 5000
+        )
+        return True
+
+    def _join_selected_vector_paths(self) -> bool:
+        indices = self._selected_design_indices()
+        if len(indices) != 2:
+            self.statusBar().showMessage(
+                "Select exactly two open editable vector paths to join.", 5000
+            )
+            return False
+        items = [self.project.items[index] for index in indices]
+        if any(
+            item.locked or item.vector_path is None or item.mesh is None
+            for item in items
+        ):
+            self.statusBar().showMessage(
+                "Both selected paths must be unlocked editable vectors.", 5500
+            )
+            return False
+        if any(item.vector_path.closed for item in items):
+            self.statusBar().showMessage(
+                "Open closed contours before joining them.", 5000
+            )
+            return False
+        if abs(
+            float(items[0].transform.translation_mm[2])
+            - float(items[1].transform.translation_mm[2])
+        ) > 1e-7:
+            self.statusBar().showMessage(
+                "Joined vector paths must share the same Z position.", 5500
+            )
+            return False
+
+        try:
+            world_paths = [
+                vector_path_in_world_xy(item)
+                for item in items
+            ]
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Vector join rejected: {exc}", 7000)
+            return False
+
+        endpoints = []
+        for endpoint_a, point_a in (
+            ("start", world_paths[0].points_xy[0]),
+            ("end", world_paths[0].points_xy[-1]),
+        ):
+            for endpoint_b, point_b in (
+                ("start", world_paths[1].points_xy[0]),
+                ("end", world_paths[1].points_xy[-1]),
+            ):
+                distance = (
+                    (point_a[0] - point_b[0]) ** 2
+                    + (point_a[1] - point_b[1]) ** 2
+                ) ** 0.5
+                endpoints.append((distance, endpoint_a, endpoint_b))
+        distance, endpoint_a, endpoint_b = min(endpoints)
+        tolerance = float(
+            self._settings.value("vector/snap_tolerance_mm", 1.0)
+        )
+        try:
+            joined = join_paths(
+                world_paths[0],
+                world_paths[1],
+                first_endpoint=endpoint_a,
+                second_endpoint=endpoint_b,
+                max_gap_mm=tolerance,
+            )
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Vector join rejected: {exc}", 7000)
+            return False
+
+        primary = self._selected_item()
+        retained_index = (
+            indices[0]
+            if primary is None
+            else next(
+                (
+                    index
+                    for index in indices
+                    if self.project.items[index].item_id == primary.item_id
+                ),
+                indices[0],
+            )
+        )
+        removed_index = indices[1] if retained_index == indices[0] else indices[0]
+        retained = self.project.items[retained_index]
+        removed = self.project.items[removed_index]
+        retained_id = retained.item_id
+        removed_id = removed.item_id
+        retained_z = float(retained.transform.translation_mm[2])
+
+        self._before_ribbon_mutation("join vector paths")
+        retained.vector_path = joined
+        retained.mesh = joined.mesh_asset()
+        retained.source_path = None
+        retained.kind = (
+            retained.kind if retained.kind == removed.kind else "pen"
+        )
+        retained.transform = Transform3D(
+            translation_mm=(0.0, 0.0, retained_z)
+        )
+        retained.group_id = (
+            retained.group_id
+            if retained.group_id == removed.group_id
+            else None
+        )
+        self._retarget_cam_sources_after_join(retained_id, removed_id)
+        self.project.items.pop(removed_index)
+
+        final_index = retained_index - (1 if removed_index < retained_index else 0)
+        self._refresh_project_list(final_index + 1)
+        self._after_ribbon_mutation("join vector paths", True)
+        self.viewport.update()
+        self._refresh_vector_node_inspector()
+        self.statusBar().showMessage(
+            f"Joined vector paths ({distance:.3f} mm endpoint gap).", 5000
+        )
+        return True
+
     def _show_vector_node_inspector(self) -> None:
         item = self._editable_vector_item()
         if item is None:
@@ -337,6 +571,21 @@ class DirectSelectionMixin:
         actions.addWidget(delete)
         layout.addLayout(actions)
 
+        topology_heading = QLabel("Path topology", dialog)
+        topology_heading.setObjectName("SectionHeading")
+        layout.addWidget(topology_heading)
+        topology_actions = QHBoxLayout()
+        open_close = QPushButton("Close Path", dialog)
+        open_close.setObjectName("VectorOpenClosePath")
+        split_path = QPushButton("Split at Node", dialog)
+        split_path.setObjectName("VectorSplitPath")
+        join_paths_button = QPushButton("Join 2 Selected", dialog)
+        join_paths_button.setObjectName("VectorJoinPaths")
+        topology_actions.addWidget(open_close)
+        topology_actions.addWidget(split_path)
+        topology_actions.addWidget(join_paths_button)
+        layout.addLayout(topology_actions)
+
         def current():
             selected = self._editable_vector_item()
             index = table.currentRow()
@@ -345,6 +594,33 @@ class DirectSelectionMixin:
             if not 0 <= index < len(selected.vector_path.points_xy):
                 return None, -1
             return selected, index
+
+        def refresh_topology_actions():
+            selected, index = current()
+            path = selected.vector_path if selected is not None else None
+            if path is None:
+                open_close.setEnabled(False)
+                split_path.setEnabled(False)
+            else:
+                open_close.setText(
+                    "Open at Node" if path.closed else "Close Path"
+                )
+                open_close.setEnabled(path.closed or len(path.points_xy) >= 3)
+                split_path.setEnabled(
+                    not path.closed
+                    and 0 < index < len(path.points_xy) - 1
+                )
+            selected_indices = self._selected_design_indices()
+            join_paths_button.setEnabled(
+                len(selected_indices) == 2
+                and all(
+                    0 <= item_index < len(self.project.items)
+                    and not self.project.items[item_index].locked
+                    and self.project.items[item_index].vector_path is not None
+                    and not self.project.items[item_index].vector_path.closed
+                    for item_index in selected_indices
+                )
+            )
 
         def refresh_segment_fields():
             selected, index = current()
@@ -400,6 +676,7 @@ class DirectSelectionMixin:
             x.setValue(float(point[0]))
             y.setValue(float(point[1]))
             refresh_segment_fields()
+            refresh_topology_actions()
 
         def segment_kind_changed():
             kind = str(segment_kind.currentData())
@@ -442,6 +719,46 @@ class DirectSelectionMixin:
                 target_world_xy=anchor,
             )
             refresh_segment_fields()
+
+        def toggle_open_closed():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            anchor = node_world_points(selected)[index]
+            target_xy = (float(anchor[0]), float(anchor[1]))
+            try:
+                if selected.vector_path.closed:
+                    changed = open_path_at_node(selected.vector_path, index)
+                    target_node = 0
+                    label = "open vector path"
+                else:
+                    changed = close_path(selected.vector_path)
+                    target_node = index
+                    label = "close vector path"
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid vector topology", str(exc))
+                return
+            if self._commit_vector_path(
+                selected.item_id,
+                changed,
+                label=label,
+                target_node=target_node,
+                target_world_xy=target_xy,
+            ):
+                table.setCurrentCell(target_node, 0)
+                refresh_topology_actions()
+
+        def split_selected():
+            _selected, index = current()
+            if self._split_selected_vector_path(index):
+                self._refresh_vector_node_inspector()
+                refresh_topology_actions()
+
+        def join_selected():
+            if self._join_selected_vector_paths():
+                self._refresh_vector_node_inspector()
+                table.setCurrentCell(0, 0)
+                refresh_topology_actions()
 
         def edit(kind: str):
             selected, index = current()
@@ -492,14 +809,18 @@ class DirectSelectionMixin:
             lambda _index: segment_kind_changed()
         )
         apply_segment.clicked.connect(apply_selected_segment)
+        open_close.clicked.connect(toggle_open_closed)
+        split_path.clicked.connect(split_selected)
+        join_paths_button.clicked.connect(join_selected)
         move.clicked.connect(lambda: edit("move"))
         add.clicked.connect(lambda: edit("insert"))
         delete.clicked.connect(lambda: edit("delete"))
 
         footer = QLabel(
             "Retained paths support line, circular-arc and cubic Bezier segments. "
-            "Imported and Boolean-result meshes are not silently converted. "
-            "On a 3D-tilted path, reset X/Y tilt before editing XY geometry."
+            "Open/close/split preserve analytic segments; Join uses the snap tolerance "
+            "and requires planar paths with compatible stroke geometry. Imported and "
+            "Boolean-result meshes are not silently converted."
         )
         footer.setWordWrap(True)
         layout.addWidget(footer)

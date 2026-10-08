@@ -13,13 +13,19 @@ in the same pull request whenever a roadmap capability is actually delivered.
   duplicate, delete, enable/disable and selective background recalculation.
   Preview/export remain blocked while any enabled stage is stale or missing
   generated motion.
-- **Analytic native vector foundation — PR #61 (upon merge):** Retained editable
+- **Analytic native vector foundation — PR #61:** Retained editable
   paths support line, circular-arc and cubic Bezier segments, deterministic
   curve tessellation, exact segment splitting, CF3D persistence, Direct
   Selection segment editing and node/midpoint/arc-center/intersection snapping.
   Planar retained vectors feed Profile, Pocket, Engrave and V-Carving directly
   at the 2D CAM boundary instead of first reconstructing their contours from
   triangles.
+- **Vector topology editing — PR #62 (upon merge):** Direct Selection can
+  close an open contour, open a closed contour at a chosen node, split an open
+  path at an interior node, and join two selected open vector paths within the
+  configured snap tolerance. Arc and cubic-Bezier segments remain analytic.
+  Split/join update persistent CAM source-object IDs and participate in normal
+  Undo/Redo and stale-operation invalidation.
 
 ## Workshop-safe output — implemented in PR #16 (upon merge)
 
@@ -81,9 +87,10 @@ It must not be described as a guarantee of physical safety.
    snapping to vector nodes, segment midpoints, arc centers and intersections.
    Planar retained vectors feed the 2D Profile, Pocket, Engrave and V-Carving
    CAM boundary directly, with mesh projection retained as a fallback.
-   Remaining vector-CAD work includes graphical Bezier-handle dragging,
-   tangent/perpendicular/grid snapping, trim/extend, join/close/split,
-   fillet/chamfer, first-class editable circle/ellipse/polygon primitives,
+   PR #62 adds close/open-at-node, split-at-node and two-object endpoint join
+   operations with CAM source retargeting. Remaining vector-CAD work includes
+   graphical Bezier-handle dragging, tangent/perpendicular/grid snapping,
+   trim/extend, fillet/chamfer, first-class editable circle/ellipse/polygon primitives,
    editable imported SVG/DXF contours, group cutouts and text-on-path.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
