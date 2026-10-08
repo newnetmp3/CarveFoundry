@@ -32,13 +32,19 @@
 - The output CF3D is a **new project**. Users MUST open it in the existing CNC application, regenerate all paths and run full fixture-aware preflight before exporting any G-code. The native Rust UI is **not** a general-purpose CF3D editor, cannot rewrite analytic curves or 3D objects and does not bypass NC safety.
 - The companion Rust UI still supports read-only 3D-project vector snapshot, design shapes, single/multi-sheet layout and SVG output from PR #84–#88. Physical KDE Plasma Wayland and actual CNC router testing are unverified.
 
+### Active next milestone — typed CAM status in Rust Studio
+
+- New branch `feature/rust-cam-readiness-inspector` (unmerged; CI not yet verified). Last verified feature PR #90 `f53c72ed0a670c97c8ea71ec2b31e28861c84255`.
+- Added `src/carvefoundry/core/rust_cam_readout.py` using the authoritative CF3D loader and source SHA-256 recheck. Reports stable operation UUIDs, cutter identity/type/diameter, persisted motion counts, fixture count and states: disabled, stale, missing motion, motion present but **unverified**. No project or G-code write occurs.
+- Added strict Rust `cam_readout.rs` schema with count/fingerprint/safety-flag validation. The Studio's nonblocking **Inspect CAM (read-only)** action displays per-stage detail and rejects a mismatch with imported source fingerprint.
+- Added Python fixture tests and Rust schema regression tests. CNC preflight cannot be inferred from a saved motion list; Rust inspection always reports `preflight_verified=false` and `export_allowed_from_rust=false`.
+
 ### Next functional milestones
 
-- [ ] Add explicit Rust UI status/preview of stale CAM operation count and a typed project read operation; keep new-file exclusive writes and original project protection.
-- [ ] Add generic, versioned CAM strategy templates through authoritative Python engine with tool-compatible validation; avoid duplicating unsafe CAM code in Rust.
-- [ ] Implement paired pocket/plug inlay setup with tool-radius clearances and verified depth/fixture constraints.
-- [ ] Refine Rust 2D CAD precision controls, snap feedback, stock and grain-aware nesting, 3D scene viewer and CNC diagnostics gradually.
-- [ ] Physical KDE Plasma Wayland verification of source import, precise XY move, save to new CF3D, open legacy CNC app and stale CAM export refusal.
+- [ ] Run Rust unit/Clippy/release build and Python 3.12/3.14 CI. Fix failures, merge only on green.
+- [ ] Create reusable, versioned CAM parameter templates in the Python engine, validated against strategy, cutter type and source, then integrate with Rust without permitting unverified NC output.
+- [ ] Implement paired inlay pocket/plug setup with tool-radius/fit tolerance and geometric verification.
+- [ ] Precision snapping and grain/fixture aware nesting; real KDE Plasma/Wayland user testing.
 
 ### Known boundaries and safety invariants
 
@@ -96,3 +102,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Added independent guarded native CF3D XY placement service, SHA-256 + UUID checks, CAM stale invalidation and exclusive new-file serialization | Branch `feature/rust-cf3d-placement-transactions`; CI pending | Validate Python lanes, integrate with Rust UI only after green |
 | 2026-10-08 | PR #89 merged guarded CF3D placement transaction engine; Rust Studio placement import/save-as-new UI and source validation added | Branch `feature/rust-ui-guarded-cf3d-placement`, CI pending | Verify both CI workflows, merge if green |
 | 2026-10-08 | PR #90 merged after Rust + both Python CI lanes passed; Rust Studio save-as-new CF3D XY placement bridge is active | Rust `37843070925`; Python `37843070724`; merge `f53c72ed` | Operation templates/inlay engine, physical KDE/CNC verification |
+| 2026-10-08 | Typed read-only CF3D CAM status inspector in Rust Studio and guarded Python report implemented | Branch `feature/rust-cam-readiness-inspector`, CI unverified | Validate/merge then typed strategy templates |

@@ -1,6 +1,7 @@
 //! Rust-native workspace and panels. The separate layout format never pretends
 //! to be a CF3D project and SVG export contains no machine instructions.
 use carvefoundry_studio::arrays::array_selected;
+use carvefoundry_studio::cam_readout::CamReadout;
 use carvefoundry_studio::geometry::{Part, Sheet, area, ellipse, polygon, rectangle, star};
 use carvefoundry_studio::nesting::{contains, nest};
 use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettings};
@@ -47,6 +48,9 @@ struct Studio {
     cf3d_path: String,
     cf3d_output_path: String,
     source_link: Option<SourcePlacement>,
+    cam_readout: Option<CamReadout>,
+    cam_readout_path: String,
+    inspecting_cam: Option<Receiver<(String, Result<CamReadout, String>)>>,
     svg_path: String,
     zoom: f32,
     message: String,
@@ -81,6 +85,9 @@ impl Default for Studio {
             cf3d_path: "project.cf3d".into(),
             cf3d_output_path: "project-rust-placement.cf3d".into(),
             source_link: None,
+            cam_readout: None,
+            cam_readout_path: String::new(),
+            inspecting_cam: None,
             svg_path: "carvefoundry-layout.svg".into(),
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
@@ -418,6 +425,73 @@ impl Studio {
         }
     }
 
+    fn start_cam_inspection(&mut self) {
+        if self.inspecting_cam.is_some() {
+            return;
+        }
+        let source = self.cf3d_path.clone();
+        let python = std::env::var("CARVEFOUNDRY_PYTHON")
+            .unwrap_or_else(|_| "python3".into());
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let outcome = Command::new(python)
+                .args(["-m", "carvefoundry.core.rust_cam_readout", source.as_str()])
+                .output()
+                .map_err(|e| e.to_string())
+                .and_then(|result| {
+                    if result.status.success() {
+                        CamReadout::decode(&result.stdout)
+                    } else {
+                        Err(String::from_utf8_lossy(&result.stderr).trim().to_owned())
+                    }
+                });
+            let _ = sender.send((source, outcome));
+        });
+        self.cam_readout = None;
+        self.cam_readout_path.clear();
+        self.inspecting_cam = Some(receiver);
+        self.message = "Reading CF3D CAM stage information (no project changes)…".into();
+    }
+
+    fn poll_cam_inspection(&mut self, ui: &egui::Ui) {
+        let outcome = self.inspecting_cam.as_ref().map(|r| r.try_recv());
+        match outcome {
+            Some(Ok((source, result))) => {
+                self.inspecting_cam = None;
+                if source != self.cf3d_path {
+                    self.message = "CF3D path changed during inspection; rerun inspection".into();
+                    return;
+                }
+                match result {
+                    Ok(report) => {
+                        if let Some(link) = &self.source_link
+                            && link.source_path == source
+                            && link.source_sha256 != report.source_sha256 {
+                            self.message = "Source CF3D changed since vector import; reimport before saving placements".into();
+                            return;
+                        }
+                        self.cam_readout_path = source;
+                        self.message = format!(
+                            "Read-only CAM: {} stage(s), {} require recalculation, {} have no motion; no CNC preflight",
+                            report.operation_count, report.counts.stale,
+                            report.counts.missing_motion,
+                        );
+                        self.cam_readout = Some(report);
+                    }
+                    Err(error) => self.message = format!("CAM inspection rejected: {error}"),
+                }
+            }
+            Some(Err(TryRecvError::Disconnected)) => {
+                self.inspecting_cam = None;
+                self.message = "CAM inspector stopped without a valid response".into();
+            }
+            Some(Err(TryRecvError::Empty)) => {
+                ui.ctx().request_repaint_after(Duration::from_millis(80));
+            }
+            None => {}
+        }
+    }
+
     fn save_cf3d_placements(&mut self) {
         let Some(link) = &self.source_link else {
             self.message = "Import a source CF3D project before requesting a placement transaction".into();
@@ -517,6 +591,11 @@ impl Studio {
             ui.label("Existing CF3D:");
             ui.add(egui::TextEdit::singleline(&mut self.cf3d_path).desired_width(155.0));
             if ui.button("Import vectors (read-only)").clicked() { self.import_cf3d(); }
+            if ui.add_enabled(
+                self.inspecting_cam.is_none(),
+                egui::Button::new(if self.inspecting_cam.is_some() {
+                    "Inspecting CAM…" } else { "Inspect CAM (read-only)" }),
+            ).clicked() { self.start_cam_inspection(); }
             ui.separator();
             if ui.button("Open verified CAM ↗").clicked() { self.open_legacy_cam(); }
         });
@@ -621,6 +700,41 @@ impl Studio {
     fn properties(&mut self, ui: &mut egui::Ui) {
         ui.heading("JOB SETUP");
         ui.label(egui::RichText::new("Stock XY0: bottom-left").color(Color32::LIGHT_GREEN));
+        if let Some(report) = &self.cam_readout
+            && self.cam_readout_path == self.cf3d_path {
+            ui.separator();
+            ui.heading("CF3D CAM STATUS");
+            ui.colored_label(Color32::YELLOW, "INSPECTION ONLY · NO PREFLIGHT");
+            ui.label(format!(
+                "{} stages · {} saved toolpaths · {} fixtures",
+                report.operation_count, report.generated_toolpath_count,
+                report.fixture_count
+            ));
+            ui.label(format!(
+                "Stale: {}  Missing: {}  Disabled: {}",
+                report.counts.stale, report.counts.missing_motion, report.counts.disabled
+            ));
+            ui.label(format!(
+                "Stored motion (unverified): {}", report.counts.motion_present_unverified
+            ));
+            egui::ScrollArea::vertical().max_height(230.0).show(ui, |ui| {
+                for stage in &report.operations {
+                    ui.group(|ui| {
+                        ui.strong(format!("{} · {}", stage.strategy, stage.state.label()));
+                        ui.label(format!("{} · {:.2} mm", stage.cutter_name, stage.cutter_diameter_mm));
+                        ui.small(format!(
+                            "{} linked sources · {} saved paths · {} moves",
+                            stage.source_item_count, stage.generated_toolpath_count,
+                            stage.motion_move_count,
+                        ));
+                        if let Some(reason) = &stage.stale_reason {
+                            ui.colored_label(Color32::YELLOW, reason);
+                        }
+                    });
+                }
+            });
+            ui.small("Read-only state; all CNC export requires verified CAM and current preflight.");
+        }
         if let Some(source) = &self.source_link {
             ui.separator();
             ui.strong("CF3D PROJECT PLACEMENT");
@@ -812,6 +926,7 @@ impl Studio {
 impl eframe::App for Studio {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_multi_nest(ui);
+        self.poll_cam_inspection(ui);
         egui::Panel::top("studio-toolbar").show(ui, |ui| {
             self.header(ui);
         });
