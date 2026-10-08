@@ -34,7 +34,7 @@ def sample_project(tmp_path):
     )
     other = ProjectItem("locked vector", kind="pen", mesh=path.mesh_asset(),
                         vector_path=path, locked=True)
-    cutter = Cutter("Flat", ToolType.FLAT, 3.175)
+    cutter = Cutter("Flat", ToolType.FLAT_END_MILL, 3.175)
     operation = CamOperation(
         "profile", cutter, source_item_ids=(item.item_id,),
         parameters={"feed_mm_min": 600.0},
