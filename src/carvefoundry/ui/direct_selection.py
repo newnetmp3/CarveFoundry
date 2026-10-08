@@ -24,6 +24,7 @@ from carvefoundry.core.vector_path import (
     arc_sweep_degrees,
     chamfer_open_line_corner,
     close_path,
+    edit_line_corner,
     extend_open_line_endpoint,
     fillet_open_line_corner,
     fit_open_line_endpoint_to_segment,
@@ -803,8 +804,7 @@ class DirectSelectionMixin:
                 )
             chamfer_button.setEnabled(
                 path is not None
-                and not path.closed
-                and 0 < index < len(path.points_xy) - 1
+                and (path.closed or 0 < index < len(path.points_xy) - 1)
                 and path.resolved_segments()[index - 1].kind == "line"
                 and path.resolved_segments()[index].kind == "line"
             )
@@ -1105,51 +1105,44 @@ class DirectSelectionMixin:
             )
             refresh_topology_actions()
 
-        def chamfer_selected_corner():
+        def apply_selected_corner(operation: str):
             selected, index = current()
             if selected is None or selected.vector_path is None:
                 return
             old_path = selected.vector_path
-            if old_path.closed or not 0 < index < len(old_path.points_xy) - 1:
+            if not old_path.closed and not 0 < index < len(old_path.points_xy) - 1:
                 return
-            fixed = node_world_points(selected)[0]
+            # When editing the seam node 0 of a closed path, the old
+            # anchor at 1 shifts to 2; otherwise node 0 remains untouched.
+            fixed_old_index = 1 if index == 0 else 0
+            fixed_new_index = 2 if index == 0 else 0
+            fixed = node_world_points(selected)[fixed_old_index]
+            amount = (
+                chamfer_setback.value() if operation == "chamfer"
+                else fillet_radius.value()
+            )
             try:
-                new_path = chamfer_open_line_corner(
-                    old_path, index, chamfer_setback.value(),
+                new_path = edit_line_corner(
+                    old_path, index, amount, operation=operation,
                 )
             except (ValueError, IndexError) as exc:
-                QMessageBox.warning(dialog, "Invalid corner chamfer", str(exc))
+                QMessageBox.warning(
+                    dialog, f"Invalid corner {operation}", str(exc),
+                )
                 return
             if self._commit_vector_path(
-                selected.item_id, new_path, label="chamfer vector corner",
-                target_node=0,
+                selected.item_id, new_path, label=f"{operation} vector corner",
+                target_node=fixed_new_index,
                 target_world_xy=(float(fixed[0]), float(fixed[1])),
             ):
                 table.setCurrentCell(index, 0)
                 refresh_topology_actions()
 
+        def chamfer_selected_corner():
+            apply_selected_corner("chamfer")
+
         def fillet_selected_corner():
-            selected, index = current()
-            if selected is None or selected.vector_path is None:
-                return
-            old_path = selected.vector_path
-            if old_path.closed or not 0 < index < len(old_path.points_xy) - 1:
-                return
-            fixed = node_world_points(selected)[0]
-            try:
-                new_path = fillet_open_line_corner(
-                    old_path, index, fillet_radius.value(),
-                )
-            except (ValueError, IndexError) as exc:
-                QMessageBox.warning(dialog, "Invalid corner fillet", str(exc))
-                return
-            if self._commit_vector_path(
-                selected.item_id, new_path, label="fillet vector corner",
-                target_node=0,
-                target_world_xy=(float(fixed[0]), float(fixed[1])),
-            ):
-                table.setCurrentCell(index, 0)
-                refresh_topology_actions()
+            apply_selected_corner("fillet")
 
         def split_selected():
             _selected, index = current()
