@@ -22,7 +22,7 @@ from PySide6.QtOpenGL import (
 )
 
 from carvefoundry.cam.render_geometry import build_render_geometry
-from carvefoundry.core.vector_path import node_world_points
+from carvefoundry.core.vector_path import node_world_points, segment_world_controls
 
 from .gpu_geometry import expand_triangle_positions
 from .viewport_geometry import GL_DEPTH_TEST, ViewportGeometryMixin
@@ -220,6 +220,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
+    controlMoveRequested = Signal(int, int, int, float, float)
     nodeEditModeChanged = Signal(bool)
 
     MIN_ZOOM = 0.01
@@ -262,6 +263,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_index: int | None = None
         self._node_drag_world: np.ndarray | None = None
         self._node_drag_item: int | None = None
+        self._control_drag_key: tuple[int, int] | None = None
 
         self._last_mouse_pos: QPointF | None = None
         self._press_pos: QPointF | None = None
@@ -746,6 +748,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_index = None
         self._node_drag_world = None
         self._node_drag_item = None
+        self._control_drag_key = None
         if enabled:
             self._camera_control_mode = False
             self._shape_draw_mode = None
@@ -765,6 +768,39 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         if not item.visible or item.locked or item.vector_path is None:
             return None
         return node_world_points(item)
+
+    def _editable_cubic_controls(self) -> list[tuple[int, int, np.ndarray, np.ndarray]]:
+        anchors = self._editable_node_points()
+        if anchors is None or self.project is None:
+            return []
+        item = self.project.items[self.selected_item_index]
+        result = []
+        for segment_index, segment in enumerate(item.vector_path.resolved_segments()):
+            if segment.kind != "cubic":
+                continue
+            pair = segment_world_controls(item, segment_index)
+            if pair is None:
+                continue
+            for handle_number, xy in enumerate(pair, start=1):
+                anchor_index = segment_index if handle_number == 1 else (segment_index + 1) % len(anchors)
+                control = np.array((xy[0], xy[1], float(anchors[anchor_index, 2])), dtype=float)
+                result.append((segment_index, handle_number, control, anchors[anchor_index]))
+        return result
+
+    def _pick_cubic_control(self, position: QPointF) -> tuple[int, int] | None:
+        projection, view, _pixel = self._camera_geometry()
+        matrix = projection * view
+        best_distance = 12.0
+        best = None
+        for segment, handle, point, _anchor in self._editable_cubic_controls():
+            projected = self._project_world_point(tuple(point), matrix)
+            if projected is None:
+                continue
+            distance = float(np.hypot(projected.x() - position.x(), projected.y() - position.y()))
+            if distance < best_distance:
+                best_distance = distance
+                best = (segment, handle)
+        return best
 
     def _pick_vector_node(self, position: QPointF) -> int | None:
         points = self._editable_node_points()
@@ -810,6 +846,39 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
             color=QVector4D(0.25, 0.99, 0.49, 1.0),
             line_width=3.5,
         )
+        controls = self._editable_cubic_controls()
+        if controls:
+            guide_lines: list[list[float]] = []
+            handle_lines: list[list[float]] = []
+            for segment, handle, source, anchor in controls:
+                point = (
+                    self._node_drag_world
+                    if self._control_drag_key == (segment, handle)
+                    and self._node_drag_world is not None else source
+                )
+                x, y, z = (float(value) for value in point)
+                z += 0.15
+                guide_lines.extend([
+                    [float(anchor[0]), float(anchor[1]), z], [x, y, z],
+                ])
+                handle_lines.extend([
+                    [x - radius, y - radius, z], [x + radius, y - radius, z],
+                    [x + radius, y - radius, z], [x + radius, y + radius, z],
+                    [x + radius, y + radius, z], [x - radius, y + radius, z],
+                    [x - radius, y + radius, z], [x - radius, y - radius, z],
+                ])
+            self._draw_lines(
+                np.asarray(guide_lines, dtype=np.float32),
+                view_projection=matrix,
+                color=QVector4D(0.65, 0.65, 0.70, 1.0),
+                line_width=1.5,
+            )
+            self._draw_lines(
+                np.asarray(handle_lines, dtype=np.float32),
+                view_projection=matrix,
+                color=QVector4D(1.0, 0.7, 0.18, 1.0),
+                line_width=2.5,
+            )
 
     def set_pen_sample_spacing(self, spacing_mm: float) -> None:
         self._pen_sample_spacing_mm = max(0.02, float(spacing_mm))
