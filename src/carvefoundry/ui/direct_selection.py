@@ -8,13 +8,17 @@ from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from carvefoundry.core.project import ProjectItem
@@ -574,6 +578,36 @@ class DirectSelectionMixin:
         row.addWidget(y)
         layout.addLayout(row)
 
+        tabs = QTabWidget(dialog)
+        tabs.setObjectName("VectorEditorTabs")
+        tabs.setDocumentMode(True)
+        panels = {}
+        for title, key in (
+            ("Geometry", "geometry"),
+            ("Snapping", "snapping"),
+            ("Topology", "topology"),
+            ("Corners", "corners"),
+            ("Endpoints", "endpoints"),
+        ):
+            scroll = QScrollArea(tabs)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setObjectName(f"VectorEditorScroll_{key}")
+            page = QWidget(scroll)
+            page.setObjectName(f"VectorEditorPage_{key}")
+            panel = QVBoxLayout(page)
+            panel.setContentsMargins(8, 8, 8, 8)
+            panel.setSpacing(8)
+            scroll.setWidget(page)
+            tabs.addTab(scroll, title)
+            panels[key] = panel
+        tab_index = int(self._settings.value("vector/editor_tab", 0))
+        tabs.setCurrentIndex(max(0, min(tab_index, tabs.count() - 1)))
+        tabs.currentChanged.connect(
+            lambda index: self._settings.setValue("vector/editor_tab", index)
+        )
+        layout.addWidget(tabs, 2)
+
         snap_row = QHBoxLayout()
         snap_enabled = QCheckBox("Snap to vector geometry", dialog)
         snap_enabled.setObjectName("VectorSnapEnabled")
@@ -594,7 +628,7 @@ class DirectSelectionMixin:
         snap_row.addWidget(snap_enabled)
         snap_row.addWidget(QLabel("Tolerance:", dialog))
         snap_row.addWidget(snap_tolerance)
-        layout.addLayout(snap_row)
+        panels["snapping"].addLayout(snap_row)
         grid_row = QHBoxLayout()
         grid_enabled = QCheckBox("Snap to stock grid", dialog)
         grid_enabled.setObjectName("VectorGridSnapEnabled")
@@ -615,7 +649,7 @@ class DirectSelectionMixin:
         grid_row.addWidget(grid_enabled)
         grid_row.addWidget(QLabel("Spacing:", dialog))
         grid_row.addWidget(grid_spacing)
-        layout.addLayout(grid_row)
+        panels["snapping"].addLayout(grid_row)
         angle_row = QHBoxLayout()
         angle_step = QDoubleSpinBox(dialog)
         angle_step.setObjectName("VectorAngleStep")
@@ -631,11 +665,11 @@ class DirectSelectionMixin:
         self.viewport.set_vector_angle_step(angle_step.value())
         angle_row.addWidget(QLabel("Shift angle increment:", dialog))
         angle_row.addWidget(angle_step)
-        layout.addLayout(angle_row)
+        panels["snapping"].addLayout(angle_row)
 
         segment_heading = QLabel("Segment after selected node", dialog)
         segment_heading.setObjectName("SectionHeading")
-        layout.addWidget(segment_heading)
+        panels["geometry"].addWidget(segment_heading)
         segment_form = QFormLayout()
         segment_kind = QComboBox(dialog)
         segment_kind.setObjectName("VectorSegmentKind")
@@ -662,10 +696,10 @@ class DirectSelectionMixin:
         segment_form.addRow("Control 1 Y", control_spins[1])
         segment_form.addRow("Control 2 X", control_spins[2])
         segment_form.addRow("Control 2 Y", control_spins[3])
-        layout.addLayout(segment_form)
+        panels["geometry"].addLayout(segment_form)
         apply_segment = QPushButton("Apply Segment", dialog)
         apply_segment.setObjectName("VectorApplySegment")
-        layout.addWidget(apply_segment)
+        panels["geometry"].addWidget(apply_segment)
 
         actions = QHBoxLayout()
         move = QPushButton("Move Node", dialog)
@@ -674,11 +708,11 @@ class DirectSelectionMixin:
         actions.addWidget(move)
         actions.addWidget(add)
         actions.addWidget(delete)
-        layout.addLayout(actions)
+        panels["geometry"].addLayout(actions)
 
         topology_heading = QLabel("Path topology", dialog)
         topology_heading.setObjectName("SectionHeading")
-        layout.addWidget(topology_heading)
+        panels["topology"].addWidget(topology_heading)
         topology_actions = QHBoxLayout()
         open_close = QPushButton("Close Path", dialog)
         open_close.setObjectName("VectorOpenClosePath")
@@ -689,7 +723,7 @@ class DirectSelectionMixin:
         topology_actions.addWidget(open_close)
         topology_actions.addWidget(split_path)
         topology_actions.addWidget(join_paths_button)
-        layout.addLayout(topology_actions)
+        panels["topology"].addLayout(topology_actions)
         chamfer_row = QHBoxLayout()
         chamfer_setback = QDoubleSpinBox(dialog)
         chamfer_setback.setObjectName("VectorChamferSetback")
@@ -705,7 +739,7 @@ class DirectSelectionMixin:
         chamfer_row.addWidget(QLabel("Corner setback:", dialog))
         chamfer_row.addWidget(chamfer_setback)
         chamfer_row.addWidget(chamfer_button)
-        layout.addLayout(chamfer_row)
+        panels["corners"].addLayout(chamfer_row)
         fillet_row = QHBoxLayout()
         fillet_radius = QDoubleSpinBox(dialog)
         fillet_radius.setObjectName("VectorFilletRadius")
@@ -721,7 +755,7 @@ class DirectSelectionMixin:
         fillet_row.addWidget(QLabel("Corner radius:", dialog))
         fillet_row.addWidget(fillet_radius)
         fillet_row.addWidget(fillet_button)
-        layout.addLayout(fillet_row)
+        panels["corners"].addLayout(fillet_row)
         trim_row = QHBoxLayout()
         trim_fraction = QDoubleSpinBox(dialog)
         trim_fraction.setObjectName("VectorEndpointTrimPercent")
@@ -738,7 +772,7 @@ class DirectSelectionMixin:
         trim_row.addWidget(QLabel("Segment fraction:", dialog))
         trim_row.addWidget(trim_fraction)
         trim_row.addWidget(trim_endpoint_button)
-        layout.addLayout(trim_row)
+        panels["endpoints"].addLayout(trim_row)
         extend_row = QHBoxLayout()
         extend_distance = QDoubleSpinBox(dialog)
         extend_distance.setObjectName("VectorEndpointExtendDistance")
@@ -754,7 +788,7 @@ class DirectSelectionMixin:
         extend_row.addWidget(QLabel("Extension:", dialog))
         extend_row.addWidget(extend_distance)
         extend_row.addWidget(extend_endpoint_button)
-        layout.addLayout(extend_row)
+        panels["endpoints"].addLayout(extend_row)
         intersect_row = QHBoxLayout()
         target_segment = QDoubleSpinBox(dialog)
         target_segment.setObjectName("VectorFitTargetSegment")
@@ -774,7 +808,10 @@ class DirectSelectionMixin:
         intersect_row.addWidget(target_segment)
         intersect_row.addWidget(intersect_mode)
         intersect_row.addWidget(intersect_button)
-        layout.addLayout(intersect_row)
+        panels["endpoints"].addLayout(intersect_row)
+
+        for panel in panels.values():
+            panel.addStretch(1)
 
         def current():
             selected = self._editable_vector_item()
