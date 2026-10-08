@@ -105,30 +105,36 @@
 - Preview/export must fail closed if enabled machining intent is stale or missing motion.
 - Offline preflight cannot confirm actual machine work offsets, unknown clamps, holder collisions or controller state.
 
-## Active development — next engineering milestone
+## Active development — unified CF3D Rust project session
 
-- No unmerged active functional feature PR from this checkpoint. Latest
-  verified `main` is `53217f13c60c351a9522909cd2cb63cbea78a36f`
-  after PR #96. This documentation-only closure may merge later.
-- **Next:** native Rust **node-level contour authoring**, with explicit
-  selection, move/insert/delete and pinned local/world coordinates, proper
-  undo/redo, `Sheet` save/reopen and SVG output. Existing snapshots of
-  retained CF3D analytic sources must **not** be silently flattened into
-  editable CF3D or written back as approximated polygons. Fail closed when
-  unsupported CF3D geometry would be mutated.
-- Keep pointer interactions reliable with native object movement: dragging
-  near an outline currently grabs the whole object for snapping; future
-  node-edit mode needs a distinct action/tool to avoid collisions.
-- Preserve all CNC safety contracts: work XY0 bottom-left, Z0 on top of
-  wood, fence bed height minus stock thickness (typical left fence 23 mm).
-  Do not weaken fixture-aware preflight, stage staleness, split per-cutter
-  NC programs, manual tool change or Z re-probe.
-- Remaining gaps: paired inlay #93 is **design-only** (no registered
-  mirrored fit/CAM toolpaths); no physical KDE Plasma Wayland or Onefinity
-  machining QA; old unrelated open PRs #32 and #33 untouched.
-- Suggested acceptance: bounded finite geometry edits; stable part identity;
-  source-linked edit gate; undo/redo and layout JSON/SVG roundtrips;
-  Rust fmt/test/Clippy/release and Python 3.12/3.14 green before merge.
+- Verified baseline before this branch: `main`
+  `e5d51de90358e54eea0431841339acb68c71d411`, merged PR #97,
+  Rust UI contour snapping #96. Older unrelated PRs #32/#33 untouched.
+- **Active:** `feature/rust-unified-cf3d-session`. New
+  `src/carvefoundry/core/rust_project_session.py` performs **one**
+  authoritative CF3D deserialize and SHA-256 consistency check, returning
+  one typed snapshot with all item IDs, model/stock thickness, fixture XY/Z
+  bounds, CAM readiness, and a sampled loss-aware closed-vector layout.
+  `rust_cam_readout.py` now exposes a pure loaded-project report helper.
+- Rust `rust-ui/src/project_session.rs` validates the full envelope,
+  shared digest, source UUID identity, fixture/stock schema, view-only
+  safety flags, bounds and size limits; `main.rs` asynchronously opens
+  complete CF3D sessions and swaps UI state **only after validation**.
+  Existing XY-only save-to-NEW-CF3D and conservative CAM invalidation
+  stay in place. No NC export or verified machine preflight.
+- New Python/Rust tests cover source digest mismatch, changed source,
+  fixture/object identity, absence of CNC instructions and CLI behavior.
+  **CI still pending; do not claim merged/verified until green**.
+- The new replacement-first migration gates **M0–M6** are now in
+  [RUST_UI_GAP_PLAN.md](RUST_UI_GAP_PLAN.md) and top of
+  [ROADMAP.md](ROADMAP.md). Follow gate order, not isolated widgets.
+  **Next M1:** versioned auditable domain-edit transactions, source
+  UUID/undo/stale-CAM fidelity; then native 2D/3D parity and CAM workflows.
+- Keep all CNC invariants: stock XY0 bottom-left, Z0 stock top,
+  stock-relative fence Z = bed fence height − stock thickness,
+  stock/cutter and fixture-aware preflight, staged cutter G-code and manual
+  Z re-probe. KDE Plasma Wayland and physical Onefinity testing remain
+  **unverified**. Python CAM remains authoritative.
 
 ## Append-only checkpoint log
 
@@ -188,3 +194,5 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #94 native stock grid precision merged after both workflows passed; 39 Rust tests and Python 3.12/3.14 green | Rust `37854022254`, Python `37854022243`, main `c992831` | Real-time vector node/edge snapping, analytic authoring/CAM bridge; physical Wayland/CNC QA |
 | 2026-10-08 | Started bounded live vertex/midpoint/edge **object alignment** with visible Rust Studio snap target, no topology edits | Branch `feature/rust-contour-live-snapping`, CI pending | Inspect CI, fix, merge, and update verified handover |
 | 2026-10-08 | PR #96 native Rust live vertex/midpoint/edge **whole-object** snapping merged and validated; original CAM behavior preserved | Rust `37860414152`, Python `37860414211`, merge `53217f13` | Next: explicit native contour node-edit mode with Undo/Redo and safe CF3D-boundary rejection |
+
+| 2026-10-08 | Began M0 unified native CF3D project-session and reorganized migration into M0–M6 complete user workflows | `feature/rust-unified-cf3d-session`, CI pending | Finish Rust/Python CI, merge if green; M1 validated edit transactions |
