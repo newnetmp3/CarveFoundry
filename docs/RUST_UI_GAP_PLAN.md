@@ -67,12 +67,13 @@ then ship the Rust GUI alongside the trusted Linux CAM application.
 
 PR #91 merged nonblocking **read-only CAM stage inspection** using a
 typed SHA-256 guarded Python report and validated Rust schema; stored motion is
-always *unverified*. An active Rust + Python PR now adds **versioned reusable
-CAM parameter templates** for existing machining operations with matching
-strategy, cutter geometry and parameter schema; application writes only a
-new CF3D and invalidates all motion. It is not a full toolpath template merge,
-not yet CI-verified, and never authorizes G-code. Paired inlay geometry and
-full native CAM controls remain production gaps.
+always *unverified*. PR #92 merged **versioned reusable CAM parameter templates** backed by
+the trusted Python CF3D engine. Existing operations must have matching strategy,
+cutter geometry and parameter types, and application writes only a NEW project
+with every machining intent stale and all motion removed. CI passed both Python
+lanes and native Rust build/Clippy tests. This does not merge toolpaths or
+authorize G-code. Paired inlay geometry and complete Rust CAM editing remain
+production gaps.
 
 ## Acceptance rules
 
