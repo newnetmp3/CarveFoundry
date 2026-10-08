@@ -7,6 +7,9 @@ use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettin
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
 use carvefoundry_studio::svg;
+use carvefoundry_studio::source_placement::SourcePlacement;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use carvefoundry_studio::plan_io::{deserialize_plan, serialize_plan};
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
@@ -42,6 +45,8 @@ struct Studio {
     array_gap: f64,
     layout_path: String,
     cf3d_path: String,
+    cf3d_output_path: String,
+    source_link: Option<SourcePlacement>,
     svg_path: String,
     zoom: f32,
     message: String,
@@ -74,6 +79,8 @@ impl Default for Studio {
             array_gap: 5.0,
             layout_path: "carvefoundry-layout.json".into(),
             cf3d_path: "project.cf3d".into(),
+            cf3d_output_path: "project-rust-placement.cf3d".into(),
+            source_link: None,
             svg_path: "carvefoundry-layout.svg".into(),
             zoom: 1.0,
             message: "Ready · Stock XY0 is bottom-left · Layout only; no G-code".into(),
@@ -340,6 +347,7 @@ impl Studio {
                 self.remember();
                 self.sheet = sheet;
                 self.selected = None;
+                self.source_link = None;
                 self.message = "Editable layout loaded; toolpaths are not part of this format".into();
             }
             Err(error) => self.message = format!("Open rejected: {error}"),
@@ -376,24 +384,106 @@ impl Studio {
                     .map_err(|error| error.to_string())
                     .and_then(|value| {
                         let skipped = value.get("skipped_items").and_then(|v| v.as_u64()).unwrap_or(0);
-                        serde_json::from_value::<Sheet>(value)
-                            .map_err(|error| error.to_string())
-                            .and_then(|sheet| sheet.validate().map(|_| (sheet, skipped)))
+                        let sheet = serde_json::from_value::<Sheet>(value.clone())
+                            .map_err(|error| error.to_string())?;
+                        sheet.validate()?;
+                        let link = SourcePlacement::from_snapshot(
+                            &value, &sheet, &self.cf3d_path,
+                        )?;
+                        Ok((sheet, skipped, link))
                     });
                 match parsed {
-                    Ok((sheet, skipped)) => {
+                    Ok((sheet, skipped, link)) => {
                         self.remember();
                         self.selected = None;
                         self.sheet = sheet;
+                        let path = std::path::Path::new(&self.cf3d_path);
+                        if let Some(stem) = path.file_stem() {
+                            self.cf3d_output_path = path.with_file_name(
+                                format!("{}-rust-placement.cf3d", stem.to_string_lossy())
+                            ).to_string_lossy().into_owned();
+                        }
+                        self.source_link = Some(link);
                         self.message = format!(
                             "Read-only CF3D vector snapshot imported; {skipped} objects skipped. \
-                             CAM, fixtures and cutting settings were not transferred.",
+                             Optional XY moves may be committed only to a NEW project. \
+                             Other geometry and CAM data cannot be edited here.",
                         );
                     }
                     Err(error) => {
-                        self.message = format!("CF3D snapshot has invalid geometry: {error}");
+                        self.message = format!("CF3D snapshot has invalid geometry or source identity: {error}");
                     }
                 }
+            }
+        }
+    }
+
+    fn save_cf3d_placements(&mut self) {
+        let Some(link) = &self.source_link else {
+            self.message = "Import a source CF3D project before requesting a placement transaction".into();
+            return;
+        };
+        if self.plan.is_some() || self.planning.is_some() {
+            self.message = "Close the multi-sheet preview before saving CF3D vector placements".into();
+            return;
+        }
+        let payload = match link.request(&self.sheet) {
+            Ok(value) => value,
+            Err(error) => {
+                self.message = format!("CF3D placement blocked: {error}");
+                return;
+            }
+        };
+        let executable = std::env::var("CARVEFOUNDRY_PYTHON")
+            .unwrap_or_else(|_| "python3".into());
+        let mut process = match Command::new(&executable)
+            .args([
+                "-m", "carvefoundry.core.rust_project_transaction",
+                "apply", link.source_path.as_str(), self.cf3d_output_path.as_str(),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(process) => process,
+            Err(error) => {
+                self.message = format!("Cannot launch guarded CF3D writer: {error}");
+                return;
+            }
+        };
+        let request_bytes = serde_json::to_vec(&payload).unwrap_or_default();
+        let write_result = process.stdin.take().ok_or("Missing writer input")
+            .and_then(|mut input| input.write_all(&request_bytes).map_err(|_| "Could not send writer request"));
+        if let Err(error) = write_result {
+            self.message = error.to_owned();
+            let _ = process.wait();
+            return;
+        }
+        match process.wait_with_output() {
+            Ok(output) if output.status.success() => {
+                let parsed: Result<serde_json::Value, _> = serde_json::from_slice(&output.stdout);
+                match parsed {
+                    Ok(report) if report["requires_cam_regeneration_and_preflight"] == true => {
+                        self.message = format!(
+                            "Created NEW {}. Prior generated toolpaths removed; \
+                            open it in verified CAM, regenerate all toolpaths and repeat preflight.",
+                            self.cf3d_output_path,
+                        );
+                    }
+                    _ => {
+                        self.message = "Writer finished but did not confirm CAM invalidation; inspect output in verified CAM".into();
+                    }
+                }
+            }
+            Ok(output) => {
+                self.message = format!(
+                    "CF3D placement rejected: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            }
+            Err(error) => {
+                self.message = format!("Could not complete CF3D placement: {error}");
             }
         }
     }
@@ -414,6 +504,7 @@ impl Studio {
                 self.remember();
                 self.sheet = Sheet::default();
                 self.selected = None;
+                self.source_link = None;
             }
             if ui.button("Undo").clicked() { self.undo(); }
             if ui.button("Redo").clicked() { self.redo(); }
@@ -530,6 +621,18 @@ impl Studio {
     fn properties(&mut self, ui: &mut egui::Ui) {
         ui.heading("JOB SETUP");
         ui.label(egui::RichText::new("Stock XY0: bottom-left").color(Color32::LIGHT_GREEN));
+        if let Some(source) = &self.source_link {
+            ui.separator();
+            ui.strong("CF3D PROJECT PLACEMENT");
+            ui.small("Supported: XY motion only, saved to a NEW native project. Rotation, shape, name, Z, toolpaths and fixtures cannot be edited here.");
+            ui.label(format!("Source: {}", source.source_path));
+            ui.label("New CF3D output path:");
+            ui.text_edit_singleline(&mut self.cf3d_output_path);
+            if ui.button("Save XY placements as NEW CF3D").clicked() {
+                self.save_cf3d_placements();
+            }
+            ui.small("All previous toolpaths are removed and CAM operations marked stale. Reopen the new project in verified CAM and run preflight.");
+        }
         if let Some(plan) = &self.plan
             && let Some(sheet) = plan.sheets.get(self.plan_index) {
             ui.heading(format!("Sheet {} of {}", self.plan_index + 1, plan.sheets.len()));
