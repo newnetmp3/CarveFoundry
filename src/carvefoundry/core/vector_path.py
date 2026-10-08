@@ -228,7 +228,9 @@ def _distance_to_chord(point: np.ndarray, a: np.ndarray, b: np.ndarray) -> float
     length = float(np.linalg.norm(chord))
     if length <= _EPS:
         return float(np.linalg.norm(point - a))
-    return abs(float(np.cross(chord, point - a))) / length
+    delta = point - a
+    cross_z = chord[0] * delta[1] - chord[1] * delta[0]
+    return abs(float(cross_z)) / length
 
 
 def _flatten_cubic(
