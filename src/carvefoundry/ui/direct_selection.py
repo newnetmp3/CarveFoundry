@@ -38,7 +38,7 @@ from carvefoundry.core.vector_path import (
     world_xy_to_local,
     world_xy_to_local_point,
 )
-from carvefoundry.core.vector_snapping import nearest_vector_snap
+from carvefoundry.core.vector_snapping import grid_snap_candidate, nearest_vector_snap
 
 
 class DirectSelectionMixin:
@@ -183,6 +183,13 @@ class DirectSelectionMixin:
             exclude_item_id=item_id,
             exclude_node_index=node_index,
         )
+        if self._settings.value("vector/grid_snap_enabled", False, type=bool):
+            spacing = float(self._settings.value("vector/grid_spacing_mm", 5.0))
+            grid = grid_snap_candidate(xy, spacing, tolerance)
+            if grid is not None and (
+                candidate is None or grid.distance_to(xy) < candidate.distance_to(xy)
+            ):
+                candidate = grid
         if candidate is None:
             return xy, None
         return candidate.point_xy, candidate.kind
