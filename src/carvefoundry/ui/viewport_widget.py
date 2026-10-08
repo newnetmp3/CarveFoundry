@@ -153,7 +153,7 @@ class MeshViewport(QWidget):
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
-    controlMoveRequested = Signal(int, int, int, float, float)
+    controlMoveRequested = Signal(int, int, int, float, float, str)
     nodeEditModeChanged = Signal(bool)
 
     ISOMETRIC_ELEVATION_DEG = 35.26438968

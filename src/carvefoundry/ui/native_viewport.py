@@ -220,7 +220,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
     freehandStrokeRequested = Signal(object)
     shapeDrawModeChanged = Signal(str)
     nodeMoveRequested = Signal(int, int, float, float)
-    controlMoveRequested = Signal(int, int, int, float, float)
+    controlMoveRequested = Signal(int, int, int, float, float, str)
     nodeEditModeChanged = Signal(bool)
 
     MIN_ZOOM = 0.01
@@ -265,6 +265,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_item: int | None = None
         self._control_drag_key: tuple[int, int] | None = None
         self._control_angle_constrained = False
+        self._control_constraint_kind: str | None = None
         self._vector_angle_step_degrees = 45.0
 
         self._last_mouse_pos: QPointF | None = None
@@ -752,6 +753,7 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
         self._node_drag_item = None
         self._control_drag_key = None
         self._control_angle_constrained = False
+        self._control_constraint_kind = None
         if enabled:
             self._camera_control_mode = False
             self._shape_draw_mode = None
@@ -898,7 +900,11 @@ class _NativeOpenGLViewport(ViewportGeometryMixin, ViewportInteractionMixin, QOp
                 self._draw_lines(
                     edges,
                     view_projection=matrix,
-                    color=QVector4D(0.27, 0.84, 1.0, 1.0),
+                    color={
+                        "angle": QVector4D(0.27, 0.84, 1.0, 1.0),
+                        "tangent": QVector4D(0.20, 0.95, 0.65, 1.0),
+                        "perpendicular": QVector4D(0.88, 0.50, 1.0, 1.0),
+                    }.get(self._control_constraint_kind, QVector4D(0.27, 0.84, 1.0, 1.0)),
                     line_width=3.0,
                 )
 

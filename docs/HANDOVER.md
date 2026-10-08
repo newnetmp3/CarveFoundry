@@ -17,29 +17,32 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged baseline: `5fc460f60f41a08c6f58c9ae3cf67c7ecc6c3d1f` (PR #71).
+- Last verified merged baseline: `c89b5872f9a514d33fab26a505036f7d544c9546` (PR #72).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active development — native raster parity/benchmark baseline
+## Active development — interactive adjacent tangent/normal handle constraints
 
-- Last verified merged `main`: `5fc460f60f41a08c6f58c9ae3cf67c7ecc6c3d1f` (PR #71), which added configurable Bézier Shift angle increment and the on-canvas indicator. GitHub Actions run `37807568271` passed Python 3.12 and 3.14.
-- Active branch: `feature/native-raster-parity-baseline`, based on merged #71.
-- New opt-in script `scripts/benchmark_native_kernels.py` compares the Python reference and PyO3 Rust rasterizer with identical deterministic triangles and grid dimensions. Performs strict field parity comparison (including nonfinite regions), warmups, repeated median wall-time measurements, and optional JSON output. Does not change production CAM or machine output.
-- Tests cover fixture stability, Python-only operation, argument validation and machine-readable output.
-- `docs/ROADMAP.md` now marks the *initial raster benchmarking harness* as started while keeping wider geometry/CAM/simulation migration as future work.
-- No measured speedup is claimed. This PR's CI and real-hardware measurements remain **unverified**. Physical Wayland viewport editing remains unverified.
+- Verified merged `main`: `c89b5872f9a514d33fab26a505036f7d544c9546` (PR #72). Its final GitHub Actions run `37809124842` passed Python 3.12 and Python 3.14 after resolving executable-shebang lint and benchmark test import issues. The Rust/Python raster benchmark script and numerical parity regression are merged, but representative workstation performance measurements have NOT been collected.
+- Active branch: `feature/adjacent-tangent-normal-handle-drag` based on merged #72.
+- Added an adjacent-segment reference tangent for each cubic control handle where a real neighboring contour segment exists. Reference direction samples the transformed analytic segment close to the adjoining endpoint; no tangent is fabricated at an open-path boundary.
+- During viewport Bézier handle drag: **Ctrl** projects the handle onto the adjacent tangent line; **Ctrl+Shift** projects it onto that line's perpendicular; **Shift** alone retains the configurable angle increment from PR #71. The active constraint has a distinct cyan/green/purple marker.
+- Extended native renderer/widget signal and Direct Selection commit interface with an optional constraint kind, avoiding subsequent grid/node snapping from silently overriding a constrained drop. Normal unmodified geometry/grid snapping remains unchanged.
+- Added geometric reference and offscreen UI regression tests for Ctrl/normal projection, modified handle persistence and indicator state.
+- **Unvalidated branch:** CI, manual KDE/Wayland dragging and real-machine output tests are not yet complete. This is cubic handle editing only, not automatic smoothness enforcement across arbitrary CAD objects.
+- Rust migration remains a gradual parallel path; no new Rust CAM engine beyond the existing kernels is claimed.
 
 ### Next checkpoints
 
-- [ ] Validate benchmark script CI on Python 3.12 and 3.14 and resolve any Ruff/pytest failures.
-- [ ] Record representative Rust/Python performance and parity on developer hardware; expand benchmark fixtures and test native result parity.
-- [ ] Resume derivative-aware interactive tangent/perpendicular snapping with visual indicators and tests.
-- [ ] Advance trim/extend, fillet/chamfer and retained editable primitives without disrupting established CAM safety.
-- [ ] Keep rolling handover and roadmap aligned with the merged base after each PR.
+- [ ] Open PR and validate Python 3.12/3.14, Ruff and Rust CI. Fix any failures before merging.
+- [ ] Confirm physical modifier semantics on KDE Plasma/Wayland when available.
+- [ ] Add general-purpose live geometric snap indicators beyond modifier-constrained cubic handles.
+- [ ] Continue trim/extend, fillet/chamfer, retained editable primitives and SVG/DXF vector import fidelity.
+- [ ] Run baseline raster benchmarks on development hardware and expand parity fixtures before replacing more Python code.
+- [ ] Update this handover and the live roadmap with actual merged results.
 
 ### Known boundaries and safety invariants
 
@@ -70,3 +73,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Merged PR #69 and started Shift-constrained Bézier drag | Main `a799d32`; branch `feature/bezier-angle-constraint`; CI pending | Validate interaction PR |
 | 2026-10-08 | PR #70 merged with green CI; implemented configurable angular handle constraint and visual indicator | Merge `66450ec`; branch `feature/angle-constraint-ui-feedback` | Validate UI PR and integrate derivative snapping |
 | 2026-10-08 | PR #71 merged after green CI; added Python/Rust raster benchmark infrastructure and regression tests | Main `5fc460f`; branch `feature/native-raster-parity-baseline`; CI pending | Validate benchmark PR and collect representative measurements |
+| 2026-10-08 | PR #72 benchmark/parity infrastructure merged after both CI lanes passed; adjacent tangent/normal handle constraints implemented on fresh branch | Merge `c89b587`; branch `feature/adjacent-tangent-normal-handle-drag` | Open PR, validate CI, review GUI interaction |
