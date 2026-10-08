@@ -699,3 +699,38 @@ def test_direct_selection_fillet_creates_retained_arc_and_fixed_anchor():
         assert tuple(node_world_points(item)[0, :2]) == pytest.approx(before)
     finally:
         window.close()
+
+
+@pytest.mark.parametrize(
+    "button_name,amount_name,expected_kind",
+    [
+        ("VectorChamferCorner", "VectorChamferSetback", "line"),
+        ("VectorFilletCorner", "VectorFilletRadius", "arc"),
+    ],
+)
+def test_closed_seam_corner_edit_preserves_world_anchor(
+    button_name, amount_name, expected_kind,
+):
+    path = VectorPath(((0, 0), (10, 0), (10, 10), (0, 10)), closed=True)
+    item = ProjectItem("Closed", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    try:
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        button = dialog.findChild(QPushButton, button_name)
+        amount = dialog.findChild(QDoubleSpinBox, amount_name)
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        assert button is not None and amount is not None and table is not None
+        table.setCurrentCell(0, 0)
+        amount.setValue(2.0)
+        assert button.isEnabled()
+        fixed = tuple(node_world_points(item)[1, :2])
+        button.click()
+        assert item.vector_path.closed
+        assert len(item.vector_path.points_xy) == 5
+        assert item.vector_path.resolved_segments()[0].kind == expected_kind
+        assert tuple(node_world_points(item)[2, :2]) == pytest.approx(fixed)
+    finally:
+        window.close()
