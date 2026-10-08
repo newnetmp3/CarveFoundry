@@ -37,6 +37,8 @@ from carvefoundry.cam.render_geometry import build_render_geometry
 from carvefoundry.cam.rest_machining import stock_aware_rest_3d
 from carvefoundry.cam.stock_simulation import StockRemovalResult, simulate_stock_removal
 from carvefoundry.cam.vector_ops import (
+    editable_vector_centerline,
+    editable_vector_regions,
     geometry_center_drill,
     geometry_drill,
     geometry_engrave,
@@ -145,6 +147,8 @@ def _generate_item(
     operation = job.operation
     cutter = job.cutter
     cut_type = job.cut_type
+    vector_regions = editable_vector_regions(item)
+    vector_centerline = editable_vector_centerline(item)
     needs_cutout = (
         operation == "finish" and settings.relief_style is ReliefStyle.FULL_DEPTH
     )
@@ -155,32 +159,74 @@ def _generate_item(
 
     progress(0.03, "Preparing geometry")
     if operation == "v_carving":
-        path = geometry_v_carving(mesh, cutter, settings)
+        path = geometry_v_carving(
+            mesh,
+            cutter,
+            settings,
+            regions=vector_regions,
+        )
     elif operation == "drill":
         path = geometry_drill(mesh, cutter, settings)
     elif operation == "center_drill":
         path = geometry_center_drill(mesh, cutter, settings)
     elif cut_type == "Pocket" and operation in {"profile", "pocket", "engrave"}:
-        path = geometry_pocket(mesh, cutter, settings)
+        path = geometry_pocket(
+            mesh,
+            cutter,
+            settings,
+            regions=vector_regions,
+        )
     elif cut_type in {"On Path", "Outside", "Inside"} and operation in {
         "profile", "pocket", "engrave"
     }:
         if operation == "engrave" and cut_type == "On Path":
-            path = geometry_engrave(mesh, cutter, settings)
+            path = geometry_engrave(
+                mesh,
+                cutter,
+                settings,
+                paths_xy=(
+                    [vector_centerline]
+                    if vector_centerline is not None else None
+                ),
+            )
         else:
             offset = {"On Path": "on", "Outside": "outside", "Inside": "inside"}[
                 cut_type
             ]
-            path = geometry_profile(mesh, cutter, settings, offset_mode=offset)
+            path = geometry_profile(
+                mesh,
+                cutter,
+                settings,
+                offset_mode=offset,
+                regions=vector_regions,
+            )
             if operation == "engrave":
                 path.name = "Engrave"
                 path.operation = "engrave"
     elif operation == "profile":
-        path = geometry_profile(mesh, cutter, settings)
+        path = geometry_profile(
+            mesh,
+            cutter,
+            settings,
+            regions=vector_regions,
+        )
     elif operation == "pocket":
-        path = geometry_pocket(mesh, cutter, settings)
+        path = geometry_pocket(
+            mesh,
+            cutter,
+            settings,
+            regions=vector_regions,
+        )
     elif operation == "engrave":
-        path = geometry_engrave(mesh, cutter, settings)
+        path = geometry_engrave(
+            mesh,
+            cutter,
+            settings,
+            paths_xy=(
+                [vector_centerline]
+                if vector_centerline is not None else None
+            ),
+        )
     elif operation == "rest":
         if previous_stock is None:
             raise ValueError("3D Rest requires previous simulated machining stages.")
