@@ -18,6 +18,7 @@ from carvefoundry.core.vector_path import (
     chamfer_open_line_corner,
     close_path,
     extend_open_line_endpoint,
+    fillet_open_line_corner,
     fit_open_line_endpoint_to_segment,
     insert_node,
     join_paths,
@@ -596,3 +597,42 @@ def test_chamfer_rejects_closed_collinear_and_curved_corners() -> None:
     )
     with pytest.raises(ValueError, match="straight"):
         chamfer_open_line_corner(path, 1, 2)
+
+
+@pytest.mark.parametrize("turn", [1, -1])
+def test_line_fillet_is_exact_tangent_circular_arc(turn: int) -> None:
+    original = VectorPath(((0, 0), (10, 0), (10, 10 * turn)))
+    updated = fillet_open_line_corner(original, 1, 2.0)
+    assert len(updated.points_xy) == 4
+    assert np.asarray(updated.points_xy[1:3]) == pytest.approx(
+        np.asarray(((8, 0), (10, 2 * turn))),
+    )
+    arc = updated.resolved_segments()[1]
+    assert arc.kind == "arc"
+    assert arc_sweep_degrees(updated, 1) == pytest.approx(90 * turn)
+    center = arc_center(updated, 1)
+    assert center == pytest.approx((8, 2 * turn))
+    for t in (0.0, 0.25, 0.5, 0.75, 1.0):
+        point = segment_point(updated, 1, t)
+        assert np.hypot(point[0] - center[0], point[1] - center[1]) == pytest.approx(2.0)
+    assert updated.points_xy[0] == original.points_xy[0]
+    assert updated.points_xy[-1] == original.points_xy[-1]
+
+
+@pytest.mark.parametrize("radius", [0, -1, 10, float("nan"), float("inf")])
+def test_fillet_rejects_invalid_or_oversize_radius(radius: float) -> None:
+    with pytest.raises(ValueError):
+        fillet_open_line_corner(
+            VectorPath(((0, 0), (10, 0), (10, 10))), 1, radius,
+        )
+
+
+def test_fillet_rejects_collinear_and_non_line_junction() -> None:
+    with pytest.raises(ValueError, match="noncollinear"):
+        fillet_open_line_corner(VectorPath(((0, 0), (10, 0), (20, 0))), 1, 2)
+    path = VectorPath(
+        ((0, 0), (10, 0), (10, 10)),
+        segments=(VectorSegment.line(), VectorSegment.arc(90)),
+    )
+    with pytest.raises(ValueError, match="straight"):
+        fillet_open_line_corner(path, 1, 2)

@@ -602,6 +602,72 @@ def chamfer_open_line_corner(
     return result
 
 
+def fillet_open_line_corner(
+    path: VectorPath, node_index: int, radius_mm: float,
+) -> VectorPath:
+    """Insert an exact circular tangent fillet at an open line/line corner.
+
+    The remaining adjacent straight edges retain their original direction.
+    The new arc is stored as an analytic bulge, not a sampled polyline.
+    """
+    path.validate()
+    if path.closed:
+        raise ValueError("Open the contour before filleting a corner.")
+    if not 0 < node_index < len(path.points_xy) - 1:
+        raise ValueError("Fillet requires an interior node.")
+    if not isfinite(radius_mm) or radius_mm <= 0:
+        raise ValueError("Fillet radius must be positive and finite.")
+    segments = list(path.resolved_segments())
+    if (
+        segments[node_index - 1].kind != "line"
+        or segments[node_index].kind != "line"
+    ):
+        raise ValueError("Fillet currently supports two adjoining straight segments.")
+    previous = _xy(path.points_xy[node_index - 1])
+    corner = _xy(path.points_xy[node_index])
+    following = _xy(path.points_xy[node_index + 1])
+    before = previous - corner
+    after = following - corner
+    length_before = float(np.linalg.norm(before))
+    length_after = float(np.linalg.norm(after))
+    if min(length_before, length_after) <= _EPS:
+        raise ValueError("Fillet requires nonzero adjoining straight edges.")
+    unit_before = before / length_before
+    unit_after = after / length_after
+    cross = float(
+        unit_before[0] * unit_after[1] - unit_before[1] * unit_after[0]
+    )
+    if abs(cross) <= 1e-10:
+        raise ValueError("Fillet requires a noncollinear corner.")
+    theta = acos(float(np.clip(np.dot(unit_before, unit_after), -1.0, 1.0)))
+    tangent_distance = radius_mm / tan(theta / 2.0)
+    if (
+        not isfinite(tangent_distance)
+        or tangent_distance <= _EPS
+        or tangent_distance >= min(length_before, length_after) - _EPS
+    ):
+        raise ValueError("Fillet radius does not fit inside both straight edges.")
+    first = corner + unit_before * tangent_distance
+    second = corner + unit_after * tangent_distance
+    # Signed turn from travel toward the corner to travel away from it.
+    incoming = -unit_before
+    sweep = atan2(
+        float(incoming[0] * unit_after[1] - incoming[1] * unit_after[0]),
+        float(np.dot(incoming, unit_after)),
+    )
+    fillet = VectorSegment("arc", bulge=tan(sweep / 4.0))
+    fillet.validate()
+    points = list(path.points_xy)
+    points[node_index:node_index + 1] = [
+        (float(first[0]), float(first[1])),
+        (float(second[0]), float(second[1])),
+    ]
+    segments.insert(node_index, fillet)
+    result = replace(path, points_xy=tuple(points), segments=_canonical_segments(segments))
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:

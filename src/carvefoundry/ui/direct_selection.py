@@ -25,6 +25,7 @@ from carvefoundry.core.vector_path import (
     chamfer_open_line_corner,
     close_path,
     extend_open_line_endpoint,
+    fillet_open_line_corner,
     fit_open_line_endpoint_to_segment,
     insert_node,
     join_paths,
@@ -706,6 +707,22 @@ class DirectSelectionMixin:
         chamfer_row.addWidget(chamfer_setback)
         chamfer_row.addWidget(chamfer_button)
         layout.addLayout(chamfer_row)
+        fillet_row = QHBoxLayout()
+        fillet_radius = QDoubleSpinBox(dialog)
+        fillet_radius.setObjectName("VectorFilletRadius")
+        fillet_radius.setRange(0.01, 100000.0)
+        fillet_radius.setDecimals(2)
+        fillet_radius.setSuffix(" mm")
+        fillet_radius.setValue(2.0)
+        fillet_radius.setToolTip(
+            "Tangent circular arc radius for an open straight/straight corner."
+        )
+        fillet_button = QPushButton("Fillet Selected Corner", dialog)
+        fillet_button.setObjectName("VectorFilletCorner")
+        fillet_row.addWidget(QLabel("Corner radius:", dialog))
+        fillet_row.addWidget(fillet_radius)
+        fillet_row.addWidget(fillet_button)
+        layout.addLayout(fillet_row)
         trim_row = QHBoxLayout()
         trim_fraction = QDoubleSpinBox(dialog)
         trim_fraction.setObjectName("VectorEndpointTrimPercent")
@@ -791,6 +808,7 @@ class DirectSelectionMixin:
                 and path.resolved_segments()[index - 1].kind == "line"
                 and path.resolved_segments()[index].kind == "line"
             )
+            fillet_button.setEnabled(chamfer_button.isEnabled())
             trim_endpoint_button.setEnabled(
                 path is not None
                 and not path.closed
@@ -1110,6 +1128,29 @@ class DirectSelectionMixin:
                 table.setCurrentCell(index, 0)
                 refresh_topology_actions()
 
+        def fillet_selected_corner():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            old_path = selected.vector_path
+            if old_path.closed or not 0 < index < len(old_path.points_xy) - 1:
+                return
+            fixed = node_world_points(selected)[0]
+            try:
+                new_path = fillet_open_line_corner(
+                    old_path, index, fillet_radius.value(),
+                )
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid corner fillet", str(exc))
+                return
+            if self._commit_vector_path(
+                selected.item_id, new_path, label="fillet vector corner",
+                target_node=0,
+                target_world_xy=(float(fixed[0]), float(fixed[1])),
+            ):
+                table.setCurrentCell(index, 0)
+                refresh_topology_actions()
+
         def split_selected():
             _selected, index = current()
             if self._split_selected_vector_path(index):
@@ -1190,6 +1231,7 @@ class DirectSelectionMixin:
         open_close.clicked.connect(toggle_open_closed)
         split_path.clicked.connect(split_selected)
         chamfer_button.clicked.connect(chamfer_selected_corner)
+        fillet_button.clicked.connect(fillet_selected_corner)
         trim_endpoint_button.clicked.connect(trim_selected_endpoint)
         extend_endpoint_button.clicked.connect(extend_selected_endpoint)
         intersect_button.clicked.connect(fit_selected_endpoint)
