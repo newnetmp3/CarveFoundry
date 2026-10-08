@@ -25,6 +25,7 @@ from carvefoundry.core.vector_path import (
     close_path,
     insert_node,
     join_paths,
+    move_cubic_control,
     move_node,
     node_world_points,
     open_path_at_node,
@@ -173,6 +174,43 @@ class DirectSelectionMixin:
         if candidate is None:
             return xy, None
         return candidate.point_xy, candidate.kind
+
+    def _control_drag_finished(
+        self, item_index: int, segment_index: int, handle: int,
+        x_mm: float, y_mm: float,
+    ) -> None:
+        if not 0 <= item_index < len(self.project.items):
+            return
+        item = self.project.items[item_index]
+        if item.locked or item.vector_path is None:
+            return
+        try:
+            local = world_xy_to_local_point(item, (x_mm, y_mm))
+            edited = move_cubic_control(
+                item.vector_path, segment_index, handle, local,
+            )
+            if edited == item.vector_path:
+                return
+        except (ValueError, IndexError) as exc:
+            self.statusBar().showMessage(f"Bezier handle drag rejected: {exc}", 7500)
+            return
+        # The mesh-bounds pivot may shift after editing a control. Preserve
+        # the dragged handle's requested world XY after committing.
+        anchor_index = (
+            segment_index if handle == 1
+            else (segment_index + 1) % len(edited.points_xy)
+        )
+        if self._commit_vector_path(
+            item.item_id, edited, label="drag Bezier handle",
+        ):
+            controls = segment_world_controls(item, segment_index)
+            if controls is not None:
+                actual = controls[handle - 1]
+                tx, ty, tz = item.transform.translation_mm
+                item.transform.translation_mm = (
+                    tx + x_mm - actual[0], ty + y_mm - actual[1], tz,
+                )
+                self.viewport.update()
 
     def _node_drag_finished(
         self, item_index: int, node_index: int, x_mm: float, y_mm: float,
