@@ -70,6 +70,11 @@ shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
 read/write CF3D engine bridge; it does not retain CAM or fixture metadata
 inside the Rust layout, generate NC programs or replace full CNC preflight.
 The original PySide6 application stays available as the CNC authority.
+A subsequent in-progress usability milestone adds safe reopening of
+versioned multi-sheet plan JSON in the Rust UI, validated before changing
+the current preview. This is read-only plan inspection, not CF3D editing;
+the source design stays independent and invalid files cannot overwrite it.
+
 PR #87 merged bounded **multi-sheet polygon-first-fit nesting** after Rust
 Cargo tests, Clippy, native Linux release build and both Python CI lanes passed.
 The Rust UI can compute plans on a background worker, inspect each stock sheet,
