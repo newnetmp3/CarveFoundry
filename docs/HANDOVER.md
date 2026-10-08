@@ -17,7 +17,7 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `399b0d71304c77c2a361d2d192721d9e564e7c29` (PR #93).
+- Last verified merged feature baseline: `c992831dec631a40043a90f82e5034dff9b9d6b0` (PR #94).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
@@ -55,11 +55,28 @@
 - **Not CAM-integrated:** no physical face mirroring, fit certification,
   cutting simulation, fixture-aware preflight, NC generation or hardware QA.
 
+### Verified native stock-origin grid precision (PR #94)
+
+- [PR #94](https://github.com/newnetmp3/CarveFoundry/pull/94) merged
+  `c992831dec631a40043a90f82e5034dff9b9d6b0` after [native Rust/Linux
+  CI `37854022254`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37854022254)
+  passed 39 Rust tests, strict Clippy, native Linux release compilation and
+  launcher checks and [Python 3.12/3.14 CI
+  `37854022243`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37854022243)
+  passed.
+- Rust Studio now provides opt-in stock-XY0 grid snapping for object translation,
+  validated 0.05–100 mm spacing, an explicit selected-object align action and
+  absolute-drag displacement to avoid per-frame rounding loss. Undo/Redo
+  invalidates outdated inlay previews. Existing precise X/Y editing remains.
+- All motion-critical CF3D operations are still delegated to the existing
+  Python CAM and protected new-file transaction; no G-code or physical machine
+  testing came from this milestone.
+
 ### Next functional milestones
 
 - [x] Paired pocket/plug **design-only** convex-contour generator merged in PR #93 with Rust/Python CI; production CNC integration, physical fit and mirroring are still [ ] milestones.
 - [ ] Extend settings templates with user-managed versions and strategy-specific parameter semantics; test application from both Rust and PySide6 workspaces.
-- [~] Add native live snapping and object precision controls: next in-progress Rust grid snapping aligns object translations to bottom-left stock XY0 using absolute drag displacement and Undo/Redo. Segment/node snapping and broader 3D scene support remain future goals.
+- [x] Native grid-precision object positioning merged in PR #94. Follow-on [ ] real-time vertex/midpoint/edge snapping, analytic curve editing and broader Rust 3D scene support.
 - [ ] Test native Rust Studio on KDE Plasma Wayland and verify the save-as-new CF3D, template and stale-CAM behavior against physical workflows.
 
 ### Known boundaries and safety invariants
@@ -70,22 +87,25 @@
 - Preview/export must fail closed if enabled machining intent is stale or missing motion.
 - Offline preflight cannot confirm actual machine work offsets, unknown clamps, holder collisions or controller state.
 
-## Active development — next slice (not merged)
+## Active development — ready for next milestone
 
-- Current merged main: `399b0d71304c77c2a361d2d192721d9e564e7c29` (PR #93).
-- Branch: `feature/rust-stock-grid-precision`. PR number and final CI pending.
-- Scope: pure Rust precision grid module with 0.05–100 mm spacing, finite
-  range guards, absolute-delta world-coordinate dragging and an explicit
-  align-to-grid action in the native Studio tools panel. Inspector retains
-  unrestricted finite precision X/Y fields when snap is not enabled.
-- UX/history: maintain stock-origin XY0 and Undo/Redo; invalidate stale inlay
-  design previews on document Undo/Redo; no change to CF3D serialization.
-- Safety: source-linked new CF3D placement continues through authoritative
-  Python SHA/UUID transaction, clearing motion and marking CAM stale.
-- Validation: Rust + Python workflows **pending**; no physical KDE/Wayland
-  mouse or CNC QA. Merge only after green CI.
-- Next: verify Clippy/tests/release/Python, then merge when green; follow on
-  with node and live geometric snapping/precision constraints.
+- No unmerged active feature PR from this session. Primary branch `main`
+  verified at `c992831dec631a40043a90f82e5034dff9b9d6b0` after PR #94.
+- Next priority: extend native snapping from object translations to robust
+  vector node/midpoint/edge constraints, analytic curve preservation, and
+  source-linked undoable editing with non-stale CAM status only after fresh
+  verified regeneration. Scope the next increment as one integrated user
+  action with geometry, UI, tests and documentation.
+- Parallel CNC gap: inlay #93 remains **design-only**. Do not post NC from
+  proposed plug/pocket pairs before mirrored registration, real cutter
+  geometry, stock/simulation and fixture-aware CAM have passed testing.
+- Critical invariants: stock XY0 bottom-left, Z0 top of wood; fence top in
+  stock-relative Z = bed-measured height − stock thickness (common left fence
+  23 mm above bed, thickness varies). Preserve tool-radius fixture clearance,
+  segmented cutter programs, manual tool swap and Z re-probe.
+- Physical KDE Plasma Wayland and actual Onefinity machining remain
+  **unverified**. The open old PRs #32/#33 have not been touched by
+  this session and should be reviewed separately.
 
 ## Append-only checkpoint log
 
@@ -142,3 +162,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Enforced offset halfplanes, source-geometry/digest integrity and strict Clippy cleanups for inlay design | Fix commits `e8da9fd`, `f70849f`, `ca7b5a6`; latest workflows pending | Verify green Rust, Python and launch build |
 | 2026-10-08 | PR #93 paired inlay design merged after full Rust/Python CI | Rust `37853384040`, Python `37853384068`, main `399b0d7` | Native precision controls |
 | 2026-10-08 | Started stock-origin precision grid for native Rust layout placements, absolute drag deltas and rollback preservation | `feature/rust-stock-grid-precision`, CI pending | Verify native/Qt compatibility and merge if green |
+| 2026-10-08 | PR #94 native stock grid precision merged after both workflows passed; 39 Rust tests and Python 3.12/3.14 green | Rust `37854022254`, Python `37854022243`, main `c992831` | Real-time vector node/edge snapping, analytic authoring/CAM bridge; physical Wayland/CNC QA |
