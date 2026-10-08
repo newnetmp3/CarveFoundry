@@ -610,3 +610,38 @@ def test_direct_selection_line_extension_preserves_opposite_world_endpoint():
         assert tuple(node_world_points(item)[-1, :2]) == pytest.approx(opposite_before)
     finally:
         window.close()
+
+
+def test_direct_selection_fit_to_second_selected_line_preserves_world_anchor():
+    source_path = VectorPath(((0, 0), (10, 0)))
+    target_path = VectorPath(((5, -4), (5, 4)))
+    source = ProjectItem(
+        "Source", kind="pen", mesh=source_path.mesh_asset(), vector_path=source_path,
+    )
+    reference = ProjectItem(
+        "Reference", kind="pen", mesh=target_path.mesh_asset(),
+        vector_path=target_path,
+    )
+    window = MainWindow()
+    try:
+        window._set_project(
+            Project(items=[source, reference]), project_path=None, selected_row=1,
+        )
+        window._selected_design_indices = lambda: [0, 1]
+        window.viewport._renderer.selected_item_index = 0
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        button = dialog.findChild(QPushButton, "VectorFitIntersection")
+        mode = dialog.findChild(QComboBox, "VectorFitMode")
+        assert table is not None and button is not None and mode is not None
+        table.setCurrentCell(0, 0)
+        assert button.isEnabled()
+        before = tuple(node_world_points(source)[-1, :2])
+        button.click()
+        assert source.vector_path.points_xy[0] == pytest.approx((5, 0))
+        assert tuple(node_world_points(source)[-1, :2]) == pytest.approx(before)
+        assert reference.vector_path == target_path
+    finally:
+        window.close()

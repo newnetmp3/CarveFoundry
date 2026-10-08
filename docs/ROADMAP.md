@@ -186,8 +186,12 @@ AI/PyTorch inference initially.
    does not extrapolate arcs or cubic curves. PR #75 is merged after CI.
    Finite straight-segment trim/extend intersection geometry is now in
    development, with explicit trim/extend direction and bounds validation.
-   Target selection UI and general analytic curve intersections remain future
-   work; the core algorithm alone is not a completed CAD user workflow.
+   PR #76 merged the strict finite-line intersection geometry. The next
+   in-progress Direct Selection workflow supports fitting against one chosen
+   straight segment of a second selected vector, converting from its world
+   coordinates to the source's local coordinate space. That UI remains
+   unverified until tests and CI pass. General analytic curve intersections
+   and direct mouse target picking remain future work.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.
