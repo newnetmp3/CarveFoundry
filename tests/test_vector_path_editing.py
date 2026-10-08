@@ -17,6 +17,7 @@ from carvefoundry.core.vector_path import (
     arc_sweep_degrees,
     chamfer_open_line_corner,
     close_path,
+    edit_line_corner,
     extend_open_line_endpoint,
     fillet_open_line_corner,
     fit_open_line_endpoint_to_segment,
@@ -636,3 +637,53 @@ def test_fillet_rejects_collinear_and_non_line_junction() -> None:
     )
     with pytest.raises(ValueError, match="straight"):
         fillet_open_line_corner(path, 1, 2)
+
+
+@pytest.mark.parametrize("operation", ["chamfer", "fillet"])
+@pytest.mark.parametrize("node_index", [0, 1, 3])
+def test_closed_corner_edit_preserves_seam_and_analytic_segments(
+    operation: str, node_index: int,
+) -> None:
+    original = VectorPath(
+        ((0, 0), (10, 0), (10, 10), (0, 10)), closed=True,
+    )
+    changed = edit_line_corner(original, node_index, 2, operation=operation)
+    changed.validate()
+    assert changed.closed
+    assert len(changed.points_xy) == 5
+    assert changed.segment_count == 5
+    inserted = changed.resolved_segments()[node_index]
+    assert inserted.kind == ("arc" if operation == "fillet" else "line")
+    if operation == "fillet":
+        center = arc_center(changed, node_index)
+        assert center is not None
+        for fraction in (0, 0.5, 1):
+            point = segment_point(changed, node_index, fraction)
+            assert np.hypot(
+                point[0] - center[0], point[1] - center[1],
+            ) == pytest.approx(2.0, abs=1e-7)
+    assert all(
+        seg.kind == "line"
+        for index, seg in enumerate(changed.resolved_segments())
+        if index != node_index
+    )
+
+
+def test_closed_corner_edit_rejects_curved_junction_and_oversize() -> None:
+    original = VectorPath(
+        ((0, 0), (10, 0), (10, 10), (0, 10)),
+        closed=True,
+        segments=(
+            VectorSegment.line(), VectorSegment.line(),
+            VectorSegment.line(), VectorSegment.arc(90),
+        ),
+    )
+    with pytest.raises(ValueError, match="straight"):
+        edit_line_corner(original, 0, 2, operation="fillet")
+    path = VectorPath(
+        ((0, 0), (10, 0), (10, 10), (0, 10)), closed=True,
+    )
+    with pytest.raises(ValueError):
+        edit_line_corner(path, 0, 10, operation="chamfer")
+    with pytest.raises(ValueError, match="operation"):
+        edit_line_corner(path, 0, 2, operation="round")
