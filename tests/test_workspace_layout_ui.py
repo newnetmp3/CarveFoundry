@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QPushButton,
 )
@@ -476,4 +477,34 @@ def test_bezier_handle_drag_uses_stock_grid_when_geometry_snapping_disabled():
                 window._settings.remove(key)
             else:
                 window._settings.setValue(key, value)
+        window.close()
+
+
+def test_vector_angle_step_is_persisted_and_forwarded_to_native_viewport():
+    path = VectorPath(
+        ((10, 10), (40, 10)),
+        segments=(VectorSegment.cubic((17, 23), (33, 23)),),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    key = "vector/angle_step_degrees"
+    original = window._settings.value(key)
+    try:
+        window._settings.setValue(key, 45.0)
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_editor()
+        dialog = window.findChild(QDialog, "VectorNodeEditor")
+        assert dialog is not None
+        step = dialog.findChild(QDoubleSpinBox, "VectorAngleStep")
+        assert step is not None
+        assert step.value() == pytest.approx(45.0)
+        step.setValue(30.0)
+        assert window.viewport._renderer._vector_angle_step_degrees == pytest.approx(30.0)
+        assert float(window._settings.value(key)) == pytest.approx(30.0)
+        dialog.close()
+    finally:
+        if original is None:
+            window._settings.remove(key)
+        else:
+            window._settings.setValue(key, original)
         window.close()
