@@ -6,6 +6,7 @@ from typing import Protocol
 
 import numpy as np
 import trimesh
+from shapely.affinity import affine_transform
 from shapely.geometry import (
     GeometryCollection,
     LineString,
@@ -16,7 +17,9 @@ from shapely.geometry import (
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge, unary_union
 
+from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.tools import Cutter, ToolType
+from carvefoundry.core.vector_path import sampled_points_xy, sampled_world_points
 
 from .toolpath import MoveKind, Toolpath, ToolpathMove
 
@@ -47,6 +50,66 @@ _EPS = 1e-8
 _PROJECT_BATCH = 1500
 _FEATURE_ANGLE_DEG = 30.0
 _SIMPLIFY_MM = 0.01
+
+
+def editable_vector_centerline(item: ProjectItem) -> np.ndarray | None:
+    """Return exact retained-vector centerline samples in world XY.
+
+    Curves remain analytic in the project model. Sampling happens here only at
+    the CAM boundary using the same deterministic tolerance as the viewport
+    mesh. Paths tilted out of XY fall back to mesh projection.
+    """
+
+    path = item.vector_path
+    if path is None or item.mesh is None:
+        return None
+    if any(abs(float(value)) > 1e-7 for value in item.transform.rotation_deg[:2]):
+        return None
+    points = sampled_world_points(item)[:, :2]
+    if len(points) < 2:
+        return None
+    if path.closed:
+        points = np.vstack((points, points[0]))
+    return np.asarray(points, dtype=float)
+
+
+def editable_vector_regions(item: ProjectItem) -> BaseGeometry | None:
+    """Build the retained stroke region directly from analytic vector source."""
+
+    path = item.vector_path
+    if path is None or item.mesh is None:
+        return None
+    if any(abs(float(value)) > 1e-7 for value in item.transform.rotation_deg[:2]):
+        return None
+
+    local = list(sampled_points_xy(path))
+    if path.closed:
+        local.append(local[0])
+    line = LineString(local)
+    if line.length <= _EPS:
+        return None
+    region = line.buffer(
+        path.width_mm / 2.0,
+        cap_style=1,
+        join_style=1,
+    )
+    bounds = np.asarray(item.mesh.mesh.bounds, dtype=float)
+    pivot = tuple(float(value) for value in bounds.mean(axis=0))
+    matrix = item.transform.matrix(pivot)
+    transformed = affine_transform(
+        region,
+        [
+            float(matrix[0, 0]),
+            float(matrix[0, 1]),
+            float(matrix[1, 0]),
+            float(matrix[1, 1]),
+            float(matrix[0, 3]),
+            float(matrix[1, 3]),
+        ],
+    )
+    if not transformed.is_valid:
+        transformed = transformed.buffer(0)
+    return transformed if not transformed.is_empty else None
 
 
 def _polygon_parts(geometry: BaseGeometry) -> list[Polygon]:
@@ -769,8 +832,9 @@ def geometry_profile(
     *,
     name: str = "Profile",
     offset_mode: str = "outside",
+    regions: BaseGeometry | None = None,
 ) -> Toolpath:
-    regions = projected_regions(mesh)
+    regions = projected_regions(mesh) if regions is None else regions
     distance = cutter.radius_mm + settings.padding_mm
     if offset_mode == "outside":
         path_regions = regions.buffer(distance, join_style=2)
@@ -910,8 +974,9 @@ def geometry_pocket(
     settings: CamSettingsLike,
     *,
     name: str = "Pocket",
+    regions: BaseGeometry | None = None,
 ) -> Toolpath:
-    regions = projected_regions(mesh)
+    regions = projected_regions(mesh) if regions is None else regions
     expanded = (
         regions.buffer(settings.padding_mm, join_style=2)
         if settings.padding_mm > 0
@@ -985,8 +1050,11 @@ def geometry_engrave(
     *,
     depth_mm: float = -0.5,
     name: str = "Engrave",
+    paths_xy: list[np.ndarray] | None = None,
 ) -> Toolpath:
-    paths = _order_paths(engraving_paths(mesh))
+    paths = _order_paths(
+        engraving_paths(mesh) if paths_xy is None else paths_xy
+    )
     target_z = (
         _target_depth(mesh, settings, fallback_mm=depth_mm)
         if settings.overall_depth_mm is not None
@@ -1054,13 +1122,14 @@ def geometry_v_carving(
     settings: CamSettingsLike,
     *,
     name: str = "V-Carving",
+    regions: BaseGeometry | None = None,
 ) -> Toolpath:
     if cutter.tool_type not in {ToolType.V_BIT, ToolType.ENGRAVING_CONE}:
         raise ValueError("V-Carving requires a V-bit or engraving-cone cutter.")
     if cutter.angle_deg is None:
         raise ValueError("Selected V-carving cutter has no included angle.")
 
-    regions = projected_regions(mesh)
+    regions = projected_regions(mesh) if regions is None else regions
     if settings.padding_mm > 0:
         regions = regions.buffer(settings.padding_mm, join_style=2)
 

@@ -1,7 +1,25 @@
 # CarveFoundry implementation roadmap
 
 This file separates **working, integrated features** from proposals. A roadmap
-entry is not a claim that a control or algorithm is available.
+entry is not a claim that a control or algorithm is available. Update this file
+in the same pull request whenever a roadmap capability is actually delivered.
+
+## Recently completed roadmap milestones
+
+- **Persistent object-aware machining operations — PR #59 / PR #60:** Native
+  projects retain machining intent separately from generated motion. The
+  Inspector exposes ordered operations with stable IDs, source-object links,
+  cutter/settings, READY / RECALCULATE / DISABLED state, edit, reorder,
+  duplicate, delete, enable/disable and selective background recalculation.
+  Preview/export remain blocked while any enabled stage is stale or missing
+  generated motion.
+- **Analytic native vector foundation — PR #61 (upon merge):** Retained editable
+  paths support line, circular-arc and cubic Bezier segments, deterministic
+  curve tessellation, exact segment splitting, CF3D persistence, Direct
+  Selection segment editing and node/midpoint/arc-center/intersection snapping.
+  Planar retained vectors feed Profile, Pocket, Engrave and V-Carving directly
+  at the 2D CAM boundary instead of first reconstructing their contours from
+  triangles.
 
 ## Workshop-safe output — implemented in PR #16 (upon merge)
 
@@ -35,13 +53,17 @@ It must not be described as a guarantee of physical safety.
    verification remain unimplemented.
 3. **Robust job recovery:** immutable job manifests, machine state/work-zero
    and tool identification, verified safe entry and machine-aware resumption.
-4. **Persistent multi-tool planning and dependencies:** A session-owned
-   multi-cutter job planner now supports appending operations, reordering/removing
-   generated paths, cutout/rough-before-finish checks, stage estimates, full
-   preview and preflighted per-cutter export. Native CF3D now retains calculated toolpaths, including cutter geometry,
-   source linkage, safe Z, move kinds/feeds and exact XYZ motion. Tool-stage
-   setup records, full automatic operation dependency generation and
-   stock-aware sequencing remain future work.
+4. **Persistent multi-tool planning and dependencies — substantially
+   implemented:** Native CF3D retains both calculated toolpaths and ordered
+   persistent machining-operation definitions. Operations store stable IDs,
+   source-object links, cutter/settings, enabled state and recalculation state.
+   The Inspector can edit, reorder, duplicate, delete, disable and selectively
+   recalculate operations; geometry/settings changes invalidate the earliest
+   affected stage and dependent downstream stages while retaining earlier valid
+   motion. Preview/export fail closed while any enabled operation is stale or
+   missing motion. Remaining work is richer dependency graphs beyond ordered
+   downstream invalidation, exact stock-state dependency reasoning, reusable
+   operation/toolpath templates and automatic global multi-tool optimization.
 5. **V-carving inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
    and fit/tolerance validation.
 6. **Beyond sampled stock-aware rest:** 3D Rest now simulates all previously
@@ -51,15 +73,21 @@ It must not be described as a guarantee of physical safety.
    actual preceding operations for each model. Exact volumetric stock-aware
    clearing, variable cutter-engagement feeds and collision/holder simulation
    remain future work.
-7. **Extended vector editing, group cutouts and text-on-path:** Direct
-   Selection now edits newly drawn Pen/Line XY control points, with viewport
-   handles, exact coordinate controls, midpoint insertion/deletion, real mesh
-   rebuild, Undo/Redo and CF3D persistence. Imported STL/legacy pen meshes,
-   ellipse/polygon shape primitives, traced meshes and baked Boolean/Offset
-   results do NOT yet have editable source knots or Bézier handles. Group
-   cutouts and text-on-path remain unimplemented. Planar silhouette
-   Union/Subtract/Intersect and signed Offset separately produce Z0-topped
-   2.5D watertight extrusions, not true 3D mesh Booleans.
+7. **Extended native vector editing, group cutouts and text-on-path —
+   in progress:** Direct Selection edits retained Pen/Line anchors with viewport
+   dragging, exact coordinates, insertion/deletion, Undo/Redo and CF3D
+   persistence. PR #61 adds analytic line, circular-arc and cubic Bezier
+   segments, exact curve splitting, numeric arc/Bezier segment editing, and
+   snapping to vector nodes, segment midpoints, arc centers and intersections.
+   Planar retained vectors feed the 2D Profile, Pocket, Engrave and V-Carving
+   CAM boundary directly, with mesh projection retained as a fallback.
+   Remaining vector-CAD work includes graphical Bezier-handle dragging,
+   tangent/perpendicular/grid snapping, trim/extend, join/close/split,
+   fillet/chamfer, first-class editable circle/ellipse/polygon primitives,
+   editable imported SVG/DXF contours, group cutouts and text-on-path.
+   Planar Union/Subtract/Intersect and signed Offset currently produce
+   Z0-topped 2.5D watertight results rather than retained analytic contours or
+   true volumetric 3D mesh Booleans.
 8. **Multi-component 3D relief compositing and editable heightmap layers.**
 9. **Machine-integrated double-sided workflow:** Stock-registered two-face
    setup now partitions visible front/back models, reflects the chosen physical

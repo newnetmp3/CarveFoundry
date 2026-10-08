@@ -7,13 +7,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_OPENGL", "software")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QPushButton,
+)
 
 from carvefoundry.cam.operation import CamOperation
 from carvefoundry.cam.toolpath import Toolpath
 from carvefoundry.core.primitives import rectangle_mesh
 from carvefoundry.core.project import Project, ProjectItem
 from carvefoundry.core.tools import Cutter, ToolType
+from carvefoundry.core.vector_path import VectorPath
 from carvefoundry.ui.cam_dialog_help import cam_generation_help
 from carvefoundry.ui.inspector_controls import InspectorControlsMixin
 from carvefoundry.ui.main_window import MainWindow
@@ -223,4 +230,64 @@ def test_machining_operations_panel_reflects_persistent_job_and_disable_state():
         assert window.project.toolpaths == []
         assert "DISABLED" in rows.item(0).text()
     finally:
+        window.close()
+
+
+def test_direct_selection_can_create_arc_and_bezier_segments_with_snap_controls():
+    window = MainWindow()
+    path = VectorPath(((0.0, 0.0), (20.0, 0.0)), width_mm=1.0, depth_mm=1.0)
+    item = ProjectItem(
+        "Editable curve",
+        kind="pen",
+        mesh=path.mesh_asset(),
+        vector_path=path,
+    )
+    try:
+        window._set_project(
+            Project(items=[item]),
+            project_path=None,
+            selected_row=1,
+        )
+        window._activate_direct_selection()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+
+        segment_kind = dialog.findChild(QComboBox, "VectorSegmentKind")
+        arc_sweep = dialog.findChild(QDoubleSpinBox, "VectorArcSweep")
+        apply_segment = dialog.findChild(QPushButton, "VectorApplySegment")
+        snap_enabled = dialog.findChild(QCheckBox, "VectorSnapEnabled")
+        snap_tolerance = dialog.findChild(QDoubleSpinBox, "VectorSnapTolerance")
+
+        assert segment_kind is not None
+        assert arc_sweep is not None
+        assert apply_segment is not None
+        assert snap_enabled is not None
+        assert snap_tolerance is not None
+        assert snap_enabled.isChecked()
+
+        segment_kind.setCurrentIndex(segment_kind.findData("arc"))
+        arc_sweep.setValue(120.0)
+        apply_segment.click()
+        _APP.processEvents()
+        edited = window.project.items[0].vector_path
+        assert edited is not None
+        assert edited.resolved_segments()[0].kind == "arc"
+
+        segment_kind.setCurrentIndex(segment_kind.findData("cubic"))
+        apply_segment.click()
+        _APP.processEvents()
+        edited = window.project.items[0].vector_path
+        assert edited is not None
+        assert edited.resolved_segments()[0].kind == "cubic"
+
+        snap_enabled.setChecked(False)
+        snap_tolerance.setValue(2.5)
+        assert not window._settings.value("vector/snap_enabled", True, type=bool)
+        assert float(window._settings.value("vector/snap_tolerance_mm")) == 2.5
+    finally:
+        dialog = getattr(window, "_vector_node_dialog", None)
+        if dialog is not None:
+            dialog.close()
+        window._settings.remove("vector/snap_enabled")
+        window._settings.remove("vector/snap_tolerance_mm")
         window.close()

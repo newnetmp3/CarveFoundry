@@ -37,7 +37,7 @@ owns shutdown. Feature behavior belongs in narrower controllers/mixins.
 | `cam/gcode_verify.py` / `cam/virtual_machining.py` | Fail-closed independent NC decoding, posted-motion/fixture verification and verified-G-code-driven stock simulation. |
 | `ui/project_recovery.py` / `core/recovery.py` | Atomic CF3D idle checkpoints, checksum verification and restore/cleanup. |
 | `ui/batch_layout.py` / `core/batch_layout.py` | Independent editable copies in stock-registered grids with fixture/cutter margin checks. |
-| `ui/direct_selection.py` / `core/vector_path.py` | Native Direct Selection and exact node editing for retained Pen/Line XY curves. |
+| `ui/direct_selection.py` / `core/vector_path.py` / `core/vector_snapping.py` | Retained analytic line/arc/cubic-Bezier source geometry, Direct Selection, exact segment editing and geometric snap candidates. Curve source stays analytic; deterministic tessellation occurs only at rendering/CAM boundaries. |
 | `ui/guided_workflow.py` | Modeless design-to-CAM workflow with derived live statuses and preflight fingerprint. |
 | `ui/interface_settings.py` | Persistent layout/viewport preferences and migration. |
 | `ui/planar_operations_actions.py` | Background orchestration and commit of planar Boolean/Offset results. |
@@ -65,6 +65,10 @@ growing `main_window.py`, a facade module, or a generic catch-all controller.
   snapshots rather than deep-copied on every Undo. Native projects also retain
   calculated CAM toolpaths; dense motion is stored as checksum-verified,
   compressed binary payloads rather than expanded JSON.
+- `core/vector_path.py` / `core/vector_snapping.py`: immutable retained
+  XY vector anchors and line/arc/cubic-Bezier segments plus node, midpoint,
+  arc-center and intersection snapping. Analytic vectors are persisted in CF3D
+  and supplied directly to planar 2D CAM when the item remains in the XY plane.
 - `core/planar_operations.py`: XY silhouette Booleans and signed offsets,
   returning Z0-topped, independently triangulated 2.5D shapes. Not 3D mesh
   Booleans.
