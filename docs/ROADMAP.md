@@ -206,10 +206,13 @@ AI/PyTorch inference initially.
    PR #79 merged an exact circular-radius line/line fillet with retained
    analytic arc geometry. Both are integrated with Direct Selection,
    Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
-   PR #80 merged closed-contour line/line corner chamfer and fillet with
-   cyclic seam support and regression tests passing both Python CI lanes. PR #80 subsequently merged closed-contour line/line
-   chamfer and fillet editing with seam-aware regression coverage.
-   Curved junctions, broader snap indicators and physical KDE/Wayland
+   PR #80 merged closed-contour line/line corner chamfer and fillet,
+   including seam-aware regression coverage, with both Python CI lanes green.
+   The next in-progress inspector milestone groups Direct Selection into
+   five scrollable tabs (Geometry, Snapping, Topology, Corners, Endpoints).
+   It retains the selected node and existing callbacks and persists the
+   active tab, but remains unverified until CI passes.
+   Curved junctions, general live snap indicators and physical KDE/Wayland
    pointer validation remain outstanding.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or

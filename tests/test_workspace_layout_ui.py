@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QPushButton,
     QTableWidget,
+    QTabWidget,
 )
 
 from carvefoundry.cam.operation import CamOperation
@@ -733,4 +734,84 @@ def test_closed_seam_corner_edit_preserves_world_anchor(
         assert item.vector_path.resolved_segments()[0].kind == expected_kind
         assert tuple(node_world_points(item)[2, :2]) == pytest.approx(fixed)
     finally:
+        window.close()
+
+
+def test_direct_selection_editor_uses_persistent_scrollable_tool_tabs():
+    path = VectorPath(((0, 0), (15, 0), (15, 10)), closed=False)
+    item = ProjectItem("Pen", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    key = "vector/editor_tab"
+    old_value = window._settings.value(key)
+    try:
+        window._settings.setValue(key, 0)
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        tabs = dialog.findChild(QTabWidget, "VectorEditorTabs")
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        assert tabs is not None and table is not None
+        assert [tabs.tabText(i) for i in range(tabs.count())] == [
+            "Geometry", "Snapping", "Topology", "Corners", "Endpoints",
+        ]
+        table.setCurrentCell(1, 0)
+        assert table.currentRow() == 1
+        tabs.setCurrentIndex(3)
+        assert int(window._settings.value(key)) == 3
+        assert table.currentRow() == 1
+        assert tabs.widget(3).objectName() == "VectorEditorScroll_corners"
+        assert tabs.widget(3).widget().objectName() == "VectorEditorPage_corners"
+        assert dialog.findChild(QPushButton, "VectorChamferCorner") is not None
+        assert dialog.findChild(QPushButton, "VectorFilletCorner") is not None
+        assert dialog.findChild(QDoubleSpinBox, "VectorGridSpacing") is not None
+        dialog.close()
+
+        window._show_vector_node_inspector()
+        reopened = window._vector_node_dialog
+        assert reopened is not None
+        restored_tabs = reopened.findChild(QTabWidget, "VectorEditorTabs")
+        assert restored_tabs is not None
+        assert restored_tabs.currentIndex() == 3
+        reopened.close()
+    finally:
+        if old_value is None:
+            window._settings.remove(key)
+        else:
+            window._settings.setValue(key, old_value)
+        window.close()
+
+
+def test_direct_selection_tab_controls_remain_operational_across_switches():
+    path = VectorPath(((0, 0), (10, 0), (10, 10)))
+    item = ProjectItem("Corner", kind="pen", mesh=path.mesh_asset(), vector_path=path)
+    window = MainWindow()
+    key = "vector/editor_tab"
+    old_value = window._settings.value(key)
+    try:
+        window._settings.setValue(key, 0)
+        window._set_project(Project(items=[item]), project_path=None, selected_row=1)
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
+        assert dialog is not None
+        tabs = dialog.findChild(QTabWidget, "VectorEditorTabs")
+        table = dialog.findChild(QTableWidget, "EditableVectorNodeTable")
+        button = dialog.findChild(QPushButton, "VectorChamferCorner")
+        setback = dialog.findChild(QDoubleSpinBox, "VectorChamferSetback")
+        assert tabs is not None and table is not None
+        assert button is not None and setback is not None
+        table.setCurrentCell(1, 0)
+        tabs.setCurrentIndex(3)
+        setback.setValue(2.0)
+        assert button.isEnabled()
+        button.click()
+        assert len(item.vector_path.points_xy) == 4
+        assert item.vector_path.resolved_segments()[1].kind == "line"
+        tabs.setCurrentIndex(1)
+        assert dialog.findChild(QCheckBox, "VectorSnapEnabled") is not None
+    finally:
+        if old_value is None:
+            window._settings.remove(key)
+        else:
+            window._settings.setValue(key, old_value)
         window.close()

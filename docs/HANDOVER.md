@@ -24,20 +24,21 @@
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Verified CAD and native parity development batch
+## Active development — Direct Selection inspector navigation
 
-- [PR #80](https://github.com/newnetmp3/CarveFoundry/pull/80): closed-contour line/line chamfer and radius fillet including seam node 0, merged `158c3d2fa3927ff1f440caaa4db1dbf357135916`; GitHub Actions run `37821221016` succeeded on Python 3.12 and 3.14 after Ruff import cleanup.
-- [PR #81](https://github.com/newnetmp3/CarveFoundry/pull/81): raster Python/Rust benchmark expanded to deterministic sloped, sparse and overlapping geometry; per-scene full-array parity tests, JSON timing measurements and fallback validation. Merged `85aa914cb809023909ccebfbd9f40ac5499f36c7`; GitHub Actions run `37821725814` succeeded on both Python lanes.
-- No production CAM kernel or CNC output was changed by PR #81. Actual target-workstation timing and memory improvements have not been measured.
-- Closed-contour corner changes are CI/offscreen tested but physical KDE Plasma/Wayland pointer interactions and real CNC workholding/clearance remain unverified.
+- Verified base: PR #81 merge `85aa914cb809023909ccebfbd9f40ac5499f36c7`, followed by main doc checkpoint `a75e43a8a6b1167dca7b8c8af71aff3c785fbf26`. GitHub Actions run `37821725814` passed Python 3.12 and 3.14.
+- Active branch: `feature/direct-selection-tabbed-inspector`; no merge or CI result yet.
+- Refactored the Direct Selection dialog into five scrollable tabs — Geometry, Snapping, Topology, Corners, Endpoints. The selected-node table and exact XY controls stay visible while switching panels. All existing widget object names, editing callbacks and CAM invalidation behavior are retained.
+- Persist selected tab with `QSettings` (clamped to valid tab count), retaining selected node across switches. Added offscreen tests for tab hierarchy, saved preference and editing a chamfer after changing tabs.
+- Existing code still needs physical KDE Plasma/Wayland interaction and CNC verification. No CAM kernel or machining behavior changes are proposed here.
 
-### Next development milestones
+### Next checkpoints
 
-- [ ] Reorganize Direct Selection's dense inspector into navigable geometry, snap and corner-tool sections with state/selection continuity.
-- [ ] Implement general live snap-kind feedback in native viewport beyond Bézier modifier indicators.
-- [ ] Expand native parity benchmarks to cutter-contact and stock-sweep against Python reference, comparing memory and result tolerance.
-- [ ] Extend line/arc and curved corner tools only with exact analytic geometry and clear failure modes.
-- [ ] Preserve bottom-left XY0, top-of-stock Z0, fixture clearance and fail-closed CAM export.
+- [ ] Run CI on Python 3.12/3.14; fix import/layout/test failures and merge only if green.
+- [ ] Refine ergonomic labels and tab size/scrolling while keeping layout stable.
+- [ ] Implement broader visual snap indicators in native viewport, beyond cubic-handle modifiers.
+- [ ] Continue Rust/Python cutter-contact and stock-sweep numerical parity testing.
+- [ ] Retain stock XY0, stock-top Z0, fixture clearance and fail-closed stale CAM export.
 
 ### Known boundaries and safety invariants
 
@@ -82,3 +83,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Implemented closed-contour chamfer/fillet for wrapped seam and interior nodes | Branch `feature/closed-vector-corner-editing`; CI pending | Validate and merge if green |
 | 2026-10-08 | PR #80 merged green and expanded native raster parity to sparse/overlap fixtures | Main `158c3d2`, branch `feature/native-raster-scene-parity` pending CI | Validate and merge fixture benchmark PR |
 | 2026-10-08 | PR #81 native raster parity scene expansion passed both CI lanes and merged | Run `37821725814` green, merge `85aa914` | Inspector organization, live snap feedback and cutter-contact parity |
+| 2026-10-08 | Grouped Direct Selection controls into five persistent scrollable tabs, with regression tests | Branch `feature/direct-selection-tabbed-inspector`, CI unverified | Validate PR, merge if green, then live snap indicators |
