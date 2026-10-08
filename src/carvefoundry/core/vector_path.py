@@ -454,6 +454,42 @@ def trim_open_endpoint(
     return result
 
 
+def extend_open_line_endpoint(
+    path: VectorPath, *, at_start: bool, distance_mm: float,
+) -> VectorPath:
+    """Extend an open contour endpoint along its adjacent straight segment.
+
+    A finite positive length extends outward without modifying other segments.
+    Curve extrapolation is deliberately unsupported until its exact geometry
+    and intersection rules can be verified.
+    """
+    path.validate()
+    if path.closed:
+        raise ValueError("Open the contour before extending an endpoint.")
+    if not isfinite(distance_mm) or distance_mm <= 0:
+        raise ValueError("Extension distance must be positive and finite.")
+    segment_index = 0 if at_start else path.segment_count - 1
+    if path.resolved_segments()[segment_index].kind != "line":
+        raise ValueError("Endpoint extension currently supports straight segments only.")
+    start = _xy(path.points_xy[segment_index])
+    end = _xy(path.points_xy[segment_index + 1])
+    delta = end - start
+    length = float(np.linalg.norm(delta))
+    if length <= _EPS:
+        raise ValueError("Cannot extend a zero-length endpoint segment.")
+    offset = delta * (distance_mm / length)
+    updated = start - offset if at_start else end + offset
+    if not np.isfinite(updated).all():
+        raise ValueError("Endpoint extension exceeds finite coordinate range.")
+    points = list(path.points_xy)
+    points[segment_index if at_start else segment_index + 1] = (
+        float(updated[0]), float(updated[1]),
+    )
+    result = replace(path, points_xy=tuple(points))
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:
