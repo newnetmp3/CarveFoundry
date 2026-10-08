@@ -16,6 +16,7 @@ from carvefoundry.core.vector_path import (
     arc_center,
     arc_sweep_degrees,
     close_path,
+    extend_open_line_endpoint,
     insert_node,
     join_paths,
     move_cubic_control,
@@ -420,3 +421,41 @@ def test_trimmed_analytic_curve_roundtrips_and_history_restores(tmp_path) -> Non
     assert load_project(saved).items[0].vector_path == changed
     restore_workspace(project, snapshot)
     assert project.items[0].vector_path == original
+
+
+@pytest.mark.parametrize("at_start", [True, False])
+def test_extend_line_endpoint_preserves_other_segments(at_start: bool) -> None:
+    path = VectorPath(
+        ((0, 0), (10, 0), (20, 10)),
+        segments=(VectorSegment.line(), VectorSegment.line()),
+    )
+    extended = extend_open_line_endpoint(path, at_start=at_start, distance_mm=5)
+    assert extended.segment_count == path.segment_count
+    assert extended.resolved_segments() == path.resolved_segments()
+    if at_start:
+        assert extended.points_xy[0] == pytest.approx((-5, 0))
+        assert extended.points_xy[1:] == path.points_xy[1:]
+    else:
+        diagonal = 5 / np.sqrt(2)
+        assert extended.points_xy[-1] == pytest.approx(
+            (20 + diagonal, 10 + diagonal)
+        )
+        assert extended.points_xy[:-1] == path.points_xy[:-1]
+
+
+@pytest.mark.parametrize("amount", [0.0, -1.0, float("inf"), float("nan")])
+def test_extend_line_endpoint_rejects_invalid_distance(amount: float) -> None:
+    path = VectorPath(((0, 0), (10, 0)))
+    with pytest.raises(ValueError):
+        extend_open_line_endpoint(path, at_start=True, distance_mm=amount)
+
+
+def test_extend_line_endpoint_rejects_closed_and_curved_ends() -> None:
+    closed = VectorPath(((0, 0), (10, 0), (10, 10)), closed=True)
+    with pytest.raises(ValueError, match="Open"):
+        extend_open_line_endpoint(closed, at_start=True, distance_mm=1)
+    cubic = VectorPath(
+        ((0, 0), (10, 0)), segments=(VectorSegment.cubic((2, 4), (8, 4)),),
+    )
+    with pytest.raises(ValueError, match="straight"):
+        extend_open_line_endpoint(cubic, at_start=False, distance_mm=1)

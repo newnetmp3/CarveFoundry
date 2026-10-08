@@ -177,10 +177,13 @@ AI/PyTorch inference initially.
    fillet/chamfer, editable circle/ellipse/polygon primitives, retained
    SVG/DXF contours, group
    cutouts and text-on-path.
-   An in-progress milestone adds exact fractional *open endpoint trimming*
+   PR #74 adds exact fractional *open endpoint trimming*
    to line, arc, and cubic paths with Direct Selection UI and Undo/CAM
    invalidation. This is not yet intersection-aware trim/extend, and it
-   must not be marked delivered until CI passes and the PR merges.
+   was merged after passing CI. The next in-progress milestone extends open
+   straight-line endpoints by a specified distance without affecting their
+   other segments, through Direct Selection and Undo/CAM invalidation. It
+   does not extrapolate arcs or cubic curves, and is not intersection-aware.
    Planar Union/Subtract/Intersect and signed Offset currently produce
    Z0-topped 2.5D watertight results rather than retained analytic contours or
    true volumetric 3D mesh Booleans.

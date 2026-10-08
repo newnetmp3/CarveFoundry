@@ -23,6 +23,7 @@ from carvefoundry.core.vector_path import (
     VectorSegment,
     arc_sweep_degrees,
     close_path,
+    extend_open_line_endpoint,
     insert_node,
     join_paths,
     move_cubic_control,
@@ -704,6 +705,22 @@ class DirectSelectionMixin:
         trim_row.addWidget(trim_fraction)
         trim_row.addWidget(trim_endpoint_button)
         layout.addLayout(trim_row)
+        extend_row = QHBoxLayout()
+        extend_distance = QDoubleSpinBox(dialog)
+        extend_distance.setObjectName("VectorEndpointExtendDistance")
+        extend_distance.setRange(0.01, 100000.0)
+        extend_distance.setDecimals(2)
+        extend_distance.setSuffix(" mm")
+        extend_distance.setValue(5.0)
+        extend_distance.setToolTip(
+            "Extend an open-path straight endpoint outward along its line."
+        )
+        extend_endpoint_button = QPushButton("Extend Selected Endpoint", dialog)
+        extend_endpoint_button.setObjectName("VectorExtendEndpoint")
+        extend_row.addWidget(QLabel("Extension:", dialog))
+        extend_row.addWidget(extend_distance)
+        extend_row.addWidget(extend_endpoint_button)
+        layout.addLayout(extend_row)
 
         def current():
             selected = self._editable_vector_item()
@@ -733,6 +750,14 @@ class DirectSelectionMixin:
                 path is not None
                 and not path.closed
                 and index in (0, len(path.points_xy) - 1)
+            )
+            extend_endpoint_button.setEnabled(
+                path is not None
+                and not path.closed
+                and index in (0, len(path.points_xy) - 1)
+                and path.resolved_segments()[
+                    0 if index == 0 else -1
+                ].kind == "line"
             )
             selected_indices = self._selected_design_indices()
             join_paths_button.setEnabled(
@@ -899,6 +924,31 @@ class DirectSelectionMixin:
             )
             refresh_topology_actions()
 
+        def extend_selected_endpoint():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            original = selected.vector_path
+            at_start = index == 0
+            if original.closed or index not in (0, len(original.points_xy) - 1):
+                return
+            opposite_index = len(original.points_xy) - 1 if at_start else 0
+            fixed_world = node_world_points(selected)[opposite_index]
+            try:
+                edited = extend_open_line_endpoint(
+                    original, at_start=at_start,
+                    distance_mm=extend_distance.value(),
+                )
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid endpoint extension", str(exc))
+                return
+            self._commit_vector_path(
+                selected.item_id, edited, label="extend line endpoint",
+                target_node=opposite_index,
+                target_world_xy=(float(fixed_world[0]), float(fixed_world[1])),
+            )
+            refresh_topology_actions()
+
         def split_selected():
             _selected, index = current()
             if self._split_selected_vector_path(index):
@@ -979,6 +1029,7 @@ class DirectSelectionMixin:
         open_close.clicked.connect(toggle_open_closed)
         split_path.clicked.connect(split_selected)
         trim_endpoint_button.clicked.connect(trim_selected_endpoint)
+        extend_endpoint_button.clicked.connect(extend_selected_endpoint)
         join_paths_button.clicked.connect(join_selected)
         move.clicked.connect(lambda: edit("move"))
         add.clicked.connect(lambda: edit("insert"))
