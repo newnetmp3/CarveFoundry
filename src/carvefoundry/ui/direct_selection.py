@@ -34,6 +34,7 @@ from carvefoundry.core.vector_path import (
     segment_world_point,
     set_segment,
     split_path_at_node,
+    trim_open_endpoint,
     vector_path_in_world_xy,
     world_xy_to_local,
     world_xy_to_local_point,
@@ -686,6 +687,23 @@ class DirectSelectionMixin:
         topology_actions.addWidget(split_path)
         topology_actions.addWidget(join_paths_button)
         layout.addLayout(topology_actions)
+        trim_row = QHBoxLayout()
+        trim_fraction = QDoubleSpinBox(dialog)
+        trim_fraction.setObjectName("VectorEndpointTrimPercent")
+        trim_fraction.setRange(1.0, 99.0)
+        trim_fraction.setDecimals(1)
+        trim_fraction.setSuffix(" %")
+        trim_fraction.setValue(50.0)
+        trim_fraction.setToolTip(
+            "Trim the selected open-path end to this parametric point "
+            "on its first or last segment (no curve flattening)."
+        )
+        trim_endpoint_button = QPushButton("Trim Selected Endpoint", dialog)
+        trim_endpoint_button.setObjectName("VectorTrimEndpoint")
+        trim_row.addWidget(QLabel("Segment fraction:", dialog))
+        trim_row.addWidget(trim_fraction)
+        trim_row.addWidget(trim_endpoint_button)
+        layout.addLayout(trim_row)
 
         def current():
             selected = self._editable_vector_item()
@@ -711,6 +729,11 @@ class DirectSelectionMixin:
                     not path.closed
                     and 0 < index < len(path.points_xy) - 1
                 )
+            trim_endpoint_button.setEnabled(
+                path is not None
+                and not path.closed
+                and index in (0, len(path.points_xy) - 1)
+            )
             selected_indices = self._selected_design_indices()
             join_paths_button.setEnabled(
                 len(selected_indices) == 2
@@ -849,6 +872,33 @@ class DirectSelectionMixin:
                 table.setCurrentCell(target_node, 0)
                 refresh_topology_actions()
 
+        def trim_selected_endpoint():
+            selected, index = current()
+            if selected is None or selected.vector_path is None:
+                return
+            original = selected.vector_path
+            at_start = index == 0
+            if original.closed or index not in (0, len(original.points_xy) - 1):
+                return
+            try:
+                edited = trim_open_endpoint(
+                    original, at_start=at_start,
+                    fraction=trim_fraction.value() / 100.0,
+                )
+            except (ValueError, IndexError) as exc:
+                QMessageBox.warning(dialog, "Invalid endpoint trim", str(exc))
+                return
+            # The mesh centre can change during trimming. Keep the surviving
+            # opposite endpoint fixed in world XY inside the undo transaction.
+            fixed_index = len(original.points_xy) - 1 if at_start else 0
+            fixed_world = node_world_points(selected)[fixed_index]
+            self._commit_vector_path(
+                selected.item_id, edited, label="trim vector endpoint",
+                target_node=fixed_index,
+                target_world_xy=(float(fixed_world[0]), float(fixed_world[1])),
+            )
+            refresh_topology_actions()
+
         def split_selected():
             _selected, index = current()
             if self._split_selected_vector_path(index):
@@ -928,6 +978,7 @@ class DirectSelectionMixin:
         apply_segment.clicked.connect(apply_selected_segment)
         open_close.clicked.connect(toggle_open_closed)
         split_path.clicked.connect(split_selected)
+        trim_endpoint_button.clicked.connect(trim_selected_endpoint)
         join_paths_button.clicked.connect(join_selected)
         move.clicked.connect(lambda: edit("move"))
         add.clicked.connect(lambda: edit("insert"))
