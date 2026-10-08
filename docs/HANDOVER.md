@@ -17,7 +17,7 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `c992831dec631a40043a90f82e5034dff9b9d6b0` (PR #94).
+- Last verified merged feature baseline: `53217f13c60c351a9522909cd2cb63cbea78a36f` (PR #96, Rust-native contour feature snapping).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
@@ -72,11 +72,29 @@
   Python CAM and protected new-file transaction; no G-code or physical machine
   testing came from this milestone.
 
+### Verified Rust Studio live contour snapping (PR #96)
+
+- [PR #96](https://github.com/newnetmp3/CarveFoundry/pull/96) merged
+  `53217f13c60c351a9522909cd2cb63cbea78a36f` after
+  [native Rust/Linux CI `37860414152`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37860414152)
+  passed Rust tests, strict Clippy, release compilation and launcher checks, and
+  [Python 3.12/3.14 CI `37860414211`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37860414211)
+  passed both required lanes. Validation belongs to the exact PR head `ed4e221c`.
+- Native layout Studio now snaps grabbed whole-object contour features
+  to vertices, segment midpoints or edge projections on other objects.
+  Includes bounded deterministic target indexing, visual crosshair and
+  XY/type label, a 4–24 pixel radius control and existing grid/free fallback.
+  Dragging away from outline features does not trigger geometry snapping.
+- This is not individual-vertex geometry editing, analytic CF3D authoring,
+  CNC fixture preflight, machine G-code, or physical Wayland/Onefinity
+  acceptance. Existing source-linked new CF3D transactions remain guarded
+  and invalidate all prior generated machine motion.
+
 ### Next functional milestones
 
 - [x] Paired pocket/plug **design-only** convex-contour generator merged in PR #93 with Rust/Python CI; production CNC integration, physical fit and mirroring are still [ ] milestones.
 - [ ] Extend settings templates with user-managed versions and strategy-specific parameter semantics; test application from both Rust and PySide6 workspaces.
-- [x] Native grid-precision object positioning merged in PR #94. Follow-on [ ] real-time vertex/midpoint/edge snapping, analytic curve editing and broader Rust 3D scene support.
+- [x] Native grid-precision object positioning merged in PR #94 and live whole-object contour snap feedback in PR #96. Follow-on [ ] **actual native vector node/edge editing**, analytic curve preservation and broader Rust 3D scene support.
 - [ ] Test native Rust Studio on KDE Plasma Wayland and verify the save-as-new CF3D, template and stale-CAM behavior against physical workflows.
 
 ### Known boundaries and safety invariants
@@ -87,33 +105,30 @@
 - Preview/export must fail closed if enabled machining intent is stale or missing motion.
 - Offline preflight cannot confirm actual machine work offsets, unknown clamps, holder collisions or controller state.
 
-## Active development — native live contour snapping (unmerged)
+## Active development — next engineering milestone
 
-- Verified base `main`: `a8b48d6f1e3fabda1ba2f6a759cd8544beb15252`,
-  documentation closure PR #95 after feature PRs #93 and #94.
-- Active feature branch: `feature/rust-contour-live-snapping`. Latest CI and
-  PR number must be verified from GitHub before merging.
-- Rust `rust-ui/src/vector_snap.rs` adds a bounded deterministic index of
-  **other** layout polygons, vertex/midpoint/edge target matching and finite
-  coordinate guards. A source feature is grabbed only near the cursor, so
-  deep interior drags still use the previous grid/free-placement behavior.
-- Rust Studio UI offers opt-in live contour snapping (default on),
-  pixel-tolerance control and target crosshair/type/XY label; exact
-  original-anchor displacement, grid fallback, Undo/Redo and unchanged
-  vector topology remain in place. Indexing is bounded at 32,768 fixed edges.
-- Newly added pure Rust regression cases cover candidate types and
-  priority, source exclusion, target order, invalid input and maximum index
-  size. CI, Linux release build and actual KDE mouse interaction **pending**.
-- Next steps: run Cargo tests, strict Clippy and native release CI, fix
-  regressions, then Python 3.12/3.14 CI; merge only after all required gates.
-  Follow-on goals: analytic native node editing and protected source-linked
-  undo transactions; full inlay CAM/mirroring and CNC testing remain open.
-- Physical Onefinity, KDE Wayland and fixture safety cannot be established
-  through offline UI snapping. Stock XY0 bottom-left, Z0 top of stock;
-  fixture relative top Z = bed fence height − stock thickness (typical left
-  fence 23 mm from bed). Source CF3D writeback remains SHA/UUID guarded,
-  outputs a **new** project only and invalidates prior CAM motion. Re-run
-  simulation/preflight; use separate cutter programs with Z re-probe.
+- No unmerged active functional feature PR from this checkpoint. Latest
+  verified `main` is `53217f13c60c351a9522909cd2cb63cbea78a36f`
+  after PR #96. This documentation-only closure may merge later.
+- **Next:** native Rust **node-level contour authoring**, with explicit
+  selection, move/insert/delete and pinned local/world coordinates, proper
+  undo/redo, `Sheet` save/reopen and SVG output. Existing snapshots of
+  retained CF3D analytic sources must **not** be silently flattened into
+  editable CF3D or written back as approximated polygons. Fail closed when
+  unsupported CF3D geometry would be mutated.
+- Keep pointer interactions reliable with native object movement: dragging
+  near an outline currently grabs the whole object for snapping; future
+  node-edit mode needs a distinct action/tool to avoid collisions.
+- Preserve all CNC safety contracts: work XY0 bottom-left, Z0 on top of
+  wood, fence bed height minus stock thickness (typical left fence 23 mm).
+  Do not weaken fixture-aware preflight, stage staleness, split per-cutter
+  NC programs, manual tool change or Z re-probe.
+- Remaining gaps: paired inlay #93 is **design-only** (no registered
+  mirrored fit/CAM toolpaths); no physical KDE Plasma Wayland or Onefinity
+  machining QA; old unrelated open PRs #32 and #33 untouched.
+- Suggested acceptance: bounded finite geometry edits; stable part identity;
+  source-linked edit gate; undo/redo and layout JSON/SVG roundtrips;
+  Rust fmt/test/Clippy/release and Python 3.12/3.14 green before merge.
 
 ## Append-only checkpoint log
 
@@ -172,3 +187,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Started stock-origin precision grid for native Rust layout placements, absolute drag deltas and rollback preservation | `feature/rust-stock-grid-precision`, CI pending | Verify native/Qt compatibility and merge if green |
 | 2026-10-08 | PR #94 native stock grid precision merged after both workflows passed; 39 Rust tests and Python 3.12/3.14 green | Rust `37854022254`, Python `37854022243`, main `c992831` | Real-time vector node/edge snapping, analytic authoring/CAM bridge; physical Wayland/CNC QA |
 | 2026-10-08 | Started bounded live vertex/midpoint/edge **object alignment** with visible Rust Studio snap target, no topology edits | Branch `feature/rust-contour-live-snapping`, CI pending | Inspect CI, fix, merge, and update verified handover |
+| 2026-10-08 | PR #96 native Rust live vertex/midpoint/edge **whole-object** snapping merged and validated; original CAM behavior preserved | Rust `37860414152`, Python `37860414211`, merge `53217f13` | Next: explicit native contour node-edit mode with Undo/Redo and safe CF3D-boundary rejection |
