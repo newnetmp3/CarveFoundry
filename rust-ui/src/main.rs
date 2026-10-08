@@ -6,7 +6,6 @@ use carvefoundry_studio::nesting::{contains, nest};
 use carvefoundry_studio::svg;
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
-use std::path::PathBuf;
 
 #[derive(Clone, Copy, PartialEq)]
 enum ShapeTool { Rectangle, Ellipse, Polygon, Star }
