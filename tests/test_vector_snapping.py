@@ -5,6 +5,7 @@ import pytest
 from carvefoundry.core.project import ProjectItem
 from carvefoundry.core.vector_path import VectorPath, VectorSegment
 from carvefoundry.core.vector_snapping import (
+    constrain_angle,
     directional_snap_candidate,
     grid_snap_candidate,
     nearest_vector_snap,
@@ -145,3 +146,18 @@ def test_directional_snap_handles_non_axis_aligned_vectors() -> None:
 def test_directional_snap_rejects_invalid_inputs(direction, tolerance) -> None:
     with pytest.raises(ValueError):
         directional_snap_candidate((1, 1), (0, 0), direction, tolerance)
+
+
+def test_angle_constraint_uses_anchor_and_preserves_radius() -> None:
+    from math import hypot
+
+    result = constrain_angle((13, 12), (10, 10), 45.0)
+    assert result[0] - 10 == pytest.approx(result[1] - 10)
+    assert hypot(result[0] - 10, result[1] - 10) == pytest.approx(hypot(3, 2))
+    assert constrain_angle((10, 10), (10, 10)) == (10.0, 10.0)
+
+
+@pytest.mark.parametrize("step", [0, -5, 181, float("inf"), float("nan")])
+def test_angle_constraint_rejects_invalid_increment(step: float) -> None:
+    with pytest.raises(ValueError):
+        constrain_angle((1, 2), (0, 0), step)

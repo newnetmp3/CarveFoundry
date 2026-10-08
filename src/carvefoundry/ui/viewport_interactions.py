@@ -9,6 +9,8 @@ import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
 
+from carvefoundry.core.vector_snapping import constrain_angle
+
 
 class ViewportInteractionMixin:
     def _pan_pixels(self, delta: QPointF) -> None:
@@ -233,6 +235,18 @@ class ViewportInteractionMixin:
         ):
             point = self._stock_plane_point(event.position())
             if point is not None:
+                if (
+                    self._interaction_mode == "control-drag"
+                    and self._control_drag_key is not None
+                    and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                ):
+                    for segment, handle, _control, anchor in self._editable_cubic_controls():
+                        if (segment, handle) == self._control_drag_key:
+                            point[:2] = constrain_angle(
+                                (float(point[0]), float(point[1])),
+                                (float(anchor[0]), float(anchor[1])),
+                            )
+                            break
                 self._node_drag_world[:2] = point[:2]
                 self.requestUpdate()
             event.accept()
@@ -364,6 +378,18 @@ class ViewportInteractionMixin:
             and self._interaction_mode == "control-drag"
         ):
             point = self._stock_plane_point(event.position())
+            if (
+                point is not None and self._control_drag_key is not None
+                and self._node_drag_item is not None
+                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ):
+                for segment, handle, _control, anchor in self._editable_cubic_controls():
+                    if (segment, handle) == self._control_drag_key:
+                        point[:2] = constrain_angle(
+                            (float(point[0]), float(point[1])),
+                            (float(anchor[0]), float(anchor[1])),
+                        )
+                        break
             if (
                 point is not None and self._control_drag_key is not None
                 and self._node_drag_item is not None
