@@ -656,6 +656,60 @@ def _local_points_to_world(
     return item.transform.apply_points(local, pivot=pivot)
 
 
+def vector_path_in_world_xy(item: ProjectItem) -> VectorPath:
+    """Bake a planar retained path into world XY without flattening curves.
+
+    Circular arcs remain analytic only under uniform positive XY scale. X/Y
+    tilt and non-uniform XY scale would turn circles into non-planar/elliptic
+    geometry, so callers must resolve those transforms before topology joins.
+    """
+
+    path = item.vector_path
+    if path is None or item.mesh is None:
+        raise ValueError("Object has no editable vector path.")
+    if item.source_units.value != "mm":
+        raise ValueError("Editable vector joins require millimeter source units.")
+    if any(abs(float(value)) > 1e-7 for value in item.transform.rotation_deg[:2]):
+        raise ValueError("Apply or reset X/Y tilt before joining vector paths.")
+    sx, sy, sz = (float(value) for value in item.transform.scale_xyz)
+    if abs(sx - sy) > 1e-7:
+        raise ValueError("Apply non-uniform XY scale before joining vector paths.")
+    if abs(sz - 1.0) > 1e-7:
+        raise ValueError("Apply Z scale before joining vector paths.")
+
+    anchors = _local_points_to_world(item, list(path.points_xy))
+    segments: list[VectorSegment] = []
+    for segment in path.resolved_segments():
+        if segment.kind == "line":
+            segments.append(VectorSegment.line())
+        elif segment.kind == "arc":
+            segments.append(segment)
+        else:
+            controls = _local_points_to_world(
+                item,
+                [segment.control1_xy, segment.control2_xy],
+            )
+            segments.append(
+                VectorSegment.cubic(
+                    (float(controls[0, 0]), float(controls[0, 1])),
+                    (float(controls[1, 0]), float(controls[1, 1])),
+                )
+            )
+
+    result = VectorPath(
+        points_xy=tuple(
+            (float(point[0]), float(point[1]))
+            for point in anchors
+        ),
+        width_mm=path.width_mm * sx,
+        depth_mm=path.depth_mm,
+        closed=path.closed,
+        segments=_canonical_segments(segments),
+    )
+    result.validate()
+    return result
+
+
 def node_world_points(item: ProjectItem) -> np.ndarray:
     if item.vector_path is None:
         raise ValueError("Selected object has no editable vector mesh.")
