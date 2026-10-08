@@ -191,7 +191,7 @@ mod tests {
     }
     fn sample() -> Sheet {
         Sheet {
-            width_mm: 44.0, height_mm: 28.0,
+            width_mm: 48.0, height_mm: 28.0,
             parts: (1..=5).map(|id| part(id, rectangle(20.0, 20.0))).collect(),
             ..Sheet::default()
         }
