@@ -27,10 +27,10 @@
 ## Active development — validated line endpoint extension
 
 - PR #74 merged successfully after GitHub Actions run `37812747764` completed successfully, merge commit `8885f24b06f06488f08272e8ccee665a3bc079a4`.
-- Active branch `feature/analytic-line-endpoint-extension` is based on this merge.
+- Active branch `feature/analytic-line-endpoint-extension` is based on this merge; [PR #75](https://github.com/newnetmp3/CarveFoundry/pull/75) is open.
 - The branch adds positive-distance outward extension of the first or last **straight** segment of an open retained vector, preserving all other segments and exact coordinates; it deliberately rejects closed contours, cubic/arc extrapolation, zero/negative/nonfinite distances and invalid geometry.
 - Direct Selection has a millimeter extension input/button enabled only for eligible endpoints, committing via the established Undo/Redo and CAM recalculation lifecycle and compensating the mesh pivot to fix the opposite endpoint in world XY.
-- Added parametrized geometry and invalid-input tests. **CI not yet verified; this feature is not merged.**
+- Added parametrized geometry, invalid-input tests, and an offscreen Qt UI regression covering opposite world-endpoint stability. **CI not yet verified; this feature is not merged.**
 - The 2026-10-08 Rust parity baseline is merged (PR #72), but workstation timing and memory measurements remain uncollected. Real KDE Plasma/Wayland mouse behavior and CNC machining are also unverified.
 
 ### Next checkpoints
@@ -75,3 +75,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Began exact line/arc/Bézier open endpoint trim with Direct Selection UI and tests | Branch `feature/analytic-endpoint-trim`; CI pending | Open PR, validate, merge only when green |
 | 2026-10-08 | PR #74 opened; added CF3D/history trim regression and verified latest CI run queued | Commit `d631bb4`; run `37812647174` pending | Review results and merge only when green |
 | 2026-10-08 | PR #74 merged after green CI; added strictly validated straight endpoint extension and Direct Selection integration | Main `8885f24`; branch `feature/analytic-line-endpoint-extension`; CI unverified | Validate follow-on PR |
+| 2026-10-08 | Opened PR #75 and added UI extension regression | Latest UI test commit `a907676`; final CI pending | Verify final CI; merge only when green |
