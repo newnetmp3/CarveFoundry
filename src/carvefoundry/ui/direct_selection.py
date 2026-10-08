@@ -111,6 +111,7 @@ class DirectSelectionMixin:
         self, item_id: str, path, *, label: str,
         target_node: int | None = None,
         target_world_xy: tuple[float, float] | None = None,
+        target_control: tuple[int, int] | None = None,
     ) -> bool:
         indices = [
             index for index, item in enumerate(self.project.items)
@@ -144,6 +145,17 @@ class DirectSelectionMixin:
                 ty + target_world_xy[1] - float(actual[1]),
                 tz,
             )
+        if target_world_xy is not None and target_control is not None:
+            segment_index, handle = target_control
+            controls = segment_world_controls(item, segment_index)
+            if controls is not None:
+                actual = controls[handle - 1]
+                tx, ty, tz = item.transform.translation_mm
+                item.transform.translation_mm = (
+                    tx + target_world_xy[0] - actual[0],
+                    ty + target_world_xy[1] - actual[1],
+                    tz,
+                )
         self._after_ribbon_mutation(label, True)
         self.viewport.update()
         self._refresh_vector_node_inspector()
@@ -194,23 +206,11 @@ class DirectSelectionMixin:
         except (ValueError, IndexError) as exc:
             self.statusBar().showMessage(f"Bezier handle drag rejected: {exc}", 7500)
             return
-        # The mesh-bounds pivot may shift after editing a control. Preserve
-        # the dragged handle's requested world XY after committing.
-        anchor_index = (
-            segment_index if handle == 1
-            else (segment_index + 1) % len(edited.points_xy)
-        )
-        if self._commit_vector_path(
+        self._commit_vector_path(
             item.item_id, edited, label="drag Bezier handle",
-        ):
-            controls = segment_world_controls(item, segment_index)
-            if controls is not None:
-                actual = controls[handle - 1]
-                tx, ty, tz = item.transform.translation_mm
-                item.transform.translation_mm = (
-                    tx + x_mm - actual[0], ty + y_mm - actual[1], tz,
-                )
-                self.viewport.update()
+            target_world_xy=(x_mm, y_mm),
+            target_control=(segment_index, handle),
+        )
 
     def _node_drag_finished(
         self, item_index: int, node_index: int, x_mm: float, y_mm: float,
