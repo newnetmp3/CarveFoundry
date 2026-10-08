@@ -1,10 +1,22 @@
 """Deterministic tests for the opt-in native raster benchmarking harness."""
 from __future__ import annotations
 
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from scripts.benchmark_native_kernels import _fixture, benchmark, main
+_SPEC = spec_from_file_location(
+    "carvefoundry_native_benchmark",
+    Path(__file__).resolve().parents[1] / "scripts" / "benchmark_native_kernels.py",
+)
+assert _SPEC is not None and _SPEC.loader is not None
+_benchmark = module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_benchmark)
+_fixture = _benchmark._fixture
+benchmark = _benchmark.benchmark
+main = _benchmark.main
 
 
 def test_raster_benchmark_fixture_is_stable_and_well_formed():
@@ -32,7 +44,7 @@ def test_raster_benchmark_rejects_invalid_grid_size(size):
 
 
 def test_raster_benchmark_cli_can_write_machine_readable_report(tmp_path, monkeypatch):
-    monkeypatch.setattr("scripts.benchmark_native_kernels.native_available", lambda: False)
+    monkeypatch.setattr(_benchmark, "native_available", lambda: False)
     path = tmp_path / "baseline.json"
     assert main(["--sizes", "8", "--iterations", "1", "--json", str(path)]) == 0
     content = path.read_text(encoding="utf-8")
