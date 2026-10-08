@@ -88,8 +88,11 @@ It must not be described as a guarantee of physical safety.
    Planar retained vectors feed the 2D Profile, Pocket, Engrave and V-Carving
    CAM boundary directly, with mesh projection retained as a fallback.
    PR #62 adds close/open-at-node, split-at-node and two-object endpoint join
-   operations with CAM source retargeting. Remaining vector-CAD work includes
-   graphical Bezier-handle dragging, tangent/perpendicular/grid snapping,
+   operations with CAM source retargeting.
+   A follow-on core change introduces immutable cubic handle movement with
+   input validation and save/Undo regression coverage; graphical handle
+   hit-testing, dragging and snap indicators are not yet wired into the viewport. Remaining vector-CAD work includes
+   interactive viewport Bezier-handle dragging, tangent/perpendicular/grid snapping,
    trim/extend, fillet/chamfer, first-class editable circle/ellipse/polygon primitives,
    editable imported SVG/DXF contours, group cutouts and text-on-path.
    Planar Union/Subtract/Intersect and signed Offset currently produce
