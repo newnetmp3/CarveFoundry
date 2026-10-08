@@ -17,27 +17,28 @@
 
 - Repository: [newnetmp3/CarveFoundry](https://github.com/newnetmp3/CarveFoundry)
 - Primary branch: `main`
-- Last verified merged feature baseline: `be890660f2e353a1800a534d13c27a96cace90d5` (PR #89).
+- Last verified merged feature baseline: `f53c72ed0a670c97c8ea71ec2b31e28861c84255` (PR #90).
 - [PR #61](https://github.com/newnetmp3/CarveFoundry/pull/61): retained analytic line, circular arc and cubic Bézier path foundation, native persistence, direct planar CAM use, basic vector snapping.
 - [PR #62](https://github.com/newnetmp3/CarveFoundry/pull/62): close/open/split/join topology editing, analytic segment preservation, persistent CAM source UUID retargeting, Undo/Redo.
 - The previous #62 validation reported Python 3.12 and 3.14 at **475 passed, 27 warnings**, plus green Ruff, Python compile, Rust formatting/Clippy/tests, installation-script syntax, and CarveWork tests. These results belong to #62, **not** to current development.
 - Existing retained machining operations, preflight, GRBL-style separated cutter stages, sampled removal preview, and double-sided project preparation are documented in [ROADMAP.md](ROADMAP.md). Do not present them as machine-tested guarantees.
 - Approximate historical roadmap assessment: native CAD ~50%, object-aware CAM ~85–90%, core router workflow ~82–85%, entire ten-part vision ~55%. These are subjective estimates, not measured acceptance coverage.
 
-## Active — verified transaction engine, integrating guarded Rust placement UI
+## Verified native CF3D placement transactions (PR #89–#90)
 
-- [PR #89](https://github.com/newnetmp3/CarveFoundry/pull/89) merged `be890660f2e353a1800a534d13c27a96cace90d5` after Python 3.12 and 3.14 CI `37842089071` passed. The new service `src/carvefoundry/core/rust_project_transaction.py` checks exact original project SHA-256, stable item UUIDs, finite XY displacements and locked/editability state; it always creates a new CF3D and preserves source bytes. Generated toolpaths are discarded; all CAM operations marked stale, preserving cutter parameters, stock and fixtures.
-- **Active branch** `feature/rust-ui-guarded-cf3d-placement` (unmerged; Rust and Python CI not yet verified).
-- The read-only CF3D snapshot now includes a stable `source_item_id` for each sampled retained vector plus a checked `source_sha256`. Rust Studio stores an import-specific, nonpersistent baseline. `rust-ui/src/source_placement.rs` rejects geometry, names, rotation, stock changes, added/removed parts, duplicate UUIDs and nonfinite offsets before building the versioned engine request.
-- Rust Studio offers an explicit **Save XY placements as NEW CF3D** action in Job Setup, uses the matching Python project environment via subprocess with JSON on stdin, verifies success reporting that CAM regeneration/preflight are required, and keeps native editable layout JSON separate from original CF3D.
-- Limitations: native CF3D rewrite is placement-only and creates a NEW output; original source never overwritten; curves are still approximated in Rust layout preview; full edit/CAM history, inlay operation authoring and CNC postprocessing remain in the original Python engine. Physical KDE Plasma Wayland and CNC hardware tests remain pending.
+- [PR #89](https://github.com/newnetmp3/CarveFoundry/pull/89) merged `be890660f2e353a1800a534d13c27a96cace90d5`. Python workflow `37842089071` passed both 3.12/3.14 after correction of fixture enum and Ruff import checks. New `src/carvefoundry/core/rust_project_transaction.py`: SHA-256 source guard, persistent item UUID, finite XY-only displacement, hidden/locked/source validation, exclusive new-file CF3D publication. Old generated toolpaths are removed and all CAM intents conservatively marked stale with cutter parameters, stock and fixtures preserved.
+- [PR #90](https://github.com/newnetmp3/CarveFoundry/pull/90) merged `f53c72ed0a670c97c8ea71ec2b31e28861c84255`. Rust-native workflow `37843070925` passed Rust unit tests, strict Clippy, Linux release build and shell syntax; Python workflow `37843070724` passed 3.12/3.14 regression suites.
+- Rust Studio's read-only CF3D vector snapshot now carries the stable source UUIDs and original source SHA-256, verified by Rust `source_placement.rs`. A source-linked import baseline prevents applying unsupported topology, rename, rotation, added/deleted geometry, altered stock or nonfinite XY movement. The explicit **Save XY placements as NEW CF3D** action sends only checked JSON deltas to the authoritative Python serializer. Original CF3D is never overwritten.
+- The output CF3D is a **new project**. Users MUST open it in the existing CNC application, regenerate all paths and run full fixture-aware preflight before exporting any G-code. The native Rust UI is **not** a general-purpose CF3D editor, cannot rewrite analytic curves or 3D objects and does not bypass NC safety.
+- The companion Rust UI still supports read-only 3D-project vector snapshot, design shapes, single/multi-sheet layout and SVG output from PR #84–#88. Physical KDE Plasma Wayland and actual CNC router testing are unverified.
 
-### Next checkpoints
+### Next functional milestones
 
-- [ ] Run Rust Studio CI Cargo geometry, strict Clippy, Linux release build and Python 3.12/3.14; fix failures, merge only if green.
-- [ ] Physical KDE Wayland check: import source CF3D, XY move, save new CF3D, reopen in original application and verify stale toolpath/preflight behavior. Reject topology/rotation and changed originals.
-- [ ] Expand safe editing bridge beyond translation only when API parity, undo and machine safety guards are independently verified.
-- [ ] Implement engine-backed cutter-compatible toolpath templates and paired inlay jobs; do not create nonfunctional CAM buttons.
+- [ ] Add explicit Rust UI status/preview of stale CAM operation count and a typed project read operation; keep new-file exclusive writes and original project protection.
+- [ ] Add generic, versioned CAM strategy templates through authoritative Python engine with tool-compatible validation; avoid duplicating unsafe CAM code in Rust.
+- [ ] Implement paired pocket/plug inlay setup with tool-radius clearances and verified depth/fixture constraints.
+- [ ] Refine Rust 2D CAD precision controls, snap feedback, stock and grain-aware nesting, 3D scene viewer and CNC diagnostics gradually.
+- [ ] Physical KDE Plasma Wayland verification of source import, precise XY move, save to new CF3D, open legacy CNC app and stale CAM export refusal.
 
 ### Known boundaries and safety invariants
 
@@ -94,3 +95,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #88 merged green: strict Rust-native multi-sheet plan save/reopen with fail-closed validation | Native CI `37831085083`, Python CI `37831085110`; merge `d76c1b2` | CF3D transactional bridge, templates/inlays and stock-aware constraints |
 | 2026-10-08 | Added independent guarded native CF3D XY placement service, SHA-256 + UUID checks, CAM stale invalidation and exclusive new-file serialization | Branch `feature/rust-cf3d-placement-transactions`; CI pending | Validate Python lanes, integrate with Rust UI only after green |
 | 2026-10-08 | PR #89 merged guarded CF3D placement transaction engine; Rust Studio placement import/save-as-new UI and source validation added | Branch `feature/rust-ui-guarded-cf3d-placement`, CI pending | Verify both CI workflows, merge if green |
+| 2026-10-08 | PR #90 merged after Rust + both Python CI lanes passed; Rust Studio save-as-new CF3D XY placement bridge is active | Rust `37843070925`; Python `37843070724`; merge `f53c72ed` | Operation templates/inlay engine, physical KDE/CNC verification |
