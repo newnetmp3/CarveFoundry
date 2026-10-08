@@ -66,7 +66,12 @@ pub fn overlaps(a: &[[f64; 2]], b: &[[f64; 2]], gap: f64) -> bool {
     if contains(a, b[0]) || contains(b, a[0]) {
         return true;
     }
-    let clearance_sq = (gap + EPS).powi(2);
+    // Equality at the configured clearance is allowed. Zero-gap touching
+    // still counts as collision (not two safely separated profiles).
+    let min_sq = (gap - EPS).max(0.0).powi(2);
+    let violation = |distance_sq: f64| {
+        if gap <= EPS { distance_sq <= EPS * EPS } else { distance_sq < min_sq }
+    };
     for ai in 0..a.len() {
         let a0 = a[ai];
         let a1 = a[(ai + 1) % a.len()];
@@ -74,10 +79,10 @@ pub fn overlaps(a: &[[f64; 2]], b: &[[f64; 2]], gap: f64) -> bool {
             let b0 = b[bi];
             let b1 = b[(bi + 1) % b.len()];
             if edges_cross(a0, a1, b0, b1)
-                || point_segment_sq(a0, b0, b1) <= clearance_sq
-                || point_segment_sq(a1, b0, b1) <= clearance_sq
-                || point_segment_sq(b0, a0, a1) <= clearance_sq
-                || point_segment_sq(b1, a0, a1) <= clearance_sq {
+                || violation(point_segment_sq(a0, b0, b1))
+                || violation(point_segment_sq(a1, b0, b1))
+                || violation(point_segment_sq(b0, a0, a1))
+                || violation(point_segment_sq(b1, a0, a1)) {
                 return true;
             }
         }
@@ -180,6 +185,8 @@ mod tests {
         assert!(overlaps(&a, &b, 0.0));
         assert!(overlaps(&a, &b, 1.0));
         assert!(!overlaps(&a, &moved(&b, 2.0, 0.0), 1.0));
+        // A boundary exactly one configured cutter gap away is acceptable.
+        assert!(!overlaps(&a, &moved(&b, 2.0, 0.0), 2.0));
     }
     #[test]
     fn nesting_is_deterministic_and_enforces_stock_margin() {
