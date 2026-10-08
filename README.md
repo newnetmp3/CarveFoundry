@@ -131,6 +131,14 @@ the original database exists; `CARVE_WORK_DATA` overrides this
 selection. **Chats, databases, `ai.key`, and other secrets stay local and are
 not tracked in Git.** See [CarveWork setup and security](tools/carve-work/README.md).
 
+## Development continuity
+
+The canonical [rolling development handover](docs/HANDOVER.md) records the
+verified merged baseline, current feature branch/PR, validated checks, blockers,
+and next action. Update it in the same PR at each meaningful development
+checkpoint; reconcile it against live GitHub state before resuming work.
+Read it alongside the [live roadmap](docs/ROADMAP.md).
+
 ## Project direction
 
 CarveFoundry aims to cover the practical workflow people often use Easel for while giving more control over imported geometry, cutter definitions, 3D relief work, preview, optimization, and G-code export.

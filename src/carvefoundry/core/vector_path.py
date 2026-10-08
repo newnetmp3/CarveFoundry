@@ -351,6 +351,37 @@ def set_segment(
     return edited
 
 
+
+def move_cubic_control(
+    path: VectorPath,
+    segment_index: int,
+    control_index: int,
+    xy: tuple[float, float],
+) -> VectorPath:
+    """Move one retained cubic handle without moving anchors or its other handle.
+
+    Coordinates are local/model XY millimeters, consistent with move_node.
+    Mesh regeneration and CAM invalidation remain the caller's responsibility.
+    """
+    path.validate()
+    if not 0 <= segment_index < path.segment_count:
+        raise IndexError("Vector segment index out of range.")
+    if control_index not in (1, 2):
+        raise ValueError("Cubic control index must be 1 or 2.")
+    if len(xy) != 2 or not all(isfinite(float(value)) for value in xy):
+        raise ValueError("Cubic control coordinates must be finite XY values.")
+    segment = path.resolved_segments()[segment_index]
+    if segment.kind != "cubic":
+        raise ValueError("Only cubic Bezier segments have control handles.")
+    point = (float(xy[0]), float(xy[1]))
+    changed = (
+        replace(segment, control1_xy=point)
+        if control_index == 1
+        else replace(segment, control2_xy=point)
+    )
+    return set_segment(path, segment_index, changed)
+
+
 def _split_cubic(
     p0: np.ndarray,
     p1: np.ndarray,

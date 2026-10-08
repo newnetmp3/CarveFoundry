@@ -18,6 +18,7 @@ from carvefoundry.core.vector_path import (
     close_path,
     insert_node,
     join_paths,
+    move_cubic_control,
     move_node,
     node_world_points,
     open_path_at_node,
@@ -301,3 +302,50 @@ def test_join_paths_rejects_far_or_incompatible_geometry():
     different = VectorPath(((10, 0), (20, 0)), width_mm=2.0, depth_mm=1.0)
     with pytest.raises(ValueError, match="same stroke width"):
         join_paths(first, different)
+
+
+def test_move_cubic_handle_preserves_other_control_and_anchors():
+    source = VectorPath(
+        ((0, 0), (12, 0)),
+        segments=(VectorSegment.cubic((2, 8), (10, 8)),),
+    )
+    changed = move_cubic_control(source, 0, 1, (3, 12))
+    assert source.resolved_segments()[0].control1_xy == (2, 8)
+    assert changed.points_xy == source.points_xy
+    assert changed.resolved_segments()[0].control1_xy == (3, 12)
+    assert changed.resolved_segments()[0].control2_xy == (10, 8)
+    assert segment_point(changed, 0, 0.5) != segment_point(source, 0, 0.5)
+
+    second = move_cubic_control(changed, 0, 2, (9, -4))
+    assert second.resolved_segments()[0].control1_xy == (3, 12)
+    assert second.resolved_segments()[0].control2_xy == (9, -4)
+
+
+def test_move_cubic_handle_rejects_invalid_indices_and_coordinates():
+    source = VectorPath(
+        ((0, 0), (10, 0)),
+        segments=(VectorSegment.cubic((2, 3), (8, 3)),),
+    )
+    with pytest.raises(IndexError):
+        move_cubic_control(source, 1, 1, (4, 4))
+    with pytest.raises(ValueError, match="index"):
+        move_cubic_control(source, 0, 0, (4, 4))
+    with pytest.raises(ValueError, match="finite"):
+        move_cubic_control(source, 0, 2, (float("nan"), 4))
+    with pytest.raises(ValueError, match="Only cubic"):
+        move_cubic_control(VectorPath(((0, 0), (10, 0))), 0, 1, (4, 4))
+
+
+def test_move_cubic_handle_roundtrips_project_and_history(tmp_path):
+    source = VectorPath(
+        ((0, 0), (12, 0)),
+        segments=(VectorSegment.cubic((2, 8), (10, 8)),),
+    )
+    item = ProjectItem("Curve", kind="pen", mesh=source.mesh_asset(), vector_path=source)
+    project = Project(items=[item])
+    snapshot = capture_workspace(project)
+    edited = move_cubic_control(source, 0, 2, (10, 12))
+    apply_vector_edit(item, edited)
+    assert load_project(save_project(project, tmp_path / "handles.cf3d")).items[0].vector_path == edited
+    restore_workspace(project, snapshot)
+    assert project.items[0].vector_path == source
