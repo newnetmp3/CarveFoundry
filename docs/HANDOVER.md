@@ -37,12 +37,13 @@
 3. Forward handle drag completion through a new signal in `native_viewport.py`, `viewport_widget.py` and `main_window.py`.
 4. Apply world-to-local drag through the merged `move_cubic_control` primitive. Keep transform-pivot compensation *inside* the undo/CAM invalidation transaction instead of correcting the transform afterward.
 5. Added an offscreen UI regression test for native control discovery, drag edit, and retained untouched opposite control.
-6. Opened PR #64. GitHub Actions run `37800820946` was queued when checked. Actual CI result and physical Wayland GUI behavior **not yet verified**; do not count this branch as merged or production ready.
+6. Opened PR #64. GitHub Actions run `37800878113` (run #1775) completed **successfully** for Python 3.12 and Python 3.14; physical KDE/Wayland GUI behavior remains **unverified**.
+7. Updated `docs/ROADMAP.md` with delivered Bézier interaction and the outstanding physical verification requirement.
 
 ### Remaining checkpoints
 
 - [ ] Expand viewport/Direct Selection regression tests for screen-space picking, Undo/Redo and stale CAM behavior (initial handle discovery/drag test added).
-- [ ] Run and inspect both CI Python lanes; resolve any Ruff, pytest or UI failures.
+- [x] Both CI Python lanes passed for run `37800878113` on the pre-roadmap-edit head. Verify CI again after documentation changes.
 - [ ] Verify KDE/Wayland real mouse dragging when a physical environment is available.
 - [ ] Update roadmap wording only after integrated behavior passes CI.
 - [ ] Merge the active PR when green; update merged baseline and handover.
@@ -69,3 +70,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #63 passed both CI lanes and merged to main | Run `37798718397`; merge `4964e3a` | Viewport interaction |
 | 2026-10-08 | Added Bézier viewport control drawing, picking and drag wiring | Branch `feature/bezier-viewport-handles`; tests and CI pending | Add UI regressions and validate |
 | 2026-10-08 | Opened PR #64 and added initial offscreen UI regression | CI run `37800820946` queued; no pass claimed | Inspect CI, fix failures and expand tests |
+| 2026-10-08 | PR #64 CI passed both Python lanes; roadmap synchronized | Run `37800878113` success; final docs head CI pending | Verify final CI and merge |
