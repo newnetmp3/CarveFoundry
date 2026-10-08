@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDialog,
     QDoubleSpinBox,
     QPushButton,
 )
@@ -492,8 +491,8 @@ def test_vector_angle_step_is_persisted_and_forwarded_to_native_viewport():
     try:
         window._settings.setValue(key, 45.0)
         window._set_project(Project(items=[item]), project_path=None, selected_row=1)
-        window._show_vector_node_editor()
-        dialog = window.findChild(QDialog, "VectorNodeEditor")
+        window._show_vector_node_inspector()
+        dialog = window._vector_node_dialog
         assert dialog is not None
         step = dialog.findChild(QDoubleSpinBox, "VectorAngleStep")
         assert step is not None
