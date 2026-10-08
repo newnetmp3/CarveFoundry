@@ -490,6 +490,69 @@ def extend_open_line_endpoint(
     return result
 
 
+def fit_open_line_endpoint_to_segment(
+    path: VectorPath,
+    *,
+    at_start: bool,
+    target_start_xy: tuple[float, float],
+    target_end_xy: tuple[float, float],
+    operation: str,
+) -> VectorPath:
+    """Trim or extend a straight endpoint exactly to a finite target segment.
+
+    The target segment is intersected with the infinite supporting line of
+    the endpoint segment, but the intersection must lie *on* the target.
+    An extension must lie outward; a trim must lie strictly inside the
+    original endpoint segment. Parallel, collinear, or degenerate geometry is
+    rejected rather than silently choosing an arbitrary intersection.
+    """
+    path.validate()
+    if path.closed:
+        raise ValueError("Open the contour before fitting an endpoint.")
+    if operation not in {"trim", "extend"}:
+        raise ValueError("Endpoint operation must be trim or extend.")
+    segment_index = 0 if at_start else path.segment_count - 1
+    if path.resolved_segments()[segment_index].kind != "line":
+        raise ValueError("Intersection fitting requires a straight endpoint segment.")
+    p = _xy(path.points_xy[segment_index])
+    r = _xy(path.points_xy[segment_index + 1]) - p
+    q = _xy(target_start_xy)
+    s = _xy(target_end_xy) - q
+    if not np.isfinite(q).all() or not np.isfinite(s).all():
+        raise ValueError("Target segment coordinates must be finite.")
+    r_len = float(np.linalg.norm(r))
+    s_len = float(np.linalg.norm(s))
+    if r_len <= _EPS or s_len <= _EPS:
+        raise ValueError("Cannot intersect degenerate line segments.")
+    cross = float(r[0] * s[1] - r[1] * s[0])
+    if abs(cross) <= 1e-12 * r_len * s_len:
+        raise ValueError("Parallel or collinear line segments have no unique intersection.")
+    v = q - p
+    t = float((v[0] * s[1] - v[1] * s[0]) / cross)
+    u = float((v[0] * r[1] - v[1] * r[0]) / cross)
+    if not all(isfinite(x) for x in (t, u)):
+        raise ValueError("Intersection coordinates must be finite.")
+    if not -1e-10 <= u <= 1.0 + 1e-10:
+        raise ValueError("Line intersection is outside the target segment.")
+    if operation == "trim":
+        if not 1e-10 < t < 1.0 - 1e-10:
+            raise ValueError("Trim intersection must be inside the endpoint segment.")
+    elif at_start and t >= -1e-10:
+        raise ValueError("Start extension must reach outward from the existing endpoint.")
+    elif not at_start and t <= 1.0 + 1e-10:
+        raise ValueError("End extension must reach outward from the existing endpoint.")
+    intersection = p + t * r
+    if not np.isfinite(intersection).all():
+        raise ValueError("Intersection exceeds finite coordinates.")
+    points = list(path.points_xy)
+    points[segment_index if at_start else segment_index + 1] = (
+        float(intersection[0]), float(intersection[1]),
+    )
+    result = replace(path, points_xy=tuple(points))
+    result.validate()
+    return result
+
+
 def insert_node(path: VectorPath, segment: int) -> VectorPath:
     """Split a segment exactly at its parametric midpoint."""
     if not 0 <= segment < path.segment_count:
