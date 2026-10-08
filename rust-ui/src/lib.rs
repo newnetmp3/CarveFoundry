@@ -6,4 +6,5 @@ pub mod arrays;
 pub mod geometry;
 pub mod nesting;
 pub mod multi_sheet;
+pub mod plan_io;
 pub mod svg;
