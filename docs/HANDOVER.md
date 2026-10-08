@@ -27,7 +27,7 @@
 ## Active development — graphical cubic Bézier handles
 
 - Previous [PR #63](https://github.com/newnetmp3/CarveFoundry/pull/63) merged successfully as `4964e3a9e2934812d78f04ca4f37d9cf4d9dbc85`. GitHub Actions run `37798718397` passed both Python 3.12 and Python 3.14 jobs.
-- Current branch: `feature/bezier-viewport-handles` from the merged `main` baseline.
+- Current branch: `feature/bezier-viewport-handles` from the merged `main` baseline. Active [PR #64](https://github.com/newnetmp3/CarveFoundry/pull/64).
 - Goal: display, pick and drag individual cubic Bézier controls using the existing native Wayland-compatible viewport input and Direct Selection event flow.
 
 ### Completed checkpoints on active branch
@@ -36,11 +36,12 @@
 2. Add pixel-distance handle hit testing and native pointer drag preview, with no separate event/proxy layer.
 3. Forward handle drag completion through a new signal in `native_viewport.py`, `viewport_widget.py` and `main_window.py`.
 4. Apply world-to-local drag through the merged `move_cubic_control` primitive. Keep transform-pivot compensation *inside* the undo/CAM invalidation transaction instead of correcting the transform afterward.
-5. CI and actual Wayland GUI behavior **not yet verified**; do not count this branch as merged or production ready.
+5. Added an offscreen UI regression test for native control discovery, drag edit, and retained untouched opposite control.
+6. Opened PR #64. GitHub Actions run `37800820946` was queued when checked. Actual CI result and physical Wayland GUI behavior **not yet verified**; do not count this branch as merged or production ready.
 
 ### Remaining checkpoints
 
-- [ ] Add viewport/Direct Selection regression tests for handle pick, drag, undo, geometry persistence and stale CAM behavior.
+- [ ] Expand viewport/Direct Selection regression tests for screen-space picking, Undo/Redo and stale CAM behavior (initial handle discovery/drag test added).
 - [ ] Run and inspect both CI Python lanes; resolve any Ruff, pytest or UI failures.
 - [ ] Verify KDE/Wayland real mouse dragging when a physical environment is available.
 - [ ] Update roadmap wording only after integrated behavior passes CI.
@@ -67,3 +68,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | Established rolling handover document | This file on PR #63 branch | Keep updating this document with each delivered step |
 | 2026-10-08 | PR #63 passed both CI lanes and merged to main | Run `37798718397`; merge `4964e3a` | Viewport interaction |
 | 2026-10-08 | Added Bézier viewport control drawing, picking and drag wiring | Branch `feature/bezier-viewport-handles`; tests and CI pending | Add UI regressions and validate |
+| 2026-10-08 | Opened PR #64 and added initial offscreen UI regression | CI run `37800820946` queued; no pass claimed | Inspect CI, fix failures and expand tests |
