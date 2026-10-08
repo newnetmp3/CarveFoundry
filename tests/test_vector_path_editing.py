@@ -17,6 +17,7 @@ from carvefoundry.core.vector_path import (
     arc_sweep_degrees,
     close_path,
     extend_open_line_endpoint,
+    fit_open_line_endpoint_to_segment,
     insert_node,
     join_paths,
     move_cubic_control,
@@ -459,3 +460,71 @@ def test_extend_line_endpoint_rejects_closed_and_curved_ends() -> None:
     )
     with pytest.raises(ValueError, match="straight"):
         extend_open_line_endpoint(cubic, at_start=False, distance_mm=1)
+
+
+@pytest.mark.parametrize(
+    "at_start,operation,target_a,target_b,expected",
+    [
+        (True, "trim", (2, -3), (2, 3), (2, 0)),
+        (False, "trim", (8, -3), (8, 3), (8, 0)),
+        (True, "extend", (-3, -2), (-3, 2), (-3, 0)),
+        (False, "extend", (14, -2), (14, 2), (14, 0)),
+    ],
+)
+def test_fit_line_endpoint_to_intersecting_finite_segment(
+    at_start, operation, target_a, target_b, expected,
+):
+    path = VectorPath(((0, 0), (10, 0), (20, 5)))
+    # For final endpoint, use a horizontal last segment in the test fixture.
+    if not at_start:
+        path = VectorPath(((0, 5), (0, 0), (10, 0)))
+    if not at_start:
+        target_a = (target_a[0], -3)
+        target_b = (target_b[0], 3)
+    edited = fit_open_line_endpoint_to_segment(
+        path,
+        at_start=at_start,
+        target_start_xy=target_a,
+        target_end_xy=target_b,
+        operation=operation,
+    )
+    actual = edited.points_xy[0 if at_start else -1]
+    assert actual == pytest.approx(expected)
+    assert edited.resolved_segments() == path.resolved_segments()
+    assert edited.points_xy[1 if at_start else 0] == path.points_xy[1 if at_start else 0]
+
+
+@pytest.mark.parametrize(
+    "target_start,target_end,reason",
+    [
+        ((2, 2), (4, 2), "Parallel"),
+        ((2, -5), (2, -2), "outside"),
+        ((2, 0), (2, 0), "degenerate"),
+        ((float("nan"), 0), (2, 1), "finite"),
+    ],
+)
+def test_fit_line_endpoint_rejects_invalid_targets(
+    target_start, target_end, reason,
+):
+    with pytest.raises(ValueError, match=reason):
+        fit_open_line_endpoint_to_segment(
+            VectorPath(((0, 0), (10, 0))),
+            at_start=True,
+            target_start_xy=target_start,
+            target_end_xy=target_end,
+            operation="trim",
+        )
+
+
+def test_fit_line_endpoint_requires_correct_operation_direction():
+    path = VectorPath(((0, 0), (10, 0)))
+    with pytest.raises(ValueError, match="outward"):
+        fit_open_line_endpoint_to_segment(
+            path, at_start=True, target_start_xy=(2, -2),
+            target_end_xy=(2, 2), operation="extend",
+        )
+    with pytest.raises(ValueError, match="inside"):
+        fit_open_line_endpoint_to_segment(
+            path, at_start=False, target_start_xy=(14, -2),
+            target_end_xy=(14, 2), operation="trim",
+        )
