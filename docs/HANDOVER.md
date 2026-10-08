@@ -87,25 +87,33 @@
 - Preview/export must fail closed if enabled machining intent is stale or missing motion.
 - Offline preflight cannot confirm actual machine work offsets, unknown clamps, holder collisions or controller state.
 
-## Active development — ready for next milestone
+## Active development — native live contour snapping (unmerged)
 
-- No unmerged active feature PR from this session. Primary branch `main`
-  verified at `c992831dec631a40043a90f82e5034dff9b9d6b0` after PR #94.
-- Next priority: extend native snapping from object translations to robust
-  vector node/midpoint/edge constraints, analytic curve preservation, and
-  source-linked undoable editing with non-stale CAM status only after fresh
-  verified regeneration. Scope the next increment as one integrated user
-  action with geometry, UI, tests and documentation.
-- Parallel CNC gap: inlay #93 remains **design-only**. Do not post NC from
-  proposed plug/pocket pairs before mirrored registration, real cutter
-  geometry, stock/simulation and fixture-aware CAM have passed testing.
-- Critical invariants: stock XY0 bottom-left, Z0 top of wood; fence top in
-  stock-relative Z = bed-measured height − stock thickness (common left fence
-  23 mm above bed, thickness varies). Preserve tool-radius fixture clearance,
-  segmented cutter programs, manual tool swap and Z re-probe.
-- Physical KDE Plasma Wayland and actual Onefinity machining remain
-  **unverified**. The open old PRs #32/#33 have not been touched by
-  this session and should be reviewed separately.
+- Verified base `main`: `a8b48d6f1e3fabda1ba2f6a759cd8544beb15252`,
+  documentation closure PR #95 after feature PRs #93 and #94.
+- Active feature branch: `feature/rust-contour-live-snapping`. Latest CI and
+  PR number must be verified from GitHub before merging.
+- Rust `rust-ui/src/vector_snap.rs` adds a bounded deterministic index of
+  **other** layout polygons, vertex/midpoint/edge target matching and finite
+  coordinate guards. A source feature is grabbed only near the cursor, so
+  deep interior drags still use the previous grid/free-placement behavior.
+- Rust Studio UI offers opt-in live contour snapping (default on),
+  pixel-tolerance control and target crosshair/type/XY label; exact
+  original-anchor displacement, grid fallback, Undo/Redo and unchanged
+  vector topology remain in place. Indexing is bounded at 32,768 fixed edges.
+- Newly added pure Rust regression cases cover candidate types and
+  priority, source exclusion, target order, invalid input and maximum index
+  size. CI, Linux release build and actual KDE mouse interaction **pending**.
+- Next steps: run Cargo tests, strict Clippy and native release CI, fix
+  regressions, then Python 3.12/3.14 CI; merge only after all required gates.
+  Follow-on goals: analytic native node editing and protected source-linked
+  undo transactions; full inlay CAM/mirroring and CNC testing remain open.
+- Physical Onefinity, KDE Wayland and fixture safety cannot be established
+  through offline UI snapping. Stock XY0 bottom-left, Z0 top of stock;
+  fixture relative top Z = bed fence height − stock thickness (typical left
+  fence 23 mm from bed). Source CF3D writeback remains SHA/UUID guarded,
+  outputs a **new** project only and invalidates prior CAM motion. Re-run
+  simulation/preflight; use separate cutter programs with Z re-probe.
 
 ## Append-only checkpoint log
 
@@ -163,3 +171,4 @@ Use entries in this format; keep older material for continuity but correct stale
 | 2026-10-08 | PR #93 paired inlay design merged after full Rust/Python CI | Rust `37853384040`, Python `37853384068`, main `399b0d7` | Native precision controls |
 | 2026-10-08 | Started stock-origin precision grid for native Rust layout placements, absolute drag deltas and rollback preservation | `feature/rust-stock-grid-precision`, CI pending | Verify native/Qt compatibility and merge if green |
 | 2026-10-08 | PR #94 native stock grid precision merged after both workflows passed; 39 Rust tests and Python 3.12/3.14 green | Rust `37854022254`, Python `37854022243`, main `c992831` | Real-time vector node/edge snapping, analytic authoring/CAM bridge; physical Wayland/CNC QA |
+| 2026-10-08 | Started bounded live vertex/midpoint/edge **object alignment** with visible Rust Studio snap target, no topology edits | Branch `feature/rust-contour-live-snapping`, CI pending | Inspect CI, fix, merge, and update verified handover |

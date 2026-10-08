@@ -6,6 +6,7 @@ use carvefoundry_studio::inlay::{InlayPlan, InlaySettings, export_pair, plan as 
 use carvefoundry_studio::geometry::{Part, Sheet, area, ellipse, polygon, rectangle, star};
 use carvefoundry_studio::nesting::{contains, nest};
 use carvefoundry_studio::precision::GridSettings;
+use carvefoundry_studio::vector_snap::{SnapIndex, SnapMatch, snapped_drag_position};
 use carvefoundry_studio::multi_sheet::{nest_multiple, MultiSheetPlan, NestSettings};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
@@ -28,6 +29,11 @@ impl ShapeTool {
             Self::Star => "Star",
         }
     }
+}
+
+struct DragSnapSession {
+    index: SnapIndex,
+    grab_world: [f64; 2],
 }
 
 struct Studio {
@@ -63,6 +69,10 @@ struct Studio {
     dragging: bool,
     drag_anchor: Option<[f64; 2]>,
     precision: GridSettings,
+    geometry_snap_enabled: bool,
+    snap_radius_px: f32,
+    drag_snap: Option<DragSnapSession>,
+    snap_preview: Option<SnapMatch>,
     plan: Option<MultiSheetPlan>,
     plan_index: usize,
     planning: Option<Receiver<Result<MultiSheetPlan, String>>>,
@@ -109,6 +119,10 @@ impl Default for Studio {
             dragging: false,
             drag_anchor: None,
             precision: GridSettings::default(),
+            geometry_snap_enabled: true,
+            snap_radius_px: 12.0,
+            drag_snap: None,
+            snap_preview: None,
             plan: None,
             plan_index: 0,
             planning: None,
@@ -124,6 +138,8 @@ impl Default for Studio {
 
 impl Studio {
     fn remember(&mut self) {
+        self.drag_snap = None;
+        self.snap_preview = None;
         self.drag_anchor = None;
         self.dragging = false;
         self.inlay_plan = None;
@@ -135,6 +151,8 @@ impl Studio {
         self.redo.clear();
     }
     fn undo(&mut self) {
+        self.drag_snap = None;
+        self.snap_preview = None;
         self.drag_anchor = None;
         self.dragging = false;
         self.inlay_plan = None;
@@ -147,6 +165,8 @@ impl Studio {
         }
     }
     fn redo(&mut self) {
+        self.drag_snap = None;
+        self.snap_preview = None;
         self.drag_anchor = None;
         self.dragging = false;
         self.inlay_plan = None;
@@ -774,6 +794,13 @@ impl Studio {
                 .range(0.05..=100.0).speed(0.05).suffix(" mm"));
         });
         ui.small("Absolute stock XY0 is bottom-left. Grid snapping affects object placement, not vector shape or CNC preflight.");
+        ui.checkbox(&mut self.geometry_snap_enabled, "Snap selected contours to other vectors");
+        ui.horizontal(|ui| {
+            ui.label("Live snap radius");
+            ui.add(egui::Slider::new(&mut self.snap_radius_px, 4.0..=24.0)
+                .suffix(" px").show_value(true));
+        });
+        ui.small("Grab close to a vertex, midpoint or edge. During the drag, vertices take priority over midpoints and edges; grid is the fallback. Other contours stay fixed.");
         if ui.add_enabled(
             self.precision.enabled && self.selected.is_some(),
             egui::Button::new("Align selected origin to grid"),
@@ -1174,12 +1201,35 @@ impl Studio {
             self.selected = self.sheet.parts.iter().rev()
                 .find(|p| contains(&p.world_points(), world)).map(|p| p.id);
             if let Some(id) = self.selected
-                && let Some(anchor) = self.sheet.parts.iter()
-                    .find(|p| p.id == id).map(|p| [p.x, p.y])
+                && let Some(part) = self.sheet.parts.iter().find(|p| p.id == id)
             {
+                let anchor = [part.x, part.y];
                 self.remember();
                 self.dragging = true;
                 self.drag_anchor = Some(anchor);
+                if self.geometry_snap_enabled {
+                    let radius_mm = (self.snap_radius_px as f64 / scale as f64)
+                        .clamp(0.001, 50.0);
+                    // A source feature must be grabbed intentionally.
+                    // Dragging from deep inside a shape still permits grid
+                    // and free movement, without a geometry snap jump.
+                    let result = SnapIndex::from_sheet(&self.sheet, id);
+                    match result {
+                        Ok(index) => {
+                            if let Some(part) = self.sheet.parts.iter().find(|p| p.id == id)
+                                && let Some(grab_world) =
+                                    SnapIndex::grab_anchor(part, world, radius_mm)
+                            {
+                                self.drag_snap = Some(DragSnapSession { index, grab_world });
+                            }
+                        }
+                        Err(reason) => {
+                            self.message = format!(
+                                "Contour snapping unavailable ({reason}); grid/free drag still works"
+                            );
+                        }
+                    }
+                }
             }
         }
         if self.dragging && response.dragged()
@@ -1189,19 +1239,54 @@ impl Studio {
             let total = response.drag_delta();
             let displacement = [total.x as f64 / scale as f64,
                                 -total.y as f64 / scale as f64];
-            match self.precision.target(anchor, displacement) {
+            let radius_mm = (self.snap_radius_px as f64 / scale as f64)
+                .clamp(0.001, 50.0);
+            let hit = self.drag_snap.as_ref().and_then(|session| {
+                snapped_drag_position(
+                    &session.index, anchor, session.grab_world, displacement, radius_mm,
+                )
+            });
+            self.snap_preview = hit.map(|(_, result)| result);
+            // Geometry wins when its target is within the screen-space snap
+            // radius. Otherwise the previous stock-origin grid behavior
+            // remains the exact fallback (or free drag if grid is off).
+            let destination = if let Some((xy, _)) = hit {
+                Ok(xy)
+            } else {
+                self.precision.target(anchor, displacement)
+            };
+            match destination {
                 Ok([x, y]) => {
                     if let Some(part) = self.sheet.parts.iter_mut().find(|p| p.id == id) {
                         part.x = x;
                         part.y = y;
                     }
                 }
-                Err(reason) => self.message = format!("Precision drag rejected: {reason}"),
+                Err(reason) => {
+                    self.snap_preview = None;
+                    self.message = format!("Precision drag rejected: {reason}");
+                }
             }
+        }
+        if let Some(hit) = self.snap_preview {
+            let at = screen(hit.target_xy);
+            let marker = Color32::from_rgb(255, 215, 105);
+            painter.circle_stroke(at, 7.0, Stroke::new(2.0, marker));
+            painter.line_segment([at - Vec2::new(11.0, 0.0), at + Vec2::new(11.0, 0.0)],
+                Stroke::new(1.4, marker));
+            painter.line_segment([at - Vec2::new(0.0, 11.0), at + Vec2::new(0.0, 11.0)],
+                Stroke::new(1.4, marker));
+            painter.text(at + Vec2::new(12.0, -12.0), egui::Align2::LEFT_BOTTOM,
+                format!("{} · part {} · X {:.2}  Y {:.2}",
+                    hit.kind.label(), hit.target_part_id,
+                    hit.target_xy[0], hit.target_xy[1]),
+                egui::FontId::monospace(11.0), marker);
         }
         if response.drag_stopped() {
             self.dragging = false;
             self.drag_anchor = None;
+            self.drag_snap = None;
+            self.snap_preview = None;
             self.message = "Moved design vector · Verify stock and fixtures before CAM".into();
         }
         if let Some(pointer) = response.hover_pos() {
