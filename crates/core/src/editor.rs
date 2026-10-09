@@ -1,5 +1,6 @@
 //! Validated undoable Rust design commands. Machine output is out of scope.
 use std::collections::HashSet;
+use crate::arrange::{Arrangement,arrangement_offsets};
 use crate::{geometry::Point, path::{AnalyticPath, Curve, PathSegment, Primitive}, project::{Contour, Fixture, Project, Stock}, shapes::{create_shape,polyline,ShapeKind}};
 
 #[derive(Clone, Debug)]
@@ -14,6 +15,7 @@ pub enum Action {
     DuplicateMany {ids:Vec<u64>},
     RemoveMany {ids:Vec<u64>},
     MoveMany {ids:Vec<u64>,delta:Point},
+    Arrange {ids:Vec<u64>,mode:Arrangement},
     Flip {id:u64,horizontal:bool},
     RotateQuarter {id:u64,clockwise:bool},
     Center {id:u64,horizontal:bool,vertical:bool},
@@ -150,6 +152,23 @@ impl Editor {
                 }
                 for contour in &mut next.contours {
                     if selected.contains(&contour.id){
+                        contour.origin=contour.origin.offset(delta.x,delta.y);
+                    }
+                }
+            }
+            Action::Arrange{ids,mode}=>{
+                Self::check_batch(&next,&ids)?;
+                if !matches!(mode,Arrangement::StockLeft|Arrangement::StockRight|
+                    Arrangement::StockHCenter|Arrangement::StockBottom|
+                    Arrangement::StockTop|Arrangement::StockVCenter)
+                    && ids.len()<2 {
+                    return Err("Align at least two vectors or use Align to Stock".into());
+                }
+                let offsets=arrangement_offsets(&next,&ids,mode)?;
+                for (id,delta) in offsets {
+                    if let Some(path)=next.paths.iter_mut().find(|p|p.id==id){
+                        path.origin=path.origin.offset(delta.x,delta.y);
+                    }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
                         contour.origin=contour.origin.offset(delta.x,delta.y);
                     }
                 }
@@ -558,6 +577,53 @@ mod tests {
     }
 
 
+    #[test]
+    fn precision_arrange_preserves_editable_curves_and_one_step_undo(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+            name:"Panel".into(),origin:Point::new(10.0,10.0),
+            width_mm:40.0,height_mm:30.0}).unwrap();
+        e.apply(Action::AddAnalytic{name:"Cubic".into(),
+            origin:Point::new(95.0,55.0),kind:Primitive::Cubic,
+            width_mm:50.0,height_mm:20.0}).unwrap();
+        e.apply(Action::AddRectangle{name:"Legacy".into(),
+            origin:Point::new(180.0,80.0),width_mm:20.0,height_mm:10.0}).unwrap();
+        let initial=e.project.clone();
+        e.apply(Action::Arrange{ids:vec![1,2,3],mode:Arrangement::Bottom}).unwrap();
+        for id in [1,2,3]{
+            let b=crate::arrange::vector_bounds(&e.project,id).unwrap();
+            assert!((b.min.y-10.0).abs()<1e-8);
+        }
+        assert!(e.project.paths[1].segments.iter()
+            .all(|s|matches!(s.curve,Curve::Cubic{..})));
+        assert!(e.undo());
+        assert_eq!(e.project,initial);
+        e.apply(Action::Arrange{ids:vec![1,2,3],mode:Arrangement::StockHCenter}).unwrap();
+        let lo=(1..=3).map(|id|crate::arrange::vector_bounds(&e.project,id).unwrap().min.x)
+            .fold(f64::INFINITY,f64::min);
+        let hi=(1..=3).map(|id|crate::arrange::vector_bounds(&e.project,id).unwrap().max.x)
+            .fold(f64::NEG_INFINITY,f64::max);
+        assert!(((lo+hi)/2.0-e.project.stock.width_mm/2.0).abs()<1e-8);
+        assert!(e.undo());
+        assert_eq!(e.project,initial);
+    }
+    #[test]
+    fn arrangement_rejects_locked_unknown_and_single_vector_selection(){
+        let mut e=Editor::default();
+        for i in 0..3 {
+            e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+                name:format!("Rect {i}"),origin:Point::new(i as f64*45.0,20.0),
+                width_mm:20.0,height_mm:15.0}).unwrap();
+        }
+        e.apply(Action::SetPathLocked{id:2,locked:true}).unwrap();
+        let before=e.project.clone();
+        for ids in [vec![1],vec![1,2,3],vec![1,1],vec![1,99]]{
+            assert!(e.apply(Action::Arrange{ids,mode:Arrangement::Left}).is_err());
+            assert_eq!(e.project,before);
+        }
+        assert!(e.apply(Action::Arrange{ids:vec![1,2,3],
+            mode:Arrangement::DistributeX}).is_err());
+    }
     #[test]
     fn batch_selection_drag_is_atomic_across_paths_and_legacy_contours(){
         let mut e=Editor::default();
