@@ -149,10 +149,10 @@ impl Studio {
                     }
                 });
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(single,egui::Button::new("↶ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Rotate -90")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
                     }
-                    if ui.add_enabled(single,egui::Button::new("↷ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Rotate +90")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
                     }
                 });
@@ -191,7 +191,7 @@ impl Studio {
         ui.small("V Select  •  N Edit nodes  •  P Pen");
         ui.small("Wheel zoom  •  Middle/right drag pan");
         ui.small("Shift-click add  •  Shift-drag box");
-        ui.small("Left→right box encloses · Right→left crosses");
+        ui.small("Left-right encloses; right-left crosses");
         ui.small("Ctrl+D Copy  •  Ctrl+Z Undo");
     }
 
