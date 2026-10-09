@@ -18,7 +18,7 @@ engineering lessons: explicit source identity, stock-bottom-left XY0, stock-top
 Z0, fixture/fence height relative to stock, one tool per NC stage, careful
 manual re-probing, stable projects, undo/redo, and fail-closed export gating.
 
-The old application is archived at
+**The fresh Rust implementation is now the `main` branch** (PR #99, checked with Rust CI). The old application is archived at
 [`archive/python-ui-2026-10`](https://github.com/newnetmp3/CarveFoundry/tree/archive/python-ui-2026-10).
 **Legacy `.cf3d` files are NOT yet supported.** The new versioned `.cfd`
 file format is JSON and belongs solely to the Rust implementation. Do not
@@ -30,7 +30,7 @@ Install the native toolchain and system OpenGL/Wayland libraries:
 
 ```bash
 sudo pacman -S --needed rust cargo pkgconf libxkbcommon wayland mesa
-git clone --branch rust-reboot https://github.com/newnetmp3/CarveFoundry.git
+git clone https://github.com/newnetmp3/CarveFoundry.git
 cd CarveFoundry
 cargo run -p carvefoundry-studio --release
 ```
