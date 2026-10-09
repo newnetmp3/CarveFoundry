@@ -178,6 +178,67 @@ impl Studio {
             self.edit_mode=EditMode::Nodes;
         }
     }
+    fn keyboard(&mut self,ui:&egui::Ui){
+        if ui.ctx().wants_keyboard_input(){return;}
+        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit)=ui.input(|i|{
+            let cmd=i.modifiers.command;
+            (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
+             (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
+                || (cmd && i.key_pressed(egui::Key::Y)),
+             cmd && i.key_pressed(egui::Key::D),
+             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+             i.key_pressed(egui::Key::Escape),
+             i.key_pressed(egui::Key::Enter),
+             !cmd && i.key_pressed(egui::Key::V),
+             !cmd && i.key_pressed(egui::Key::N),
+             !cmd && i.key_pressed(egui::Key::P),
+             !cmd && i.key_pressed(egui::Key::F))
+        });
+        if escape{
+            if self.drag.is_some(){
+                self.editor.cancel_drag();
+                self.drag=None;
+                self.status="Drag cancelled · original geometry restored".into();
+            }else if self.edit_mode==EditMode::Draw{
+                self.drawing.clear();
+                self.edit_mode=EditMode::Objects;
+            }else{
+                self.selected=None;self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            return;
+        }
+        if undo{self.editor.undo();}
+        if redo{self.editor.redo();}
+        if duplicate && let Some(id)=self.selected_id(){
+            let next=self.editor.project.next_id;
+            self.apply(Action::Duplicate{id});
+            if self.editor.project.paths.iter().any(|p|p.id==next){
+                self.selected_path=Some(next);self.selected=None;
+            }else if self.editor.project.contours.iter().any(|p|p.id==next){
+                self.selected=Some(next);self.selected_path=None;
+            }
+        }
+        if delete{
+            if let Some(id)=self.selected_path{
+                self.apply(Action::RemovePath{id});
+                if !self.editor.project.paths.iter().any(|p|p.id==id){
+                    self.selected_path=None;self.selected_node=None;
+                    self.selected_handle=None;
+                }
+            }else if let Some(id)=self.selected{
+                self.apply(Action::Remove{id});
+                if !self.editor.project.contours.iter().any(|p|p.id==id){
+                    self.selected=None;
+                }
+            }
+        }
+        if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
+        if v{self.edit_mode=EditMode::Objects;}
+        if n{self.edit_mode=EditMode::Nodes;}
+        if p{self.edit_mode=EditMode::Draw;self.drawing.clear();}
+        if fit{self.zoom=1.0;}
+    }
     fn header(&mut self,ui:&mut egui::Ui) {
         ui.horizontal_wrapped(|ui|{
             ui.heading("CARVEFOUNDRY");
@@ -776,6 +837,7 @@ impl Studio {
 }
 impl eframe::App for Studio {
     fn ui(&mut self,ui:&mut egui::Ui,_frame:&mut eframe::Frame){
+        self.keyboard(ui);
         egui::Panel::top("top").show(ui,|ui|self.header(ui));
         egui::Panel::bottom("status").show(ui,|ui|{
             ui.horizontal_wrapped(|ui|{
