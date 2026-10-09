@@ -428,3 +428,34 @@ retained-geometry SVG/DXF interchange and real text/font authoring in Rust.
 Stay CAD-only until the machining and posted-code safety gates are met.
 
 | 2026-10-09 | PR #110 native editor controls and direct selected-node property UX merged | [Rust CI 37966080362](https://github.com/newnetmp3/CarveFoundry/actions/runs/37966080362) green: 53 core + 10 studio tests, strict Clippy, native release; main `55d6399b` | KDE Wayland manual UI smoke; retained SVG/DXF and font authoring |
+
+
+## Active follow-up — 2026-10-09 node dragging from owner screencast
+
+The owner uploaded `Screencast_20261009_133456.webm` showing nodes
+failing to follow the mouse across multiple frames in the Rust Node editor.
+Root cause identified in `apps/studio/src/ui/canvas.rs`: egui
+`Response::drag_delta()` is the **per-frame movement**, but all the
+`Editor::preview_*_drag` functions reconstruct each frame from the
+**original pre-drag model**. Thus a 1–3 pixel per-frame motion kept resetting
+the dragged node/vector near its starting position. Shape placement was
+similarly affected. This is a proven source-level defect, not a machine
+sensitivity setting or a Windows/Wayland mouse problem.
+
+Branch `fix/rust-cumulative-node-drag` (base main `32d69ce6`):
+- Use `Response::total_drag_delta()` for absolute pointer displacement
+  from initial mouse press, applied consistently to shapes, nodes, Bezier
+  controls, complete paths/contours and group moves.
+- Retain pre-drag baseline transaction, one Undo commit on release,
+  deterministic grid quantization of the entire displacement.
+- New studio tests exercise multi-frame cumulative node and path movement,
+  stationary frames, off-grid movement and undo.
+- Alt temporarily bypasses feature-snap magnetic behavior during node and
+  handle dragging; live snap indicator omits actively dragged path.
+
+**CI pending.** Update exact PR/head/run details after green CI, then merge.
+Actual owner KDE Plasma Wayland drag feeling must be retested from scratch.
+No CAM, G-code output, safety boundary or project schema changed.
+
+This is a high-priority UI blocker; future refactors MUST NOT revert to
+per-frame delta in a baseline-based drag preview.
