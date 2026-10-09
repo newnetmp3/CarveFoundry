@@ -1,0 +1,173 @@
+//! Compact, discoverable CAD drawing tool palette, independent of the canvas.
+use super::super::{EditMode,Studio};
+use carvefoundry_core::{Action,Primitive,ShapeKind};
+use eframe::egui;
+
+fn shape(ui:&mut egui::Ui,label:&str,tip:&str)->bool {
+    ui.add_sized([91.0,38.0],egui::Button::new(label))
+        .on_hover_text(tip).clicked()
+}
+impl Studio {
+    pub(crate) fn drawing_palette(&mut self,ui:&mut egui::Ui){
+        ui.horizontal(|ui|{
+            ui.heading("DRAWING");
+            ui.weak("2D vectors");
+        });
+        ui.label(egui::RichText::new("1  CREATE VECTORS").strong()
+            .color(super::theme::ACCENT));
+        ui.group(|ui|{
+            ui.horizontal_wrapped(|ui|{
+                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle"){
+                    self.add_shape(ShapeKind::Rectangle);
+                }
+                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation"){
+                    self.add_shape(ShapeKind::Circle);
+                }
+                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse"){
+                    self.add_shape(ShapeKind::Ellipse);
+                }
+                if shape(ui,"△ Triangle","Create a 3-sided closed vector"){
+                    self.add_shape(ShapeKind::Triangle);
+                }
+                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector"){
+                    self.add_shape(ShapeKind::Hexagon);
+                }
+                if shape(ui,"☆ Star","Create a ten-node star outline"){
+                    self.add_shape(ShapeKind::Star);
+                }
+                if shape(ui,"Pentagon","Create a 5-sided outline"){
+                    self.add_shape(ShapeKind::Pentagon);
+                }
+                if shape(ui,"Octagon","Create an 8-sided outline"){
+                    self.add_shape(ShapeKind::Octagon);
+                }
+            });
+        });
+        ui.add_space(5.0);
+        ui.label(egui::RichText::new("2  DRAW PATHS").strong()
+            .color(super::theme::ACCENT));
+        ui.group(|ui|{
+            ui.horizontal_wrapped(|ui|{
+                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing"){
+                    self.edit_mode=EditMode::Draw;
+                    self.drawing.clear();
+                }
+                if shape(ui,"／ Line","Create an editable analytic straight segment"){
+                    self.add_analytic(Primitive::Line);
+                }
+                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends"){
+                    self.add_analytic(Primitive::Arc);
+                }
+                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve"){
+                    self.add_analytic(Primitive::Cubic);
+                }
+            });
+            if self.edit_mode==EditMode::Draw {
+                ui.separator();
+                ui.checkbox(&mut self.draw_closed,"Close into outline");
+                ui.horizontal_wrapped(|ui|{
+                    ui.strong(format!("{} vertices",self.drawing.len()));
+                    if ui.add_enabled(
+                        self.drawing.len()>=if self.draw_closed{3}else{2},
+                        egui::Button::new("Finish [Enter]"),
+                    ).clicked(){self.finish_drawing();}
+                    if ui.button("Cancel [Esc]").clicked(){
+                        self.drawing.clear();
+                        self.edit_mode=EditMode::Objects;
+                    }
+                });
+                ui.small("Click points in the drawing area. Double-click or press Enter to finish.");
+            }
+        });
+        ui.add_space(5.0);
+        egui::CollapsingHeader::new("3  VECTOR DIMENSIONS")
+            .default_open(false).show(ui,|ui|{
+                ui.label("New object name");
+                ui.text_edit_singleline(&mut self.shape_name);
+                ui.columns(2,|cols|{
+                    cols[0].label("Width (mm)");
+                    cols[0].add(egui::DragValue::new(&mut self.shape_width)
+                        .range(0.1..=10_000.0).speed(0.5));
+                    cols[1].label("Height (mm)");
+                    cols[1].add(egui::DragValue::new(&mut self.shape_height)
+                        .range(0.1..=10_000.0).speed(0.5));
+                });
+                ui.weak("Dimensions apply to newly created vectors.");
+            });
+        egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
+            .default_open(true).show(ui,|ui|{
+                let enabled=self.selected_id().is_some();
+                ui.horizontal_wrapped(|ui|{
+                    if ui.add_enabled(enabled,egui::Button::new("Duplicate"))
+                        .on_hover_text("Create an editable copy, offset 8 mm").clicked(){
+                        self.run_selected(|id|Action::Duplicate{id});
+                    }
+                    if ui.add_enabled(enabled,egui::Button::new("Mirror X"))
+                        .on_hover_text("Mirror selected vector horizontally").clicked(){
+                        self.run_selected(|id|Action::Flip{id,horizontal:true});
+                    }
+                    if ui.add_enabled(enabled,egui::Button::new("Mirror Y"))
+                        .on_hover_text("Mirror selected vector vertically").clicked(){
+                        self.run_selected(|id|Action::Flip{id,horizontal:false});
+                    }
+                });
+                ui.horizontal_wrapped(|ui|{
+                    if ui.add_enabled(enabled,egui::Button::new("↶ Rotate 90°")).clicked(){
+                        self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
+                    }
+                    if ui.add_enabled(enabled,egui::Button::new("↷ Rotate 90°")).clicked(){
+                        self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
+                    }
+                });
+                ui.horizontal_wrapped(|ui|{
+                    if ui.add_enabled(enabled,egui::Button::new("Center X")).clicked(){
+                        self.run_selected(|id|Action::Center{id,horizontal:true,vertical:false});
+                    }
+                    if ui.add_enabled(enabled,egui::Button::new("Center Y")).clicked(){
+                        self.run_selected(|id|Action::Center{id,horizontal:false,vertical:true});
+                    }
+                    if ui.add_enabled(enabled,egui::Button::new("Center both")).clicked(){
+                        self.run_selected(|id|Action::Center{id,horizontal:true,vertical:true});
+                    }
+                });
+            });
+        egui::CollapsingHeader::new("5  VIEW & SNAP")
+            .default_open(false).show(ui,|ui|{
+                ui.checkbox(&mut self.show_grid,"Show stock grid");
+                ui.checkbox(&mut self.use_grid,"Snap movement to grid");
+                ui.horizontal(|ui|{
+                    ui.label("Spacing");
+                    ui.add(egui::DragValue::new(&mut self.grid_step)
+                        .range(0.1..=100.0).suffix(" mm"));
+                });
+                if ui.button("Fit material [F]").clicked(){
+                    self.zoom=1.0;self.pan=egui::Vec2::ZERO;
+                }
+                ui.weak("Snapping is off by default and never jumps existing nodes.");
+            });
+        ui.add_space(8.0);
+        ui.separator();
+        ui.small("V Select  •  N Edit nodes  •  P Pen");
+        ui.small("Wheel zoom  •  Middle/right drag pan");
+        ui.small("Ctrl+D Copy  •  Ctrl+Z Undo");
+    }
+
+    pub(crate) fn toolpaths_palette(&mut self,ui:&mut egui::Ui){
+        ui.heading("TOOLPATHS");
+        ui.label(egui::RichText::new("Not yet available").strong()
+            .color(super::theme::ACCENT));
+        ui.separator();
+        ui.label("This Rust reboot currently edits CNC design geometry only.");
+        ui.small("The machining workflow will be activated after the native CAM engine, verified tool database, fixture/holder checks, posted-code preflight and simulation are implemented.");
+        ui.separator();
+        ui.strong("Planned machining tools");
+        for item in ["Profile / cutout","Pocket clearing","V-carving & engraving",
+            "3D roughing and finishing","Material simulation",
+            "Fixture-aware preflight","Controller-specific NC export"] {
+            ui.add_enabled(false,egui::Button::new(item));
+        }
+        ui.separator();
+        ui.colored_label(egui::Color32::YELLOW,
+            "NC output is deliberately unavailable.");
+    }
+}
