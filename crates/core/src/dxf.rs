@@ -20,7 +20,6 @@ struct Meta {
     id:u64,index:usize,total:usize,closed:bool,
     visible:bool,locked:bool,name:String,
 }
-struct Item {path:AnalyticPath,meta:Option<Meta>}
 fn parse_pairs(bytes:&[u8])->Result<Vec<Pair>,String>{
     if bytes.len()>LIMIT{return Err("DXF exceeds the 16 MiB limit".into());}
     let text=std::str::from_utf8(bytes).map_err(|_|"Binary/non-UTF8 DXF is not supported")?;
@@ -35,13 +34,13 @@ fn parse_pairs(bytes:&[u8])->Result<Vec<Pair>,String>{
     if out.is_empty(){return Err("DXF is empty".into());}
     Ok(out)
 }
-fn entry<'a>(pairs:&'a [Pair],code:i32)->Result<&'a str,String>{
+fn entry(pairs:&[Pair],code:i32)->Result<&str,String>{
     let mut values=pairs.iter().filter(|p|p.code==code);
     let first=values.next().ok_or_else(||format!("DXF entity missing code {code}"))?;
     if values.next().is_some(){return Err(format!("DXF duplicate group code {code}"));}
     Ok(&first.value)
 }
-fn optional<'a>(pairs:&'a [Pair],code:i32)->Option<&'a str>{
+fn optional(pairs:&[Pair],code:i32)->Option<&str>{
     pairs.iter().find(|p|p.code==code).map(|p|p.value.as_str())
 }
 fn number(s:&str)->Result<f64,String>{
@@ -78,7 +77,7 @@ fn planar(p:&[Pair])->Result<(),String>{
 fn path(name:String,points:Vec<Point>,curves:Vec<Curve>,closed:bool)
     ->Result<AnalyticPath,String>{
     let len=points.len();
-    if len<2 || len>256 || curves.len()!=len-usize::from(!closed){
+    if !(2..=256).contains(&len) || curves.len()!=len-usize::from(!closed){
         return Err("Invalid DXF path node/segment count".into());
     }
     let nodes=points.into_iter().enumerate().map(|(i,p)|
@@ -129,12 +128,10 @@ fn polyline(e:&[Pair],units:f64,name:String)->Result<AnalyticPath,String>{
                 y=Some(number(&pair.value)?);
             }
             42=>{bulge=number(&pair.value)?;}
-            40|41=>{
-                // Width changes imply strokes, not centerline geometry.
-                if number(&pair.value)?.abs()>EPS {
-                    return Err("DXF polyline variable width unsupported".into());
-                }
+            40|41 if number(&pair.value)?.abs()>EPS=>{
+                return Err("DXF polyline variable width unsupported".into());
             }
+            40|41=>{}
             _=>{}
         }
     }
@@ -169,7 +166,7 @@ fn spline(e:&[Pair],units:f64,name:String)->Result<AnalyticPath,String>{
     }
     let knots=e.iter().filter(|v|v.code==40)
         .map(|v|number(&v.value)).collect::<Result<Vec<_>,_>>()?;
-    if knots.len()!=8 || !(knots[4]>knots[3])||
+    if knots.len()!=8 || knots[4]<=knots[3]||
         knots[..4].iter().any(|x|(x-knots[0]).abs()>EPS)||
         knots[4..].iter().any(|x|(x-knots[4]).abs()>EPS){
         return Err("DXF spline knots must be clamped cubic Bezier".into());
@@ -231,7 +228,7 @@ fn entity(kind:&str,e:&[Pair],scale:f64,index:usize)->Result<AnalyticPath,String
 fn from_hex(s:&str)->Result<String,String>{
     if !s.len().is_multiple_of(2){return Err("Invalid DXF vector-name metadata".into());}
     let mut v=Vec::new();
-    for chunk in s.as_bytes().chunks_exact(2){
+    for chunk in s.as_bytes().chunks(2){
         let s=std::str::from_utf8(chunk).map_err(|_|"Invalid metadata hex")?;
         v.push(u8::from_str_radix(s,16).map_err(|_|"Invalid metadata hex")?);
     }
