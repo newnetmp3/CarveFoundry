@@ -5,6 +5,8 @@ use crate::{geometry::Point, path::{AnalyticPath, Curve, PathSegment, Primitive}
 pub enum Action {
     AddRectangle { name: String, origin: Point, width_mm: f64, height_mm: f64 },
     AddShape {kind:ShapeKind,name:String,origin:Point,width_mm:f64,height_mm:f64},
+    RenamePath {id:u64,name:String},
+    RenameProject {name:String},
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
     ConvertContour {id:u64},
     Duplicate {id:u64},
@@ -72,6 +74,15 @@ impl Editor {
                         Point::new(width_mm,height_mm),Point::new(0.,height_mm),
                     ],
                 });
+            }
+            Action::RenameProject{name}=>{
+                next.name=name;
+            }
+            Action::RenamePath{id,name}=>{
+                let path=next.paths.iter_mut().find(|p|p.id==id)
+                    .ok_or("Path ID not found")?;
+                if path.locked{return Err("Path is locked".into());}
+                path.name=name;
             }
             Action::AddShape{kind,name,origin,width_mm,height_mm}=>{
                 let id=next.next_id;
@@ -450,6 +461,27 @@ mod tests {
     }
 
 
+    #[test]
+    fn object_and_project_renaming_are_atomic_and_undoable(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+            name:"Unnamed".into(),origin:Point::new(0.0,0.0),
+            width_mm:20.0,height_mm:10.0}).unwrap();
+        e.apply(Action::RenamePath{id:1,name:"Top pocket".into()}).unwrap();
+        e.apply(Action::RenameProject{name:"Wall sign".into()}).unwrap();
+        assert_eq!(e.project.paths[0].name,"Top pocket");
+        assert_eq!(e.project.name,"Wall sign");
+        let snapshot=e.project.clone();
+        assert!(e.apply(Action::RenamePath{id:1,name:"".into()}).is_err());
+        assert!(e.apply(Action::RenameProject{name:" ".into()}).is_err());
+        assert_eq!(e.project,snapshot);
+        assert!(e.undo());
+        assert_eq!(e.project.name,"Untitled CNC design");
+        assert!(e.undo());
+        assert_eq!(e.project.paths[0].name,"Unnamed");
+        assert!(e.redo());
+        assert_eq!(e.project.paths[0].name,"Top pocket");
+    }
     #[test]
     fn all_creation_tools_create_editable_paths_and_preserve_history(){
         let mut e=Editor::default();
