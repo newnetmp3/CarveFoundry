@@ -42,6 +42,8 @@ struct Studio {
     selected_node: Option<u64>,
     selected_handle: Option<(u64,u8)>,
     edit_mode: EditMode,
+    active_shape: Option<ShapeKind>,
+    shape_drag_start: Option<Point>,
     shape_name: String,
     shape_width: f64,
     shape_height: f64,
@@ -76,6 +78,8 @@ impl Default for Studio {
             selected_node: None,
             selected_handle: None,
             edit_mode: EditMode::Objects,
+            active_shape: None,
+            shape_drag_start: None,
             shape_name: "New vector".into(),
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
@@ -110,6 +114,8 @@ impl Studio {
         self.selected_node = None;
         self.selected_handle = None;
         self.drag = None;
+        self.active_shape=None;
+        self.shape_drag_start=None;
         self.drawing.clear();
         self.pan=Vec2::ZERO;self.zoom=1.0;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
@@ -133,6 +139,8 @@ impl Studio {
                 self.selected_node = None;
                 self.selected_handle = None;
                 self.drag = None;
+                self.active_shape=None;
+                self.shape_drag_start=None;
                 self.drawing.clear();
                 self.pan=Vec2::ZERO;self.zoom=1.0;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
@@ -227,6 +235,34 @@ impl Studio {
             self.edit_mode=EditMode::Objects;
         }
     }
+    fn choose_shape_tool(&mut self,kind:ShapeKind){
+        self.active_shape=Some(kind);
+        self.shape_drag_start=None;
+        self.edit_mode=EditMode::Objects;
+        self.drawing.clear();
+        self.drag=None;
+        self.status=format!("{}: drag a diagonal on the material. Shift constrains proportions; Esc cancels.",
+            kind.title());
+    }
+    fn create_drag_shape(&mut self,kind:ShapeKind,placement:carvefoundry_core::ShapePlacement){
+        let id=self.editor.project.next_id;
+        self.apply(Action::AddShape{
+            kind,name:format!("{} {}",self.shape_name,kind.title()),
+            origin:placement.origin,width_mm:placement.width_mm,
+            height_mm:placement.height_mm,
+        });
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);
+            self.selected=None;
+            self.selected_node=None;
+            self.selected_handle=None;
+            self.inspector_tab=InspectorTab::Properties;
+            self.shape_width=placement.width_mm;
+            self.shape_height=placement.height_mm;
+            self.status=format!("Created {}: {:.2} × {:.2} mm. Drag again to add another.",
+                kind.title(),placement.width_mm,placement.height_mm);
+        }
+    }
     fn finish_drawing(&mut self){
         let points=std::mem::take(&mut self.drawing);
         if points.is_empty(){return;}
@@ -309,7 +345,11 @@ impl Studio {
              cmd && i.key_pressed(egui::Key::S))
         });
         if escape{
-            if self.drag.is_some(){
+            if self.active_shape.is_some(){
+                self.active_shape=None;
+                self.shape_drag_start=None;
+                self.status="Drawing tool cancelled".into();
+            }else if self.drag.is_some(){
                 self.editor.cancel_drag();
                 self.drag=None;
                 self.status="Drag cancelled · original geometry restored".into();
@@ -338,9 +378,10 @@ impl Studio {
         }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
-        if v{self.edit_mode=EditMode::Objects;}
-        if n{self.edit_mode=EditMode::Nodes;}
-        if p{self.edit_mode=EditMode::Draw;self.drawing.clear();}
+        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.shape_drag_start=None;}
+        if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;}
+        if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
+            self.shape_drag_start=None;self.drawing.clear();}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
 
