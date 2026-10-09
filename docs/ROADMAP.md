@@ -287,3 +287,17 @@ pointer QA is not yet verified.** No CAM, NC output or format migration was enab
 
 **Next**: check actual desktop UI usability at multiple display scales;
 then source-preserving SVG/DXF vectors, system fonts and editable grouping.
+
+
+## R1 urgent node-drag regression — active 2026-10-09
+
+The user's KDE/Wayland screencast shows nodes resetting toward their
+original position instead of tracking the mouse. This is a source-level
+input contract mismatch: `response.drag_delta()` means motion during the
+**current frame**, whereas the validated drag preview always starts from
+the original project snapshot. Branch `fix/rust-cumulative-node-drag`
+switches all design drags to `response.total_drag_delta()` and adds
+multi-frame regression coverage, unrestricted Alt-drag (ignoring feature
+snaps), and explicit UI hints. Successful release CI and hands-on KDE
+pointer capture QA are separate gates. Do not proceed to SVG/text features
+until the existing node dragging workflow is usable. CNC remains disabled.
