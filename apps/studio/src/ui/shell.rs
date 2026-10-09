@@ -16,18 +16,25 @@ impl Studio {
                         self.request_document(PendingDocument::New);
                         ui.close();
                     }
-                    if ui.button("Open project").clicked(){
-                        self.request_document(PendingDocument::Open);
+                    if ui.button("Open design…  Ctrl+O").clicked(){
+                        self.choose_open_document();
                         ui.close();
                     }
-                    if ui.button("Save project").clicked(){
+                    if ui.button("Save  Ctrl+S").clicked(){
                         self.save_document();ui.close();
+                    }
+                    if ui.button("Save as…").clicked(){
+                        self.choose_save_as();ui.close();
                     }
                     ui.separator();
                     ui.label("Project file (.cfd)");
                     ui.add(egui::TextEdit::singleline(&mut self.project_path)
                         .desired_width(270.0));
-                    ui.weak("Open/Save operate on the path above.");
+                    if ui.button("Open entered path").clicked(){
+                        self.request_document(PendingDocument::Open);
+                        ui.close();
+                    }
+                    ui.weak("Open/Save use the native KDE file picker or this path.");
                     ui.separator();
                     ui.small("Projects are Rust-native; historic CF3D files cannot be opened.");
                 });
@@ -206,6 +213,7 @@ impl Studio {
                 ui.label("Middle / right drag  Pan the view");
                 ui.label("F  Fit material to drawing window");
                 ui.separator();
+                ui.label("Ctrl+N  New · Ctrl+O  Open · Ctrl+S  Save");
                 ui.label("Ctrl+Z  Undo · Ctrl+Y / Ctrl+Shift+Z  Redo");
                 ui.label("Ctrl+D  Duplicate · Delete  Remove selected");
                 ui.weak("Shortcuts do not run while text fields have keyboard focus.");
@@ -232,10 +240,18 @@ impl Studio {
                 if confirm{
                     match command{
                         PendingDocument::New=>self.new_document(),
-                        PendingDocument::Open=>self.open_document(),
+                        PendingDocument::Open=>{
+                            if let Some(path)=self.pending_open_path.take(){
+                                self.project_path=path;
+                            }
+                            self.open_document();
+                        },
                     }
                 }
             }else if !opened{self.pending_document=None;}
+            if self.pending_document.is_none(){
+                self.pending_open_path=None;
+            }
         }
     }
 }
