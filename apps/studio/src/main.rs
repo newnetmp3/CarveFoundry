@@ -293,6 +293,136 @@ impl Studio {
             }
         }
         ui.separator();
+        ui.heading("ANALYTIC VECTORS");
+        let prior=self.selected_path;
+        egui::ScrollArea::vertical().max_height(120.0).show(ui,|ui|{
+            for path in &self.editor.project.paths {
+                ui.selectable_value(&mut self.selected_path,Some(path.id),format!(
+                    "{}{} · {} segment(s)",
+                    if path.locked {"🔒 "} else {""},
+                    path.name,path.segments.len(),
+                ));
+            }
+        });
+        if self.selected_path!=prior {
+            self.selected=None;
+            self.selected_node=None;
+            self.selected_handle=None;
+        }
+        let selected_path=self.editor.project.paths.iter()
+            .find(|p|Some(p.id)==self.selected_path).cloned();
+        if let Some(path)=selected_path {
+            ui.separator();
+            ui.strong(format!("RETAINED PATH · {}",path.name));
+            ui.small(format!("Stable path ID {} · {} nodes · {} curves",
+                path.id,path.nodes.len(),path.segments.len()));
+            let mut origin=path.origin;
+            let mut moved=false;
+            ui.horizontal(|ui|{
+                ui.label("X");
+                moved|=ui.add(egui::DragValue::new(&mut origin.x)
+                    .speed(0.25).suffix(" mm")).changed();
+                ui.label("Y");
+                moved|=ui.add(egui::DragValue::new(&mut origin.y)
+                    .speed(0.25).suffix(" mm")).changed();
+            });
+            if moved{self.apply(Action::MovePath{id:path.id,origin});}
+            let mut locked=path.locked;
+            if ui.checkbox(&mut locked,"Lock analytic path").changed(){
+                self.apply(Action::SetPathLocked{id:path.id,locked});
+            }
+            ui.horizontal(|ui|{
+                if ui.add_enabled(!locked,egui::Button::new(
+                    if path.closed{"Open path"}else{"Close with line"}
+                )).clicked(){
+                    self.apply(Action::SetPathClosed{id:path.id,closed:!path.closed});
+                }
+                if ui.add_enabled(!locked,egui::Button::new("Delete path")).clicked(){
+                    self.apply(Action::RemovePath{id:path.id});
+                    self.selected_path=None;
+                    self.selected_node=None;
+                    self.selected_handle=None;
+                }
+            });
+            ui.small("Closing requires 3+ noncollinear nodes. Never silently converts curves to polylines.");
+            ui.separator();
+            ui.label("Path nodes · local coordinates");
+            for node in &path.nodes {
+                ui.selectable_value(&mut self.selected_node,Some(node.id),
+                    format!("#{} · {:.2}, {:.2} mm",
+                        node.id,node.position.x,node.position.y));
+            }
+            if let Some(node)=path.nodes.iter().find(|n|Some(n.id)==self.selected_node) {
+                ui.strong(format!("NODE #{}",node.id));
+                let mut at=node.position;
+                let mut changed=false;
+                ui.horizontal(|ui|{
+                    ui.label("X");
+                    changed|=ui.add(egui::DragValue::new(&mut at.x)
+                        .speed(0.1).suffix(" mm")).changed();
+                    ui.label("Y");
+                    changed|=ui.add(egui::DragValue::new(&mut at.y)
+                        .speed(0.1).suffix(" mm")).changed();
+                });
+                if changed{self.apply(Action::MoveNode{
+                    path_id:path.id,node_id:node.id,position:at,
+                });}
+                ui.horizontal_wrapped(|ui|{
+                    if ui.add_enabled(!locked,
+                        egui::Button::new("Insert midpoint after node")).clicked(){
+                        let new_id=path.next_element_id;
+                        self.apply(Action::InsertNodeAfter{
+                            path_id:path.id,node_id:node.id,
+                        });
+                        if self.editor.project.paths.iter()
+                            .any(|p|p.id==path.id &&
+                                p.nodes.iter().any(|n|n.id==new_id)){
+                            self.selected_node=Some(new_id);
+                        }
+                    }
+                    if ui.add_enabled(!locked,
+                        egui::Button::new("Delete node")).clicked(){
+                        self.apply(Action::RemoveNode{
+                            path_id:path.id,node_id:node.id,
+                        });
+                        self.selected_node=None;
+                    }
+                });
+                ui.small("Arc anchors are fixed until radius-constrained node editing is implemented. Cubic controls move with their anchors.");
+            }
+            ui.separator();
+            ui.label("Cubic control handles");
+            for seg in &path.segments {
+                if let Curve::Cubic{control1,control2} = seg.curve {
+                    ui.horizontal(|ui|{
+                        ui.selectable_value(&mut self.selected_handle,
+                            Some((seg.id,1)),format!("Segment #{} · H1",seg.id));
+                        ui.selectable_value(&mut self.selected_handle,
+                            Some((seg.id,2)),format!("H2 ({:.1}, {:.1})",
+                                control2.x,control2.y));
+                    });
+                    if self.selected_handle==Some((seg.id,1)) ||
+                        self.selected_handle==Some((seg.id,2)) {
+                        let handle=self.selected_handle.unwrap().1;
+                        let mut value=if handle==1{control1}else{control2};
+                        let mut changed=false;
+                        ui.horizontal(|ui|{
+                            ui.label("X");
+                            changed|=ui.add(egui::DragValue::new(&mut value.x)
+                                .speed(0.1).suffix(" mm")).changed();
+                            ui.label("Y");
+                            changed|=ui.add(egui::DragValue::new(&mut value.y)
+                                .speed(0.1).suffix(" mm")).changed();
+                        });
+                        if changed{self.apply(Action::MoveControl{
+                            path_id:path.id,segment_id:seg.id,handle,position:value,
+                        });}
+                    }
+                }
+            }
+            ui.small("Selections, node moves and handles are serialized losslessly into .cfd, with undoable modifications.");
+        }
+        ui.separator();
         ui.heading("MACHINING");
         ui.colored_label(Color32::YELLOW,
             "Not implemented · no toolpaths, preflight or G-code");
@@ -304,8 +434,8 @@ impl Studio {
         ui.horizontal(|ui|{
             ui.heading("STOCK / VECTOR DESIGN");
             ui.separator();
-            ui.label(format!("{} contours · {:.0}×{:.0} mm",
-                self.editor.project.contours.len(),
+            ui.label(format!("{} contours · {} analytic paths · {:.0}×{:.0} mm",
+                self.editor.project.contours.len(),self.editor.project.paths.len(),
                 self.editor.project.stock.width_mm,
                 self.editor.project.stock.height_mm));
             ui.add(egui::Slider::new(&mut self.zoom,0.4..=4.0).text("Zoom"));
