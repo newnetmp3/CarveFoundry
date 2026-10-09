@@ -347,6 +347,21 @@ mod tests {
         assert_eq!(a.next_element_id,6);
     }
     #[test]
+    fn removing_open_endpoints_does_not_underflow_node_index(){
+        let mut path=p(Primitive::Line);
+        let mid=path.split_line_after(1).unwrap();
+        path.remove_node(1).unwrap();
+        assert_eq!(path.nodes.len(),2);
+        assert_eq!(path.nodes[0].id,mid);
+        assert_eq!(path.segments.len(),1);
+        path.validate().unwrap();
+        let mut path=p(Primitive::Line);
+        path.split_line_after(1).unwrap();
+        path.remove_node(2).unwrap();
+        assert_eq!(path.nodes.len(),2);
+        path.validate().unwrap();
+    }
+    #[test]
     fn disallows_silent_split_or_deletion_of_curves() {
         let mut a=p(Primitive::Arc);
         assert!(a.split_line_after(1).is_err());
