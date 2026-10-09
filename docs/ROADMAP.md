@@ -301,3 +301,22 @@ multi-frame regression coverage, unrestricted Alt-drag (ignoring feature
 snaps), and explicit UI hints. Successful release CI and hands-on KDE
 pointer capture QA are separate gates. Do not proceed to SVG/text features
 until the existing node dragging workflow is usable. CNC remains disabled.
+
+
+## Verified R1 native drag recovery — PR #111
+
+[PR #111](https://github.com/newnetmp3/CarveFoundry/pull/111) merged
+as `7ee5cba21afe0f805f1ea9289dfee2309b85ffc9`.
+Final feature head `d7304a945afe06929dbc82448aa1e335c31a5fd9`
+passed [CI 37968221186](https://github.com/newnetmp3/CarveFoundry/actions/runs/37968221186):
+**53 core + 14 studio tests**, strict Clippy and native Linux release.
+All pre-drag-baseline previews now consume absolute total pointer displacement,
+not egui's incremental frame delta. This repairs node, Bezier handle, path,
+contour, group and drag-to-size interactions at source level. Alt enables
+temporary snap bypass while directly editing a node or handle. Multi-frame
+and undo regressions are tested; actual KDE Wayland gestures remain a
+separate, pending acceptance check. CNC output remains disabled.
+
+**Next**: validate the owner screencast's direct-node interaction on the
+updated desktop, then advance to source-preserving SVG/DXF and system-font
+editing with regression fixtures.
