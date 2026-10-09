@@ -92,3 +92,8 @@ These tests are explicitly UNCHECKED until run on an actual desktop.
 
 All checks above are manual and remain unchecked. Rust CI is not
 real-world pointer/keyboard QA.
+
+- [ ] Select off-center objects; Shift+F and Fit Selection zoom to the exact
+      selection envelope while leaving Undo and saved design untouched.
+- [ ] Quick rectangle, circle and star buttons on the top ribbon enter the
+      same drag-to-draw interaction as the left palette (no unwanted objects).
