@@ -332,7 +332,7 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save)=ui.input(|i|{
+        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
@@ -347,7 +347,9 @@ impl Studio {
              !cmd && i.key_pressed(egui::Key::F),
              cmd && i.key_pressed(egui::Key::N),
              cmd && i.key_pressed(egui::Key::O),
-             cmd && i.key_pressed(egui::Key::S))
+             cmd && i.key_pressed(egui::Key::S),
+             !cmd && i.key_pressed(egui::Key::R),
+             !cmd && i.key_pressed(egui::Key::C))
         });
         if escape{
             if self.active_shape.is_some(){
@@ -388,6 +390,8 @@ impl Studio {
         if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
         if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
             self.shape_drag_start=None;self.shape_drag_delta=None;self.drawing.clear();}
+        if r{self.choose_shape_tool(ShapeKind::Rectangle);}
+        if c{self.choose_shape_tool(ShapeKind::Circle);}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
 
