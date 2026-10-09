@@ -95,6 +95,19 @@ impl Studio {
             .find(|p|Some(p.id)==self.selected_path).cloned();
         if let Some(path)=path {
             ui.strong(&path.name);
+            if self.rename_target!=Some(path.id){
+                self.rename_target=Some(path.id);
+                self.rename_draft=path.name.clone();
+            }
+            ui.horizontal(|ui|{
+                ui.add(egui::TextEdit::singleline(&mut self.rename_draft)
+                    .hint_text("Vector name").desired_width(178.0));
+                if ui.add_enabled(!path.locked,
+                    egui::Button::new("Rename")).clicked(){
+                    let desired=self.rename_draft.trim().to_owned();
+                    self.apply(Action::RenamePath{id:path.id,name:desired});
+                }
+            });
             ui.small(format!("Path #{} · {} nodes · {} segments",
                 path.id,path.nodes.len(),path.segments.len()));
             ui.separator();
@@ -189,7 +202,7 @@ impl Studio {
                                 self.selected_handle=Some((segment.id,1));
                             }
                             if ui.selectable_label(self.selected_handle==Some((segment.id,2)),
-                                format!("H2",)).clicked(){
+                                "H2").clicked(){
                                 self.selected_handle=Some((segment.id,2));
                             }
                         });
@@ -242,6 +255,14 @@ impl Studio {
         }
     }
     fn job_tab(&mut self,ui:&mut egui::Ui) {
+        ui.strong("Project name");
+        ui.add(egui::TextEdit::singleline(&mut self.project_name_draft)
+            .desired_width(ui.available_width().min(260.0)));
+        if ui.button("Rename project").clicked(){
+            let desired=self.project_name_draft.trim().to_owned();
+            self.apply(Action::RenameProject{name:desired});
+        }
+        ui.separator();
         ui.strong("Material setup");
         ui.label("Work XY0: stock bottom-left");
         ui.label("Work Z0: material top");
