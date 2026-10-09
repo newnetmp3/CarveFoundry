@@ -25,7 +25,8 @@ impl Studio {
     fn objects_tab(&mut self,ui:&mut egui::Ui) {
         let n=self.editor.project.paths.len()+self.editor.project.contours.len();
         ui.label(format!("{n} vectors  ·  {} fixtures",self.editor.project.fixtures.len()));
-        ui.small("Select an object. Eye toggles visibility; lock prevents editing.");
+        ui.small("Click to select · Shift/Ctrl-click to add or remove. Drag blank canvas for a selection box.");
+        ui.label(format!("{} selected",self.selected_ids.len()));
         ui.separator();
         let entries:Vec<_>=self.editor.project.paths.iter().map(|p|
             (p.id,p.name.clone(),p.visible,p.locked,true))
@@ -36,7 +37,7 @@ impl Studio {
             .max_height(280.0)
             .show(ui,|ui|{
                 for (id,name,visible,locked,is_path) in entries {
-                    let selected=self.selected_id()==Some(id);
+                    let selected=self.selected_ids.contains(&id);
                     ui.horizontal(|ui|{
                         if ui.small_button(if visible{"◉"}else{"○"})
                             .on_hover_text(if visible{"Hide vector"}else{"Show vector"})
@@ -50,15 +51,37 @@ impl Studio {
                         let marker=if is_path{"⌁"}else{"▱"};
                         if ui.selectable_label(selected,format!("{marker}  {name}"))
                             .on_hover_text("Select and inspect this vector").clicked(){
-                            if is_path{self.selected_path=Some(id);self.selected=None;}
-                            else{self.selected=Some(id);self.selected_path=None;}
-                            self.selected_node=None;
-                            self.selected_handle=None;
+                            let additive=ui.input(|i|i.modifiers.shift||i.modifiers.command);
+                            self.select_vector(Some(id),additive);
                         }
                     });
                 }
             });
         ui.separator();
+        if self.selected_ids.len()>1{
+            let ids:Vec<u64>=self.selected_ids.iter().copied().collect();
+            ui.strong(format!("{} selected vectors",ids.len()));
+            ui.small("Drag any selected vector to move the entire selection.");
+            ui.horizontal_wrapped(|ui|{
+                if ui.button("Duplicate selection").clicked(){
+                    let first=self.editor.project.next_id;
+                    self.apply(Action::DuplicateMany{ids:ids.clone()});
+                    if self.editor.project.next_id==first+ids.len() as u64{
+                        self.selected_ids=(first..first+ids.len() as u64).collect();
+                        self.selected_path=None;self.selected=None;
+                        self.reconcile_selection();
+                    }
+                }
+                if ui.button("Delete selection").clicked(){
+                    self.apply(Action::RemoveMany{ids});
+                    self.reconcile_selection();
+                }
+                if ui.button("Clear").clicked(){
+                    self.select_vector(None,false);
+                }
+            });
+            return;
+        }
         if let Some(id)=self.selected_id(){
             ui.strong("Selected vector");
             if let Some(p)=self.editor.project.paths.iter().find(|p|p.id==id){
@@ -83,6 +106,7 @@ impl Studio {
                 }
                 if ui.button("Hide").clicked(){
                     self.apply(Action::SetVisible{id,visible:false});
+                    self.reconcile_selection();
                 }
             });
         }else{
@@ -91,6 +115,14 @@ impl Studio {
         }
     }
     fn object_properties(&mut self,ui:&mut egui::Ui) {
+        if self.selected_ids.len()>1{
+            ui.heading(format!("{} selected vectors",self.selected_ids.len()));
+            ui.label("Move them together in Select mode, or use the Objects tab for Duplicate/Delete selection.");
+            if ui.button("Open Objects tab").clicked(){
+                self.inspector_tab=InspectorTab::Objects;
+            }
+            return;
+        }
         let path=self.editor.project.paths.iter()
             .find(|p|Some(p.id)==self.selected_path).cloned();
         if let Some(path)=path {
