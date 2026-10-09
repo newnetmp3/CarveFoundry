@@ -167,3 +167,22 @@ palette, set width/height and choose **Use exact size**, then click the intended
 location on the stock. A ghost outline previews the shape until placed. Existing
 Rust-native .cfd projects continue to open unchanged; machine toolpaths
 and G-code export are still intentionally unavailable.
+
+### Precision positioning and arranging vectors
+
+The Drawing toolbox now includes **Precision Align & Position**.
+Shift/Ctrl-click multiple vectors, then align their left/right/top/bottom
+edges or horizontal/vertical centers, distribute three or more by even
+center spacing, or move their shared bounding rectangle to the material
+edges/center. Curves retain their exact analytic definitions.
+
+For exact work, set **Left X** and **Bottom Y** in millimeters and click
+**Set X/Y**; these are coordinates of the selected shape(s)' combined
+bounding rectangle relative to the lower-left stock origin. Nothing
+moves while you type. Use **Read position** to reset draft coordinates.
+Arrow keys nudge by the adjustable **Step**; Shift+arrow moves ten steps.
+Each accepted transform is a single Undo/Redo action. Geometry locked
+against edits is never moved as part of a group.
+
+This is still a design-only CNC CAD application. Native G-code output,
+toolpath simulation and machining preflight are not implemented.

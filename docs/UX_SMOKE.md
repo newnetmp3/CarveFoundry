@@ -63,3 +63,37 @@ Keep all checkboxes unchecked until verified on the target KDE desktop.
   UI selection does not pollute saved schema.
 
 These tests are explicitly UNCHECKED until run on an actual desktop.
+
+## Native arrange-and-position controls (manual QA, NOT YET VERIFIED)
+
+- [ ] Create an open cubic and a circular arc, select each, and confirm
+      bounds/Center on Stock respect curved extents rather than a control
+      polygon or approximated preview.
+- [ ] Create three rectangles, select them and test Left/Center X/Right,
+      Bottom/Center Y/Top alignment. Ctrl+Z once restores all.
+- [ ] Distribute three differently positioned vectors on X and Y; the
+      outermost vector centers remain fixed, intermediate centers become
+      equally spaced; Undo once restores.
+- [ ] Select a group with differently sized members and align the
+      *combined envelope* to stock center/edges without collapsing the
+      relative spacing. Use stock bottom-left coordinate convention.
+- [ ] Type X=12.3/Y=8.6 as an absolute selection bounding-left/bottom
+      and click Set X/Y: no geometry moves during text editing, one
+      Undo restores the previous geometry. Read Position resynchronizes
+      the inspector.
+- [ ] Use arrow keys and nudge buttons at 0.1 mm then Shift+arrow ×10,
+      confirm no camera pan or unexpectedly rounded off-grid coordinates.
+- [ ] Lock any group member; all precision/group arrangement actions
+      fail closed without partially moving the others.
+- [ ] Editing a text field must NOT trigger keyboard arrows or V/N/P
+      tool selection. Test under KDE Wayland 100%/125%/150% scale.
+- [ ] Save/reopen .cfd; no selected objects or temporary XY fields
+      are persisted, and all retained arc/Bézier geometry is lossless.
+
+All checks above are manual and remain unchecked. Rust CI is not
+real-world pointer/keyboard QA.
+
+- [ ] Select off-center objects; Shift+F and Fit Selection zoom to the exact
+      selection envelope while leaving Undo and saved design untouched.
+- [ ] Quick rectangle, circle and star buttons on the top ribbon enter the
+      same drag-to-draw interaction as the left palette (no unwanted objects).

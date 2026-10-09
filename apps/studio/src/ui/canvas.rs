@@ -19,9 +19,14 @@ impl Studio {
             if ui.button("Fit [F]").clicked(){
                 self.zoom=1.0;self.pan=Vec2::ZERO;
             }
+            if ui.add_enabled(!self.selected_ids.is_empty(),
+                egui::Button::new("Fit selection [Shift+F]"))
+                .on_hover_text("Zoom and center the selected geometry without changing project coordinates")
+                .clicked(){self.fit_selection();}
             ui.small("Wheel: zoom   Middle/right-drag: pan");
         });
         let size=ui.available_size().max(Vec2::splat(40.0));
+        self.canvas_size=size;
         let (rect,response)=ui.allocate_exact_size(size,Sense::click_and_drag());
         // Navigation does not modify the design or its Undo history.
         let (mouse,wheel,pan_motion,pan_button)=ui.input(|i|(
@@ -163,6 +168,20 @@ impl Studio {
                     }
                 }
             }
+        }
+        // Selection envelope reflects exact analytic arcs/Bézier extrema,
+        // not the coarse on-screen path sampling. Purely visual; no resize
+        // handles are shown until a proper validated resize tool exists.
+        if self.edit_mode==EditMode::Objects
+            && let Some((low,high))=self.selection_envelope(){
+            let outline=egui::Rect::from_two_pos(screen(low),screen(high));
+            painter.rect_stroke(outline,0.0,Stroke::new(1.25,super::theme::SELECTION),
+                egui::StrokeKind::Outside);
+            let caption=format!("{} selected  ·  {:.2} × {:.2} mm",
+                self.selected_ids.len(),high.x-low.x,high.y-low.y);
+            let label=screen(Point::new(low.x,high.y))+Vec2::new(1.0,-8.0);
+            painter.text(label,egui::Align2::LEFT_BOTTOM,caption,
+                egui::FontId::monospace(11.0),super::theme::SELECTION);
         }
         painter.text(screen(Point::new(0.,0.))+Vec2::new(6.,6.),
             egui::Align2::LEFT_TOP,"XY0",
