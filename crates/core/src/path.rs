@@ -239,7 +239,8 @@ impl AnalyticPath {
         let n=draft.nodes.len();
         let incoming=if i>0{Some(i-1)}else if draft.closed{Some(n-1)}else{None};
         let outgoing=if i<draft.segments.len(){Some(i)}else{None};
-        let old_arcs:[Option<(usize,Point,Point,Point,bool)>;2]=
+        type ArcSnapshot=(usize,Point,Point,Point,bool);
+        let old_arcs:[Option<ArcSnapshot>;2]=
             [incoming,outgoing].map(|index|index.and_then(|j|{
                 let (a,b)=draft.endpoints(j);
                 match draft.segments[j].curve {
