@@ -242,7 +242,7 @@ Switch Select/Nodes/Pen or Escape to cancel the tool.
 - The grouped palette, ribbon and Drawing menu now select tools
   instead of instantly dropping arbitrary-offset shapes. For
   keyboard-driven precision, use collapsed Vector Dimensions and
-  "Place exact-size" to add a shape at a known offset.
+  "Use exact size" to click a precise lower-left placement on the stock with an uncommitted ghost preview.
 - Regression tests cover any-corner drag, aspect lock, no movement,
   invalid geometry, non-mutating tool selection, single-step Undo.
 - **CI pending.** Human Wayland QA not done. This is design-only;
