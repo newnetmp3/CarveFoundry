@@ -111,7 +111,7 @@ impl Editor {
                         path.next_element_id=id.checked_add(1).ok_or("Segment IDs exhausted")?;
                         path.segments.push(PathSegment{id,curve:Curve::Line});
                     } else {
-                        path.segments.pop();
+                        let _ = path.segments.pop();
                     }
                     path.closed=closed;
                 }
