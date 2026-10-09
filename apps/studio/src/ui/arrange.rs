@@ -5,7 +5,7 @@ use carvefoundry_core::{Arrangement,Point,vector_bounds};
 use eframe::egui;
 
 impl Studio{
-    fn selection_envelope(&self)->Option<(Point,Point)>{
+    pub(crate) fn selection_envelope(&self)->Option<(Point,Point)>{
         let mut lo=Point::new(f64::INFINITY,f64::INFINITY);
         let mut hi=Point::new(f64::NEG_INFINITY,f64::NEG_INFINITY);
         for id in &self.selected_ids{
