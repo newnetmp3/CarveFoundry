@@ -180,7 +180,7 @@ impl Studio {
         ui.heading("DESIGN TOOLS");
         ui.small("All geometry, history and file operations run natively in Rust.");
         ui.separator();
-        ui.strong("ADD CLOSED CONTOUR");
+        ui.strong("DRAW / CREATE");
         ui.label("Name");
         ui.text_edit_singleline(&mut self.shape_name);
         ui.horizontal(|ui|{
@@ -193,7 +193,36 @@ impl Studio {
             ui.add(egui::DragValue::new(&mut self.shape_height)
                 .range(0.1..=10_000.0).suffix(" mm"));
         });
-        if ui.button("＋ Add rectangle").clicked(){self.add_rectangle();}
+        ui.label("Basic shapes");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("▭ Rectangle").clicked(){self.add_shape(ShapeKind::Rectangle);}
+            if ui.button("◯ Circle").clicked(){self.add_shape(ShapeKind::Circle);}
+            if ui.button("⬭ Ellipse").clicked(){self.add_shape(ShapeKind::Ellipse);}
+        });
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("△ Triangle").clicked(){self.add_shape(ShapeKind::Triangle);}
+            if ui.button("Pentagon").clicked(){self.add_shape(ShapeKind::Pentagon);}
+            if ui.button("Hexagon").clicked(){self.add_shape(ShapeKind::Hexagon);}
+            if ui.button("Octagon").clicked(){self.add_shape(ShapeKind::Octagon);}
+            if ui.button("☆ Star").clicked(){self.add_shape(ShapeKind::Star);}
+        });
+        if ui.button("✎ Draw polyline / polygon").clicked(){
+            self.edit_mode=EditMode::Draw;
+            self.drawing.clear();
+            self.selected_node=None;self.selected_handle=None;
+        }
+        if self.edit_mode==EditMode::Draw {
+            ui.checkbox(&mut self.draw_closed,"Close outline into polygon");
+            ui.label(format!("{} points · click canvas to add",self.drawing.len()));
+            ui.horizontal(|ui|{
+                if ui.add_enabled(self.drawing.len()>=if self.draw_closed{3}else{2},
+                    egui::Button::new("Finish ↵")).clicked(){self.finish_drawing();}
+                if ui.button("Cancel Esc").clicked(){
+                    self.drawing.clear();self.edit_mode=EditMode::Objects;
+                }
+            });
+            ui.small("Click each point on stock · Enter/double-click finishes · Escape cancels. Grid snap optional.");
+        }
         ui.separator();
         ui.strong("ADD RETAINED ANALYTIC PATH");
         ui.horizontal_wrapped(|ui|{
@@ -204,24 +233,54 @@ impl Studio {
         ui.small("Line/arc/cubic remain mathematical segments in .cfd. The displayed linework is preview-only.");
         ui.separator();
         ui.heading("EDIT MODE");
-        ui.horizontal(|ui|{
-            ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"Move objects");
-            ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"Edit nodes");
+        ui.horizontal_wrapped(|ui|{
+            ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"V · Select");
+            ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"N · Nodes");
+            ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"P · Pen");
         });
         ui.small("Object mode translates complete contours/paths. Node mode edits anchors and cubic handles without flattening curves.");
         ui.separator();
         ui.heading("POSITION");
-        ui.checkbox(&mut self.use_grid,"Snap drag to stock XY grid");
+        ui.checkbox(&mut self.use_grid,"Snap drag delta to grid");
         ui.horizontal(|ui|{
             ui.label("Grid");
             ui.add(egui::DragValue::new(&mut self.grid_step)
                 .range(0.1..=100.0).suffix(" mm"));
         });
-        ui.small("Stock XY0 is bottom-left. Object/node/control drags become a single Undo action.");
+        ui.small("First click-drag an anchor/handle directly. Drags start at mouse-down position. Grid snaps movement only and never jumps the node to grid.");
         ui.separator();
-        ui.heading("NEXT MILESTONES");
-        ui.label("• Arc constraint and tangent controls");
-        ui.label("• SVG/DXF, fonts and text");
+        ui.heading("EDIT OPERATIONS");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Duplicate · Ctrl+D").clicked(){
+                self.run_selected(|id|Action::Duplicate{id});
+            }
+            if ui.button("Flip X").clicked(){
+                self.run_selected(|id|Action::Flip{id,horizontal:true});
+            }
+            if ui.button("Flip Y").clicked(){
+                self.run_selected(|id|Action::Flip{id,horizontal:false});
+            }
+        });
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Center X").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:true,vertical:false});
+            }
+            if ui.button("Center Y").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:false,vertical:true});
+            }
+            if ui.button("Center both").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:true,vertical:true});
+            }
+        });
+        ui.horizontal(|ui|{
+            if ui.button("Show").clicked(){
+                self.run_selected(|id|Action::SetVisible{id,visible:true});
+            }
+            if ui.button("Hide").clicked(){
+                self.run_selected(|id|Action::SetVisible{id,visible:false});
+            }
+        });
+        ui.small("Ctrl+Z Undo · Ctrl+Shift+Z/Ctrl+Y Redo · Delete removes selection · Escape cancels drag · F fits view.");
         ui.label("• True 3D mesh viewport");
         ui.label("• Native machining operations");
         ui.label("• Fixture-aware CAM safety");
