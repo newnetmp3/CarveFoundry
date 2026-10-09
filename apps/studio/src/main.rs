@@ -339,10 +339,7 @@ impl Studio {
             height_mm:placement.height_mm,
         });
         if self.editor.project.paths.iter().any(|p|p.id==id){
-            self.selected_path=Some(id);
-            self.selected=None;
-            self.selected_node=None;
-            self.selected_handle=None;
+            self.select_vector(Some(id),false);
             self.inspector_tab=InspectorTab::Properties;
             self.shape_width=placement.width_mm;
             self.shape_height=placement.height_mm;
