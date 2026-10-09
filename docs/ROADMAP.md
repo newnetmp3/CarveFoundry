@@ -204,3 +204,15 @@ cutting, CAM or machine-safety feature is enabled.
 multi-object selection, stronger 2D geometry snapping, text, SVG/DXF,
 layers and conventional CAD transformation tools. CNC preflight remains
 a separate future release gate.
+
+## R1 precision usability batch — active PR
+
+Native multi-object selection and geometry snapping are the immediate
+workflow priority: Shift/Ctrl-click additive selection, CAD enclosure/crossing
+marquee, validated atomic group move/duplicate/delete, real vector vertex and
+line-midpoint snapping, stock-corner snap, and UI indicators/toggles.
+Selection is a transient editor property, **never a .cfd schema change**.
+Do not silently apply single-vector mirror/rotate to only part of a group.
+Acceptance requires a single Undo step for group editing, fail-closed locks,
+no snapping against the actively edited source, and real Wayland pointer QA.
+Design-only machine safety boundary unchanged.
