@@ -14,6 +14,11 @@ pub(crate) fn install(ctx:&egui::Context) {
     style.visuals.widgets.active.bg_fill=Color32::from_rgb(54,108,147);
     style.visuals.selection.bg_fill=Color32::from_rgb(47,111,159);
     style.visuals.selection.stroke.color=Color32::WHITE;
+    style.text_styles.insert(egui::TextStyle::Body,egui::FontId::proportional(14.0));
+    style.text_styles.insert(egui::TextStyle::Button,egui::FontId::proportional(14.0));
+    style.text_styles.insert(egui::TextStyle::Small,egui::FontId::proportional(12.0));
+    style.text_styles.insert(egui::TextStyle::Heading,egui::FontId::proportional(17.0));
+    style.text_styles.insert(egui::TextStyle::Monospace,egui::FontId::monospace(13.0));
     style.spacing.item_spacing=egui::vec2(6.0,6.0);
     style.spacing.button_padding=egui::vec2(10.0,6.0);
     style.spacing.interact_size.y=30.0;
