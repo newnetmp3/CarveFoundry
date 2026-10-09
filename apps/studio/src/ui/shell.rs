@@ -41,18 +41,16 @@ impl Studio {
                 ui.menu_button("Edit",|ui|{
                     if ui.add_enabled(self.editor.can_undo(),
                         egui::Button::new("Undo  Ctrl+Z")).clicked(){
-                        self.editor.undo();ui.close();
+                        self.editor.undo();self.reconcile_selection();ui.close();
                     }
                     if ui.add_enabled(self.editor.can_redo(),
                         egui::Button::new("Redo  Ctrl+Y")).clicked(){
-                        self.editor.redo();ui.close();
+                        self.editor.redo();self.reconcile_selection();ui.close();
                     }
                     ui.separator();
                     if ui.add_enabled(self.selected_id().is_some(),
                         egui::Button::new("Duplicate  Ctrl+D")).clicked(){
-                        if let Some(id)=self.selected_id(){
-                            self.apply(Action::Duplicate{id});
-                        }
+                        self.duplicate_selection();
                         ui.close();
                     }
                     if ui.add_enabled(self.selected_id().is_some(),
@@ -66,7 +64,8 @@ impl Studio {
                         self.zoom=1.0;self.pan=egui::Vec2::ZERO;ui.close();
                     }
                     ui.checkbox(&mut self.show_grid,"Show grid");
-                    ui.checkbox(&mut self.use_grid,"Snap movement");
+                    ui.checkbox(&mut self.use_grid,"Snap movement to grid");
+                    ui.checkbox(&mut self.snap_features,"Snap endpoints / midpoints");
                     if ui.button("Material setup").clicked(){
                         self.inspector_tab=InspectorTab::Job;ui.close();
                     }
@@ -146,9 +145,13 @@ impl Studio {
                 }
                 ui.separator();
                 if ui.add_enabled(self.editor.can_undo(),egui::Button::new("↶"))
-                    .on_hover_text("Undo, Ctrl+Z").clicked(){self.editor.undo();}
+                    .on_hover_text("Undo, Ctrl+Z").clicked(){
+                    self.editor.undo();self.reconcile_selection();
+                }
                 if ui.add_enabled(self.editor.can_redo(),egui::Button::new("↷"))
-                    .on_hover_text("Redo, Ctrl+Y").clicked(){self.editor.redo();}
+                    .on_hover_text("Redo, Ctrl+Y").clicked(){
+                    self.editor.redo();self.reconcile_selection();
+                }
                 if ui.button("Fit").on_hover_text("Fit stock to canvas [F]").clicked(){
                     self.zoom=1.0;self.pan=egui::Vec2::ZERO;
                 }
@@ -174,7 +177,10 @@ impl Studio {
                     ui.small(format!("X {:.2}   Y {:.2} mm",at.x,at.y));
                     ui.separator();
                 }
-                ui.small(if self.use_grid{"Snap ON"}else{"Snap OFF"});
+                ui.small(format!("Grid {} · Features {} · {} selected",
+                    if self.use_grid{"ON"}else{"OFF"},
+                    if self.snap_features{"ON"}else{"OFF"},
+                    self.selected_ids.len()));
                 ui.separator();
                 ui.label(&self.status);
             });
@@ -220,6 +226,9 @@ impl Studio {
             .open(&mut self.show_help).resizable(false).show(ctx,|ui|{
                 ui.heading("Drawing workspace");
                 ui.label("V  Select and move complete objects");
+                ui.label("Shift / Ctrl-click  Toggle vectors in selection");
+                ui.label("Drag blank stock  Marquee: left→right encloses, right→left crosses");
+                ui.label("Drag selected vectors  Move together with one Undo");
                 ui.label("N  Edit nodes and Bézier handles");
                 ui.label("P  Draw point-by-point polyline or polygon");
                 ui.label("Shape button  →  drag its size on the stock");
