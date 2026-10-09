@@ -43,6 +43,7 @@ struct Studio {
     selected_handle: Option<(u64,u8)>,
     edit_mode: EditMode,
     active_shape: Option<ShapeKind>,
+    exact_shape_placement: bool,
     shape_drag_start: Option<Point>,
     shape_drag_delta: Option<Point>,
     shape_name: String,
@@ -80,6 +81,7 @@ impl Default for Studio {
             selected_handle: None,
             edit_mode: EditMode::Objects,
             active_shape: None,
+            exact_shape_placement: false,
             shape_drag_start: None,
             shape_drag_delta: None,
             shape_name: "New vector".into(),
@@ -117,6 +119,7 @@ impl Studio {
         self.selected_handle = None;
         self.drag = None;
         self.active_shape=None;
+        self.exact_shape_placement=false;
         self.shape_drag_start=None;
         self.shape_drag_delta=None;
         self.drawing.clear();
@@ -143,6 +146,7 @@ impl Studio {
                 self.selected_handle = None;
                 self.drag = None;
                 self.active_shape=None;
+                self.exact_shape_placement=false;
                 self.shape_drag_start=None;
                 self.shape_drag_delta=None;
                 self.drawing.clear();
@@ -241,6 +245,7 @@ impl Studio {
     }
     fn choose_shape_tool(&mut self,kind:ShapeKind){
         self.active_shape=Some(kind);
+        self.exact_shape_placement=false;
         self.shape_drag_start=None;
         self.shape_drag_delta=None;
         self.edit_mode=EditMode::Objects;
@@ -248,6 +253,12 @@ impl Studio {
         self.drag=None;
         self.status=format!("{}: drag a diagonal on the material. Shift constrains proportions; Esc cancels.",
             kind.title());
+    }
+    fn choose_exact_shape_placement(&mut self,kind:ShapeKind){
+        self.choose_shape_tool(kind);
+        self.exact_shape_placement=true;
+        self.status=format!("{}: click a starting position on the stock to place a {:.2} × {:.2} mm vector.",
+            kind.title(),self.shape_width,self.shape_height);
     }
     fn create_drag_shape(&mut self,kind:ShapeKind,placement:carvefoundry_core::ShapePlacement){
         let id=self.editor.project.next_id;
@@ -354,6 +365,7 @@ impl Studio {
         if escape{
             if self.active_shape.is_some(){
                 self.active_shape=None;
+                self.exact_shape_placement=false;
                 self.shape_drag_start=None;
                 self.shape_drag_delta=None;
                 self.status="Drawing tool cancelled".into();
@@ -386,7 +398,7 @@ impl Studio {
         }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
-        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
+        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;self.shape_drag_delta=None;}
         if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
         if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
             self.shape_drag_start=None;self.shape_drag_delta=None;self.drawing.clear();}
@@ -433,6 +445,7 @@ mod tests {
         assert_eq!(studio.active_shape,Some(ShapeKind::Rectangle));
         assert_eq!(studio.editor.project,before);
         studio.active_shape=None;
+        studio.exact_shape_placement=false;
         studio.shape_drag_start=None;
         assert_eq!(studio.editor.project,before);
         assert!(!studio.editor.can_undo());
@@ -454,6 +467,24 @@ mod tests {
         assert!(studio.editor.undo());
         assert_eq!(studio.editor.project,original);
         assert!(!studio.editor.can_undo());
+    }
+
+    #[test]
+    fn exact_shape_position_mode_is_non_mutating_until_placed() {
+        let mut studio=Studio::default();
+        let original=studio.editor.project.clone();
+        studio.choose_exact_shape_placement(ShapeKind::Rectangle);
+        assert!(studio.exact_shape_placement);
+        assert_eq!(studio.editor.project,original);
+        let desired=carvefoundry_core::ShapePlacement{
+            origin:Point::new(37.5,18.25),
+            width_mm:studio.shape_width,
+            height_mm:studio.shape_height,
+        };
+        studio.create_drag_shape(ShapeKind::Rectangle,desired);
+        assert_eq!(studio.editor.project.paths[0].origin,desired.origin);
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,original);
     }
 
     #[test]
