@@ -150,3 +150,20 @@ yet; this version only inserts/deletes nodes on eligible straight segments.
 Text, SVG/DXF, tool libraries, 3D, CAM and NC export are not implemented.
 See `docs/UX_SMOKE.md` for manual KDE Plasma/Wayland tests. A green CI
 does NOT substitute for testing pointer behaviors on your actual display.
+
+
+### Direct shape placement
+
+In the **Drawing** workspace select Rectangle, Circle, Ellipse, Star or
+Polygon from the tool palette, top ribbon or Drawing menu. Drag a
+diagonal across the stock to draw; the temporary outline and live
+width/height preview appear until mouse release. **No object is added
+until you release the button.** Hold Shift for equal width and height;
+circles constrain to a square automatically. Press Esc or select
+V/N/P to leave the shape tool. The tool remains active to draw more.
+
+For precise predefined sizes open **Vector Dimensions** in the left
+palette, set width/height and choose **Use exact size**, then click the intended lower-left
+location on the stock. A ghost outline previews the shape until placed. Existing
+Rust-native .cfd projects continue to open unchanged; machine toolpaths
+and G-code export are still intentionally unavailable.

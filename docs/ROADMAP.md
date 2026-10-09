@@ -167,3 +167,21 @@ acceptance. Fix clipping, scaling, pen-node dragging, keyboard focus,
 native portal dialogs and material/property-pane regressions before
 implementing unsupported CAD/CAM tooling. Do not claim to have matched
 every feature of commercial software, or unlock NC export.
+
+
+## UI iteration — drag-to-draw shape tools
+
+Active branch `feature/rust-drag-to-draw-cad`: replace arbitrary-offset
+shape spawning with direct bounding-box drawing on the stock. Preview
+without modifying the model; commit a single Undo operation on
+mouse release. Shift constrains proportions, Circles stay square,
+Escape and tiny drags do not change the project, and the numeric
+size controls allow precise click-to-place positioning with an uncommitted ghost preview.
+Bounded/finite geometry, off-grid origin and reverse-direction
+gestures are checked in pure Rust tests. No NC output is enabled.
+CI and manual KDE Wayland acceptance are separate gates.
+
+Next prioritize interactive position/size feedback, multi-object
+selection, actual vector snapping and vector editing ergonomics,
+then SVG/text/layer tools. Do not substitute a decorative UI for
+working CAD operations.

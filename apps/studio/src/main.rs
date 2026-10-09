@@ -42,6 +42,10 @@ struct Studio {
     selected_node: Option<u64>,
     selected_handle: Option<(u64,u8)>,
     edit_mode: EditMode,
+    active_shape: Option<ShapeKind>,
+    exact_shape_placement: bool,
+    shape_drag_start: Option<Point>,
+    shape_drag_delta: Option<Point>,
     shape_name: String,
     shape_width: f64,
     shape_height: f64,
@@ -76,6 +80,10 @@ impl Default for Studio {
             selected_node: None,
             selected_handle: None,
             edit_mode: EditMode::Objects,
+            active_shape: None,
+            exact_shape_placement: false,
+            shape_drag_start: None,
+            shape_drag_delta: None,
             shape_name: "New vector".into(),
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
@@ -110,6 +118,10 @@ impl Studio {
         self.selected_node = None;
         self.selected_handle = None;
         self.drag = None;
+        self.active_shape=None;
+        self.exact_shape_placement=false;
+        self.shape_drag_start=None;
+        self.shape_drag_delta=None;
         self.drawing.clear();
         self.pan=Vec2::ZERO;self.zoom=1.0;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
@@ -133,6 +145,10 @@ impl Studio {
                 self.selected_node = None;
                 self.selected_handle = None;
                 self.drag = None;
+                self.active_shape=None;
+                self.exact_shape_placement=false;
+                self.shape_drag_start=None;
+                self.shape_drag_delta=None;
                 self.drawing.clear();
                 self.pan=Vec2::ZERO;self.zoom=1.0;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
@@ -227,6 +243,42 @@ impl Studio {
             self.edit_mode=EditMode::Objects;
         }
     }
+    fn choose_shape_tool(&mut self,kind:ShapeKind){
+        self.active_shape=Some(kind);
+        self.exact_shape_placement=false;
+        self.shape_drag_start=None;
+        self.shape_drag_delta=None;
+        self.edit_mode=EditMode::Objects;
+        self.drawing.clear();
+        self.drag=None;
+        self.status=format!("{}: drag a diagonal on the material. Shift constrains proportions; Esc cancels.",
+            kind.title());
+    }
+    fn choose_exact_shape_placement(&mut self,kind:ShapeKind){
+        self.choose_shape_tool(kind);
+        self.exact_shape_placement=true;
+        self.status=format!("{}: click a starting position on the stock to place a {:.2} × {:.2} mm vector.",
+            kind.title(),self.shape_width,self.shape_height);
+    }
+    fn create_drag_shape(&mut self,kind:ShapeKind,placement:carvefoundry_core::ShapePlacement){
+        let id=self.editor.project.next_id;
+        self.apply(Action::AddShape{
+            kind,name:format!("{} {}",self.shape_name,kind.title()),
+            origin:placement.origin,width_mm:placement.width_mm,
+            height_mm:placement.height_mm,
+        });
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);
+            self.selected=None;
+            self.selected_node=None;
+            self.selected_handle=None;
+            self.inspector_tab=InspectorTab::Properties;
+            self.shape_width=placement.width_mm;
+            self.shape_height=placement.height_mm;
+            self.status=format!("Created {}: {:.2} × {:.2} mm. Drag again to add another.",
+                kind.title(),placement.width_mm,placement.height_mm);
+        }
+    }
     fn finish_drawing(&mut self){
         let points=std::mem::take(&mut self.drawing);
         if points.is_empty(){return;}
@@ -291,7 +343,7 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save)=ui.input(|i|{
+        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
@@ -306,10 +358,18 @@ impl Studio {
              !cmd && i.key_pressed(egui::Key::F),
              cmd && i.key_pressed(egui::Key::N),
              cmd && i.key_pressed(egui::Key::O),
-             cmd && i.key_pressed(egui::Key::S))
+             cmd && i.key_pressed(egui::Key::S),
+             !cmd && i.key_pressed(egui::Key::R),
+             !cmd && i.key_pressed(egui::Key::C))
         });
         if escape{
-            if self.drag.is_some(){
+            if self.active_shape.is_some(){
+                self.active_shape=None;
+                self.exact_shape_placement=false;
+                self.shape_drag_start=None;
+                self.shape_drag_delta=None;
+                self.status="Drawing tool cancelled".into();
+            }else if self.drag.is_some(){
                 self.editor.cancel_drag();
                 self.drag=None;
                 self.status="Drag cancelled · original geometry restored".into();
@@ -338,9 +398,12 @@ impl Studio {
         }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
-        if v{self.edit_mode=EditMode::Objects;}
-        if n{self.edit_mode=EditMode::Nodes;}
-        if p{self.edit_mode=EditMode::Draw;self.drawing.clear();}
+        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;self.shape_drag_delta=None;}
+        if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
+        if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
+            self.shape_drag_start=None;self.shape_drag_delta=None;self.drawing.clear();}
+        if r{self.choose_shape_tool(ShapeKind::Rectangle);}
+        if c{self.choose_shape_tool(ShapeKind::Circle);}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
 
@@ -373,6 +436,56 @@ fn main()->eframe::Result{
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selecting_a_shape_is_not_a_project_edit_and_cancel_is_safe(){
+        let mut studio=Studio::default();
+        let before=studio.editor.project.clone();
+        studio.choose_shape_tool(ShapeKind::Rectangle);
+        assert_eq!(studio.active_shape,Some(ShapeKind::Rectangle));
+        assert_eq!(studio.editor.project,before);
+        studio.active_shape=None;
+        studio.exact_shape_placement=false;
+        studio.shape_drag_start=None;
+        assert_eq!(studio.editor.project,before);
+        assert!(!studio.editor.can_undo());
+    }
+
+    #[test]
+    fn completed_shape_gesture_creates_one_undoable_vector(){
+        let mut studio=Studio::default();
+        studio.choose_shape_tool(ShapeKind::Ellipse);
+        let original=studio.editor.project.clone();
+        let place=carvefoundry_core::shape_placement(
+            Point::new(22.5,13.0),Point::new(50.0,25.0),
+            ShapeKind::Ellipse,false).unwrap();
+        studio.create_drag_shape(ShapeKind::Ellipse,place);
+        assert_eq!(studio.editor.project.paths.len(),1);
+        assert_eq!(studio.editor.project.paths[0].origin,place.origin);
+        assert_eq!(studio.selected_path,Some(1));
+        assert_eq!(studio.active_shape,Some(ShapeKind::Ellipse));
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,original);
+        assert!(!studio.editor.can_undo());
+    }
+
+    #[test]
+    fn exact_shape_position_mode_is_non_mutating_until_placed() {
+        let mut studio=Studio::default();
+        let original=studio.editor.project.clone();
+        studio.choose_exact_shape_placement(ShapeKind::Rectangle);
+        assert!(studio.exact_shape_placement);
+        assert_eq!(studio.editor.project,original);
+        let desired=carvefoundry_core::ShapePlacement{
+            origin:Point::new(37.5,18.25),
+            width_mm:studio.shape_width,
+            height_mm:studio.shape_height,
+        };
+        studio.create_drag_shape(ShapeKind::Rectangle,desired);
+        assert_eq!(studio.editor.project.paths[0].origin,desired.origin);
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,original);
+    }
 
     #[test]
     fn dirty_design_requires_confirmation_before_new(){

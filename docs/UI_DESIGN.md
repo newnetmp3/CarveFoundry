@@ -58,3 +58,25 @@ until native geometry, holder/cutter, fixture and posted-code safeguards exist.
 
 Run the existing complementary test list in UX_SMOKE.md. Physical KDE/Wayland
 interaction is NOT verified by a GitHub compile or an automated geometry test.
+
+
+## Tool-placement usability contract
+
+- Clicking Rectangle/Circle/Ellipse/Polygon/Star in the palette,
+  ribbon or Drawing menu selects a tool; **does not create anything**.
+- Press-drag-release on the paper-toned stock defines shape dimensions.
+  Reverse corners work; all coordinates are mm relative to stock XY0.
+- While dragging, show a temporary outline plus live width × height.
+  No draft vector enters Project or Undo until successful release.
+- Shift locks equal width/height; Circle is always square.
+  The snap option quantizes only pointer displacement, never the
+  original off-grid start coordinate.
+- Escape cancels; choosing Select, Nodes or Pen leaves shape mode.
+  Small/out-of-range placements reject with a status, no history.
+- New objects are selected automatically, displayed in Properties
+  with editable numeric coordinates, and can be undone in one action.
+- Precise numeric size entry remains accessible in Vector Dimensions
+  with an exact-size click-to-place mode and ghost preview.
+- **Manual KDE Wayland QA required:** test pointer capture, fast dragging,
+  modifier behavior, circle radius, reverse direction and no-commit
+  cancellation on 100–150% display scales.

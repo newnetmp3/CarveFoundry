@@ -1,7 +1,8 @@
 //! Large stock-centered 2D vector canvas, bounded rulers/grid, stable
 //! first-press hit testing and direct drag behavior.
 use super::super::{Studio,EditMode,ActiveDrag};
-use carvefoundry_core::{Curve,Hit,PickMode,Point,movement_delta,pick};
+use carvefoundry_core::{Curve,Hit,PickMode,Point,movement_delta,pick,
+    create_shape,shape_placement};
 use eframe::egui;
 use egui::{Color32,Pos2,Sense,Stroke,Vec2};
 impl Studio {
@@ -185,8 +186,82 @@ impl Studio {
         let press_target=pressed.and_then(|p|
             pick(&self.editor.project,p,radius,pick_mode));
 
-        // Pen tool is explicit and non-destructive until Finish.
-        if self.edit_mode==EditMode::Draw {
+        // A shape tool creates one object per mouse gesture. Until release,
+        // the project/Undo history are completely unchanged.
+        if let Some(kind)=self.active_shape {
+            if self.exact_shape_placement {
+                let width=if kind==carvefoundry_core::ShapeKind::Circle {
+                    self.shape_width.min(self.shape_height)
+                }else{self.shape_width};
+                let height=if kind==carvefoundry_core::ShapeKind::Circle {
+                    width
+                }else{self.shape_height};
+                if let Some(cursor)=response.hover_pos()
+                    && back.contains(cursor) {
+                    let origin=to_world(cursor);
+                    if let Ok(preview)=create_shape(1,"Draft".into(),origin,
+                        kind,width,height)
+                        && let Ok(polyline)=preview.preview_points(0.4) {
+                        let screen_points:Vec<Pos2>=polyline.into_iter().map(screen).collect();
+                        painter.add(egui::Shape::closed_line(screen_points,
+                            Stroke::new(1.3,super::theme::SELECTION)));
+                    }
+                }
+                if response.clicked() && let Some(cursor)=pointer
+                    && back.contains(cursor) {
+                    self.create_drag_shape(kind,carvefoundry_core::ShapePlacement{
+                        origin:to_world(cursor),width_mm:width,height_mm:height,
+                    });
+                }
+            }else{
+            if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
+                self.shape_drag_start=ui.input(|i|i.pointer.press_origin())
+                    .filter(|at|back.contains(*at)).map(to_world);
+                self.shape_drag_delta=None;
+                if self.shape_drag_start.is_none(){
+                    self.status="Start drawing inside the material outline".into();
+                }
+            }
+            if let Some(start)=self.shape_drag_start {
+                let delta=response.drag_delta();
+                let snapped=movement_delta(delta.x as f64/scale as f64,
+                    -delta.y as f64/scale as f64,
+                    if self.use_grid{Some(self.grid_step)}else{None});
+                let square=ui.input(|i|i.modifiers.shift);
+                if response.dragged(){
+                    self.shape_drag_delta=Some(snapped);
+                }
+                let final_delta=if response.drag_stopped(){
+                    self.shape_drag_delta.take().unwrap_or(snapped)
+                }else{snapped};
+                if let Ok(placement)=shape_placement(start,final_delta,kind,square)
+                    && let Ok(preview)=create_shape(1,"Draft".into(),placement.origin,
+                        kind,placement.width_mm,placement.height_mm)
+                    && let Ok(outline)=preview.preview_points(0.4) {
+                    let points:Vec<Pos2>=outline.into_iter().map(screen).collect();
+                    painter.add(egui::Shape::closed_line(points,
+                        Stroke::new(2.0,super::theme::SELECTION)));
+                    let top=screen(Point::new(placement.origin.x,
+                        placement.origin.y+placement.height_mm));
+                    painter.text(top+Vec2::new(6.0,-8.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        format!("{:.2} × {:.2} mm",
+                            placement.width_mm,placement.height_mm),
+                        egui::FontId::monospace(12.0),super::theme::SELECTION);
+                }
+                if response.drag_stopped() {
+                    self.shape_drag_start=None;
+                    match shape_placement(start,final_delta,kind,square){
+                        Ok(placement)=>self.create_drag_shape(kind,placement),
+                        Err(error)=>self.status=format!("No shape created: {error}"),
+                    }
+                }
+            }else if response.clicked() {
+                self.status=format!("{} selected: drag a diagonal on the stock to place it.",
+                    kind.title());
+            }
+            }
+        }else if self.edit_mode==EditMode::Draw {
             if response.double_clicked(){
                 self.finish_drawing();
             }else if response.clicked() && let Some(mut at)=pointer_world {

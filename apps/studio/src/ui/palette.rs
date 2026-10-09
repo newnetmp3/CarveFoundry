@@ -3,8 +3,13 @@ use super::super::{EditMode,Studio};
 use carvefoundry_core::{Action,Primitive,ShapeKind};
 use eframe::egui;
 
-fn shape(ui:&mut egui::Ui,label:&str,tip:&str)->bool {
-    ui.add_sized([91.0,38.0],egui::Button::new(label))
+fn shape(ui:&mut egui::Ui,label:&str,tip:&str,selected:bool)->bool {
+    let button=egui::Button::new(label).fill(if selected{
+        egui::Color32::from_rgb(38,108,160)
+    }else{
+        egui::Color32::from_rgb(49,63,80)
+    });
+    ui.add_sized([91.0,38.0],button)
         .on_hover_text(tip).clicked()
 }
 impl Studio {
@@ -13,52 +18,67 @@ impl Studio {
             ui.heading("DRAWING");
             ui.weak("2D vectors");
         });
+        if let Some(tool)=self.active_shape {
+            ui.group(|ui|{
+                ui.strong(format!("{} drawing tool selected",tool.title()));
+                ui.label(if self.exact_shape_placement{"Click the stock to position the precise-size vector."}else{"Drag a diagonal on the stock to set the size."});
+                ui.small(if self.exact_shape_placement{"Dimensions below · Esc cancels tool"}else{"Hold Shift for equal sides · Esc cancels tool"});
+                if ui.button("Exit shape tool [V]").clicked(){
+                    self.active_shape=None;
+                    self.exact_shape_placement=false;
+                    self.shape_drag_start=None;
+                }
+            });
+        }
         ui.label(egui::RichText::new("1  CREATE VECTORS").strong()
             .color(super::theme::ACCENT));
         ui.group(|ui|{
             ui.horizontal_wrapped(|ui|{
-                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle"){
-                    self.add_shape(ShapeKind::Rectangle);
+                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle",self.active_shape==Some(ShapeKind::Rectangle)){
+                    self.choose_shape_tool(ShapeKind::Rectangle);
                 }
-                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation"){
-                    self.add_shape(ShapeKind::Circle);
+                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation",self.active_shape==Some(ShapeKind::Circle)){
+                    self.choose_shape_tool(ShapeKind::Circle);
                 }
-                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse"){
-                    self.add_shape(ShapeKind::Ellipse);
+                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse",self.active_shape==Some(ShapeKind::Ellipse)){
+                    self.choose_shape_tool(ShapeKind::Ellipse);
                 }
-                if shape(ui,"△ Triangle","Create a 3-sided closed vector"){
-                    self.add_shape(ShapeKind::Triangle);
+                if shape(ui,"△ Triangle","Create a 3-sided closed vector",self.active_shape==Some(ShapeKind::Triangle)){
+                    self.choose_shape_tool(ShapeKind::Triangle);
                 }
-                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector"){
-                    self.add_shape(ShapeKind::Hexagon);
+                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector",self.active_shape==Some(ShapeKind::Hexagon)){
+                    self.choose_shape_tool(ShapeKind::Hexagon);
                 }
-                if shape(ui,"☆ Star","Create a ten-node star outline"){
-                    self.add_shape(ShapeKind::Star);
+                if shape(ui,"☆ Star","Create a ten-node star outline",self.active_shape==Some(ShapeKind::Star)){
+                    self.choose_shape_tool(ShapeKind::Star);
                 }
-                if shape(ui,"Pentagon","Create a 5-sided outline"){
-                    self.add_shape(ShapeKind::Pentagon);
+                if shape(ui,"Pentagon","Create a 5-sided outline",self.active_shape==Some(ShapeKind::Pentagon)){
+                    self.choose_shape_tool(ShapeKind::Pentagon);
                 }
-                if shape(ui,"Octagon","Create an 8-sided outline"){
-                    self.add_shape(ShapeKind::Octagon);
+                if shape(ui,"Octagon","Create an 8-sided outline",self.active_shape==Some(ShapeKind::Octagon)){
+                    self.choose_shape_tool(ShapeKind::Octagon);
                 }
             });
         });
+        ui.small("Click a shape tool, then drag its size on the stock. The project changes only when you release.");
         ui.add_space(5.0);
         ui.label(egui::RichText::new("2  DRAW PATHS").strong()
             .color(super::theme::ACCENT));
         ui.group(|ui|{
             ui.horizontal_wrapped(|ui|{
-                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing"){
+                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing",false){
                     self.edit_mode=EditMode::Draw;
+                    self.active_shape=None;
+                    self.shape_drag_start=None;
                     self.drawing.clear();
                 }
-                if shape(ui,"／ Line","Create an editable analytic straight segment"){
+                if shape(ui,"／ Line","Create an editable analytic straight segment",false){
                     self.add_analytic(Primitive::Line);
                 }
-                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends"){
+                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends",false){
                     self.add_analytic(Primitive::Arc);
                 }
-                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve"){
+                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve",false){
                     self.add_analytic(Primitive::Cubic);
                 }
             });
@@ -92,7 +112,12 @@ impl Studio {
                     cols[1].add(egui::DragValue::new(&mut self.shape_height)
                         .range(0.1..=10_000.0).speed(0.5));
                 });
-                ui.weak("Dimensions apply to newly created vectors.");
+                ui.weak("For precise placement: enter dimensions, then click the stock position.");
+                if let Some(kind)=self.active_shape
+                    && ui.button(format!("Use exact size: {} (click stock)",kind.title()))
+                        .on_hover_text("Switches to click-to-place mode; no vector is created until you click stock").clicked(){
+                    self.choose_exact_shape_placement(kind);
+                }
             });
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
             .default_open(true).show(ui,|ui|{
