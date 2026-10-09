@@ -67,6 +67,33 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
     }
     None
 }
+/// Conventional CAD marquee: left-to-right encloses whole vectors;
+/// right-to-left crossing selects any overlapping vector bounds.
+pub fn marquee_ids(project:&Project,start:Point,end:Point)->Vec<u64>{
+    if !start.finite() || !end.finite(){return Vec::new();}
+    let (min_x,max_x)=(start.x.min(end.x),start.x.max(end.x));
+    let (min_y,max_y)=(start.y.min(end.y),start.y.max(end.y));
+    let contain=end.x>=start.x;
+    let matches=|points:&[Point]|{
+        if points.is_empty(){return false;}
+        let lo_x=points.iter().map(|p|p.x).fold(f64::INFINITY,f64::min);
+        let hi_x=points.iter().map(|p|p.x).fold(f64::NEG_INFINITY,f64::max);
+        let lo_y=points.iter().map(|p|p.y).fold(f64::INFINITY,f64::min);
+        let hi_y=points.iter().map(|p|p.y).fold(f64::NEG_INFINITY,f64::max);
+        if contain{lo_x>=min_x&&hi_x<=max_x&&lo_y>=min_y&&hi_y<=max_y}
+        else{lo_x<=max_x&&hi_x>=min_x&&lo_y<=max_y&&hi_y>=min_y}
+    };
+    let mut ids=Vec::new();
+    for path in project.paths.iter().filter(|p|p.visible){
+        if let Ok(points)=path.preview_points(0.35)
+            && matches(&points){ids.push(path.id);}
+    }
+    for contour in project.contours.iter().filter(|p|p.visible){
+        if matches(&contour.world_points()){ids.push(contour.id);}
+    }
+    ids
+}
+
 /// Exact CAD reference points, never preview-tessellation vertices.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum SnapKind { Vertex, Midpoint, StockCorner }
@@ -147,6 +174,22 @@ mod tests {
         p.paths.push(AnalyticPath::preset(1,"Bezier".into(),
             Point::new(20.0,10.0),Primitive::Cubic,40.0,20.0).unwrap());
         p
+    }
+    #[test]
+    fn selection_marquee_enclosure_vs_crossing_and_hidden(){
+        let mut p=project();
+        p.paths.push(AnalyticPath::preset(2,"Line".into(),
+            Point::new(80.0,40.0),Primitive::Line,40.0,0.0).unwrap());
+        p.next_id=3;
+        assert_eq!(marquee_ids(&p,Point::new(70.0,30.0),
+            Point::new(130.0,50.0)),vec![2]);
+        assert_eq!(marquee_ids(&p,Point::new(85.0,50.0),
+            Point::new(75.0,30.0)),vec![2]);
+        assert!(marquee_ids(&p,Point::new(85.0,30.0),
+            Point::new(95.0,50.0)).is_empty());
+        p.paths[1].visible=false;
+        assert!(marquee_ids(&p,Point::new(130.0,55.0),
+            Point::new(70.0,30.0)).is_empty());
     }
     #[test]
     fn exact_geometry_snaps_to_nodes_and_line_midpoints(){
