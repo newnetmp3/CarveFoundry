@@ -72,12 +72,13 @@ impl Studio {
                     }
                 });
                 ui.menu_button("Drawing",|ui|{
-                    if ui.button("Rectangle").clicked(){self.add_shape(ShapeKind::Rectangle);ui.close();}
-                    if ui.button("Circle").clicked(){self.add_shape(ShapeKind::Circle);ui.close();}
-                    if ui.button("Ellipse").clicked(){self.add_shape(ShapeKind::Ellipse);ui.close();}
-                    if ui.button("Star").clicked(){self.add_shape(ShapeKind::Star);ui.close();}
+                    if ui.button("Rectangle").clicked(){self.choose_shape_tool(ShapeKind::Rectangle);ui.close();}
+                    if ui.button("Circle").clicked(){self.choose_shape_tool(ShapeKind::Circle);ui.close();}
+                    if ui.button("Ellipse").clicked(){self.choose_shape_tool(ShapeKind::Ellipse);ui.close();}
+                    if ui.button("Star").clicked(){self.choose_shape_tool(ShapeKind::Star);ui.close();}
                     ui.separator();
                     if ui.button("Polyline  P").clicked(){
+                        self.active_shape=None;self.shape_drag_start=None;
                         self.edit_mode=EditMode::Draw;self.drawing.clear();ui.close();
                     }
                     if ui.button("Circular arc").clicked(){
@@ -113,12 +114,18 @@ impl Studio {
                 ui.separator();
                 if self.workspace==Workspace::Drawing{
                     ui.strong("MODES");
-                    ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"↖ Select [V]")
-                        .on_hover_text("Select and drag complete vectors");
-                    ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"◇ Nodes [N]")
-                        .on_hover_text("Pick and drag anchors and Bézier handles");
-                    ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"✎ Pen [P]")
-                        .on_hover_text("Click to draw an open polyline or closed polygon");
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"↖ Select [V]")
+                        .on_hover_text("Select and drag complete vectors").clicked(){
+                        self.active_shape=None;self.shape_drag_start=None;
+                    }
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"◇ Nodes [N]")
+                        .on_hover_text("Pick and drag anchors and Bézier handles").clicked(){
+                        self.active_shape=None;self.shape_drag_start=None;
+                    }
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"✎ Pen [P]")
+                        .on_hover_text("Click an open polyline or closed polygon").clicked(){
+                        self.active_shape=None;self.shape_drag_start=None;
+                    }
                     ui.separator();
                     ui.strong("QUICK SHAPES");
                     if ui.button("▭").on_hover_text("Rectangle").clicked(){
@@ -149,10 +156,12 @@ impl Studio {
         });
         egui::Panel::bottom("status-line").show(ui,|ui|{
             ui.horizontal_wrapped(|ui|{
-                let mode=match self.edit_mode{
+                let mode=if let Some(kind)=self.active_shape {
+                    kind.title()
+                }else{match self.edit_mode{
                     EditMode::Objects=>"Select",EditMode::Nodes=>"Node edit",
                     EditMode::Draw=>"Pen",
-                };
+                }};
                 ui.label(egui::RichText::new(format!("  {mode}"))
                     .color(super::theme::ACCENT).strong());
                 ui.separator();
@@ -213,6 +222,8 @@ impl Studio {
                 ui.label("V  Select and move complete objects");
                 ui.label("N  Edit nodes and Bézier handles");
                 ui.label("P  Draw point-by-point polyline or polygon");
+                ui.label("Shape button  →  drag its size on the stock");
+                ui.label("Shift while drawing  Equal sides; Esc  Cancel drawing tool");
                 ui.label("Enter  Complete Pen shape · Esc  Cancel");
                 ui.separator();
                 ui.label("Mouse wheel  Zoom under pointer");
