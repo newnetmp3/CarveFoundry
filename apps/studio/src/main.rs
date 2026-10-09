@@ -416,6 +416,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn selecting_a_shape_is_not_a_project_edit_and_cancel_is_safe(){
+        let mut studio=Studio::default();
+        let before=studio.editor.project.clone();
+        studio.choose_shape_tool(ShapeKind::Rectangle);
+        assert_eq!(studio.active_shape,Some(ShapeKind::Rectangle));
+        assert_eq!(studio.editor.project,before);
+        studio.active_shape=None;
+        studio.shape_drag_start=None;
+        assert_eq!(studio.editor.project,before);
+        assert!(!studio.editor.can_undo());
+    }
+
+    #[test]
+    fn completed_shape_gesture_creates_one_undoable_vector(){
+        let mut studio=Studio::default();
+        studio.choose_shape_tool(ShapeKind::Ellipse);
+        let original=studio.editor.project.clone();
+        let place=carvefoundry_core::shape_placement(
+            Point::new(22.5,13.0),Point::new(50.0,25.0),
+            ShapeKind::Ellipse,false).unwrap();
+        studio.create_drag_shape(ShapeKind::Ellipse,place);
+        assert_eq!(studio.editor.project.paths.len(),1);
+        assert_eq!(studio.editor.project.paths[0].origin,place.origin);
+        assert_eq!(studio.selected_path,Some(1));
+        assert_eq!(studio.active_shape,Some(ShapeKind::Ellipse));
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,original);
+        assert!(!studio.editor.can_undo());
+    }
+
+    #[test]
     fn dirty_design_requires_confirmation_before_new(){
         let mut studio=Studio::default();
         studio.add_shape(ShapeKind::Rectangle);
