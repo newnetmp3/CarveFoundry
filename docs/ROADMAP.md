@@ -9,7 +9,7 @@ interfaces, informed by the archived code, without depending on it at runtime.
 
 | Phase | Deliverable | Acceptance | State |
 |---|---|---|---|
-| R0 | Pure Rust monorepo + working 2D canvas | Cargo workspace, geometry, stock/fixture model, versioned files, undo/redo, CI, native window | **Implemented on rust-reboot; CI pending** |
+| R0 | Pure Rust monorepo + working 2D canvas | Cargo workspace, geometry, stock/fixture model, versioned files, undo/redo, CI, native window | **Merged to main via PR #99; Rust CI passed; KDE/Onefinity QA pending** |
 | R1 | Professional vector CAD | Retained line/arc/cubic paths, node/handle editing, snapping, Bézier preservation, real fonts/text, SVG/DXF, layers/grouping, trim/extend, fillet/chamfer | Planned |
 | R2 | 3D geometry workspace | Real mesh load/store, multi-part layers, camera/gizmos, material relief, procedural image-to-depth input, robust Wayland viewport QA | Planned |
 | R3 | Native job definition and tool library | Physical cutter profiles and materials, ordered typed CAM operations, UUID-linked sources, per-stage invalidation/dependency graph | Planned |
@@ -20,7 +20,7 @@ interfaces, informed by the archived code, without depending on it at runtime.
 
 ## Immediate next milestones
 
-1. **R0 QA and usability:** pass Rust/Linux CI, improve exact vector selection,
+1. **R0 QA and usability:** Rust unit tests, strict Clippy and release build passed in [run 37862945581](https://github.com/newnetmp3/CarveFoundry/actions/runs/37862945581). Next improve exact vector selection,
    fixture editing/removal and save/load error feedback; measure native UI
    behavior on KDE Plasma/Wayland before declaring R0 fully accepted.
 2. **R1 analytic vector data core:** persistent segment enum (line, circular
@@ -46,6 +46,8 @@ interfaces, informed by the archived code, without depending on it at runtime.
   and safe rapid positioning, not just positive Z values.
 - Keep operations reproducible and granular. Do not claim cutting readiness
   on the basis of editor tests, Rust compilation or a preview.
+
+The clean-slate Rust reboot was merged as [PR #99](https://github.com/newnetmp3/CarveFoundry/pull/99) into main at `909ae2a4eef989515cb93d66cf9de41f4709f0f3`. The 10 pure-core Rust tests passed; strict Clippy and native Linux release compilation passed on exact PR head `916cffe80dd8f1860aa7f4c3552f529eab3db310`. This does not establish tested physical KDE Wayland behavior or CNC safety.
 
 The archived Python application is evidence/reference only; it is not linked
 or executed by the clean Rust workspace. A future CF3D-to-CFD migration
