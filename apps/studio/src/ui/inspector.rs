@@ -33,7 +33,7 @@ impl Studio {
                 (p.id,p.name.clone(),p.visible,p.locked,false)))
             .collect();
         egui::ScrollArea::vertical().id_salt("object-tree")
-            .max_height(ui.available_height().max(140.0)*0.64)
+            .max_height(280.0)
             .show(ui,|ui|{
                 for (id,name,visible,locked,is_path) in entries {
                     let selected=self.selected_id()==Some(id);
