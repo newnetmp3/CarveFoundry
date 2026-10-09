@@ -205,7 +205,7 @@ multi-object selection, stronger 2D geometry snapping, text, SVG/DXF,
 layers and conventional CAD transformation tools. CNC preflight remains
 a separate future release gate.
 
-## R1 precision usability batch — active PR
+## Verified R1 precision workflow — PR #108
 
 Native multi-object selection and geometry snapping are the immediate
 workflow priority: Shift/Ctrl-click additive selection, CAD enclosure/crossing
@@ -216,3 +216,9 @@ Do not silently apply single-vector mirror/rotate to only part of a group.
 Acceptance requires a single Undo step for group editing, fail-closed locks,
 no snapping against the actively edited source, and real Wayland pointer QA.
 Design-only machine safety boundary unchanged.
+
+Verified merge: `7ad69fef3125834898adb24cf68323f5f0ced3f6`.
+Exact feature head `b091af41bac0a0a3d0f6c89737cc5b680b6d15b5` passed
+[CI `37876938223`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37876938223):
+48 core + 7 studio tests, strict Clippy, native Linux release compilation.
+Manual desktop acceptance remains separate; no CNC output is implemented.
