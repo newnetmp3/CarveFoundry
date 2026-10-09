@@ -317,3 +317,37 @@ KDE Plasma Wayland mouse capture, scaling and real tool feel are
 No CAM, G-code or controller changes.
 
 | 2026-10-08 | PR #108 bulk vector selection and exact endpoint/midpoint/stock-corner snapping merged | [Rust CI `37876938223`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37876938223): 48 core + 7 studio, strict Clippy, Linux release; main `7ad69fef` | Real KDE/Wayland interaction QA; then multi-object alignment, SVG/DXF, typography |
+
+## Precision placement and arrangement milestone — active development
+
+Branch `feature/rust-precision-arrange-tools`: after multi-selection and
+real-feature snapping (#108), the next blocker is exact XY placement and
+repeatable alignment. New **pure Rust** module `crates/core/src/arrange.rs`
+calculates exact retained-geometry bounds of analytic Line, circular Arc
+(including in-sweep quadrants), Cubic Bézier (quadratic derivative extrema),
+and legacy contour polygons. This avoids relying on a 32-step visual
+approximation when positioning carved vectors.
+
+The `Editor` gains a validated one-Undo `Action::Arrange` preserving stable
+vector identities, curve definitions, and stock XY0. In addition to
+aligning 2+ objects by six edges/centers, users can distribute 3+ vectors
+by equal center spacing, or move an *entire selection envelope* to the
+stock's left/center/right or bottom/center/top without destroying
+relative spacing. Existing fail-closed multi-selection validation
+rejects hidden, locked, unknown and duplicate members atomically.
+
+The new modular native `apps/studio/src/ui/arrange.rs` panel, visible under
+Drawing → **Precision Align & Position**, supports absolute bounding-left
+X and bounding-bottom Y, position resync, nudge buttons and adjustable
+0.01–1000 mm step, arrow-key nudges (Shift ×10), alignment, spacing,
+and stock-positioning controls. Draft input fields do not modify the
+project until the user clicks Set X/Y. Each accepted edit is a single
+Undo operation. Undo/Redo still uses the existing project history.
+
+**CI pending and KDE Wayland desktop UI QA NOT performed.**
+Machine output, toolpaths, posted NC and controller operation remain blocked.
+
+Follow-on: test keyboard modifiers, stock alignment, zero movement,
+mixed analytic/legacy selections, changing window sizes and real monitor
+scales on KDE; then improve selection behavior and implement native text /
+SVG / DXF interoperability without reopening the retired Python GUI.
