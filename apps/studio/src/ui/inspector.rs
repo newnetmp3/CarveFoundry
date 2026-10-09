@@ -3,6 +3,7 @@
 use super::super::{InspectorTab,Studio,EditMode};
 use carvefoundry_core::{Action,Curve,Fixture,Point};
 use eframe::egui;
+use super::icons::{self,Icon};
 
 impl Studio {
     pub(crate) fn inspector(&mut self,ui:&mut egui::Ui) {
@@ -39,17 +40,16 @@ impl Studio {
                 for (id,name,visible,locked,is_path) in entries {
                     let selected=self.selected_ids.contains(&id);
                     ui.horizontal(|ui|{
-                        if ui.small_button(if visible{"◉"}else{"○"})
-                            .on_hover_text(if visible{"Hide vector"}else{"Show vector"})
+                        if icons::small(ui,if visible{"Hide vector"}else{"Show vector"},
+                            if visible{Icon::Eye}else{Icon::Hidden})
                             .clicked(){self.apply(Action::SetVisible{id,visible:!visible});}
-                        if ui.small_button(if locked{"🔒"}else{"◌"})
-                            .on_hover_text(if locked{"Unlock vector"}else{"Lock vector"})
+                        if icons::small(ui,if locked{"Unlock vector"}else{"Lock vector"},
+                            if locked{Icon::Lock}else{Icon::Unlock})
                             .clicked(){
                                 if is_path{self.apply(Action::SetPathLocked{id,locked:!locked});}
                                 else{self.apply(Action::SetLocked{id,locked:!locked});}
                             }
-                        let marker=if is_path{"⌁"}else{"▱"};
-                        if ui.selectable_label(selected,format!("{marker}  {name}"))
+                        if ui.selectable_label(selected,name)
                             .on_hover_text("Select and inspect this vector").clicked(){
                             let additive=ui.input(|i|i.modifiers.shift||i.modifiers.command);
                             self.select_vector(Some(id),additive);
@@ -87,11 +87,18 @@ impl Studio {
             if let Some(p)=self.editor.project.paths.iter().find(|p|p.id==id){
                 ui.label(&p.name);
                 ui.small(format!("{} nodes · {} segments",p.nodes.len(),p.segments.len()));
+                if let Some(node_id)=self.selected_node {
+                    if let Some(node)=p.nodes.iter().find(|node|node.id==node_id){
+                        ui.strong(format!("Node #{}  X {:.2}  Y {:.2} mm",
+                            node_id,node.position.x,node.position.y));
+                        ui.small("Open Properties to edit exact node coordinates.");
+                    }
+                }
             }else if let Some(p)=self.editor.project.contours.iter().find(|p|p.id==id){
                 ui.label(&p.name);
                 ui.small(format!("{} contour vertices",p.vertices.len()));
             }
-            if ui.button("Edit selected properties →").clicked(){
+            if ui.button("Edit properties").clicked(){
                 self.inspector_tab=InspectorTab::Properties;
             }
             ui.horizontal_wrapped(|ui|{
