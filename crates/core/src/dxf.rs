@@ -534,7 +534,7 @@ mod tests{
                     (Curve::Cubic{control1:a,control2:c},
                         Curve::Cubic{control1:b,control2:d})=>{
                         // Translation already validated for path endpoints.
-                        approx(a.offset(0.0,0.0),*b);
+                        approx(a.offset(lhs_path_origin.x,lhs_path_origin.y),*b);
                         approx(c.offset(lhs_path_origin.x,lhs_path_origin.y),*d);
                     }
                     _=>panic!("curve type changed"),
