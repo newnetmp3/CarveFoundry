@@ -460,6 +460,18 @@ impl Studio {
             if ui.checkbox(&mut locked,"Lock contour").changed(){
                 self.apply(Action::SetLocked{id:contour.id,locked});
             }
+            ui.small("Legacy R0 polygon: convert to analytic lines to move individual nodes.");
+            if ui.add_enabled(!locked,egui::Button::new(
+                "Convert to editable nodes"
+            )).clicked(){
+                self.apply(Action::ConvertContour{id:contour.id});
+                if self.editor.project.paths.iter().any(|p|p.id==contour.id){
+                    self.selected_path=Some(contour.id);
+                    self.selected=None;
+                    self.selected_node=None;
+                    self.edit_mode=EditMode::Nodes;
+                }
+            }
             if ui.add_enabled(!contour.locked,
                 egui::Button::new("Delete selected contour")).clicked(){
                 self.apply(Action::Remove{id:contour.id});
