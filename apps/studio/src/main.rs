@@ -26,6 +26,9 @@ struct Studio {
     editor: Editor,
     saved_project: Project,
     project_path: String,
+    rename_target: Option<u64>,
+    rename_draft: String,
+    project_name_draft: String,
     workspace: Workspace,
     inspector_tab: InspectorTab,
     show_grid: bool,
@@ -56,6 +59,9 @@ impl Default for Studio {
             editor: Editor::default(),
             saved_project: Project::default(),
             project_path: "carvefoundry-design.cfd".into(),
+            rename_target: None,
+            rename_draft: String::new(),
+            project_name_draft: Project::default().name,
             workspace: Workspace::Drawing,
             inspector_tab: InspectorTab::Objects,
             show_grid: true,
@@ -88,6 +94,9 @@ impl Studio {
     fn new_document(&mut self) {
         self.editor = Editor::default();
         self.saved_project=self.editor.project.clone();
+        self.project_name_draft=self.editor.project.name.clone();
+        self.rename_target=None;
+        self.rename_draft.clear();
         self.workspace=Workspace::Drawing;
         self.inspector_tab=InspectorTab::Objects;
         self.pending_document=None;
@@ -107,6 +116,9 @@ impl Studio {
             Ok(editor) => {
                 self.editor = editor;
                 self.saved_project=self.editor.project.clone();
+                self.project_name_draft=self.editor.project.name.clone();
+                self.rename_target=None;
+                self.rename_draft.clear();
                 self.workspace=Workspace::Drawing;
                 self.inspector_tab=InspectorTab::Objects;
                 self.pending_document=None;
