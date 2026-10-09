@@ -195,3 +195,12 @@ current design in one Undo operation. **File -> Export vectors as SVG…**
 writes editable line/arc/Bézier sources as SVG artwork, not G-code.
 Unsupported transforms, elliptical arcs and text are rejected explicitly.
 See [SVG interoperability and acceptance](docs/SVG_INTERCHANGE.md).
+
+## Native DXF vector interchange (R1c)
+
+In the native Rust File menu, **Import DXF vectors…** and
+**Export vectors as DXF…** exchange editable 2D outlines in millimetres.
+Supported types include LINE, ARC/CIRCLE, LWPOLYLINE with exact bulges,
+and simple non-rational cubic SPLINE. Unsupported entity types reject
+the entire import. DXF is artwork, not CNC instructions.
+See [DXF compatibility and verification](docs/DXF_INTERCHANGE.md).

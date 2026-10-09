@@ -354,3 +354,15 @@ Desktop KDE/Wayland dialog and scale behavior requires manual acceptance.
 fail-closed contracts, followed by system-font text and vector outline
 generation, grouping/layer organization and analytic trimming.
 SVG output is vector art only; CAM/NC remains disabled.
+
+## R1c — strict editable 2D DXF interchange (active)
+
+PR #113 on feature/rust-r1-dxf-interchange implements pure Rust ASCII DXF
+geometry support: LINE, LWPOLYLINE with signed circular arc bulges, ARC,
+CIRCLE and clamped non-rational cubic SPLINE. Explicit source units, bounded
+coordinates and fail-closed unsupported entities protect CAD geometry.
+Native XDATA preserves editable path sequence on roundtrip. Imports are
+atomic, one-step undoable, and cannot modify .cfd material/fixtures.
+Native KDE File menu provides Import DXF and Export DXF drawing, not NC.
+Regressions, strict CI and separate real desktop QA required before mark done.
+Next: system-font text and editable layers/grouping.

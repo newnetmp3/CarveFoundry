@@ -563,3 +563,28 @@ topology, while preserving edit and SVG round-trip guarantees. CNC export
 remains blocked by native CAM, postprocessor and physical preflight gates.
 
 | 2026-10-09 | PR #112 native source-preserving SVG vector interchange merged | [CI 37970424316](https://github.com/newnetmp3/CarveFoundry/actions/runs/37970424316) green: 57 core + 15 studio, Clippy, native Linux release; main `cca178b1` | KDE SVG import/export QA; then native DXF and system-font vector text |
+
+## R1c DXF interoperability — active 2026-10-09
+
+User continued development with "1". Starting main verified at
+87df38b2b16d895369d56b44e3054372b52e4647, no open PRs.
+The owner confirmed direct node dragging now works.
+
+PR #113: feature/rust-r1-dxf-interchange adds native, bounded ASCII
+DXF source geometry interchange in pure Rust (crates/core/src/dxf.rs).
+Supported 2D LINE, ARC, CIRCLE, LWPOLYLINE signed bulges and four-point
+clamped degree-3 SPLINE. Explicit INSUNITS scales mm/in/cm/m; unsupported
+entities, unknown units, non-planar objects and other spline types fail
+closed without silent vector loss. Native exported XDATA retains source
+multi-span vector grouping and attributes; third-party CAD tools may
+strip XDATA. Files use the native KDE File menu and ImportPaths action
+for one undoable atomic operation with unchanged .cfd stock/fixtures.
+CNC/NC toolpath export remains entirely disabled.
+
+**Verification pending**: exact PR head Rust CI, final merge, actual KDE
+file-dialog and external CAD interchange. Update the rolling record once
+the PR has passed core/studio tests, strict Clippy and release compilation.
+See docs/DXF_INTERCHANGE.md for supported subset and manual QA.
+
+Next major milestones after verified DXF: editable typography from installed
+system fonts, grouping/layers, and CAD curve topology.
