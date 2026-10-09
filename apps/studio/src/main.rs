@@ -136,17 +136,8 @@ impl Studio {
     }
     fn properties(&mut self,ui:&mut egui::Ui) {
         ui.heading("PROJECT");
-        ui.label("Project name");
-        let mut name=self.editor.project.name.clone();
-        if ui.text_edit_singleline(&mut name).changed() {
-            if !name.trim().is_empty() && name.len()<=256 {
-                // Project rename requires a history-aware command; UI is
-                // read-only for names until that command is delivered.
-                self.status="Project rename will be enabled with typed project commands".into();
-            }
-        }
-        ui.weak("Project names become editable in the next design slice");
-        ui.label(format!("Current: {}",self.editor.project.name));
+        ui.strong(&self.editor.project.name);
+        ui.small("Project renaming will be added with undoable project commands.");
         ui.separator();
         ui.heading("STOCK");
         ui.label("XY0 bottom-left · Z0 stock top");
@@ -307,24 +298,19 @@ impl Studio {
                 .find(|part|part.visible &&
                     polygon_contains(&part.world_points(),p)).map(|part|part.id)
         };
-        if response.clicked() {
-            if let Some(cursor)=pointer {
-                self.selected=find(to_world(cursor));
-            }
+        if response.clicked() && let Some(cursor)=pointer {
+            self.selected=find(to_world(cursor));
         }
-        if response.drag_started() {
-            if let Some(cursor)=pointer {
-                self.selected=find(to_world(cursor));
-                if let Some(id)=self.selected {
-                    match self.editor.start_drag(id) {
-                        Ok(anchor)=>self.drag=Some((id,anchor)),
-                        Err(reason)=>self.status=format!("Drag refused: {reason}"),
-                    }
+        if response.drag_started() && let Some(cursor)=pointer {
+            self.selected=find(to_world(cursor));
+            if let Some(id)=self.selected {
+                match self.editor.start_drag(id) {
+                    Ok(anchor)=>self.drag=Some((id,anchor)),
+                    Err(reason)=>self.status=format!("Drag refused: {reason}"),
                 }
             }
         }
-        if response.dragged() {
-            if let Some((id,start))=self.drag {
+        if response.dragged() && let Some((id,start))=self.drag {
                 let pixels=response.drag_delta();
                 let mut next=start.offset(
                     pixels.x as f64/scale as f64,
@@ -338,7 +324,6 @@ impl Studio {
                 if let Err(reason)=self.editor.preview_drag(id,next) {
                     self.status=format!("Drag rejected: {reason}");
                 }
-            }
         }
         if response.drag_stopped() {
             self.editor.finish_drag();
