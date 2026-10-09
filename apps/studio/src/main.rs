@@ -403,12 +403,13 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
+        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
                 || (cmd && i.key_pressed(egui::Key::Y)),
              cmd && i.key_pressed(egui::Key::D),
+             cmd && i.key_pressed(egui::Key::A),
              i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
              i.key_pressed(egui::Key::Escape),
              i.key_pressed(egui::Key::Enter),
@@ -450,6 +451,14 @@ impl Studio {
         if undo{self.editor.undo();self.reconcile_selection();}
         if redo{self.editor.redo();self.reconcile_selection();}
         if duplicate{self.duplicate_selection();}
+        if select_all{
+            self.selected_ids=self.editor.project.paths.iter().filter(|p|p.visible)
+                .map(|p|p.id).chain(self.editor.project.contours.iter()
+                .filter(|p|p.visible).map(|p|p.id)).collect();
+            self.selected_path=None;self.selected=None;
+            self.reconcile_selection();
+            self.edit_mode=EditMode::Objects;
+        }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
         if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;self.shape_drag_delta=None;}
