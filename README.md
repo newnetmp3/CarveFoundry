@@ -80,3 +80,41 @@ The work is only considered a production CNC replacement after the new engine
 passes all acceptance gates in `docs/ROADMAP.md`, especially verified
 toolpath decoding, collision/preflight gating, physical test cuts and KDE
 Wayland acceptance.
+
+## Practical Rust CAD editor controls (usability recovery)
+
+The Rust app now offers **editable analytic rectangles, circles, ellipses,
+triangles, pentagons, hexagons, octagons and stars**, an interactive
+polyline/polygon Pen, straight paths, circular arcs and cubic Bézier paths.
+These are all stored as editable vector paths with stable nodes rather than
+noneditable legacy contour samples. Circles and ellipses currently use four
+cubic Bézier segments (a curve approximation, not mathematically exact
+circle primitives).
+
+- **V** selects/moves objects; **N** directly selects and drags any visible
+  anchor or Bézier control (no initial click to select the parent needed).
+- **P** draws a line/polyline by clicking on the canvas; check **Close outline**
+  for polygons; **Enter** or double-click to finish; **Escape** cancels.
+- **Mouse wheel** zooms around the pointer, **middle/right drag** pans;
+  **F** or **Fit** resets the camera.
+- **Ctrl+Z**, **Ctrl+Y** or **Ctrl+Shift+Z**, **Ctrl+D**, **Delete**:
+  Undo, Redo, Duplicate, Delete selected. Escape cancels an active drag.
+- In the left design toolbar: duplicate, flip horizontally/vertically,
+  rotate 90° in either direction, align object to stock center X/Y,
+  hide/show. All validated edits are Undo/Redo actions.
+- **Grid snapping is OFF by default.** Turning it on snaps *movement
+  displacement*, not the existing position, so a node cannot jump on
+  mouse-down. Pointer target selection is based on original press position,
+  not the position after crossing the drag threshold.
+- Arc endpoints now adjust via **exact circular geometry refits** that
+  preserve signed sweep, and Bézier anchor movement preserves adjacent
+  control-handle offsets.
+
+### Known restrictions
+
+The UI is still design-only. Node insertion/deletion on analytic curved
+segments requires topology-preserving algorithms that are not implemented
+yet; this version only inserts/deletes nodes on eligible straight segments.
+Text, SVG/DXF, tool libraries, 3D, CAM and NC export are not implemented.
+See `docs/UX_SMOKE.md` for manual KDE Plasma/Wayland tests. A green CI
+does NOT substitute for testing pointer behaviors on your actual display.
