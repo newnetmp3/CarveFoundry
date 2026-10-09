@@ -96,13 +96,7 @@ impl Studio {
             }
             ui.horizontal_wrapped(|ui|{
                 if ui.button("Duplicate").on_hover_text("Copy selected geometry").clicked(){
-                    let new_id=self.editor.project.next_id;
-                    self.apply(Action::Duplicate{id});
-                    if self.editor.project.paths.iter().any(|p|p.id==new_id){
-                        self.selected_path=Some(new_id);self.selected=None;
-                    }else if self.editor.project.contours.iter().any(|p|p.id==new_id){
-                        self.selected=Some(new_id);self.selected_path=None;
-                    }
+                    self.duplicate_selection();
                 }
                 if ui.button("Hide").clicked(){
                     self.apply(Action::SetVisible{id,visible:false});
@@ -168,6 +162,7 @@ impl Studio {
                 if ui.add_enabled(!locked,egui::Button::new("Delete")).clicked(){
                     self.apply(Action::RemovePath{id:path.id});
                     self.selected_path=None;self.selected_node=None;
+                    self.reconcile_selection();
                 }
             });
             ui.separator();
@@ -274,7 +269,7 @@ impl Studio {
                 egui::Button::new("Convert to editable nodes")).clicked(){
                 self.apply(Action::ConvertContour{id:contour.id});
                 if self.editor.project.paths.iter().any(|p|p.id==contour.id){
-                    self.selected_path=Some(contour.id);self.selected=None;
+                    self.select_vector(Some(contour.id),false);
                     self.edit_mode=EditMode::Nodes;
                 }
             }
