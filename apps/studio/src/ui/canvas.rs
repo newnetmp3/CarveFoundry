@@ -189,6 +189,31 @@ impl Studio {
         // A shape tool creates one object per mouse gesture. Until release,
         // the project/Undo history are completely unchanged.
         if let Some(kind)=self.active_shape {
+            if self.exact_shape_placement {
+                let width=if kind==carvefoundry_core::ShapeKind::Circle {
+                    self.shape_width.min(self.shape_height)
+                }else{self.shape_width};
+                let height=if kind==carvefoundry_core::ShapeKind::Circle {
+                    width
+                }else{self.shape_height};
+                if let Some(cursor)=response.hover_pos()
+                    && back.contains(cursor) {
+                    let origin=to_world(cursor);
+                    if let Ok(preview)=create_shape(1,"Draft".into(),origin,
+                        kind,width,height)
+                        && let Ok(polyline)=preview.preview_points(0.4) {
+                        let screen_points:Vec<Pos2>=polyline.into_iter().map(screen).collect();
+                        painter.add(egui::Shape::closed_line(screen_points,
+                            Stroke::new(1.3,super::theme::SELECTION)));
+                    }
+                }
+                if response.clicked() && let Some(cursor)=pointer
+                    && back.contains(cursor) {
+                    self.create_drag_shape(kind,carvefoundry_core::ShapePlacement{
+                        origin:to_world(cursor),width_mm:width,height_mm:height,
+                    });
+                }
+            }else{
             if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
                 self.shape_drag_start=ui.input(|i|i.pointer.press_origin())
                     .filter(|at|back.contains(*at)).map(to_world);
@@ -234,6 +259,7 @@ impl Studio {
             }else if response.clicked() {
                 self.status=format!("{} selected: drag a diagonal on the stock to place it.",
                     kind.title());
+            }
             }
         }else if self.edit_mode==EditMode::Draw {
             if response.double_clicked(){
