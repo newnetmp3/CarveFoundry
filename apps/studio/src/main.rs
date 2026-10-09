@@ -8,11 +8,11 @@ use std::path::Path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EditMode { Objects, Nodes, Draw }
-#[derive(Clone,Copy,PartialEq,Eq)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Workspace { Drawing, Toolpaths }
 #[derive(Clone,Copy,PartialEq,Eq)]
 enum InspectorTab { Objects, Properties, Job }
-#[derive(Clone,Copy,PartialEq,Eq)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
 #[derive(Clone, Copy)]
 enum ActiveDrag {
