@@ -222,6 +222,26 @@ impl Studio {
             self.save_document();
         }
     }
+    fn duplicate_selection(&mut self){
+        if self.selected_ids.len()>1{
+            let before=self.editor.project.next_id;
+            let count=self.selected_ids.len();
+            let ids=self.selected_ids.iter().copied().collect();
+            self.apply(Action::DuplicateMany{ids});
+            if self.editor.project.next_id==before+count as u64{
+                self.selected_ids=(before..before+count as u64).collect();
+                self.selected_path=None;self.selected=None;
+                self.reconcile_selection();
+            }
+        }else if let Some(id)=self.selected_id(){
+            let next=self.editor.project.next_id;
+            self.apply(Action::Duplicate{id});
+            if self.editor.project.paths.iter().any(|p|p.id==next)
+                ||self.editor.project.contours.iter().any(|p|p.id==next){
+                self.select_vector(Some(next),false);
+            }
+        }
+    }
     fn delete_selection(&mut self){
         if self.selected_ids.len()>1{
             let ids=self.selected_ids.iter().copied().collect();
@@ -234,11 +254,13 @@ impl Studio {
             if !self.editor.project.paths.iter().any(|p|p.id==id){
                 self.selected_path=None;self.selected_node=None;
                 self.selected_handle=None;
+                self.reconcile_selection();
             }
         }else if let Some(id)=self.selected{
             self.apply(Action::Remove{id});
             if !self.editor.project.contours.iter().any(|p|p.id==id){
                 self.selected=None;
+                self.reconcile_selection();
             }
         }
     }
@@ -359,8 +381,11 @@ impl Studio {
         }
     }
     fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
-        if let Some(id)=self.selected_id(){self.apply(action(id));}
-        else{self.status="Select a shape first".into();}
+        if self.selected_ids.len()!=1{
+            self.status="This operation requires exactly one selected vector".into();
+        }else if let Some(id)=self.selected_id(){
+            self.apply(action(id));
+        }
     }
     fn add_analytic(&mut self,kind:Primitive){
         let id=self.editor.project.next_id;
@@ -425,27 +450,9 @@ impl Studio {
         if new{self.request_document(PendingDocument::New);}
         if open{self.choose_open_document();}
         if save{self.save_command();}
-        if undo{self.editor.undo();}
-        if redo{self.editor.redo();}
-        if duplicate && self.selected_ids.len()>1{
-            let before=self.editor.project.next_id;
-            let count=self.selected_ids.len();
-            let ids=self.selected_ids.iter().copied().collect();
-            self.apply(Action::DuplicateMany{ids});
-            if self.editor.project.next_id==before+count as u64{
-                self.selected_ids=(before..before+count as u64).collect();
-                self.selected_path=None;self.selected=None;
-                self.reconcile_selection();
-            }
-        }else if duplicate && let Some(id)=self.selected_id(){
-            let next=self.editor.project.next_id;
-            self.apply(Action::Duplicate{id});
-            if self.editor.project.paths.iter().any(|p|p.id==next){
-                self.selected_path=Some(next);self.selected=None;
-            }else if self.editor.project.contours.iter().any(|p|p.id==next){
-                self.selected=Some(next);self.selected_path=None;
-            }
-        }
+        if undo{self.editor.undo();self.reconcile_selection();}
+        if redo{self.editor.redo();self.reconcile_selection();}
+        if duplicate{self.duplicate_selection();}
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
         if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;self.shape_drag_delta=None;}
