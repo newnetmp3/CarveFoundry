@@ -78,7 +78,7 @@ impl Studio {
                     if ui.button("Star").clicked(){self.choose_shape_tool(ShapeKind::Star);ui.close();}
                     ui.separator();
                     if ui.button("Polyline  P").clicked(){
-                        self.active_shape=None;self.shape_drag_start=None;
+                        self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                         self.edit_mode=EditMode::Draw;self.drawing.clear();ui.close();
                     }
                     if ui.button("Circular arc").clicked(){
@@ -116,15 +116,15 @@ impl Studio {
                     ui.strong("MODES");
                     if ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"↖ Select [V]")
                         .on_hover_text("Select and drag complete vectors").clicked(){
-                        self.active_shape=None;self.shape_drag_start=None;
+                        self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
                     if ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"◇ Nodes [N]")
                         .on_hover_text("Pick and drag anchors and Bézier handles").clicked(){
-                        self.active_shape=None;self.shape_drag_start=None;
+                        self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
                     if ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"✎ Pen [P]")
                         .on_hover_text("Click an open polyline or closed polygon").clicked(){
-                        self.active_shape=None;self.shape_drag_start=None;
+                        self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
                     ui.separator();
                     ui.strong("QUICK SHAPES");
