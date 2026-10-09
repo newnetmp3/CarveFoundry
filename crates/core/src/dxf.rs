@@ -163,8 +163,8 @@ fn spline(e:&[Pair],units:f64,name:String)->Result<AnalyticPath,String>{
     if flags & (1|2|4|16|32|64|128)!=0 {
         return Err("DXF rational/closed/periodic spline unsupported".into());
     }
-    if integer(e,71,-1)!=3||integer(e,72,-1)!=8||integer(e,73,-1)!=4||
-        integer(e,74,0)!=0{
+    if integer(e,71,-1)?!=3||integer(e,72,-1)?!=8||integer(e,73,-1)?!=4||
+        integer(e,74,0)?!=0{
         return Err("Only clamped, degree-3, four-control-point DXF SPLINE is supported".into());
     }
     let knots=e.iter().filter(|v|v.code==40)
@@ -175,7 +175,7 @@ fn spline(e:&[Pair],units:f64,name:String)->Result<AnalyticPath,String>{
         return Err("DXF spline knots must be clamped cubic Bezier".into());
     }
     if e.iter().filter(|v|v.code==41).any(|v|
-        number(&v.value).is_err_or(|w|(w-1.0).abs()>EPS)){
+        number(&v.value).map_or(true,|w|(w-1.0).abs()>EPS)){
         return Err("Weighted/rational DXF splines unsupported".into());
     }
     let xs=e.iter().filter(|v|v.code==10).map(|v|number(&v.value))
@@ -265,8 +265,8 @@ fn metadata(e:&[Pair])->Result<Option<Meta>,String>{
     if id==0||total==0||total>256||index>=total{
         return Err("DXF vector metadata identity/order invalid".into());
     }
-    let flag=|i:usize|match fields[i]{"0"=>Ok(false),"1"=>Ok(true),
-        _=>Err("Invalid DXF vector metadata bool".into())};
+    let flag=|i:usize|->Result<bool,String>{match fields[i]{"0"=>Ok(false),"1"=>Ok(true),
+        _=>Err("Invalid DXF vector metadata bool".into())}};
     let name=from_hex(&hex)?;
     if name.is_empty()||name.len()>256{return Err("Invalid DXF vector metadata name".into());}
     Ok(Some(Meta{id,index,total,closed:flag(3)?,
@@ -393,7 +393,6 @@ fn curve_bulge(a:Point,b:Point,c:&Curve)->Result<f64,String>{
     match *c{
         Curve::Line=>Ok(0.0),
         Curve::Arc{center,clockwise}=>{
-            let center=center; // path-local; caller passes local endpoints
             let aa=(a.y-center.y).atan2(a.x-center.x);
             let bb=(b.y-center.y).atan2(b.x-center.x);
             let angle=if clockwise{-(aa-bb).rem_euclid(TAU)}
