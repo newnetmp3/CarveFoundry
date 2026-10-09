@@ -113,7 +113,41 @@ No CNC export exists; physical Wayland/Onefinity tests remain outstanding.
 
 | 2026-10-08 | PR #101 R1a retained analytic curves and native direct node/handle editing merged to main | [Rust CI `37867505729`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37867505729): 26 tests, strict Clippy, native Linux release; main `49a58bf3` | R1b analytic SVG interchange/snapping/curves and physical KDE Wayland QA |
 
-## Usability recovery — PR #103 (active, not merged until green CI)
+
+## Verified Rust editor usability recovery — merged PR #103
+
+- [PR #103](https://github.com/newnetmp3/CarveFoundry/pull/103)
+  merged as main commit **e78c33470eb54a5e8034399b09d28fb103852197**.
+  Its exact feature head **4d8bf1833636b06d92851396f627323e1a855406**
+  passed [Rust CI run 37869621001](https://github.com/newnetmp3/CarveFoundry/actions/runs/37869621001):
+  **38 Rust tests, strict Clippy and Linux native release compilation**.
+- Corrected node/handle dragging to pick the **original mouse press point**
+  rather than the cursor after the drag threshold; nodes on unselected
+  paths can be moved directly. Grid snaps relative displacement and is
+  OFF by default. Undo/redo and failed drags are atomic.
+- Native editable shapes now include Rectangle, Circle, Ellipse, Triangle,
+  Pentagon, Hexagon, Octagon and Star. Circles/ellipses are four
+  cubic-Bézier approximations. Pen clicks create open polylines or closed
+  outlines. New editable objects have real analytic path nodes.
+- Existing R0 polygon contours can be converted on demand to editable
+  line paths, preserving identity, placement, visibility and Undo.
+- True circular arcs allow endpoint motion with exact sweep-preserving
+  circle refits. The editor includes Duplicate, Rotate ±90°, Mirror X/Y,
+  Center on Stock X/Y, Hide/Show, Delete, keyboard shortcuts, mousewheel
+  cursor-anchored zoom, middle/right pan and Fit View.
+- Enabled serde_json float_roundtrip for precise f64 CAD persistence:
+  exact saved path coordinates round-trip without parser rounding changes.
+- [docs/UX_SMOKE.md](UX_SMOKE.md) specifies required real-world KDE Plasma
+  Wayland interaction tests. **Those manual tests have NOT been run.**
+- Still no real fonts/text, SVG/DXF, grouping/layers, broad curve topology,
+  3D workspace, native CAM engine, machine-safety preflight or NC export.
+
+**Next priority:** obtain actual KDE Plasma Wayland node-drag and zoom/pan
+feedback, fix any remaining blockers, then continue with native 2D authoring,
+SVG/DXF and typography. Do not treat automated tests as interactive QA.
+Do not resume Python GUI conversion or unlock CNC export prematurely.
+
+## Investigation record — original node drag regressions (resolved in PR #103)
 
 The user reported the initial Rust vector editor as extremely unusable
 (particularly node motion, missing CAD tools). Root causes found:
@@ -145,8 +179,10 @@ The user reported the initial Rust vector editor as extremely unusable
   strict Clippy and native Linux release, then manually test KDE
   Plasma/Wayland pointer/drag/cancel/selection flow.
 
-**Next after this usability PR:** resolve any KDE/Wayland QA regressions
+**Follow-on after usability recovery:** resolve any KDE/Wayland QA regressions
 first, add precision transformations and keyboard workflows, then
 SVG/DXF, fonts/text, layers, and further CNC-free CAD authoring.
 Don't reactivate the retired PySide6 application. Preserve stock XY0
 bottom left, top-of-stock Z0, and no G-code until R6 preflight gates.
+
+| 2026-10-08 | Rust node-drag and tool-palette repair PR #103 merged to main | [Rust CI `37869621001`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37869621001) green: 38 tests, strict Clippy, native Linux release; main e78c3347 | Manual KDE/Wayland interaction QA; then SVG/DXF and CAD typography |
