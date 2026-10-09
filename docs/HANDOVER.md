@@ -588,3 +588,37 @@ See docs/DXF_INTERCHANGE.md for supported subset and manual QA.
 
 Next major milestones after verified DXF: editable typography from installed
 system fonts, grouping/layers, and CAD curve topology.
+
+## Verified R1c DXF vector interchange — merged PR #113
+
+[PR #113](https://github.com/newnetmp3/CarveFoundry/pull/113)
+merged as **08bf16847a65e21b1f58323dd57992d23b490a90**.
+Final exact source head
+**4f0dc1b581f46a26c536c5955ce8e8df5264548e**
+passed [Rust native CI run 37972805832](https://github.com/newnetmp3/CarveFoundry/actions/runs/37972805832):
+**61 core + 16 studio tests (77 total), strict Clippy, Linux release build**.
+
+Implemented the pure Rust DXF subset in crates/core/src/dxf.rs:
+ASCII, bounded 2D LINE, LWPOLYLINE with signed circular bulges, ARC,
+CIRCLE as four exact editable quarter-arcs, and degree-3 nonrational
+clamped four-control SPLINE retained as native cubic Bezier.
+INSUNITS explicitly supports mm/in/cm/m with conversion to native mm;
+unitless/unknown units and unrepresentable/3D entities fail closed.
+Regular LWPOLYLINE preserves line/arc paths; multiline and cubic
+vector segments export as regular line/polyline/spline entities with
+standard registered CarveFoundry XDATA for source path grouping and
+attributes on native DXF roundtrips. ImportPaths applies imported vectors
+atomically in one Undo step; CAD stock, fixture and .cfd schema unchanged.
+Native KDE File actions Import DXF vectors / Export vectors as DXF available.
+
+CI confirms Rust behavior and build, **not** manual KDE portal, scale,
+external CAD viewer or representative customer DXF compatibility.
+A third-party CAD editor may strip XDATA: analytic entities remain usable
+but vector grouping can be lost; no arbitrary INSERT, dimensions, general
+SPLINE or nonplanar drawing support yet. See docs/DXF_INTERCHANGE.md.
+
+Next coherent milestone: pure Rust system-font text authoring and editable
+vector outlines, then first-class layers/groups and native CAD trim/join.
+Keep all native CNC CAM/post/export gates closed until independently safe.
+
+| 2026-10-09 | PR #113 DXF native vector interchange merged | [CI 37972805832](https://github.com/newnetmp3/CarveFoundry/actions/runs/37972805832) green: 61 core + 16 studio, strict Clippy, native Linux release; merged 08bf1684 | KDE DXF picker + third-party CAD roundtrip; system fonts/text and grouping |
