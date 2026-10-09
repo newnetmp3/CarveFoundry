@@ -369,3 +369,43 @@ fn main()->eframe::Result{
         }),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dirty_design_requires_confirmation_before_new(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Rectangle);
+        assert_ne!(studio.editor.project,studio.saved_project);
+        let count=studio.editor.project.paths.len();
+        studio.request_document(PendingDocument::New);
+        assert_eq!(studio.pending_document,Some(PendingDocument::New));
+        assert_eq!(studio.editor.project.paths.len(),count);
+    }
+
+    #[test]
+    fn clean_new_document_resets_selection_and_never_marks_saved(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Star);
+        studio.new_document();
+        assert!(studio.editor.project.paths.is_empty());
+        assert!(studio.selected_id().is_none());
+        assert_eq!(studio.workspace,Workspace::Drawing);
+        assert!(!studio.has_saved_file);
+        assert_eq!(studio.project_path,"untitled.cfd");
+        assert_eq!(studio.editor.project,studio.saved_project);
+    }
+
+    #[test]
+    fn switching_workspaces_cannot_generate_nc_or_mutate_design(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Ellipse);
+        let original=studio.editor.project.clone();
+        studio.workspace=Workspace::Toolpaths;
+        assert_eq!(studio.editor.project,original);
+        studio.workspace=Workspace::Drawing;
+        assert_eq!(studio.editor.project,original);
+    }
+}
