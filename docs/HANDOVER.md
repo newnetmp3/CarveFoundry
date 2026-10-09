@@ -402,3 +402,29 @@ merge, successful compilation or machine QA until those results are checked.
 Next planned CAD milestones: native SVG/DXF interchange, system text/fonts,
 editable layers/grouping and direct curve topology tools. CNC posting stays
 disabled pending fixture/cutter/holder validation and posted-code preflight.
+
+## Verified PR #110 — screenshot-driven native Rust editor usability
+
+[PR #110](https://github.com/newnetmp3/CarveFoundry/pull/110)
+merged into `main` at **`55d6399b8f235f721048d1f1ec28ab9b60664feb`**,
+after its exact final feature commit
+`533a57769baab87428d52a9da1819d6a41b61fcb`
+passed [Rust CI #37966080362](https://github.com/newnetmp3/CarveFoundry/actions/runs/37966080362):
+**53 core tests + 10 studio tests, strict Clippy and Linux release build**.
+An initial lint-only failure was fixed before merging.
+
+New UI: font-independent painted shape/eye/lock/nudge icons, readable
+quick-action labels, consistent two-column vector/path palette, wider
+resizable sidebars and larger default fonts, non-wrapping XY placement
+rows, stable alignment grid, and automatic Properties inspector activation
+on canvas node/handle selection (non-mutating regression included).
+No native schema change, CAM engine or NC-export pathway was introduced.
+**Manual KDE Plasma/Wayland pointer, scaling, file picker and panel QA remains outstanding.**
+See `docs/UI_DESIGN.md` for the screenshot-specific checklist.
+
+**Next engineering batch:** test user-reported real desktop layouts and
+picking gestures, fix any remaining usability defects, then implement
+retained-geometry SVG/DXF interchange and real text/font authoring in Rust.
+Stay CAD-only until the machining and posted-code safety gates are met.
+
+| 2026-10-09 | PR #110 native editor controls and direct selected-node property UX merged | [Rust CI 37966080362](https://github.com/newnetmp3/CarveFoundry/actions/runs/37966080362) green: 53 core + 10 studio tests, strict Clippy, native release; main `55d6399b` | KDE Wayland manual UI smoke; retained SVG/DXF and font authoring |
