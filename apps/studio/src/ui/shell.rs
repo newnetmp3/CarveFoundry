@@ -21,7 +21,7 @@ impl Studio {
                         ui.close();
                     }
                     if ui.button("Save  Ctrl+S").clicked(){
-                        self.save_document();ui.close();
+                        self.save_command();ui.close();
                     }
                     if ui.button("Save as…").clicked(){
                         self.choose_save_as();ui.close();
@@ -95,7 +95,13 @@ impl Studio {
                 });
                 ui.separator();
                 let dirty=self.editor.project!=self.saved_project;
-                ui.label(if dirty{"● Unsaved changes"}else{"✓ Saved / clean"});
+                ui.label(if !self.has_saved_file {
+                    "◯ Unsaved new design"
+                }else if dirty {
+                    "● Unsaved changes"
+                }else {
+                    "✓ Saved"
+                });
                 ui.separator();
                 ui.small("CAD only · no CNC export");
             });
