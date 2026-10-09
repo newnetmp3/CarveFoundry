@@ -198,6 +198,39 @@ impl Project {
 mod tests {
     use super::*;
     #[test]
+    fn old_r0_project_opens_and_new_analytic_format_roundtrips() {
+        use crate::path::{AnalyticPath, Primitive, Curve};
+        let legacy=r#"{
+            "schema_version":1,"name":"Old layout",
+            "stock":{"width_mm":300.0,"height_mm":200.0,"thickness_mm":19.0},
+            "contours":[],"fixtures":[],"next_id":1
+        }"#;
+        let mut p=Project::decode(legacy.as_bytes()).unwrap();
+        assert!(p.paths.is_empty());
+        p.paths.push(AnalyticPath::preset(1,"Original curve".into(),
+            Point::new(20.0,20.0),Primitive::Cubic,70.0,25.0).unwrap());
+        p.next_id=2;
+        let encoded=p.encode().unwrap();
+        let reload=Project::decode(&encoded).unwrap();
+        assert_eq!(reload,p);
+        assert!(matches!(reload.paths[0].segments[0].curve,Curve::Cubic{..}));
+        assert_eq!(reload.paths[0].nodes[0].id,1);
+        assert_eq!(reload.paths[0].segments[0].id,3);
+    }
+    #[test]
+    fn ids_must_be_globally_distinct_across_polygon_and_analytic_paths(){
+        use crate::path::{AnalyticPath,Primitive};
+        let mut p=Project::default();
+        p.next_id=2;
+        p.contours.push(Contour{id:1,name:"Rectangle".into(),visible:true,
+            locked:false,origin:Point::new(0.0,0.0),
+            vertices:vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                Point::new(0.0,10.0)]});
+        p.paths.push(AnalyticPath::preset(1,"Duplicate ID".into(),
+            Point::new(0.0,0.0),Primitive::Line,10.0,10.0).unwrap());
+        assert!(p.validate().is_err());
+    }
+    #[test]
     fn strict_project_roundtrip_and_schema_fail_closed() {
         let project=Project::default();
         let bytes=project.encode().unwrap();
