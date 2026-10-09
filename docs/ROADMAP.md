@@ -334,3 +334,23 @@ import/export on `feature/rust-r1-svg-vectors`:
 - Roundtrip and hostile/unsupported input tests, CI gates, separate KDE
   desktop acceptance. Native DXF, font text, and layers follow in R1.
 - No machine toolpaths, NC export or false cutting-ready claims.
+
+## Verified SVG interchange — PR #112
+
+[PR #112](https://github.com/newnetmp3/CarveFoundry/pull/112)
+merged as `cca178b15c3104bc45f3de05336003bb073a0072`.
+Exact head `043f21ee106734ea46c125c1f63a58df7cfa7aca`
+passed [Rust CI 37970424316](https://github.com/newnetmp3/CarveFoundry/actions/runs/37970424316):
+**57 core tests + 15 studio tests, strict Clippy, Linux release build**.
+
+Native SVG path import/export now preserves editable straight, true circular
+arc and cubic Bézier sources. It validates dimensions, coordinate conventions
+and unsupported SVG structures strictly; imports are atomic, undoable and
+cannot silently convert geometric curves into display tessellation.
+Native file pickers expose SVG actions without changing `.cfd` schema.
+Desktop KDE/Wayland dialog and scale behavior requires manual acceptance.
+
+**Next course:** DXF exchange with the same source-preserving and
+fail-closed contracts, followed by system-font text and vector outline
+generation, grouping/layer organization and analytic trimming.
+SVG output is vector art only; CAM/NC remains disabled.
