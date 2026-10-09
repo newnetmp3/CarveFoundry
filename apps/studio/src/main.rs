@@ -1,23 +1,52 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 use carvefoundry_core::{
-    Action, Editor, Fixture, Point, Project, polygon_contains,
+    Action, AnalyticPath, Curve, Editor, Fixture, Point, Primitive, Project, polygon_contains,
 };
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
 use std::path::Path;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EditMode { Objects, Nodes }
+#[derive(Clone, Copy)]
+enum ActiveDrag {
+    Contour(u64,Point),
+    Path(u64,Point),
+    Node(u64,u64,Point),
+    Control(u64,u64,u8,Point),
+}
+fn point_distance(a:Point,b:Point)->f64 {(a.x-b.x).hypot(a.y-b.y)}
+fn line_distance(p:Point,a:Point,b:Point)->f64 {
+    let dx=b.x-a.x;
+    let dy=b.y-a.y;
+    let len=dx*dx+dy*dy;
+    if len<=1e-12 {return point_distance(p,a);}
+    let t=(((p.x-a.x)*dx+(p.y-a.y)*dy)/len).clamp(0.0,1.0);
+    point_distance(p,Point::new(a.x+t*dx,a.y+t*dy))
+}
+fn path_hit(path:&AnalyticPath,point:Point,tol_mm:f64)->bool {
+    if !path.visible {return false;}
+    let Ok(points)=path.preview_points(0.4) else{return false;};
+    points.windows(2).any(|v|line_distance(point,v[0],v[1])<=tol_mm)
+        || (path.closed && polygon_contains(&points,point))
+}
+
 struct Studio {
     editor: Editor,
     project_path: String,
     selected: Option<u64>,
+    selected_path: Option<u64>,
+    selected_node: Option<u64>,
+    selected_handle: Option<(u64,u8)>,
+    edit_mode: EditMode,
     shape_name: String,
     shape_width: f64,
     shape_height: f64,
     zoom: f32,
     grid_step: f64,
     use_grid: bool,
-    drag: Option<(u64, Point)>,
+    drag: Option<ActiveDrag>,
     status: String,
 }
 impl Default for Studio {
@@ -26,6 +55,10 @@ impl Default for Studio {
             editor: Editor::default(),
             project_path: "carvefoundry-design.cfd".into(),
             selected: None,
+            selected_path: None,
+            selected_node: None,
+            selected_handle: None,
+            edit_mode: EditMode::Objects,
             shape_name: "New contour".into(),
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, grid_step: 1.0, use_grid: true,
@@ -44,6 +77,9 @@ impl Studio {
     fn new_document(&mut self) {
         self.editor = Editor::default();
         self.selected = None;
+        self.selected_path = None;
+        self.selected_node = None;
+        self.selected_handle = None;
         self.drag = None;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
     }
@@ -53,6 +89,9 @@ impl Studio {
             Ok(editor) => {
                 self.editor = editor;
                 self.selected = None;
+                self.selected_path = None;
+                self.selected_node = None;
+                self.selected_handle = None;
                 self.drag = None;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
             }
@@ -74,6 +113,26 @@ impl Studio {
         });
         if self.editor.project.contours.iter().any(|p|p.id==id) {
             self.selected=Some(id);
+            self.selected_path=None;
+            self.selected_node=None;
+        }
+    }
+    fn add_analytic(&mut self,kind:Primitive){
+        let id=self.editor.project.next_id;
+        let position=10.0+(self.editor.project.paths.len()%10) as f64*12.0;
+        self.apply(Action::AddAnalytic{
+            name:format!("{} {}",self.shape_name,match kind {
+                Primitive::Line=>"Line",Primitive::Arc=>"Arc",Primitive::Cubic=>"Bézier",
+            }),
+            origin:Point::new(position,position),
+            kind,width_mm:self.shape_width,height_mm:self.shape_height,
+        });
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected=None;
+            self.selected_path=Some(id);
+            self.selected_node=Some(1);
+            self.selected_handle=None;
+            self.edit_mode=EditMode::Nodes;
         }
     }
     fn header(&mut self,ui:&mut egui::Ui) {
@@ -117,6 +176,21 @@ impl Studio {
         });
         if ui.button("＋ Add rectangle").clicked(){self.add_rectangle();}
         ui.separator();
+        ui.strong("ADD RETAINED ANALYTIC PATH");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Line").clicked(){self.add_analytic(Primitive::Line);}
+            if ui.button("Circular arc").clicked(){self.add_analytic(Primitive::Arc);}
+            if ui.button("Cubic Bézier").clicked(){self.add_analytic(Primitive::Cubic);}
+        });
+        ui.small("Line/arc/cubic remain mathematical segments in .cfd. The displayed linework is preview-only.");
+        ui.separator();
+        ui.heading("EDIT MODE");
+        ui.horizontal(|ui|{
+            ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"Move objects");
+            ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"Edit nodes");
+        });
+        ui.small("Object mode translates complete contours/paths. Node mode edits anchors and cubic handles without flattening curves.");
+        ui.separator();
         ui.heading("POSITION");
         ui.checkbox(&mut self.use_grid,"Snap drag to stock XY grid");
         ui.horizontal(|ui|{
@@ -124,11 +198,11 @@ impl Studio {
             ui.add(egui::DragValue::new(&mut self.grid_step)
                 .range(0.1..=100.0).suffix(" mm"));
         });
-        ui.small("Left/bottom stock corner is work XY0. Drag a selected contour to move it; changes are a single Undo step.");
+        ui.small("Stock XY0 is bottom-left. Object/node/control drags become a single Undo action.");
         ui.separator();
         ui.heading("NEXT MILESTONES");
-        ui.label("• Retained lines, arcs and Béziers");
-        ui.label("• Direct node/curve editing");
+        ui.label("• Arc constraint and tangent controls");
+        ui.label("• SVG/DXF, fonts and text");
         ui.label("• True 3D mesh viewport");
         ui.label("• Native machining operations");
         ui.label("• Fixture-aware CAM safety");
