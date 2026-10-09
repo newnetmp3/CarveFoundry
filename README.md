@@ -163,7 +163,7 @@ circles constrain to a square automatically. Press Esc or select
 V/N/P to leave the shape tool. The tool remains active to draw more.
 
 For precise predefined sizes open **Vector Dimensions** in the left
-palette, set width/height and choose **Place exact-size**. This is a
-different workflow from drawing directly on the stock. Existing
+palette, set width/height and choose **Use exact size**, then click the intended lower-left
+location on the stock. A ghost outline previews the shape until placed. Existing
 Rust-native .cfd projects continue to open unchanged; machine toolpaths
 and G-code export are still intentionally unavailable.
