@@ -31,6 +31,7 @@ struct Studio {
     show_grid: bool,
     show_help: bool,
     pending_document: Option<PendingDocument>,
+    pending_open_path: Option<String>,
     cursor_world: Option<Point>,
     selected: Option<u64>,
     selected_path: Option<u64>,
@@ -60,6 +61,7 @@ impl Default for Studio {
             show_grid: true,
             show_help: false,
             pending_document: None,
+            pending_open_path: None,
             cursor_world: None,
             selected: None,
             selected_path: None,
@@ -89,6 +91,7 @@ impl Studio {
         self.workspace=Workspace::Drawing;
         self.inspector_tab=InspectorTab::Objects;
         self.pending_document=None;
+        self.pending_open_path=None;
         self.selected = None;
         self.selected_path = None;
         self.selected_node = None;
@@ -107,6 +110,7 @@ impl Studio {
                 self.workspace=Workspace::Drawing;
                 self.inspector_tab=InspectorTab::Objects;
                 self.pending_document=None;
+                self.pending_open_path=None;
                 self.selected = None;
                 self.selected_path = None;
                 self.selected_node = None;
@@ -136,6 +140,35 @@ impl Studio {
                 PendingDocument::New=>self.new_document(),
                 PendingDocument::Open=>self.open_document(),
             }
+        }
+    }
+    fn choose_open_document(&mut self){
+        let choice=rfd::FileDialog::new()
+            .add_filter("CarveFoundry design", &["cfd"])
+            .pick_file();
+        if let Some(path)=choice{
+            let destination=path.to_string_lossy().into_owned();
+            if self.editor.project!=self.saved_project{
+                self.pending_open_path=Some(destination);
+                self.pending_document=Some(PendingDocument::Open);
+            }else{
+                self.project_path=destination;
+                self.open_document();
+            }
+        }
+    }
+    fn choose_save_as(&mut self){
+        let initial=Path::new(&self.project_path)
+            .file_name().and_then(|x|x.to_str())
+            .filter(|n|!n.is_empty()).unwrap_or("design.cfd");
+        let choice=rfd::FileDialog::new()
+            .add_filter("CarveFoundry design",&["cfd"])
+            .set_file_name(initial)
+            .save_file();
+        if let Some(mut path)=choice{
+            if path.extension().is_none(){path.set_extension("cfd");}
+            self.project_path=path.to_string_lossy().into_owned();
+            self.save_document();
         }
     }
     fn delete_selection(&mut self){
@@ -236,7 +269,7 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit)=ui.input(|i|{
+        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
@@ -248,7 +281,10 @@ impl Studio {
              !cmd && i.key_pressed(egui::Key::V),
              !cmd && i.key_pressed(egui::Key::N),
              !cmd && i.key_pressed(egui::Key::P),
-             !cmd && i.key_pressed(egui::Key::F))
+             !cmd && i.key_pressed(egui::Key::F),
+             cmd && i.key_pressed(egui::Key::N),
+             cmd && i.key_pressed(egui::Key::O),
+             cmd && i.key_pressed(egui::Key::S))
         });
         if escape{
             if self.drag.is_some(){
@@ -264,6 +300,9 @@ impl Studio {
             }
             return;
         }
+        if new{self.request_document(PendingDocument::New);}
+        if open{self.choose_open_document();}
+        if save{self.save_document();}
         if undo{self.editor.undo();}
         if redo{self.editor.redo();}
         if duplicate && let Some(id)=self.selected_id(){
