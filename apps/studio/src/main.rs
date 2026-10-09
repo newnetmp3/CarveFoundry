@@ -1,14 +1,15 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 use carvefoundry_core::{
-    Action, AnalyticPath, Curve, Editor, Fixture, Point, Primitive, Project, polygon_contains,
+    Action, Curve, Editor, Fixture, Hit, PickMode, Point, Primitive, Project,
+    ShapeKind, movement_delta, pick,
 };
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
 use std::path::Path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum EditMode { Objects, Nodes }
+enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone, Copy)]
 enum ActiveDrag {
     None,
@@ -17,22 +18,6 @@ enum ActiveDrag {
     Node(u64,u64,Point),
     Control(u64,u64,u8,Point),
 }
-fn point_distance(a:Point,b:Point)->f64 {(a.x-b.x).hypot(a.y-b.y)}
-fn line_distance(p:Point,a:Point,b:Point)->f64 {
-    let dx=b.x-a.x;
-    let dy=b.y-a.y;
-    let len=dx*dx+dy*dy;
-    if len<=1e-12 {return point_distance(p,a);}
-    let t=(((p.x-a.x)*dx+(p.y-a.y)*dy)/len).clamp(0.0,1.0);
-    point_distance(p,Point::new(a.x+t*dx,a.y+t*dy))
-}
-fn path_hit(path:&AnalyticPath,point:Point,tol_mm:f64)->bool {
-    if !path.visible {return false;}
-    let Ok(points)=path.preview_points(0.4) else{return false;};
-    points.windows(2).any(|v|line_distance(point,v[0],v[1])<=tol_mm)
-        || (path.closed && polygon_contains(&points,point))
-}
-
 struct Studio {
     editor: Editor,
     project_path: String,
@@ -48,6 +33,8 @@ struct Studio {
     grid_step: f64,
     use_grid: bool,
     drag: Option<ActiveDrag>,
+    drawing: Vec<Point>,
+    draw_closed: bool,
     status: String,
 }
 impl Default for Studio {
@@ -64,6 +51,8 @@ impl Default for Studio {
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, grid_step: 1.0, use_grid: true,
             drag: None,
+            drawing: Vec::new(),
+            draw_closed: false,
             status: "Ready · Rust design file only · CNC export disabled".into(),
         }
     }
@@ -82,6 +71,7 @@ impl Studio {
         self.selected_node = None;
         self.selected_handle = None;
         self.drag = None;
+        self.drawing.clear();
         self.status = "New independent Rust design · No legacy CF3D converter".into();
     }
     fn open_document(&mut self) {
@@ -94,6 +84,7 @@ impl Studio {
                 self.selected_node = None;
                 self.selected_handle = None;
                 self.drag = None;
+                self.drawing.clear();
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
             }
             Err(error) => self.status = format!("Open rejected; original design kept: {error}"),
@@ -105,18 +96,45 @@ impl Studio {
             Err(error) => format!("Save failed: {error}"),
         };
     }
-    fn add_rectangle(&mut self) {
-        let id = self.editor.project.next_id;
-        let pos=10.0+(self.editor.project.contours.len()%10) as f64*8.0;
-        self.apply(Action::AddRectangle {
-            name:self.shape_name.clone(), origin:Point::new(pos,pos),
-            width_mm:self.shape_width, height_mm:self.shape_height,
+    fn selected_id(&self)->Option<u64> {
+        self.selected_path.or(self.selected)
+    }
+    fn add_shape(&mut self,kind:ShapeKind){
+        let id=self.editor.project.next_id;
+        let offset=10.0+(self.editor.project.paths.len()%8) as f64*12.0;
+        let size=if kind==ShapeKind::Circle {
+            self.shape_width.min(self.shape_height)
+        }else{self.shape_width};
+        self.apply(Action::AddShape{
+            kind,name:format!("{} {}",self.shape_name,kind.title()),
+            origin:Point::new(offset,offset),width_mm:size,
+            height_mm:if kind==ShapeKind::Circle{size}else{self.shape_height},
         });
-        if self.editor.project.contours.iter().any(|p|p.id==id) {
-            self.selected=Some(id);
-            self.selected_path=None;
-            self.selected_node=None;
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Objects;
         }
+    }
+    fn finish_drawing(&mut self){
+        let points=std::mem::take(&mut self.drawing);
+        if points.is_empty(){return;}
+        let id=self.editor.project.next_id;
+        self.apply(Action::AddPolyline {
+            name:format!("{} Polyline",self.shape_name),points:points.clone(),
+            closed:self.draw_closed,
+        });
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Nodes;
+        }else {
+            self.drawing=points;
+        }
+    }
+    fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
+        if let Some(id)=self.selected_id(){self.apply(action(id));}
+        else{self.status="Select a shape first".into();}
     }
     fn add_analytic(&mut self,kind:Primitive){
         let id=self.editor.project.next_id;
