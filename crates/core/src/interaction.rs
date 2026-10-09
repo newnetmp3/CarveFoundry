@@ -179,7 +179,7 @@ mod tests {
     fn selection_marquee_enclosure_vs_crossing_and_hidden(){
         let mut p=project();
         p.paths.push(AnalyticPath::preset(2,"Line".into(),
-            Point::new(80.0,40.0),Primitive::Line,40.0,0.0).unwrap());
+            Point::new(80.0,40.0),Primitive::Line,40.0,10.0).unwrap());
         p.next_id=3;
         assert_eq!(marquee_ids(&p,Point::new(70.0,30.0),
             Point::new(130.0,50.0)),vec![2]);
@@ -195,17 +195,17 @@ mod tests {
     fn exact_geometry_snaps_to_nodes_and_line_midpoints(){
         let mut p=project();
         p.paths.push(AnalyticPath::preset(2,"Straight".into(),
-            Point::new(80.0,50.0),Primitive::Line,30.0,0.0).unwrap());
+            Point::new(80.0,50.0),Primitive::Line,30.0,10.0).unwrap());
         p.next_id=3;
         assert_eq!(nearest_snap(&p,Point::new(80.2,50.1),1.0,&[]),
             Some(SnapTarget{
                 point:Point::new(80.0,50.0),
                 kind:SnapKind::Vertex,object_id:Some(2)}));
-        assert_eq!(nearest_snap(&p,Point::new(94.6,50.0),1.0,&[]),
+        assert_eq!(nearest_snap(&p,Point::new(94.6,55.0),1.0,&[]),
             Some(SnapTarget{
-                point:Point::new(95.0,50.0),
+                point:Point::new(95.0,55.0),
                 kind:SnapKind::Midpoint,object_id:Some(2)}));
-        assert!(nearest_snap(&p,Point::new(95.0,50.0),1.0,&[2]).is_none());
+        assert!(nearest_snap(&p,Point::new(95.0,55.0),1.0,&[2]).is_none());
     }
     #[test]
     fn snapping_stock_corners_and_visibility_is_deterministic(){
