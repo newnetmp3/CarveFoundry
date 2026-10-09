@@ -226,6 +226,7 @@ impl Studio {
             .open(&mut self.show_help).resizable(false).show(ctx,|ui|{
                 ui.heading("Drawing workspace");
                 ui.label("V  Select and move complete objects");
+                ui.label("Ctrl+A  Select all visible vectors");
                 ui.label("Shift / Ctrl-click  Toggle vectors in selection");
                 ui.label("Drag blank stock  Marquee: left→right encloses, right→left crosses");
                 ui.label("Drag selected vectors  Move together with one Undo");
