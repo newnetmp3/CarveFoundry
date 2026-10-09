@@ -160,7 +160,9 @@ impl Studio {
                     }
                 });
             });
-        egui::CollapsingHeader::new("5  VIEW & SNAP")
+        egui::CollapsingHeader::new("5  PRECISION ALIGN & POSITION")
+            .default_open(true).show(ui,|ui|self.precise_tools(ui));
+        egui::CollapsingHeader::new("6  VIEW & SNAP")
             .default_open(false).show(ui,|ui|{
                 ui.checkbox(&mut self.show_grid,"Show stock grid");
                 ui.checkbox(&mut self.use_grid,"Snap movement to grid");
