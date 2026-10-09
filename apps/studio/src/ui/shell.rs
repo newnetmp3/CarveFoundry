@@ -63,6 +63,10 @@ impl Studio {
                     if ui.button("Fit material  F").clicked(){
                         self.zoom=1.0;self.pan=egui::Vec2::ZERO;ui.close();
                     }
+                    if ui.add_enabled(!self.selected_ids.is_empty(),
+                        egui::Button::new("Fit selection  Shift+F")).clicked(){
+                        self.fit_selection();ui.close();
+                    }
                     ui.checkbox(&mut self.show_grid,"Show grid");
                     ui.checkbox(&mut self.use_grid,"Snap movement to grid");
                     ui.checkbox(&mut self.snap_features,"Snap endpoints / midpoints");
@@ -128,13 +132,13 @@ impl Studio {
                     ui.separator();
                     ui.strong("QUICK SHAPES");
                     if ui.button("▭").on_hover_text("Rectangle").clicked(){
-                        self.add_shape(ShapeKind::Rectangle);
+                        self.choose_shape_tool(ShapeKind::Rectangle);
                     }
                     if ui.button("◯").on_hover_text("Circle").clicked(){
-                        self.add_shape(ShapeKind::Circle);
+                        self.choose_shape_tool(ShapeKind::Circle);
                     }
                     if ui.button("☆").on_hover_text("Star").clicked(){
-                        self.add_shape(ShapeKind::Star);
+                        self.choose_shape_tool(ShapeKind::Star);
                     }
                     if ui.button("◠").on_hover_text("Circular arc").clicked(){
                         self.add_analytic(Primitive::Arc);
@@ -236,6 +240,10 @@ impl Studio {
                 ui.label("Shift while drawing  Equal sides; Esc  Cancel drawing tool");
                 ui.label("Enter  Complete Pen shape · Esc  Cancel");
                 ui.separator();
+                ui.label("Arrow keys  Nudge selected by configured step");
+                ui.label("Shift+arrow  Nudge 10 steps");
+                ui.label("Align/Position tools  Left Drawing palette");
+                ui.label("Shift+F  Fit selected vectors into view");
                 ui.label("Mouse wheel  Zoom under pointer");
                 ui.label("Middle / right drag  Pan the view");
                 ui.label("F  Fit material to drawing window");
