@@ -192,6 +192,7 @@ impl Studio {
             if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
                 self.shape_drag_start=ui.input(|i|i.pointer.press_origin())
                     .filter(|at|back.contains(*at)).map(to_world);
+                self.shape_drag_delta=None;
                 if self.shape_drag_start.is_none(){
                     self.status="Start drawing inside the material outline".into();
                 }
@@ -202,7 +203,13 @@ impl Studio {
                     -delta.y as f64/scale as f64,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let square=ui.input(|i|i.modifiers.shift);
-                if let Ok(placement)=shape_placement(start,snapped,kind,square){
+                if response.dragged(){
+                    self.shape_drag_delta=Some(snapped);
+                }
+                let final_delta=if response.drag_stopped(){
+                    self.shape_drag_delta.take().unwrap_or(snapped)
+                }else{snapped};
+                if let Ok(placement)=shape_placement(start,final_delta,kind,square){
                     if let Ok(preview)=create_shape(1,"Draft".into(),placement.origin,
                         kind,placement.width_mm,placement.height_mm){
                         if let Ok(outline)=preview.preview_points(0.4){
@@ -221,7 +228,7 @@ impl Studio {
                 }
                 if response.drag_stopped() {
                     self.shape_drag_start=None;
-                    match shape_placement(start,snapped,kind,square){
+                    match shape_placement(start,final_delta,kind,square){
                         Ok(placement)=>self.create_drag_shape(kind,placement),
                         Err(error)=>self.status=format!("No shape created: {error}"),
                     }
