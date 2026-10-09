@@ -252,3 +252,35 @@ After merging, continue with normal design workflows: mouse-on-canvas
 numeric tool positioning, responsive sidebars, click-vs-drag Pen usability,
 native text and SVG vector interchange; do not equate passing CI with
 real KDE pointer QA.
+
+## Verified native shape-placement milestone — merged PR #107
+
+- [PR #107](https://github.com/newnetmp3/CarveFoundry/pull/107)
+  merged to main as **`49f96f577b2b72fdfb6eee5ae7ab7ce64f878708`**.
+  Exact feature head **`d420fc10da94943b8d12d6629f01ebf8c5806649`**
+  passed [Rust CI `37872863242`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37872863242):
+  **47 core/studio tests, strict Clippy, native Linux release build**.
+- The professional CNC-style tool palette now activates a tool rather than
+  adding arbitrary-offset geometry. Users drag a diagonal anywhere on
+  stock, see a noncommittal outline and live dimensions, and release to
+  create exactly one undoable analytic vector. Reverse drags, Circle and
+  Shift equal-side constraints, relative snap, minimum size and finite
+  bounds are implemented and tested. Escape cancels.
+- Numeric width/height entry uses **click-to-place**, with a ghost
+  preview anchored at the pointer; no geometry is added until clicked.
+  Selected tools remain highlighted. R/C drawing shortcuts, V/N/P mode
+  exits and status hints clarify interaction.
+- The pure geometry resides in `crates/core/src/placement.rs`; canvas,
+  palette and shell only consume its validated placement contract.
+- Native project's .cfd serialization and machine/export boundaries
+  are unchanged. No NC generator, cutting preflight or physical router
+  interaction is implemented. **Manual KDE Plasma Wayland pointer QA is
+  still outstanding.**
+
+**Next engineering priority:** perform live KDE/Wayland pointer QA on both
+gesture and numeric placement, including 125%/150% scaling, then improve
+multi-object selection, precision snapping and editable numeric placement,
+plus SVG/text/layer workflows. Do not confuse a green Rust CI with
+end-user input verification. Continue pure Rust only.
+
+| 2026-10-08 | PR #107 drag-to-size / exact click-to-place UX merged | [CI 37872863242](https://github.com/newnetmp3/CarveFoundry/actions/runs/37872863242) green: 47 tests, strict Clippy, release; main 49f96f57 | Manual KDE Wayland gesture QA; then multi-select and precise snapping |
