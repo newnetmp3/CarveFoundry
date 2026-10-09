@@ -1,613 +1,82 @@
-# CarveFoundry
+# CarveFoundry — Rust reboot
 
-CarveFoundry is a native Linux CNC design and CAM application with a compact Photopea-style menu and tool rail. It is being built for Linux/Wayland first, with strong support for common CNC workflows including Onefinity-style GRBL machines.
+**New, native Rust CAD/CAM architecture.** This is a fresh implementation, not
+a wrapper, translation or UI adapter around the previous Python application.
 
-## New to CNC? Start here
+**Current milestone: 2D design foundation.** It has a real Rust project file,
+finite polygon geometry and validation, drag-and-drop layout, undoable changes,
+stock setup, visual fixture inventory, and a dark native desktop workspace.
 
-CarveFoundry opens a **Welcome / Start Here** window the first time you launch
-the desktop app. Reopen it anytime from **Help → Welcome / Start Here…**.
+**No CAM, simulation, machine preflight, G-code or CNC controller output yet.**
+The current GUI is intentionally not suitable for cutting real material.
 
-1. Select **Create my first nameplate** (editable lettering) or **Try a coaster
-   template**. You can also import your own image, SVG or STL.
-2. Open **Help → Machine Setup Explained…**. Learn the difference between
-   machine home and the stock-bottom-left **work XY0 / stock-top Z0** origin.
-   Verify the profile's travel dimensions against YOUR machine; choose
-   **I don't have a CNC machine yet** to design and learn without connecting one.
-3. Open **Help → Cutter & Material Guide…** for cross-section illustrations,
-   cutter use cases and opt-in **example** feed/plunge/stepdown values.
-   These are *not manufacturer-approved cutting recipes*, and do not set RPM.
-4. Choose **Toolpaths → Generate Toolpaths**. **Simple** asks what to cut,
-   which cutter to use, depth and detail; **Advanced** exposes the full
-   unchanged CAM controls. Either mode runs the same generation and readiness
-   checks.
-5. Select **Toolpaths → Will This Carve Correctly?…** and compare the modeled
-   design against simulated stock after verified posted G-code. Available
-   3D model-surface deviation colors show sampled uncut/gouged regions;
-   2D pockets/engraving require visual interpretation and are not directly
-   comparable to model-top surfaces.
-6. Run independent **CNC Preflight**, then export the checked NC files.
-   **File → Print CNC Job Setup Sheet…** creates a PDF with cutter stages,
-   origin, stock, fixture coordinates and the physical checklist. It includes
-   exported filenames only when they match the current project.
-7. Save the project normally. Calculated CAM plans are retained in the native
-   CF3D file, including cutter geometry, source-object linkage and exact motion,
-   so reopening a job restores its preview/export-ready toolpaths without
-   forcing an unchanged calculation to run again.
-8. Record actual cutting outcomes under **Project → Project Notes / Carving Log…**.
-   Notes and the recorded material survive CF3D save/reload and Undo/Redo.
+## Why a clean reboot?
 
-The **Guided CNC Workflow** under Help or Project links these actual actions.
-For definitions of jargon, use **Help → Search CNC Glossary…**. CarveFoundry
-cannot verify physical clamps, live work offsets, holder reach or spindle
-condition; operator checks are required even after a passing software preflight.
+The former Python UI and Python/Rust bridge became two partially overlapping
+applications. This branch discards that app architecture and keeps only the
+engineering lessons: explicit source identity, stock-bottom-left XY0, stock-top
+Z0, fixture/fence height relative to stock, one tool per NC stage, careful
+manual re-probing, stable projects, undo/redo, and fail-closed export gating.
 
-## New Rust-native layout workspace (experimental)
+The old application is archived at
+[`archive/python-ui-2026-10`](https://github.com/newnetmp3/CarveFoundry/tree/archive/python-ui-2026-10).
+**Legacy `.cf3d` files are NOT yet supported.** The new versioned `.cfd`
+file format is JSON and belongs solely to the Rust implementation. Do not
+rename .cf3d files to .cfd.
 
-A separate **native Rust/egui** layout studio now lives in `rust-ui/`.
-It has editable rectangles, ellipses, polygons and stars; mouse selection and
-dragging; undo/redo; polygon-aware first-fit sheet placement; array duplication;
-editable versioned layout JSON and stock-relative SVG export.
+## Run on Arch Linux / KDE Plasma / Wayland
+
+Install the native toolchain and system OpenGL/Wayland libraries:
 
 ```bash
-cd /mnt/moar/Downloads/git/CarveFoundry
-bash scripts/run-rust-studio.sh
-
-# Optional: build and register a separate KDE application-menu launcher
-bash scripts/install-rust-studio.sh
-~/.local/bin/carvefoundry-studio
-```
-
-The Rust window can read existing CF3D **vector outlines only** through a
-read-only project snapshot. Provide a CF3D path and select **Import vectors
-(read-only)**; the operation never overwrites native CNC project files.
-Open and mesh-only objects, original fixtures and all CAM stages are excluded.
-Save Rust layouts separately as JSON or SVG; both still require the existing
-application's CNC preflight and separate NC export.
-
-This **does not yet replace** the established full CNC/CAM application.
-The original `carvefoundry` desktop launch remains unchanged until the Rust
-editor can preserve native CF3D projects, toolpaths, preflight and all
-machine-safety gates. Import the exported SVG into the established CAM workspace
-and review its XY orientation and toolpaths before any machining.
-See [Rust Studio installation and limits](rust-ui/README.md) and the
-[capability gap plan](docs/RUST_UI_GAP_PLAN.md).
-
-## Install on Linux (KDE Plasma / Wayland)
-
-CarveFoundry has a **user-local native desktop installer**. After installation
-you can launch it from the KDE application menu or by typing `carvefoundry`
-from a terminal; you do **not** need to activate a Python virtual environment.
-No `sudo pip`, system Python modifications, or global PyTorch installs.
-
-On Arch Linux, install the source-build prerequisites once:
-
-```bash
-sudo pacman -S --needed git python python-pip rust
-git clone https://github.com/newnetmp3/CarveFoundry.git
+sudo pacman -S --needed rust cargo pkgconf libxkbcommon wayland mesa
+git clone --branch rust-reboot https://github.com/newnetmp3/CarveFoundry.git
 cd CarveFoundry
-bash scripts/install-linux.sh
+cargo run -p carvefoundry-studio --release
 ```
 
-This compiles the existing Rust CAM extension inside a private virtual
-environment, installs the application as an editable Python package, and
-registers a `CarveFoundry` KDE/GNOME menu entry with its icon. The first build
-needs internet access and takes longer. This is a **native source-checkout
-installer**, not a prebuilt Flatpak or a self-contained binary: keep the cloned
-directory in place after installing. The application automatically reuses
-`./.venv` if present, preserving installed PyTorch and model dependencies.
-Otherwise it creates a private venv under
-`${XDG_DATA_HOME:-~/.local/share}/carvefoundry/venv`.
+Or run `bash scripts/run-linux.sh`. No Python interpreter, PySide6, maturin
+or Python CAM installation is required. Window/display behavior still needs
+human testing on the target KDE Plasma/Wayland system.
 
-**Already have a working CarveFoundry venv?** Register the app without touching
-any Python/Rust packages:
+## Architecture
+
+```text
+Cargo.toml                       Rust workspace
+crates/core/                     Pure Rust versioned project + geometry + editor
+  src/project.rs                 Stock, contours, fixtures, .cfd persistence
+  src/geometry.rs                Finite closed-polygon validation and hit testing
+  src/editor.rs                  Validated commands, drag transaction, Undo/Redo
+apps/studio/                     Native eframe/egui UI
+  src/main.rs                    Canvas, panels, stock/fixture/contour editing
+docs/ROADMAP.md                  New implementation phases and acceptance gates
+docs/SAFETY.md                   Known machine-side requirements, blocked exports
+docs/HANDOVER.md                 Rolling development checkpoint
+.github/workflows/rust.yml       Rust CI, Clippy, Linux release compilation
+```
+
+Modules are split by ownership. Geometry and project validation have **no UI
+dependency**, and the UI cannot invoke a machine exporter that does not exist.
+
+## Design controls
+
+Use **Add rectangle** to create a closed contour, click to select it, drag to
+position it, or edit X/Y numerically. Locked contours cannot move or delete.
+Undo/Redo records each drag as one history action. Save/Open a project using
+a typed `.cfd` path in the toolbar. Stock dimensions and basic fixture
+inventory live in the Inspector. Sample left-fence dimensions are an example
+only and require measurement before any machining capability is added.
+
+## Core testing
 
 ```bash
-cd /mnt/moar/Downloads/git/CarveFoundry
-bash scripts/install-linux.sh --desktop-only
+cargo fmt --all
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo build --release -p carvefoundry-studio
 ```
 
-This uses the checkout's existing `.venv`. If yours is elsewhere, add
-`--venv /absolute/path/to/venv`. This is the safest option when you already
-have matching CPU/CUDA/ROCm AI packages installed.
-
-To install optional local AI dependencies into the installer-managed venv for
-a new installation, use `bash scripts/install-linux.sh --with-ai`. **Existing
-GPU users:** this can replace matching PyTorch wheels; preserve your working
-venv with `--desktop-only`, or use the
-[official PyTorch installation selector](https://pytorch.org/get-started/locally/)
-to choose matching CPU/CUDA/ROCm wheels. It does not package model weights;
-those download on first use.
-
-**Launch:**
-
-```bash
-~/.local/bin/carvefoundry
-```
-
-If `~/.local/bin` is already in your `PATH`, just run `carvefoundry`.
-Or open the KDE application launcher and search for **CarveFoundry**.
-For subsequent application updates:
-
-```bash
-cd /path/to/CarveFoundry
-git pull --ff-only
-bash scripts/install-linux.sh
-```
-
-Flatpak remains a future, separately tested distribution target, especially
-for users on other Linux distributions. Its sandbox and GPU/AI dependency
-handling need physical validation before replacing this native build.
-
-## CarveWork — local AI project chat (Ollama)
-
-The **CarveWork** companion website is included in this same Git repository
-at `tools/carve-work/`. It defaults to local Ollama
-(`devstral-small-2:24b`); OpenAI API remains an explicit, separately billed
-opt-in. Automatic linked chat handovers, historical chat search, project
-tasks, and approval-gated file/command tools are included.
-
-With your existing CarveFoundry checkout up to date and Ollama running:
-
-```bash
-cd /mnt/moar/Downloads/git/CarveFoundry
-git pull --ff-only
-ollama list  # install devstral-small-2:24b if needed
-bash scripts/run-carvework.sh
-```
-
-Open `http://127.0.0.1:8765`. No separate ZIP or source checkout is needed.
-If an earlier CarveWork installation has chats under
-`$HOME/git/carve-work/data`, the launcher reuses them automatically when
-the original database exists; `CARVE_WORK_DATA` overrides this
-selection. **Chats, databases, `ai.key`, and other secrets stay local and are
-not tracked in Git.** See [CarveWork setup and security](tools/carve-work/README.md).
-
-## Development continuity
-
-The canonical [rolling development handover](docs/HANDOVER.md) records the
-verified merged baseline, current feature branch/PR, validated checks, blockers,
-and next action. Update it in the same PR at each meaningful development
-checkpoint; reconcile it against live GitHub state before resuming work.
-Read it alongside the [live roadmap](docs/ROADMAP.md).
-
-## Project direction
-
-CarveFoundry aims to cover the practical workflow people often use Easel for while giving more control over imported geometry, cutter definitions, 3D relief work, preview, optimization, and G-code export.
-
-Planned and current areas include:
-
-- 2D/2.5D design and CAM workflows
-- SVG, DXF, image, STL, and G-code import paths
-- first-class STL mesh import with retained geometry and mesh metadata
-- stock and project setup
-- cutter-aware CAM using the actual selected cutter profile
-- roughing and finishing strategies for 3-axis CNC
-- preview and simulation
-- G-code export
-- Linux/Wayland-native desktop behavior
-
-## Locally generated AI bas-reliefs
-
-Open **Model → Generate AI Bas-Relief…** (also in the Position tool flyout).
-Choose **From image** for a local photograph/illustration, or **From text
-prompt** to generate a reference image first. Choose relief width, height,
-raised depth, backing thickness, grid detail (32–384 samples on the long
-axis), foreground inversion, and smoothing. CarveFoundry saves a real,
-watertight **STL in millimeters** at your selected path and automatically
-imports it through the normal STL importer, ready to position, save in
-`.cf3d`, and machine with cutter-aware CAM. Prompt generation also writes
-`<STL stem>_source.png` beside the STL.
-
-Install the optional, **locally executed** models on your Arch Linux Python
-environment:
-
-```bash
-cd /mnt/moar/Downloads/git/CarveFoundry
-git pull --ff-only
-source .venv/bin/activate
-python -m pip install -e '.[ai]'
-python -c "import torch, torchvision; print('torch:', torch.__version__, 'torchvision:', torchvision.__version__)"
-```
-
-The AI extra installs **torchvision** as well as torch, Pillow, Transformers
-and Diffusers. A missing Torchvision installation previously stopped
-`AutoImageProcessor` before it could estimate depth. Install these in the
-**same virtual environment** used to start CarveFoundry, then restart the app.
-If the import check reports an error such as
-`operator torchvision::nms does not exist`, torch and torchvision likely
-have incompatible binary builds. Reinstall **matching** torch/torchvision
-wheels for your CPU/CUDA/ROCm hardware, following the official PyTorch
-installation selector at https://pytorch.org/get-started/locally/; do not
-mix CPU, CUDA, ROCm, or system/pip builds. The optional dependency alone does
-not guarantee GPU support.
-**Depth Anything V2 Small** estimates relative image depth. For prompt mode,
-**SD-Turbo** generates a reference image before depth estimation. Hugging Face
-downloads their weights the first time you use each model, into your local
-model cache. Later generation runs locally, and can run offline when the
-weights are cached. No inference server, cloud generation account, or API key
-is required. Image mode can run on CPU; prompt mode on CPU may be very slow
-and needs substantially more memory. Consult SD-Turbo's current model license
-for commercial-use terms.
-
-The result is a **single-view, rectangular 2.5D heightfield relief** with
-a flat back and solid edge walls, not a true multi-view 3D reconstruction.
-Perspective, hidden surfaces, thin lettering, overlapping features and
-background may require source-image cleanup or inversion. The ML predictions
-are *relative*, not metric measurements; the selected millimeter depth
-controls actual geometry. Check cutter reach, stock thickness, fixtures,
-visual detail and preflight before cutting. The generated STL is placed with
-its highest point at the current stock-top **Z0**, with stock-bottom-left XY
-zero; change the object Z transform to recess its highest point if desired.
-CarveFoundry keeps the UI responsive during generation and supports Cancel,
-although model downloads and CPU jobs may consume substantial resources.
-
-## Cutter geometry
-
-CarveFoundry is not designed around a ball-nose-only 3D finishing assumption. Cutter definitions model the actual cutter profile so flat end mills, ball noses, V-bits, engraving/conical tools, tapered ball noses, and future custom revolved profiles can be handled by the CAM engine.
-
-## Compact left toolbar
-
-The vertical rail prioritizes **interactive viewport tools**. Camera/Arcball
-remains the default, followed by Select, Shapes, Line, Text, Pen, Measure XY,
-and Draw Fixture. Move through the longer rail using the mouse wheel over
-the icons; the top File/Edit/View menus retain the general commands.
-
-The **Measure XY** tool measures a drag on the *stock-top Z0 plane*,
-reporting length, signed ΔX, signed ΔY and the counterclockwise angle
-from +X. The yellow measurement line remains until you click **Clear**
-or open a different project. This is a **planar measurement**, not an
-arbitrary 3D surface/mesh distance.
-
-With **Draw Fixture**, set Top Z and extra cutter-clearance margin in the
-contextual options bar, then drag an XY rectangle on the stock. The
-result is a real project-owned preflight keep-out, visible in the viewport,
-undoable and saved in .cf3d. The small arrow on its tool button opens
-**Clamps and Fences** for editing, deleting or adding off-stock fence
-regions that cannot be drawn within the stock rectangle.
-
-Generate Toolpaths, Preview, CNC Preflight and G-code Export are
-one-click buttons near the bottom of the scrollable rail. More advanced
-CAM, cutter and machine controls remain in their flyout menus.
-
-## Planar silhouette Union / Subtract / Intersect / Offset
-
-Select two or more drawn planar shapes, then choose **Design → Vector → Union
-Silhouettes**, **Subtract Silhouettes**, or **Intersect Silhouettes**. The
-same commands are available from the small arrow on the Pen/Vector rail tool.
-For Subtract, the first item in Layers order is kept and the other selected
-items are removed from its XY outline. Select exactly one planar shape for
-**Offset Silhouette**: a positive distance expands it and a negative distance
-contracts it. Round, mitre and bevel corner styles are available.
-
-The operation runs in a background worker and creates a new 2.5D shape, with
-the selected depth below **stock-top Z0**. It preserves cutouts and separate
-islands, hides the original objects without deleting them, and supports
-Undo/Redo and .cf3d save/load. Recalculate toolpaths after making an edit.
-
-**Scope:** these are XY-projected outline operations, not volumetric 3D
-Booleans or editable vector control points. STL reliefs and objects tilted
-out of the XY plane are not accepted. Source shapes that no longer overlap
-may produce an empty Intersect/Subtract result; the existing design is
-left untouched if a calculation fails.
-
-## Workshop preflight and cutter stages
-
-CarveFoundry stores clamps and fences as project fixture keep-out zones.
-Open **Project → Clamps and Fences** to record the fixture XY footprint and
-its top Z relative to the **stock top Z0**. For example, a 23 mm high left
-fence measured from the *machine bed* alongside 19.4 mm thick stock has
-top Z = 23 − 19.4 = **+3.6 mm**, not +23 mm. Fixture clearance is an extra
-margin around the nominal cutter radius.
-
-**Toolpaths → CNC Preflight** checks fixture collision, cutter travel, depth
-and configured work-envelope limits. The same checks run automatically
-before normal, resume and tiled G-code export; known errors block export.
-Tiled programs are checked tile-by-tile in their own local work envelopes.
-
-**Export now also verifies the actual NC text:** For each consecutive cutter
-stage, CarveFoundry renders the GRBL commands, independently decodes modal
-G0/G1 movements, checks posted XYZ and feeds against the planned cuts, and
-preflights the decoded retracts, rapids, parking and cutting motions. Unknown
-codes (including arcs, canned cycles or changed work offsets) fail closed;
-they are not approximated. Cutter-stage NC files are prepared temporarily
-before replacing their destination files, so a later stage's verification
-failure does not overwrite earlier files. Supported GRBL output uses
-G90/G91, G20/G21, G17, G94, F and M2/M30. This offline interpreter is not
-a substitute for inspecting the actual controller and installed work offset.
-
-Multi-tool output is split into one G-code file per consecutive cutter stage.
-Run these files in the numbered order, stop the machine between stages,
-change the cutter and re-probe the new tool's Z before proceeding.
-
-These are **offline checks**. CarveFoundry cannot determine actual
-work-zero calibration, an unrecorded clamp, cutter holder collisions,
-or where the machine is currently positioned. Always verify the program
-and the physical setup before starting your CNC.
-
-For proposed features that do **not** yet exist, see
-[`docs/ROADMAP.md`](docs/ROADMAP.md). CarveFoundry does not expose fake
-controls for those proposals.
-
-## Double-sided stock setup (front/back)
-
-Choose **Project → Double-Sided Stock Setup…** (also in the Position flyout).
-Assign the visible model objects for each face and choose the **physical**
-turnover of the stock. Left/right turnover reverses X:
-`X_back = stock_width - X_front`; top/bottom turnover reverses Y:
-`Y_back = stock_height - Y_front`. Both resulting projects use the machine's
-stock-bottom-left XY0 and **the exposed face's stock-top Z0**. The physical
-stock thickness is unchanged in software. Geometry must fit the full stock
-XY area and depth on each face; the wizard rejects an ambiguous/unsafe layout
-rather than clipping it.
-
-Select a parent directory and a **new** setup folder. CarveFoundry builds and
-reload-validates `front.cf3d`, `back.cf3d`, and `SETUP_INSTRUCTIONS.txt`
-in the background. The source project is not modified, and existing setup
-folders are not overwritten. Back meshes have the reflection baked in;
-edit the source project and repeat setup to change the back design. Fixture
-rectangles remain in MACHINE coordinates (fixed fences are not mirrored).
-
-**Operator steps:** Open each generated CF3D independently, generate that
-face's toolpaths, preview, run fixture-aware CNC preflight and export. Machine
-the front, stop and physically turn the wood against the registration stops,
-secure it, confirm fence heights/clearances and work offsets, **re-probe the
-newly exposed stock face as Z0**, then run the back setup. The wizard does not
-control the machine, measure a physical turnover or guarantee alignment.
-
-## Persistent multi-cutter machining operations
-
-In **Generate Toolpaths**, check **Append to existing machining job** when
-adding rough, finish, detail or cutout passes. The CPU worker generates the
-new operation, validates rough-before-finish and cutout-last dependencies,
-and builds the complete combined preview. Failure leaves the previous job
-untouched.
-
-The Inspector's **Machining Operations** section is the persistent job editor.
-Every saved operation retains its operation type, cutter, source objects and
-calculation settings independently from generated machine motion. The list
-shows READY, RECALCULATE or DISABLED state and supports editing, selective
-recalculation, reordering, duplication, deletion and enable/disable.
-
-Changes that can alter material state invalidate the affected operation and
-the dependent operations after it. Earlier unaffected motion is retained.
-Preview and export stay blocked while an enabled operation needs recalculation.
-Disabling an operation removes its machine motion from the active job without
-deleting its saved setup; re-enabling it requires fresh calculation.
-
-CF3D projects persist both the operation stack and calculated toolpaths.
-Reopening an unchanged project therefore restores a preview/export-ready job.
-GRBL export still splits cutter stages into separate numbered files when a
-manual tool change is required. Stop, change the cutter and re-probe Z between
-files, and run mandatory CNC preflight before export.
-
-## Batch production grid
-
-Select a part or multiple component objects, then choose **Design → Arrange →
-Batch Production Grid…** (also in the Position flyout). Specify copy count,
-columns, gap and stock margin. The operation checks the full combined template
-footprint against the stock and recorded clamp/fence rectangles using the
-**currently selected cutter's radius**, then generates independently editable
-stock-relative copies in a background worker. Originals are hidden, not
-destroyed, and Undo/Redo restores them. Copies of multiple components are
-grouped by finished part.
-
-This is regular row/column layout, **not** irregular nesting or automatic
-optimization of rotation/grain. The chosen cutter checks initial clearance;
-use mandatory CNC preflight for every cutter in the finished multi-tool job.
-X/Y Smart Value bindings must be removed from template objects so they cannot
-overwrite calculated batch positions.
-
-## Compact workspace and guided CAM form
-
-The viewport's **Import / Fit / Inspector** shortcuts now move into the
-always-visible **⋯** menu automatically when the canvas is narrow. The object
-selector, CAM status and toolpath-generation command remain visible; no
-feature is lost when you resize the window or expand the Inspector. The menu
-also opens Layers and the Guided CNC Job.
-
-The Inspector's **Position, Rotation, Size, Scale**, and Object/Gizmo
-settings are compact expandable sections. Position and Size open by default;
-Rotation, Scale, and advanced setup can remain collapsed. Your expand/collapse
-choices persist across launches. Choosing **Model → Transform → Rotate/Size/
-Scale/Position** reopens the correct section and takes the cursor to its
-numerical field, so hidden controls do not interfere with menu workflows.
-
-**Generate Toolpaths** has a side rail linking directly to Source, Cutter,
-Strategy, Depth, Motion/Safety, Tabs, Stock-Aware Rest, and Readiness. Hide the
-rail with **Hide steps** on smaller displays; the full form and all option
-help remain available. A fixed context strip displays the chosen operation,
-cutter, number of visible models and actual stock dimensions as you edit.
-The existing live validation, cancellation, worker process and mandatory
-export preflight are unchanged.
-
-**Guided CNC Job** shows a progress indicator for *project readiness checks*
-and a **Go to next action** shortcut. It avoids repainting unchanged checks
-while open. Readiness is not physical proof of machine setup or confirmation
-that the named steps were manually performed.
-
-## Stock-aware rest machining
-
-After generating a 3D Rough or Finish operation, reopen **Generate
-Toolpaths → 3D Rest** (or **Guided CNC Job → Rest Cleanup**). This operation
-**requires and appends to the existing machining job**. CarveFoundry simulates
-stock after all prior cutter stages and generates cutter-contact-compensated
-serpentine cleanup **only where the new cutter is predicted to remove residual
-material above the selected threshold**. Typical workflow: rough with a
-1/4-inch bit, then rest cleanup with a smaller ball nose; inspect the
-completed path in Preview and rerun mandatory CNC preflight before export.
-The existing job remains unchanged if the model has no sampled leftover.
-
-Set **Minimum leftover height** (default 0.15 mm) to ignore negligible
-material, and **Stock simulation spacing** (default 0.75 mm) to determine
-the smallest leftover features the simulation can detect. This is sampled
-**2.5D** rest machining—not a live measurement of the actual workpiece.
-It cannot see cuts made outside CarveFoundry, real cutter deflection, the
-holder or unrecorded hold-downs. Increase simulation resolution for small
-features; the memory/sample caps reject overly fine setups instead of
-silently guessing. Each design object needs a preceding operation, and
-a detached part cannot be rest-machined after a full-depth cutout.
-New cutter stages remain separate GRBL programs requiring manual cutter
-change and stock-top Z re-probe; export still performs its own fixture-aware
-preflight.
-
-## Sampled material-removal simulation
-
-Choose **Toolpaths → Simulate Material Removal…** after generating a machining
-job, or click **Virtual machining** in the standalone Toolpath Preview.
-This is separate from the existing backplot/path animation. CarveFoundry
-simulates each cutting/plunge move, in cutter-stage order, against a regular XY
-grid of remaining stock using the selected flat, ball, V/cone, tapered ball or
-custom radial cutter profile. G0 rapid moves are not treated as cuts. The
-standalone viewer shows remaining stock height, approximate removed volume by
-operation and (when a 3D model is present) deviation from the top model
-surface: blue = remaining material above target, red = cut below target.
-Choose XY sample spacing before calculation; the application rejects overly
-large grids/sampling workloads instead of silently degrading resolution.
-Long simulations support cancellation.
-
-The **Verify and simulate posted G-code** box is on by default. It
-postprocesses each cutter stage, decodes and preflights the resulting NC
-against configured machine travel, stock and recorded fixtures, then runs
-material removal using those decoded NC motions (rather than trusting the
-unexported plan). Uncheck it only to compare against the original in-memory
-toolpaths. The stock viewer identifies which mode produced its result. The
-posted-code parser and geometric stock solver are separate parts; the latter
-is still sampled 2.5D rather than a second exact CSG implementation.
-
-**Scope:** This is sampled **2.5D material removal**, not exact continuous
-volumetric CSG. It cannot represent undercuts, physical holder contact,
-runout, machine acceleration, the actual work offset or fixtures not recorded
-in the project. Model comparison uses the *top surface* of visible 3D objects:
-intentional 2D pocket/cutout operations can be below that surface. Simulated
-volume is approximate. Always run mandatory CNC preflight before exporting.
-
-### Repeatable offline benchmark
-
-Run `python scripts/virtual_cam_benchmark.py --spacing-mm 1` from an
-installed CarveFoundry environment to produce JSON metrics for a synthetic
-three-cutter serpentine job: decoded NC move count, cutting and rapid
-distance, lateral retract travel, estimated material removed and simulation
-runtime. The benchmark is an explicitly **synthetic surrogate**, not the
-original CPO anchor, coin or plaque project. Original project assets must be
-checked in (with permission) before claiming those as reference fixtures.
-No simulation result is physical Onefinity validation.
-
-## Automatic project recovery
-
-CarveFoundry saves a **separate complete CF3D recovery checkpoint** after
-approximately one minute without further editing. This does not replace your
-manually saved file and does not clear the unsaved-change indicator. On the
-next visible startup, existing checkpoints appear in a Restore/Discard dialog;
-they remain available until successfully saved or deliberately discarded.
-The File menu also offers **Recover Autosave…**, **Save Recovery Checkpoint**
-and an **Automatic Recovery Checkpoints** toggle.
-
-The recovery area lives in your normal Linux application-data directory, not
-in the project folder. Checkpoints have atomic metadata, SHA-256 verification
-before restore and bounded retention. Restoring loads a normal project as
-**unsaved changes**. If the source file changed since the checkpoint, the
-restore dialog warns you. Only an explicit normal **Save** can overwrite
-the source project. A deliberate Discard of unsaved work removes that
-session's recovery checkpoint. The checkpoint preserves the same design,
-stock, fixture and mesh information as a normal CF3D Save; session-owned
-generated toolpaths and machining-job order must be regenerated after restore.
-
-## Direct Selection — analytic line, arc and Bezier paths
-
-Newly drawn **Pen Strokes and Lines** retain editable centerline XY anchors
-alongside the cutter-facing 3D mesh. Select one eligible object, then use
-**Direct Selection** from the left rail or **Design → Draw/Vector → Direct
-Selection**. Green anchor crosses appear in the OpenGL viewport. Drag an
-anchor on the stock plane (Top view recommended), or use the modeless
-inspector for exact XY coordinates and segment editing.
-
-A segment after the selected anchor can be a straight **Line**, a
-**Circular Arc** with an exact signed sweep, or a **Cubic Bezier** with two
-exact control points. Curves remain analytic in the project and are flattened
-only at viewport/CAM boundaries using a deterministic tolerance. Midpoint
-insertion splits arcs and Beziers at their exact parametric midpoint instead
-of baking them into arbitrary line fragments.
-
-Direct Selection can snap dragged/moved anchors to nearby retained-vector
-**nodes, segment midpoints, arc centers and intersections** with a configurable
-millimeter tolerance. It also supports **Close Path**, **Open at Node**,
-**Split at Node**, and **Join 2 Selected**. Split/join retain analytic curve
-segments, update persistent CAM source-object IDs, and participate in normal
-Undo/Redo and stale-operation invalidation. All edits rebuild actual machinable
-geometry and persist inside normal CF3D files. Planar retained vectors are also
-supplied directly to Profile, Pocket, Engrave and V-Carving CAM; mesh
-projection remains the fallback for non-vector or out-of-plane geometry.
-
-This feature does **not** pretend arbitrary imported STL, raster traces or
-baked silhouette/Boolean meshes contain editable vector source geometry.
-Editable imported SVG/DXF contours, graphical Bezier-handle dragging,
-trim/extend, fillet/chamfer, tangent/perpendicular/grid snapping,
-first-class editable imported contours and text-on-path remain follow-on
-vector-CAD work. Cross-object Join currently requires planar compatible paths
-and an endpoint gap within the configured snap tolerance. Paths with X/Y tilt must be untilted before
-XY source editing.
-
-## Guided CNC workflow
-
-Use the new **Guided CNC Job** button next to Save/Undo, or select
-**Project → Guided CNC Workflow…**. The modeless eight-step guide follows:
-stock and work zero, machine profile, physical fences/clamps, design objects,
-CAM generation, job/preview review, **actual mandatory CNC preflight**, then
-per-cutter G-code export. Every button launches the existing real command.
-Its step statuses update from the current stock, fixture, machine and generated
-toolpaths. Preflight completion is linked to the *exact current setup*;
-changing stock, fixtures, machine settings or toolpaths invalidates the
-guide's green preflight status. Export remains protected by the independent
-fixture-aware preflight that already runs during export.
-
-The guide is an aid for human setup, not automatic physical verification:
-check the actual stock registration, Makita/Onefinity holder and fences,
-re-probe stock-top Z0 after tool changes, and repeat the full guide separately
-on each side of a double-sided project.
-
-## Native CAM core
-
-The CPU-heavy mesh rasterization and cutter-contact calculations are implemented in Rust and exposed to the Python application through PyO3. The PySide6 UI, project model, cutter definitions, and orchestration remain Python.
-
-The original readable Python implementations are intentionally kept as reference backends. This makes correctness problems much easier to isolate:
-
-```bash
-CARVEFOUNDRY_CAM_BACKEND=python carvefoundry
-CARVEFOUNDRY_CAM_BACKEND=rust carvefoundry
-```
-
-The normal default is auto, which uses Rust when the compiled extension is available and otherwise falls back to Python. Packaged/development installs build the Rust extension automatically.
-
-For module ownership and extension guidelines, see
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Native Wayland hardware acceptance
-
-Automated CI tests run offscreen and cannot prove physical KDE Plasma/Wayland
-pointer delivery, input focus, real OpenGL rendering or GPU performance. The
-hardware acceptance matrix and native-input recorder are in
-[docs/WAYLAND_QA.md](docs/WAYLAND_QA.md). Run it locally after viewport,
-gizmo, toolbar and Inspector changes; do not report those behaviors as
-hardware-tested based on headless CI alone.
-
-## Development
-
-Requires Python 3.12 or newer and a Rust toolchain new enough for PyO3 0.29 (Rust 1.83 or newer).
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-python -m pip install -e '.[dev]'
-carvefoundry
-```
-
-Run the Python and Rust checks with:
-
-```bash
-ruff check src tests
-pytest -q
-cargo fmt --manifest-path rust/Cargo.toml --check
-cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path rust/Cargo.toml
-```
+The work is only considered a production CNC replacement after the new engine
+passes all acceptance gates in `docs/ROADMAP.md`, especially verified
+toolpath decoding, collision/preflight gating, physical test cuts and KDE
+Wayland acceptance.

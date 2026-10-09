@@ -1,358 +1,53 @@
-# CarveFoundry implementation roadmap
+# CarveFoundry — pure Rust reboot roadmap
 
-This file separates **working, integrated features** from proposals. A roadmap
-entry is not a claim that a control or algorithm is available. Update this file
-in the same pull request whenever a roadmap capability is actually delivered.
+**Direction:** entirely new Rust desktop, Rust-owned project schema, and
+incrementally built Rust CAD/CAM. Do not port GUI functions one by one from the
+old Python application. Reimplement useful workflows with tests and stable
+interfaces, informed by the archived code, without depending on it at runtime.
 
-## Recently completed roadmap milestones
+## Milestone gates
 
-- **Persistent object-aware machining operations — PR #59 / PR #60:** Native
-  projects retain machining intent separately from generated motion. The
-  Inspector exposes ordered operations with stable IDs, source-object links,
-  cutter/settings, READY / RECALCULATE / DISABLED state, edit, reorder,
-  duplicate, delete, enable/disable and selective background recalculation.
-  Preview/export remain blocked while any enabled stage is stale or missing
-  generated motion.
-- **Analytic native vector foundation — PR #61:** Retained editable
-  paths support line, circular-arc and cubic Bezier segments, deterministic
-  curve tessellation, exact segment splitting, CF3D persistence, Direct
-  Selection segment editing and node/midpoint/arc-center/intersection snapping.
-  Planar retained vectors feed Profile, Pocket, Engrave and V-Carving directly
-  at the 2D CAM boundary instead of first reconstructing their contours from
-  triangles.
-- **Vector topology editing — PR #62 (upon merge):** Direct Selection can
-  close an open contour, open a closed contour at a chosen node, split an open
-  path at an interior node, and join two selected open vector paths within the
-  configured snap tolerance. Arc and cubic-Bezier segments remain analytic.
-  Split/join update persistent CAM source-object IDs and participate in normal
-  Undo/Redo and stale-operation invalidation.
+| Phase | Deliverable | Acceptance | State |
+|---|---|---|---|
+| R0 | Pure Rust monorepo + working 2D canvas | Cargo workspace, geometry, stock/fixture model, versioned files, undo/redo, CI, native window | **Implemented on rust-reboot; CI pending** |
+| R1 | Professional vector CAD | Retained line/arc/cubic paths, node/handle editing, snapping, Bézier preservation, real fonts/text, SVG/DXF, layers/grouping, trim/extend, fillet/chamfer | Planned |
+| R2 | 3D geometry workspace | Real mesh load/store, multi-part layers, camera/gizmos, material relief, procedural image-to-depth input, robust Wayland viewport QA | Planned |
+| R3 | Native job definition and tool library | Physical cutter profiles and materials, ordered typed CAM operations, UUID-linked sources, per-stage invalidation/dependency graph | Planned |
+| R4 | Rust 2D/2.5D CAM | Profile, pocket, engraving, V-carving, inlay, contour/texturing, clearance vs cutter geometry, operation arrays, performance parity | Planned |
+| R5 | Rust 3D CAM and preview | Roughing, finishing, rest, native stock removal visualization, collision/contact checks and deterministic benchmarks | Planned |
+| R6 | CNC-critical safeguards and export | Fixture/holder-aware posted NC preflight, stock/tool/machine bounds, Z clearance, cutter-specific NC stages, re-probe prompts, fail-closed output | Planned |
+| R7 | Production reliability + physical QA | Atomic recovery, packaged Linux build, source/project migration tool, golden projects, independent NC validation, KDE/Wayland and Onefinity scrap tests | Planned |
 
-## Workshop-safe output — implemented in PR #16 (upon merge)
+## Immediate next milestones
 
-- Project-owned rectangular fixture keep-outs with editable XY extents, top Z,
-  clearance, visible viewport outlines, native CF3D persistence, and Undo/Redo.
-- Cutter-radius-aware segment/fixture preflight, stock depth, configured machine
-  travel and parking movement checks. Normal, resume and tiled exports are
-  blocked when preflight detects an error. Preflight is also available as a
-  separate report-only command.
-- Dedicated G-code file per consecutive cutter stage rather than silently
-  switching cutters inside one GRBL file. Manual cutter change and Z re-probe
-  between files are required.
-- Project-window open/save moved to workers; Save-before-New/Open/Close defers
-  the requested action until the save succeeds.
+1. **R0 QA and usability:** pass Rust/Linux CI, improve exact vector selection,
+   fixture editing/removal and save/load error feedback; measure native UI
+   behavior on KDE Plasma/Wayland before declaring R0 fully accepted.
+2. **R1 analytic vector data core:** persistent segment enum (line, circular
+   arc, cubic Bézier), exact edge operations, stable node IDs and Undo, full
+   schema roundtrip. Avoid sampling analytic curves as the canonical source.
+3. **R1 editor UI:** Direct Selection mode and separate whole-object mode,
+   numeric coordinates, live snaps and keyboard modifiers, layers, SVG/DXF.
+4. **R2 mesh project store + live 3D view**, after successful R1 milestones.
+5. **R3/R4 typed CNC jobs**, no NC emitter until R6 passes independent tests.
 
-Preflight is deliberately conservative and offline. It cannot know the actual
-work offset, controller travel origin, hold-downs omitted from the project,
-cutter holder envelope, spindle state, or where the machine is currently parked.
-It must not be described as a guarantee of physical safety.
+## Critical constraints learned from earlier versions
 
-## Rust-native UI replacement — new priority
+- XY0 = stock bottom-left; Z0 = stock top. Store fixtures' top Z relative
+  to stock top (bed fence height minus stock thickness where appropriate).
+- A side fence can extend outside nominal stock XY. Keep-out validation
+  must allow those negative coordinates.
+- Each cutter stage must have distinct generated NC output. Manual tool
+  changes need Z re-probing. Never silently switch physical cutters.
+- Treat every relevant design, fixture, cutter or strategy change as
+  stale-to-downstream CAM until regenerated. Post-processed NC needs
+  validation **after** generation, not only internal toolpath checks.
+- CAM safety needs holder/tool envelope, clamp clearances, machine travel
+  and safe rapid positioning, not just positive Z values.
+- Keep operations reproducible and granular. Do not claim cutting readiness
+  on the basis of editor tests, Rust compilation or a preview.
 
-The product direction is now a native Rust desktop interface using egui/eframe,
-**not a cosmetic PySide6 makeover**. The first isolated implementation lives in
-`rust-ui/` and provides real vector shapes, direct selection, rectangle arrays,
-polygon-aware first-fit stock placement, editable Rust layout JSON and SVG
-interchange. It is intentionally an **experimental companion**, not a completed
-UI replacement, and the legacy CNC workspace remains the sole validated
-CF3D/CAM/preflight/export path until a cross-language engine bridge is proven.
-
-Priorities based on gaps in production CNC tooling are sheet layout/nesting,
-reusable toolpath templates, inlay plug/pocket workflows, merged/arrayed
-operations, vector texturing, extension/gadget APIs and safe batch production.
-See [Rust UI capability and acceptance plan](RUST_UI_GAP_PLAN.md).
-No source workspace from this native Rust layout may be mistaken for G-code.
-PR #84 merged the first Rust-native layout window after Cargo geometry
-tests, Linux release compilation and strict Clippy CI passed. PR #85 merged
-a read-only CF3D vector-outline and stock snapshot adapter after both Python
-CI lanes passed. PR #86 merged the **Import vectors (read-only)** Rust UI workflow and a
-separate KDE launcher, with passing native Rust geometry/Clippy/release tests,
-shell syntax checks and Python 3.12/3.14 CI. This is explicitly **not** a
-read/write CF3D engine bridge; it does not retain CAM or fixture metadata
-inside the Rust layout, generate NC programs or replace full CNC preflight.
-The original PySide6 application stays available as the CNC authority.
-PR #89 merged the SHA-256 and stable-UUID guarded, placement-only
-native CF3D transaction service after green Python CI. PR #90 completed the
-**Save XY placements as NEW CF3D** Rust UI workflow and passed independent
-Rust Cargo, strict Clippy, Linux release-build and Python 3.12/3.14 CI.
-The interface rejects unsupported geometry/topology, object set, name,
-rotation and stock changes; its new output file discards generated
-toolpaths and marks all persisted CAM operations stale. The existing
-application must then regenerate, simulate and preflight machining.
-This does not yet supply a full Rust-native CF3D project authoring/3D-CAM
-editing interface, NC exporter or machine-tested workflow.
-
-The next **in-progress**, unmerged engine milestone introduces typed SHA-256-
-guarded, stable-UUID placement transactions against the original CF3D
-serializer. The only supported mutation is a checked XY translation of an
-eligible retained vector. It writes a new CF3D, invalidates all generated
-toolpaths, marks every CAM operation stale, and leaves the source untouched.
-It is not wired to Rust UI yet and does not authorize machine export.
-
-PR #88 merged strict versioned multi-sheet plan JSON reopening with
-validated stock geometry, source part identities, placement clearance and
-file-size limits; Rust/Clippy/native release CI and Python 3.12/3.14 CI passed.
-The UI previews and exports independently saved layouts without touching the
-editable source vector design or the original CF3D/CAM state.
-
-PR #87 merged bounded **multi-sheet polygon-first-fit nesting** after Rust
-Cargo tests, Clippy, native Linux release build and both Python CI lanes passed.
-The Rust UI can compute plans on a background worker, inspect each stock sheet,
-lock quarter-turn rotation to preserve grain orientation, and export a versioned
-plan JSON plus a separate SVG per sheet. Source layout remains unchanged on
-planner failure. This is a bounded heuristic rather than globally optimal
-nesting; machine fixtures, actual grain vectors, cutter kerf, toolpath safety
-and CNC preflight remain responsibilities of the existing CAM application.
-
-PR #91 merged the read-only Rust CAM stage inspector after Python
-3.12/3.14 and Rust/Linux CI passed. Its stored motion counts remain explicitly
-unverified; this is NOT a posted-G-code or fixture-aware preflight certificate.
-
-PR #92 merged **versioned reusable CAM settings templates** after Rust
-Cargo/Clippy/native release and both Python CI lanes passed. It exports
-parameters from an existing operation and applies them to another existing
-operation only when strategy, cutter geometry and parameter key/type schema
-match. A new CF3D file is exclusively published, original files remain
-untouched, all generated motion is removed and every operation is stale.
-This is a parameter preset workflow, not toolpath merging, G-code export or a
-verified CNC machining plan. Full Rust-native CAM remains a future milestone.
-
-**Paired inlay design milestone — PR #93 merged and CI passed:** Native Rust
-Studio now has a strictly-convex polygon-only pocket/plug outline planner in
-`rust-ui/src/inlay.rs`, typed included cutter angle, tip diameter, cutter
-envelope, depth, engagement, material thickness, glue gap and fit clearance.
-The derived plug contour uses an inward design setback of
-`clearance + engagement × tan(included_angle / 2)` and rejects malformed,
-concave, collapsing and out-of-stock outlines. It previews the plug outline
-and creates paired SVG designs plus a JSON manifest only in a NEW directory,
-guarding CF3D-linked sources with the original SHA-256 and UUID. **These are
-design contours, NOT certified mating geometry or toolpaths**: face mirroring,
-stock registration, cutter-angle/toolpath pairing, real material fit, CNC
-simulation, fixture-aware preflight and NC export remain unimplemented here.
-Full CNC production integration, fit certification and physical QA still require separate validation.
-
-**Native precision stock grid — PR #94 merged and CI passed:** A pure Rust
-stock-XY0 snapping primitive uses finite bounded millimetre grid pitch and
-absolute pointer displacement to prevent sub-grid per-frame rounding loss.
-Rust Studio adds an opt-in drag-to-grid toggle and selected-object alignment.
-Undo/Redo and the existing guarded placement transaction are retained.
-This does not implement vector node snapping, CAM path constraints, new
-CF3D editing semantics or NC safety parity. PR #94 passed 39 Rust unit tests, strict Clippy, Linux release compilation and Python 3.12/3.14 CI. Native node, midpoint and edge snapping remain open milestones.
-
-**Rust Studio live contour alignment — PR #96 merged with green CI:** A
-bounded snap index in `rust-ui/src/vector_snap.rs` searches vertices, edge
-midpoints and edge projections of **other** layout polygons. The Studio
-dragging workflow grabs a nearby feature of the selected part, calculates
-the entire object's XY translation from its absolute drag displacement,
-prioritizes compatible geometry snap targets inside a screen-pixel radius,
-draws the active snap target and falls back to optional stock-origin grid
-snapping. Source polygons are never rewritten. Oversized target sets are
-rejected, preserving free/grid movement. Tests cover vertex/midpoint/edge
-results, source exclusion, deterministic part order, malformed coordinates
-and resource limits. This does **not** implement direct editing of individual
-vector nodes, retention of imported analytic curves in the Rust format,
-CF3D topology writeback or any new CNC preflight capability. PR #96 passed native Rust tests/strict Clippy/release, plus Python
-3.12/3.14 CI. Individual native vertex editing and protected analytic
-CF3D node writeback remain separate unimplemented milestones.
-
-## Parallel architecture track — gradual Rust migration (planned)
-
-PR #81 merged the expanded native raster parity benchmark with sloped,
-sparse and overlapping triangle scenes. Both Python CI lanes passed and
-full-array numerical equivalence checks are available. These results do
-not establish speed improvements on the developer's machine, and cutter
-contact/stock-sweep performance and parity remain separate future steps.
-PR #83 merged an opt-in Python/Rust cutter-contact benchmark for smooth,
-missing-data and ridge height fields with flat and ball-like radial footprints.
-Python 3.12/3.14 CI passed; native parity tests run when the PyO3 extension is
-available. It changes no production CAM code and does not establish real
-hardware speedups or memory savings.
-
-**Keep shipping the native 2D CAD / snapping / CAM roadmap above and below.**
-The Rust migration is a parallel, opportunistic modernization track, **not**
-a prerequisite for the next CAD feature and not a reason to halt current PRs.
-
-**Existing foundation:** `rust/` already builds a PyO3/maturin extension with
-Rayon and NumPy interoperability. Its implemented kernels currently accelerate
-specific raster/contact calculations. The UI and most application logic remain
-Python/PySide6. Do not describe the percentages below as measured repository
-language composition.
-
-**Target direction:** Prefer Rust for reliable geometry, motion planning,
-validation and long-running numerical work while incrementally replacing the presentation layer with a Rust-native
-Wayland interface, and retaining the established Python CNC runtime until
-CF3D, CAM safety, and controller workflow parity are independently verified. An eventual approximately 80–85% Rust
-architecture is an aspirational design choice, **not** a delivery milestone,
-guaranteed speedup, or a commitment to rewrite the entire GUI. Keep Python
-AI/PyTorch inference initially.
-
-### Incremental migration order
-
-1. **Benchmark and define compatibility contracts — in progress:**
-   The initial raster kernel benchmark is available in
-   `scripts/benchmark_native_kernels.py`: deterministic triangles, grid sizes,
-   Python-reference/native parity checking, repeated warmup/median wall-time
-   samples, and JSON output. Results must be measured on target hardware; CI
-   asserts behavior, not speed. Expand to CAD edit, V-Carving, pocketing, 3D
-   finishing, rest machining, simulation and export workloads, including peak
-   memory and Python/Rust transfer overhead. Capture numerical tolerances and
-   representative correct outputs before each conversion.
-2. **Native vector geometry — planned:** Migrate analytic line/arc/cubic
-   evaluation, subdivision, contour topology, geometric snapping and
-   trim/extend/fillet primitives behind the existing Python-facing model/API.
-   Keep UI, project serialization, and machining source UUID semantics stable.
-3. **2D/2.5D CAM and path optimization — planned:** Move independently tested
-   profile, pocket, engraving, V-Carving and rest/ordering kernels one strategy
-   at a time, preserving cutter-aware input and output semantics.
-4. **Simulation and verified NC safety — planned:** Port cutter-profile sweeps,
-   sampled stock removal and collision/preflight calculations with independent
-   Python-versus-Rust parity and fail-closed posted-G-code verification.
-   No simulation replacement may silently weaken safety checks.
-5. **Mesh, project and import cores — planned:** Benchmark and selectively
-   migrate mesh processing, project serialization/history, and vector/import
-   parsing while preserving compatibility with existing `.cf3d` projects
-   and Undo/Redo.
-6. **Optional application-level Rust expansion — evaluate later:** Consider
-   background scheduling, plugin ABI and native UI only after core migration
-   proves useful and KDE Plasma/Wayland behavior remains stable. Do not
-   displace the functional Qt interface solely to maximize Rust percentage.
-
-### Acceptance gates for *each* conversion
-
-- Keep Python-facing interfaces and native CF3D file compatibility stable,
-  including project roundtrips and Undo/Redo.
-- Test golden geometry, numerical tolerances, toolpath ordering, cutter stages,
-  operation stale/ready state and emitted/decoded G-code. Retain a trusted
-  Python reference or reproducible golden cases until parity is demonstrated.
-- Run Rust unit/property tests, `cargo fmt`, strict Clippy, Python 3.12/3.14
-  CI and integration/regression tests. Benchmark speed **and memory**, including
-  PyO3 transfer costs; do not claim performance improvements without evidence.
-- Preserve stock XY0/Z0 conventions, fixture/rapid clearance, offline
-  preflight, manual tool-change and Z re-probing, and fail-closed export.
-- Migrate modules in small, reversible PRs, preferably alongside the relevant
-  CAD/CAM feature. Keep explicit Python fallback where practical during
-  validation; remove it only with adequate independent coverage.
-- Update **this roadmap** and `docs/HANDOVER.md` in each PR, distinguishing
-  implemented, validated, and planned Rust functionality.
-
-## Further development — do not treat proposals as implemented
-
-1. **Live, managed CNC sender:** GRBL planner/serial response tracking, real
-   machine position, feed overrides, pause, stop, recovery and alarm handling;
-   design for interrupted transfers and controller disconnection.
-2. **Exact volumetric simulation beyond the sampled, verified-NC stock preview:**
-   The top-down 2.5D viewer now decodes and preflights exported GRBL motion,
-   models actual cutter radial profiles, approximate removed volume and
-   top-surface deviation. It does not validate arbitrary unsupported NC.
-   Accurate undercuts, continuous CSG, holder collision and live machining
-   verification remain unimplemented.
-3. **Robust job recovery:** immutable job manifests, machine state/work-zero
-   and tool identification, verified safe entry and machine-aware resumption.
-4. **Persistent multi-tool planning and dependencies — substantially
-   implemented:** Native CF3D retains both calculated toolpaths and ordered
-   persistent machining-operation definitions. Operations store stable IDs,
-   source-object links, cutter/settings, enabled state and recalculation state.
-   The Inspector can edit, reorder, duplicate, delete, disable and selectively
-   recalculate operations; geometry/settings changes invalidate the earliest
-   affected stage and dependent downstream stages while retaining earlier valid
-   motion. Preview/export fail closed while any enabled operation is stale or
-   missing motion. Remaining work is richer dependency graphs beyond ordered
-   downstream invalidation, exact stock-state dependency reasoning, reusable
-   operation/toolpath templates and automatic global multi-tool optimization.
-5. **V-carving inlays:** matched plug/pocket geometry, taper, gap, insertion depth,
-   and fit/tolerance validation.
-6. **Beyond sampled stock-aware rest:** 3D Rest now simulates all previously
-   generated cutter stages and retains only selected-cutter cleanup passes at
-   sample centres with residual material above an operator-set threshold.
-   It appends to the existing ordered job, refuses no-op rest, and requires
-   actual preceding operations for each model. Exact volumetric stock-aware
-   clearing, variable cutter-engagement feeds and collision/holder simulation
-   remain future work.
-7. **Extended native vector editing, group cutouts and text-on-path —
-   in progress:** Direct Selection edits retained Pen/Line anchors with viewport
-   dragging, exact coordinates, insertion/deletion, Undo/Redo and CF3D
-   persistence. PR #61 adds analytic line, circular-arc and cubic Bezier
-   segments, exact curve splitting, numeric arc/Bezier segment editing, and
-   snapping to vector nodes, segment midpoints, arc centers and intersections.
-   Planar retained vectors feed the 2D Profile, Pocket, Engrave and V-Carving
-   CAM boundary directly, with mesh projection retained as a fallback.
-   PR #62 adds close/open-at-node, split-at-node and two-object endpoint join
-   operations with CAM source retargeting.
-   PR #63 adds validated immutable cubic control editing; PR #64 adds native
-   viewport cubic handles, anchor guide lines, hit testing and drag-to-edit
-   through the existing Undo/Redo and CAM invalidation workflow. Both Python
-   CI lanes passed for PR #64; physical KDE/Wayland interaction testing is
-   still outstanding. PR #65 adds optional stock-origin grid snapping;
-   PR #68 applies geometry/grid snaps to cubic handles; PR #69 adds directional
-   tangent/normal projection math; PRs #70-71 add Shift angle increments and
-   in-viewport active constraint feedback.
-   PR #73 aligns cubic handles with the adjoining segment's
-   tangent via Ctrl or its perpendicular via Ctrl+Shift, with typed visual
-   markers and retained Undo/CAM invalidation. This is limited to cubic
-   handle editing where an adjacent segment provides a reference; it is NOT
-   general all-tool tangent snapping or automatic curvature continuity.
-   PR #73 CI passed both Python 3.12 and 3.14; physical KDE/Wayland
-   modifier interactions still require real-device verification.
-   Remaining native vector-CAD work includes wider draw-time snapping,
-   geometric live snap indicators, intersection-aware trim/extend,
-   fillet/chamfer, editable circle/ellipse/polygon primitives, retained
-   SVG/DXF contours, group
-   cutouts and text-on-path.
-   PR #74 adds exact fractional *open endpoint trimming*
-   to line, arc, and cubic paths with Direct Selection UI and Undo/CAM
-   invalidation. This is not yet intersection-aware trim/extend, and it
-   was merged after passing CI. The next in-progress milestone extends open
-   straight-line endpoints by a specified distance without affecting their
-   other segments, through Direct Selection and Undo/CAM invalidation. It
-   does not extrapolate arcs or cubic curves. PR #75 is merged after CI.
-   Finite straight-segment trim/extend intersection geometry is now in
-   development, with explicit trim/extend direction and bounds validation.
-   PR #76 merged the strict finite-line intersection geometry. The next
-   in-progress Direct Selection workflow supports fitting against one chosen
-   straight segment of a second selected vector, converting from its world
-   coordinates to the source's local coordinate space. That UI remains
-   unverified until tests and CI pass. General analytic curve intersections
-   and direct mouse target picking remain future work. PR #77 merged the
-   two-vector finite line trim/extend interface after passing CI.
-   The next **in-progress**, unmerged step adds an equal-setback analytic
-   chamfer for open path interior line/line corners, using Direct Selection
-   and the retained-history/CAM invalidation lifecycle. PR #78 merged
-   an equal-setback line/line chamfer for open-path interior corners and
-   PR #79 merged an exact circular-radius line/line fillet with retained
-   analytic arc geometry. Both are integrated with Direct Selection,
-   Undo/Redo, CAM invalidation and Python 3.12/3.14 CI regression coverage.
-   PR #80 merged closed-contour line/line corner chamfer and fillet,
-   including seam-aware regression coverage, with both Python CI lanes green.
-   PR #82 merged the Direct Selection inspector into five scrollable
-   tabs (Geometry, Snapping, Topology, Corners, Endpoints), retaining the
-   selected node and callbacks and persisting the active tab. Both Python
-   CI lanes and the offscreen UI regressions passed.
-   Curved junctions, general live snap indicators and physical KDE/Wayland
-   pointer validation remain outstanding.
-   Planar Union/Subtract/Intersect and signed Offset currently produce
-   Z0-topped 2.5D watertight results rather than retained analytic contours or
-   true volumetric 3D mesh Booleans.
-8. **Multi-component 3D relief compositing and editable heightmap layers.**
-9. **Machine-integrated double-sided workflow:** Stock-registered two-face
-   setup now partitions visible front/back models, reflects the chosen physical
-   flip axis, validates XY/Z containment, and writes two verified CF3D projects
-   and a setup checklist in a new folder without touching source geometry.
-   Each face must separately generate, preflight and export G-code. Live fixture
-   detection, physical registration testing, machine-aware flip verification,
-   and automatic multi-face G-code execution are NOT implemented.
-10. **Optimized batch production/nesting:** Editable regular-grid duplication
-    now supports selected multi-part templates, cutter-radius stock margins,
-    recorded fixture clearance, hidden originals and Undo/Redo. Irregular
-    silhouette nesting, optional grain rotation, serial text and automatic
-    global multi-tool optimization remain future additions.
-11. **Spoilboard mapping and probe-backed height compensation** with verified
-    source/units and explicit controller dependencies.
-12. **Material presets, first-run machine wizard and packaged Linux releases.**
-13. **Extended recovery features:** Complete CF3D idle checkpoints,
-    checksum verification, source modification warnings, restore/discard
-    choice, user-controlled normal Save, and bounded retention now exist.
-    Persistent Undo history, cross-device sync and cloud backups remain
-    unimplemented.
-
-For each item, do not add a button or a stub until calculation, UI,
-persistence (where needed), export/sender behavior and regression tests can
-be delivered together.
+The archived Python application is evidence/reference only; it is not linked
+or executed by the clean Rust workspace. A future CF3D-to-CFD migration
+must use an explicit, tested one-way tool with clear omissions, not rename
+files or infer compatibility.
