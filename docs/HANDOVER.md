@@ -459,3 +459,35 @@ No CAM, G-code output, safety boundary or project schema changed.
 
 This is a high-priority UI blocker; future refactors MUST NOT revert to
 per-frame delta in a baseline-based drag preview.
+
+
+## Verified node-drag fix — merged PR #111
+
+**Merged to main:** [PR #111](https://github.com/newnetmp3/CarveFoundry/pull/111)
+at `7ee5cba21afe0f805f1ea9289dfee2309b85ffc9`.
+Its final exact feature head `d7304a945afe06929dbc82448aa1e335c31a5fd9`
+passed [Rust CI run 37968221186](https://github.com/newnetmp3/CarveFoundry/actions/runs/37968221186):
+**53 core + 14 studio tests, strict Clippy, native Linux release build**.
+
+The owner-provided 7-second screencast showed nodes repeatedly falling back
+near their original coordinates during drag. Confirmed cause: use of egui
+`response.drag_delta()`, which only measures movement **since last frame**,
+when all drag preview functions apply an **absolute cumulative displacement**
+to a retained pre-drag baseline. This same defect affected shape sizing,
+full-vector/path movement and group drags. Both canvas instances were changed
+to `response.total_drag_delta()`. Regression tests verify multiframe
+movement, stationary-frame stability, grid snapping/off-grid origin,
+one-Undo node dragging and full-vector drag. Alt suppresses magnetic snap
+during node/handle dragging; active path excluded from drag snap indicator.
+Pure Rust schema and safety/CAM/export gates unchanged.
+
+**Manual KDE Plasma/Wayland drag retest is STILL REQUIRED**: after updating
+main, create a polyline, select Node mode, drag multiple nodes across long
+and short distances, hold still mid-drag, drag Bezier control handles and arc
+endpoints, Alt free drag, drag a shape to size, Undo/Redo and save/reopen.
+Automated Rust CI is not proof of physical desktop pointer feel.
+
+Next after confirming mouse QA: precise vector import/export and font/text
+CAD editing. Never regress absolute drag preview to per-frame deltas.
+
+| 2026-10-09 | PR #111 cumulative drag regression repair merged | [Rust CI 37968221186](https://github.com/newnetmp3/CarveFoundry/actions/runs/37968221186): 53 core + 14 studio, Clippy and Linux release green; main `7ee5cba2` | Retest node/shape/whole-vector drags on KDE Wayland; then SVG/DXF/text |
