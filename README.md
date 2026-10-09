@@ -186,3 +186,12 @@ against edits is never moved as part of a group.
 
 This is still a design-only CNC CAD application. Native G-code output,
 toolpath simulation and machining preflight are not implemented.
+
+
+## Native SVG vector import/export (R1b)
+
+**File -> Import SVG vectors…** adds supported SVG path outlines to the
+current design in one Undo operation. **File -> Export vectors as SVG…**
+writes editable line/arc/Bézier sources as SVG artwork, not G-code.
+Unsupported transforms, elliptical arcs and text are rejected explicitly.
+See [SVG interoperability and acceptance](docs/SVG_INTERCHANGE.md).
