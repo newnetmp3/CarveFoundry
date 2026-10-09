@@ -44,6 +44,7 @@ struct Studio {
     edit_mode: EditMode,
     active_shape: Option<ShapeKind>,
     shape_drag_start: Option<Point>,
+    shape_drag_delta: Option<Point>,
     shape_name: String,
     shape_width: f64,
     shape_height: f64,
@@ -80,6 +81,7 @@ impl Default for Studio {
             edit_mode: EditMode::Objects,
             active_shape: None,
             shape_drag_start: None,
+            shape_drag_delta: None,
             shape_name: "New vector".into(),
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
@@ -116,6 +118,7 @@ impl Studio {
         self.drag = None;
         self.active_shape=None;
         self.shape_drag_start=None;
+        self.shape_drag_delta=None;
         self.drawing.clear();
         self.pan=Vec2::ZERO;self.zoom=1.0;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
@@ -141,6 +144,7 @@ impl Studio {
                 self.drag = None;
                 self.active_shape=None;
                 self.shape_drag_start=None;
+                self.shape_drag_delta=None;
                 self.drawing.clear();
                 self.pan=Vec2::ZERO;self.zoom=1.0;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
@@ -238,6 +242,7 @@ impl Studio {
     fn choose_shape_tool(&mut self,kind:ShapeKind){
         self.active_shape=Some(kind);
         self.shape_drag_start=None;
+        self.shape_drag_delta=None;
         self.edit_mode=EditMode::Objects;
         self.drawing.clear();
         self.drag=None;
@@ -348,6 +353,7 @@ impl Studio {
             if self.active_shape.is_some(){
                 self.active_shape=None;
                 self.shape_drag_start=None;
+                self.shape_drag_delta=None;
                 self.status="Drawing tool cancelled".into();
             }else if self.drag.is_some(){
                 self.editor.cancel_drag();
@@ -378,10 +384,10 @@ impl Studio {
         }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
-        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.shape_drag_start=None;}
-        if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;}
+        if v{self.edit_mode=EditMode::Objects;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
+        if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
         if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
-            self.shape_drag_start=None;self.drawing.clear();}
+            self.shape_drag_start=None;self.shape_drag_delta=None;self.drawing.clear();}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
 
