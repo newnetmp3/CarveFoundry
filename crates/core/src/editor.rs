@@ -8,6 +8,7 @@ pub enum Action {
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
     Duplicate {id:u64},
     Flip {id:u64,horizontal:bool},
+    RotateQuarter {id:u64,clockwise:bool},
     Center {id:u64,horizontal:bool,vertical:bool},
     SetVisible {id:u64,visible:bool},
 
@@ -134,6 +135,52 @@ impl Editor {
                         if horizontal {p.x=lo+hi-p.x;}else{p.y=lo+hi-p.y;}
                     }
                 }else{return Err("Nothing selected to flip".into());}
+            }
+            Action::RotateQuarter{id,clockwise}=>{
+                if let Some(path)=next.paths.iter_mut().find(|p|p.id==id) {
+                    if path.locked{return Err("Path is locked".into());}
+                    let bounds=path.nodes.iter().map(|n|n.position);
+                    let min_x=bounds.clone().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=path.nodes.iter().map(|n|n.position.x)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=path.nodes.iter().map(|n|n.position.y)
+                        .fold(f64::INFINITY,f64::min);
+                    let max_y=path.nodes.iter().map(|n|n.position.y)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let pivot=Point::new((min_x+max_x)/2.0,(min_y+max_y)/2.0);
+                    let rotate=|p:&mut Point|{
+                        let x=p.x-pivot.x;let y=p.y-pivot.y;
+                        if clockwise{
+                            p.x=pivot.x+y;p.y=pivot.y-x;
+                        }else{
+                            p.x=pivot.x-y;p.y=pivot.y+x;
+                        }
+                    };
+                    for node in &mut path.nodes{rotate(&mut node.position);}
+                    for seg in &mut path.segments{
+                        match &mut seg.curve{
+                            Curve::Line=>{},
+                            Curve::Arc{center,..}=>rotate(center),
+                            Curve::Cubic{control1,control2}=>{
+                                rotate(control1);rotate(control2);
+                            },
+                        }
+                    }
+                }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
+                    if contour.locked{return Err("Contour is locked".into());}
+                    let min_x=contour.vertices.iter().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=contour.vertices.iter().map(|p|p.x)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=contour.vertices.iter().map(|p|p.y).fold(f64::INFINITY,f64::min);
+                    let max_y=contour.vertices.iter().map(|p|p.y)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let cx=(min_x+max_x)/2.0;let cy=(min_y+max_y)/2.0;
+                    for p in &mut contour.vertices{
+                        let x=p.x-cx;let y=p.y-cy;
+                        if clockwise{p.x=cx+y;p.y=cy-x;}
+                        else{p.x=cx-y;p.y=cy+x;}
+                    }
+                }else{return Err("Nothing selected to rotate".into());}
             }
             Action::Center{id,horizontal,vertical}=>{
                 let stock_center=Point::new(next.stock.width_mm*0.5,
@@ -414,6 +461,10 @@ mod tests {
         assert_eq!(e.project.paths[1].id,2);
         let before=e.project.clone();
         e.apply(Action::Flip{id:2,horizontal:true}).unwrap();
+        assert!(e.project.paths[1].segments.iter()
+            .all(|s|matches!(s.curve,Curve::Cubic{..})));
+        e.apply(Action::RotateQuarter{id:2,clockwise:true}).unwrap();
+        e.apply(Action::RotateQuarter{id:2,clockwise:false}).unwrap();
         assert!(e.project.paths[1].segments.iter()
             .all(|s|matches!(s.curve,Curve::Cubic{..})));
         e.apply(Action::Center{id:2,horizontal:true,vertical:true}).unwrap();
