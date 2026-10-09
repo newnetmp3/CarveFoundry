@@ -266,6 +266,61 @@ impl Studio {
             }
         }
     }
+    /// Add a fully validated DXF as one undoable design edit.
+    /// Source stock, fixtures and native .cfd identity remain unchanged.
+    fn import_dxf_bytes(&mut self,bytes:&[u8])->Result<usize,String>{
+        let vectors=carvefoundry_core::import_dxf(bytes)?;
+        let count=vectors.paths.len();
+        let units=vectors.units;
+        let start=self.editor.project.next_id;
+        self.editor.apply(Action::ImportPaths{paths:vectors.paths})?;
+        self.selected_ids=(start..start+count as u64).collect();
+        self.selected=None;
+        self.selected_path=None;
+        self.selected_node=None;
+        self.selected_handle=None;
+        self.reconcile_selection();
+        self.edit_mode=EditMode::Objects;
+        self.active_shape=None;
+        self.inspector_tab=InspectorTab::Objects;
+        self.status=format!("Imported {count} editable DXF vectors (source units: {units}); material unchanged. CNC output disabled");
+        Ok(count)
+    }
+    fn choose_import_dxf(&mut self){
+        let choice=rfd::FileDialog::new()
+            .add_filter("DXF vector drawing",&["dxf"]).pick_file();
+        if let Some(path)=choice{
+            let result=(||{
+                let meta=fs::metadata(&path).map_err(|e|e.to_string())?;
+                if meta.len()>16*1024*1024 {
+                    return Err("DXF exceeds the 16 MiB limit".to_string());
+                }
+                let bytes=fs::read(&path).map_err(|e|e.to_string())?;
+                self.import_dxf_bytes(&bytes)
+            })();
+            if let Err(error)=result{
+                self.status=format!("DXF import rejected; design unchanged: {error}");
+            }
+        }
+    }
+    fn choose_export_dxf(&mut self){
+        let initial=Path::new(&self.project_path).file_stem()
+            .and_then(|s|s.to_str()).filter(|s|!s.is_empty())
+            .unwrap_or("drawing");
+        let choice=rfd::FileDialog::new()
+            .add_filter("DXF vector drawing",&["dxf"])
+            .set_file_name(format!("{initial}.dxf")).save_file();
+        if let Some(mut path)=choice{
+            if path.extension().is_none(){path.set_extension("dxf");}
+            let result=carvefoundry_core::export_dxf(&self.editor.project)
+                .and_then(|dxf|fs::write(&path,dxf).map_err(|e|e.to_string()));
+            self.status=match result{
+                Ok(())=>format!("Exported editable 2D DXF to {}",path.display()),
+                Err(error)=>format!("DXF export failed: {error}"),
+            };
+        }
+    }
+
     fn choose_export_svg(&mut self){
         let initial=Path::new(&self.project_path).file_stem()
             .and_then(|v|v.to_str()).filter(|s|!s.is_empty())
@@ -769,6 +824,22 @@ mod tests {
         assert_eq!(studio.editor.project,imported);
         assert!(studio.editor.undo());
         assert_eq!(studio.editor.project,empty);
+    }
+    #[test]
+    fn dxf_import_is_one_undoable_operation_and_invalid_data_is_atomic(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Rectangle);
+        let before=studio.editor.project.clone();
+        let dxf=carvefoundry_core::export_dxf(&before).unwrap();
+        let n=studio.import_dxf_bytes(dxf.as_bytes()).unwrap();
+        assert_eq!(n,1);
+        assert_eq!(studio.selected_ids.len(),1);
+        assert_eq!(studio.editor.project.paths.len(),2);
+        let imported=studio.editor.project.clone();
+        assert!(studio.import_dxf_bytes(b"0\nEOF\n").is_err());
+        assert_eq!(studio.editor.project,imported);
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,before);
     }
     #[test]
     fn switching_workspaces_cannot_generate_nc_or_mutate_design(){
