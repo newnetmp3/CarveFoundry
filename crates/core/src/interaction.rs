@@ -70,7 +70,7 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
 /// Quantize MOVEMENT, never absolute coordinates: no initial snap jump.
 pub fn movement_delta(dx:f64,dy:f64,grid:Option<f64>)->Point {
     match grid {
-        Some(step) if step.is_finite() && step>=0.1 && step<=100.0 => {
+        Some(step) if step.is_finite() && (0.1..=100.0).contains(&step) => {
             Point::new((dx/step).round()*step,(dy/step).round()*step)
         }
         _=>Point::new(dx,dy),
