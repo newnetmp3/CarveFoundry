@@ -112,8 +112,8 @@ impl Editor {
         Ok(())
     }
     pub fn finish_drag(&mut self) {
-        if let Some(before)=self.drag_before.take() {
-            if before!=self.project {self.store(before);}
+        if let Some(before)=self.drag_before.take() && before!=self.project {
+            self.store(before);
         }
     }
     pub fn cancel_drag(&mut self) {
