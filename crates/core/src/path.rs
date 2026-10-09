@@ -202,44 +202,88 @@ impl AnalyticPath {
 
     /// Moving a cubic endpoint translates its adjacent control handles.
     /// Arc endpoints stay locked until a constraint-preserving arc editor exists.
-    pub fn move_node(&mut self, id:u64, point:Point) -> Result<(),String> {
-        let i=self.node_index(id)?;
-        let prior=self.nodes[i].position;
-        if prior==point{return Ok(());}
-        let n=self.nodes.len();
-        let incoming=if i>0 {Some(i-1)} else if self.closed {Some(n-1)} else {None};
-        let outgoing=if i<self.segments.len() {Some(i)} else {None};
-        if [incoming,outgoing].into_iter().flatten()
-            .any(|j|matches!(self.segments[j].curve,Curve::Arc{..})) {
-            return Err("Arc anchors are constrained; move the entire path instead".into());
+    /// Refit the original circular sweep to the new chord, rather than
+    /// rejecting every arc anchor drag. The arc remains an exact circle.
+    fn refitted_arc_center(a:Point,b:Point,center:Point,clockwise:bool,
+        new_a:Point,new_b:Point)->Result<Point,String>{
+        let begin=(a.y-center.y).atan2(a.x-center.x);
+        let end=(b.y-center.y).atan2(b.x-center.x);
+        let sweep=if clockwise {
+            (begin-end).rem_euclid(TAU)
+        }else{
+            (end-begin).rem_euclid(TAU)
+        };
+        let dx=new_b.x-new_a.x;let dy=new_b.y-new_a.y;
+        let chord=dx.hypot(dy);
+        if chord<EPS || sweep<EPS || (TAU-sweep)<EPS {
+            return Err("Arc endpoints or sweep are degenerate".into());
         }
-        let dx=point.x-prior.x;
-        let dy=point.y-prior.y;
-        if let Some(index)=incoming
-            && let Curve::Cubic{ref mut control2,..}=self.segments[index].curve {
-                *control2=control2.offset(dx,dy);
-            }
-        if let Some(index)=outgoing
-            && let Curve::Cubic{ref mut control1,..}=self.segments[index].curve {
-                *control1=control1.offset(dx,dy);
-            }
-        self.nodes[i].position=point;
-        self.validate()
+        let middle=Point::new((new_a.x+new_b.x)*0.5,(new_a.y+new_b.y)*0.5);
+        let tan=(sweep*0.5).tan();
+        let altitude=if !tan.is_finite(){0.0}else{chord/(2.0*tan)}
+            *if clockwise{-1.0}else{1.0};
+        let candidate=Point::new(middle.x-dy/chord*altitude,
+            middle.y+dx/chord*altitude);
+        if !candidate.finite() {return Err("Refitted arc exceeds design coordinates".into());}
+        Ok(candidate)
     }
 
-    pub fn move_control(&mut self, segment_id:u64, handle:u8, point:Point)
-        -> Result<(),String> {
-        let segment=self.segments.iter_mut().find(|s|s.id==segment_id)
+    /// Anchor motions are atomic: cubic adjacent handles translate with the
+    /// endpoint, while circular arcs preserve their signed sweep and recompute
+    /// the exact center/radius for the new chord.
+    pub fn move_node(&mut self,id:u64,point:Point)->Result<(),String>{
+        let mut draft=self.clone();
+        let i=draft.node_index(id)?;
+        let prior=draft.nodes[i].position;
+        if prior==point{return Ok(());}
+        let n=draft.nodes.len();
+        let incoming=if i>0{Some(i-1)}else if draft.closed{Some(n-1)}else{None};
+        let outgoing=if i<draft.segments.len(){Some(i)}else{None};
+        let old_arcs:[Option<(usize,Point,Point,Point,bool)>;2]=
+            [incoming,outgoing].map(|index|index.and_then(|j|{
+                let (a,b)=draft.endpoints(j);
+                match draft.segments[j].curve {
+                    Curve::Arc{center,clockwise}=>Some((j,a,b,center,clockwise)),
+                    _=>None
+                }
+            }));
+        let dx=point.x-prior.x;let dy=point.y-prior.y;
+        if let Some(j)=incoming
+            && let Curve::Cubic{ref mut control2,..}=draft.segments[j].curve{
+                *control2=control2.offset(dx,dy);
+            }
+        if let Some(j)=outgoing
+            && let Curve::Cubic{ref mut control1,..}=draft.segments[j].curve{
+                *control1=control1.offset(dx,dy);
+            }
+        draft.nodes[i].position=point;
+        for (j,a,b,center,clockwise) in old_arcs.into_iter().flatten(){
+            let (new_a,new_b)=draft.endpoints(j);
+            let new_center=Self::refitted_arc_center(
+                a,b,center,clockwise,new_a,new_b)?;
+            draft.segments[j].curve=Curve::Arc{center:new_center,clockwise};
+        }
+        draft.validate()?;
+        *self=draft;
+        Ok(())
+    }
+
+    pub fn move_control(&mut self,segment_id:u64,handle:u8,point:Point)
+        -> Result<(),String>{
+        let mut draft=self.clone();
+        let segment=draft.segments.iter_mut().find(|s|s.id==segment_id)
             .ok_or("Unknown path segment identity")?;
         match &mut segment.curve {
-            Curve::Cubic{control1,control2} => match handle {
+            Curve::Cubic{control1,control2} => match handle{
                 1=>*control1=point,
                 2=>*control2=point,
-                _=>return Err("Cubic handle must be one or two".into()),
+                _=>return Err("Cubic handle must be 1 or 2".into()),
             },
-            _=>return Err("Only cubic Bézier segments have free control handles".into()),
+            _=>return Err("Only cubic segments have handles".into()),
         }
-        self.validate()
+        draft.validate()?;
+        *self=draft;
+        Ok(())
     }
 
     /// Splits a LINE at its midpoint, retaining its original segment ID on
@@ -329,10 +373,15 @@ mod tests {
         }else{panic!("Lost retained cubic");}
     }
     #[test]
-    fn arc_endpoint_rejects_shape_change_without_corrupting_source_when_cloned() {
+    fn arc_endpoint_refit_remains_circular_and_undoable() {
         let mut a=p(Primitive::Arc);
-        assert!(a.move_node(1,Point::new(1.0,2.0)).is_err());
-        assert_eq!(a.nodes[0].position,Point::new(0.0,0.0));
+        a.move_node(1,Point::new(2.0,3.0)).unwrap();
+        assert_eq!(a.nodes[0].position,Point::new(2.0,3.0));
+        assert!(matches!(a.segments[0].curve,Curve::Arc{..}));
+        a.validate().unwrap();
+        let previous=a.clone();
+        assert!(a.move_node(1,a.nodes[1].position).is_err());
+        assert_eq!(a,previous);
     }
     #[test]
     fn split_line_and_rejoin_preserves_original_segment_id() {
