@@ -56,6 +56,7 @@ struct Studio {
     shape_height: f64,
     zoom: f32,
     pan: Vec2,
+    canvas_size:Vec2,
     grid_step: f64,
     use_grid: bool,
     nudge_mm:f64,
@@ -99,7 +100,7 @@ impl Default for Studio {
             shape_drag_delta: None,
             shape_name: "New vector".into(),
             shape_width: 50.0, shape_height: 30.0,
-            zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
+            zoom: 1.0, pan:Vec2::ZERO, canvas_size:Vec2::new(900.0,650.0), grid_step: 1.0, use_grid: false,
             nudge_mm:1.0,precise_selection:Vec::new(),precise_x:0.0,precise_y:0.0,
             drag: None,
             drawing: Vec::new(),
@@ -247,6 +248,29 @@ impl Studio {
             }
         }
     }
+    fn fit_selection(&mut self){
+        let Some((lo,hi))=self.selection_envelope()else{
+            self.status="Select one or more vectors to fit them in view".into();
+            return;
+        };
+        let stock=&self.editor.project.stock;
+        let base=(((self.canvas_size.x-60.0)/stock.width_mm as f32)
+            .min((self.canvas_size.y-60.0)/stock.height_mm as f32))
+            .max(0.0001);
+        let width=(hi.x-lo.x).max(1.0) as f32;
+        let height=(hi.y-lo.y).max(1.0) as f32;
+        let scale=(((self.canvas_size.x-100.0).max(20.0)/width)
+            .min((self.canvas_size.y-100.0).max(20.0)/height)).max(0.0001);
+        self.zoom=(scale/base).clamp(0.25,8.0);
+        let actual=base*self.zoom;
+        let center_x=(lo.x+hi.x) as f32*0.5;
+        let center_y=(lo.y+hi.y) as f32*0.5;
+        self.pan=Vec2::new((stock.width_mm as f32*0.5-center_x)*actual,
+            (center_y-stock.height_mm as f32*0.5)*actual);
+        self.status=format!("Fitted {} selected vectors into the drawing view",
+            self.selected_ids.len());
+    }
+
     fn selected_vector_ids(&self)->Vec<u64>{
         self.selected_ids.iter().copied().collect()
     }
@@ -427,7 +451,7 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,new,open,save,r,c,arrows,coarse)=ui.input(|i|{
+        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,fit_selected,new,open,save,r,c,arrows,coarse)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
@@ -440,7 +464,8 @@ impl Studio {
              !cmd && i.key_pressed(egui::Key::V),
              !cmd && i.key_pressed(egui::Key::N),
              !cmd && i.key_pressed(egui::Key::P),
-             !cmd && i.key_pressed(egui::Key::F),
+             !cmd && !i.modifiers.shift && i.key_pressed(egui::Key::F),
+             !cmd && i.modifiers.shift && i.key_pressed(egui::Key::F),
              cmd && i.key_pressed(egui::Key::N),
              cmd && i.key_pressed(egui::Key::O),
              cmd && i.key_pressed(egui::Key::S),
@@ -504,6 +529,7 @@ impl Studio {
         if r{self.choose_shape_tool(ShapeKind::Rectangle);}
         if c{self.choose_shape_tool(ShapeKind::Circle);}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
+        if fit_selected{self.fit_selection();}
     }
 
 }
@@ -600,6 +626,16 @@ mod tests {
         studio.select_vector(None,false);
         assert!(studio.selected_ids.is_empty());
         assert_eq!(studio.editor.project,baseline);
+    }
+    #[test]
+    fn selection_camera_fit_changes_view_not_project(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Rectangle);
+        let original=studio.editor.project.clone();
+        studio.fit_selection();
+        assert_eq!(studio.editor.project,original);
+        assert!(studio.zoom.is_finite() && studio.zoom>=0.25 && studio.zoom<=8.0);
+        assert!(studio.pan.x.is_finite()&&studio.pan.y.is_finite());
     }
     #[test]
     fn exact_multi_vector_move_is_a_single_history_step(){
