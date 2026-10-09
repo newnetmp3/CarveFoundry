@@ -6,6 +6,19 @@ use carvefoundry_core::{Curve,Hit,PickMode,Point,movement_delta,pick,
     create_shape,shape_placement};
 use eframe::egui;
 use egui::{Color32,Pos2,Sense,Stroke,Vec2};
+/// Return displacement from the INITIAL pointer press, not one frame of mouse motion.
+/// egui Response::drag_delta is a *per-frame* delta and must never drive an
+/// Editor preview that rebuilds geometry from its pre-drag snapshot.
+fn total_drag_world(response:&egui::Response,scale:f32,grid:Option<f64>)->Point {
+    let total=response.total_drag_delta().unwrap_or_default();
+    cumulative_drag_world(total,scale,grid)
+}
+
+fn cumulative_drag_world(total:Vec2,scale:f32,grid:Option<f64>)->Point {
+    movement_delta(total.x as f64/scale as f64,
+        -total.y as f64/scale as f64,grid)
+}
+
 impl Studio {
     pub(crate) fn canvas(&mut self,ui:&mut egui::Ui) {
         ui.horizontal(|ui|{
@@ -272,9 +285,7 @@ impl Studio {
                 }
             }
             if let Some(start)=self.shape_drag_start {
-                let delta=response.drag_delta();
-                let snapped=movement_delta(delta.x as f64/scale as f64,
-                    -delta.y as f64/scale as f64,
+                let snapped=total_drag_world(&response,scale,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let square=ui.input(|i|i.modifiers.shift);
                 if response.dragged(){
@@ -393,9 +404,7 @@ impl Studio {
                 }
             }
             if response.dragged() && let Some(drag)=self.drag.clone() {
-                let delta=response.drag_delta();
-                let shift=movement_delta(delta.x as f64/scale as f64,
-                    -delta.y as f64/scale as f64,
+                let shift=total_drag_world(&response,scale,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let result=match drag {
                     ActiveDrag::Group(ids)=>self.editor.preview_group_drag(&ids,shift),
@@ -480,5 +489,38 @@ impl Studio {
                 format!("X {:.2} · Y {:.2} mm",world.x,world.y),
                 egui::FontId::monospace(12.),Color32::WHITE);
         }
+    }
+}
+
+#[cfg(test)]
+mod drag_regression_tests {
+    use super::*;
+
+    #[test]
+    fn cumulative_pointer_motion_is_not_each_frames_motion() {
+        // A slow pointer can move ~2px/frame but end up 84px from its
+        // press point. Absolute preview commands MUST see the 84px.
+        let screen_totals=[
+            Vec2::new(2.0,-1.0),
+            Vec2::new(32.0,-12.0),
+            Vec2::new(84.0,-36.0),
+            Vec2::new(84.0,-36.0), // stationary frame must not reset shape
+        ];
+        let positions:Vec<_>=screen_totals.into_iter()
+            .map(|total|cumulative_drag_world(total,2.0,None)).collect();
+        assert_eq!(positions[0],Point::new(1.0,0.5));
+        assert_eq!(positions[1],Point::new(16.0,6.0));
+        assert_eq!(positions[2],Point::new(42.0,18.0));
+        assert_eq!(positions[3],positions[2]);
+    }
+
+    #[test]
+    fn snapped_total_drag_preserves_sub_grid_press_origin() {
+        let start=Point::new(35.75,70.125);
+        let motion=cumulative_drag_world(Vec2::new(53.0,-19.0),
+            2.0,Some(5.0));
+        assert_eq!(motion,Point::new(25.0,10.0));
+        assert_eq!(start.offset(motion.x,motion.y),
+            Point::new(60.75,80.125));
     }
 }
