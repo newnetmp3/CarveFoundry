@@ -201,11 +201,11 @@ mod tests {
             Some(SnapTarget{
                 point:Point::new(80.0,50.0),
                 kind:SnapKind::Vertex,object_id:Some(2)}));
-        assert_eq!(nearest_snap(&p,Point::new(94.6,55.0),1.0,&[]),
+        assert_eq!(nearest_snap(&p,Point::new(94.6,50.0),1.0,&[]),
             Some(SnapTarget{
-                point:Point::new(95.0,55.0),
+                point:Point::new(95.0,50.0),
                 kind:SnapKind::Midpoint,object_id:Some(2)}));
-        assert!(nearest_snap(&p,Point::new(95.0,55.0),1.0,&[2]).is_none());
+        assert!(nearest_snap(&p,Point::new(95.0,50.0),1.0,&[2]).is_none());
     }
     #[test]
     fn snapping_stock_corners_and_visibility_is_deterministic(){
