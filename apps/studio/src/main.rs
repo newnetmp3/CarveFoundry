@@ -11,6 +11,7 @@ use std::path::Path;
 enum EditMode { Objects, Nodes }
 #[derive(Clone, Copy)]
 enum ActiveDrag {
+    None,
     Contour(u64,Point),
     Path(u64,Point),
     Node(u64,u64,Point),
@@ -489,6 +490,54 @@ impl Studio {
                     if chosen{Color32::from_rgb(255,205,95)}
                     else{Color32::from_rgb(110,222,172)})));
         }
+        for path in &self.editor.project.paths {
+            if !path.visible {continue;}
+            let Ok(polyline)=path.preview_points(0.3) else {continue;};
+            let chosen=self.selected_path==Some(path.id);
+            let style=Stroke::new(if chosen{2.6}else{1.6},
+                if chosen{Color32::from_rgb(255,208,99)}
+                else{Color32::from_rgb(124,168,255)});
+            let points:Vec<Pos2>=polyline.into_iter().map(&screen).collect();
+            if path.closed {painter.add(egui::Shape::closed_line(points,style));}
+            else{painter.add(egui::Shape::line(points,style));}
+            if chosen && self.edit_mode==EditMode::Nodes {
+                for (i,node) in path.nodes.iter().enumerate() {
+                    let at=screen(node.position.offset(path.origin.x,path.origin.y));
+                    painter.circle_filled(at,if Some(node.id)==self.selected_node{6.5}else{4.5},
+                        if Some(node.id)==self.selected_node{Color32::WHITE}
+                        else{Color32::from_rgb(255,193,88)});
+                    painter.text(at+Vec2::new(6.0,-6.0),egui::Align2::LEFT_BOTTOM,
+                        format!("{}",node.id),egui::FontId::monospace(10.0),
+                        Color32::from_rgb(255,235,186));
+                    if let Some(segment)=path.segments.get(i){
+                        match segment.curve {
+                            Curve::Cubic{control1,control2} => {
+                                let start=node.position.offset(path.origin.x,path.origin.y);
+                                let end=path.nodes[(i+1)%path.nodes.len()]
+                                    .position.offset(path.origin.x,path.origin.y);
+                                for (control,from,handle) in [
+                                    (control1,start,1_u8),(control2,end,2_u8),
+                                ] {
+                                    let world=control.offset(path.origin.x,path.origin.y);
+                                    let pos=screen(world);
+                                    painter.line_segment([screen(from),pos],
+                                        Stroke::new(0.8,Color32::from_rgb(150,167,196)));
+                                    painter.circle_filled(pos,
+                                        if self.selected_handle==Some((segment.id,handle)){6.0}else{4.0},
+                                        Color32::from_rgb(255,130,174));
+                                }
+                            }
+                            Curve::Arc{center,..} => {
+                                painter.circle_stroke(
+                                    screen(center.offset(path.origin.x,path.origin.y)),
+                                    3.0,Stroke::new(1.0,Color32::from_rgb(140,153,180)));
+                            }
+                            Curve::Line=>{}
+                        }
+                    }
+                }
+            }
+        }
         painter.text(screen(Point::new(0.,0.))+Vec2::new(6.,6.),
             egui::Align2::LEFT_TOP,"XY0",
             egui::FontId::monospace(12.),Color32::WHITE);
@@ -496,42 +545,140 @@ impl Studio {
         let to_world=|p:Pos2|Point::new(
             (p.x-origin.x) as f64/scale as f64,
             (origin.y-p.y) as f64/scale as f64,
-        );
-        let find=|p:Point| {
-            self.editor.project.contours.iter().rev()
-                .find(|part|part.visible &&
-                    polygon_contains(&part.world_points(),p)).map(|part|part.id)
-        };
-        if response.clicked() && let Some(cursor)=pointer {
-            self.selected=find(to_world(cursor));
-        }
-        if response.drag_started() && let Some(cursor)=pointer {
-            self.selected=find(to_world(cursor));
-            if let Some(id)=self.selected {
-                match self.editor.start_drag(id) {
-                    Ok(anchor)=>self.drag=Some((id,anchor)),
-                    Err(reason)=>self.status=format!("Drag refused: {reason}"),
+         // Read the hit candidates first; mutations below only use stable IDs.
+        let radius=10.0/scale as f64;
+        let point=pointer.map(to_world);
+        let contour_hit=point.and_then(|world|
+            self.editor.project.contours.iter().rev().find(|p|
+                p.visible && polygon_contains(&p.world_points(),world)).map(|p|p.id));
+        let analytic_hit=point.and_then(|world|
+            self.editor.project.paths.iter().rev().find(|p|
+                path_hit(p,world,radius)).map(|p|p.id));
+        let active_path=self.editor.project.paths.iter()
+            .find(|p|Some(p.id)==self.selected_path && p.visible);
+        let node_hit=if self.edit_mode==EditMode::Nodes {
+            point.and_then(|world|active_path.and_then(|path|
+                path.nodes.iter().filter(|n|
+                    point_distance(n.position.offset(path.origin.x,path.origin.y),world)<radius)
+                .min_by(|a,b|{
+                    let da=point_distance(a.position.offset(path.origin.x,path.origin.y),world);
+                    let db=point_distance(b.position.offset(path.origin.x,path.origin.y),world);
+                    da.total_cmp(&db)
+                }).map(|n|n.id)))
+        } else {None};
+        let control_hit=if self.edit_mode==EditMode::Nodes {
+            point.and_then(|world|active_path.and_then(|path|
+                path.segments.iter().flat_map(|seg|{
+                    let mut controls=Vec::new();
+                    if let Curve::Cubic{control1,control2}=seg.curve {
+                        controls.push((seg.id,1_u8,control1));
+                        controls.push((seg.id,2_u8,control2));
+                    }
+                    controls
+                }).filter(|(_,_,at)|point_distance(
+                    at.offset(path.origin.x,path.origin.y),world)<radius)
+                .min_by(|(_,_,a),(_,_,b)|{
+                    let da=point_distance(a.offset(path.origin.x,path.origin.y),world);
+                    let db=point_distance(b.offset(path.origin.x,path.origin.y),world);
+                    da.total_cmp(&db)
+                }).map(|(segment,handle,_)|(segment,handle))))
+        } else {None};
+
+        if response.clicked() {
+            if self.edit_mode==EditMode::Nodes {
+                if let Some(node)=node_hit {
+                    self.selected_node=Some(node);
+                    self.selected_handle=None;
+                }else if let Some((segment,handle))=control_hit {
+                    self.selected_handle=Some((segment,handle));
+                    self.selected_node=None;
+                }else{
+                    self.selected_path=analytic_hit;
+                    self.selected_node=None;
+                    self.selected_handle=None;
+                    self.selected=None;
                 }
+            }else{
+                self.selected_path=analytic_hit;
+                self.selected=if analytic_hit.is_some(){None}else{contour_hit};
+                self.selected_node=None;
+                self.selected_handle=None;
             }
         }
-        if response.dragged() && let Some((id,start))=self.drag {
-                let pixels=response.drag_delta();
-                let mut next=start.offset(
-                    pixels.x as f64/scale as f64,
-                    -pixels.y as f64/scale as f64,
-                );
-                if self.use_grid && self.grid_step.is_finite()
-                    && (0.1..=100.0).contains(&self.grid_step) {
-                    next.x=(next.x/self.grid_step).round()*self.grid_step;
-                    next.y=(next.y/self.grid_step).round()*self.grid_step;
+        if response.drag_started() {
+            let started=if self.edit_mode==EditMode::Nodes {
+                if let (Some(path_id),Some(node_id))=(self.selected_path,node_hit) {
+                    self.selected_node=Some(node_id);
+                    self.selected_handle=None;
+                    self.editor.start_node_drag(path_id,node_id)
+                        .map(|pos|ActiveDrag::Node(path_id,node_id,pos))
+                }else if let (Some(path_id),Some((segment,handle)))=
+                    (self.selected_path,control_hit) {
+                    self.selected_node=None;
+                    self.selected_handle=Some((segment,handle));
+                    self.editor.start_control_drag(path_id,segment,handle)
+                        .map(|pos|ActiveDrag::Control(path_id,segment,handle,pos))
+                }else {
+                    self.selected_path=analytic_hit;
+                    self.selected_node=None;
+                    self.selected_handle=None;
+                    Ok(ActiveDrag::None)
                 }
-                if let Err(reason)=self.editor.preview_drag(id,next) {
-                    self.status=format!("Drag rejected: {reason}");
+            }else if let Some(id)=analytic_hit {
+                self.selected_path=Some(id);
+                self.selected=None;
+                self.editor.start_path_drag(id).map(|p|ActiveDrag::Path(id,p))
+            }else if let Some(id)=contour_hit {
+                self.selected=Some(id);
+                self.selected_path=None;
+                self.editor.start_drag(id).map(|p|ActiveDrag::Contour(id,p))
+            }else {
+                self.selected=None;
+                self.selected_path=None;
+                Ok(ActiveDrag::None)
+            };
+            match started {
+                Ok(ActiveDrag::None)=>self.drag=None,
+                Ok(other)=>self.drag=Some(other),
+                Err(reason)=>self.status=format!("Drag refused: {reason}"),
+            }
+        }
+        if response.dragged() && let Some(target)=self.drag {
+            let pixels=response.drag_delta();
+            let (path_origin,start)=match target {
+                ActiveDrag::Contour(_,p)|ActiveDrag::Path(_,p)=>(Point::new(0.0,0.0),p),
+                ActiveDrag::Node(path_id,_,p)|ActiveDrag::Control(path_id,_,_,p)=>{
+                    let at=self.editor.project.paths.iter().find(|v|v.id==path_id)
+                        .map(|v|v.origin).unwrap_or(Point::new(0.0,0.0));
+                    (at,p)
                 }
+                ActiveDrag::None=>(Point::new(0.0,0.0),Point::new(0.0,0.0)),
+            };
+            let mut next=start.offset(
+                pixels.x as f64/scale as f64,
+                -pixels.y as f64/scale as f64,
+            );
+            if self.use_grid && self.grid_step.is_finite()
+                && (0.1..=100.0).contains(&self.grid_step) {
+                next.x=((next.x+path_origin.x)/self.grid_step).round()
+                    *self.grid_step-path_origin.x;
+                next.y=((next.y+path_origin.y)/self.grid_step).round()
+                    *self.grid_step-path_origin.y;
+            }
+            let result=match target {
+                ActiveDrag::Contour(id,_)=>self.editor.preview_drag(id,next),
+                ActiveDrag::Path(id,_)=>self.editor.preview_path_drag(id,next),
+                ActiveDrag::Node(id,node,_)=>self.editor.preview_node_drag(id,node,next),
+                ActiveDrag::Control(id,seg,handle,_)=>
+                    self.editor.preview_control_drag(id,seg,handle,next),
+                ActiveDrag::None=>Ok(()),
+            };
+            if let Err(reason)=result {self.status=format!("Drag rejected: {reason}");}
         }
         if response.drag_stopped() {
             self.editor.finish_drag();
             self.drag=None;
+        }
         }
         if let Some(cursor)=response.hover_pos() {
             let world=to_world(cursor);
