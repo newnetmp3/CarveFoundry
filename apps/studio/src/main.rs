@@ -415,10 +415,12 @@ impl Studio {
             Some(Hit::Node{path_id,node_id})=>{
                 self.select_vector(Some(path_id),false);
                 self.selected_node=Some(node_id);
+                self.inspector_tab=InspectorTab::Properties;
             }
             Some(Hit::Handle{path_id,segment_id,handle})=>{
                 self.select_vector(Some(path_id),false);
                 self.selected_handle=Some((segment_id,handle));
+                self.inspector_tab=InspectorTab::Properties;
             }
             Some(Hit::Path(id))=>self.select_vector(Some(id),additive),
             Some(Hit::Contour(id))=>self.select_vector(Some(id),additive),
@@ -675,6 +677,27 @@ mod tests {
         assert!(!studio.has_saved_file);
         assert_eq!(studio.project_path,"untitled.cfd");
         assert_eq!(studio.editor.project,studio.saved_project);
+    }
+
+    #[test]
+    fn direct_node_and_handle_picks_open_properties_without_editing_geometry(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Ellipse);
+        let before=studio.editor.project.clone();
+        let node_id=studio.editor.project.paths[0].nodes[0].id;
+        let segment_id=studio.editor.project.paths[0].segments[0].id;
+
+        studio.inspector_tab=InspectorTab::Objects;
+        studio.apply_canvas_hit(Some(Hit::Node{path_id:1,node_id}),false);
+        assert!(matches!(studio.inspector_tab,InspectorTab::Properties));
+        assert_eq!(studio.selected_node,Some(node_id));
+        assert_eq!(studio.editor.project,before);
+
+        studio.inspector_tab=InspectorTab::Objects;
+        studio.apply_canvas_hit(Some(Hit::Handle{path_id:1,segment_id,handle:1}),false);
+        assert!(matches!(studio.inspector_tab,InspectorTab::Properties));
+        assert_eq!(studio.selected_handle,Some((segment_id,1)));
+        assert_eq!(studio.editor.project,before);
     }
 
     #[test]

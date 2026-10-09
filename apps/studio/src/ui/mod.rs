@@ -5,3 +5,4 @@ mod arrange;
 mod inspector;
 mod palette;
 mod shell;
+mod icons;

@@ -9,7 +9,7 @@ fn shape(ui:&mut egui::Ui,label:&str,tip:&str,selected:bool)->bool {
     }else{
         egui::Color32::from_rgb(49,63,80)
     });
-    ui.add_sized([91.0,38.0],button)
+    ui.add_sized([ui.available_width().max(40.0),34.0],button)
         .on_hover_text(tip).clicked()
 }
 impl Studio {
@@ -33,29 +33,35 @@ impl Studio {
         ui.label(egui::RichText::new("1  CREATE VECTORS").strong()
             .color(super::theme::ACCENT));
         ui.group(|ui|{
-            ui.horizontal_wrapped(|ui|{
-                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle",self.active_shape==Some(ShapeKind::Rectangle)){
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Rect","Drag a 4-node rectangle",self.active_shape==Some(ShapeKind::Rectangle)){
                     self.choose_shape_tool(ShapeKind::Rectangle);
                 }
-                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation",self.active_shape==Some(ShapeKind::Circle)){
+                if shape(&mut cols[1],"Circle","Drag an editable circle",self.active_shape==Some(ShapeKind::Circle)){
                     self.choose_shape_tool(ShapeKind::Circle);
                 }
-                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse",self.active_shape==Some(ShapeKind::Ellipse)){
+            });
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Ellipse","Drag an ellipse",self.active_shape==Some(ShapeKind::Ellipse)){
                     self.choose_shape_tool(ShapeKind::Ellipse);
                 }
-                if shape(ui,"△ Triangle","Create a 3-sided closed vector",self.active_shape==Some(ShapeKind::Triangle)){
+                if shape(&mut cols[1],"Triangle","Drag a triangle",self.active_shape==Some(ShapeKind::Triangle)){
                     self.choose_shape_tool(ShapeKind::Triangle);
                 }
-                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector",self.active_shape==Some(ShapeKind::Hexagon)){
+            });
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Hexagon","Drag a hexagon",self.active_shape==Some(ShapeKind::Hexagon)){
                     self.choose_shape_tool(ShapeKind::Hexagon);
                 }
-                if shape(ui,"☆ Star","Create a ten-node star outline",self.active_shape==Some(ShapeKind::Star)){
+                if shape(&mut cols[1],"Star","Drag a star",self.active_shape==Some(ShapeKind::Star)){
                     self.choose_shape_tool(ShapeKind::Star);
                 }
-                if shape(ui,"Pentagon","Create a 5-sided outline",self.active_shape==Some(ShapeKind::Pentagon)){
+            });
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Pentagon","Drag a pentagon",self.active_shape==Some(ShapeKind::Pentagon)){
                     self.choose_shape_tool(ShapeKind::Pentagon);
                 }
-                if shape(ui,"Octagon","Create an 8-sided outline",self.active_shape==Some(ShapeKind::Octagon)){
+                if shape(&mut cols[1],"Octagon","Drag an octagon",self.active_shape==Some(ShapeKind::Octagon)){
                     self.choose_shape_tool(ShapeKind::Octagon);
                 }
             });
@@ -65,20 +71,22 @@ impl Studio {
         ui.label(egui::RichText::new("2  DRAW PATHS").strong()
             .color(super::theme::ACCENT));
         ui.group(|ui|{
-            ui.horizontal_wrapped(|ui|{
-                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing",false){
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Polyline","Click vertices on the stock; Enter to finish",self.edit_mode==EditMode::Draw){
                     self.edit_mode=EditMode::Draw;
                     self.active_shape=None;
                     self.shape_drag_start=None;
                     self.drawing.clear();
                 }
-                if shape(ui,"／ Line","Create an editable analytic straight segment",false){
+                if shape(&mut cols[1],"Line","Create an analytic straight segment",false){
                     self.add_analytic(Primitive::Line);
                 }
-                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends",false){
+            });
+            ui.columns(2,|cols|{
+                if shape(&mut cols[0],"Arc","Create an exact circular arc",false){
                     self.add_analytic(Primitive::Arc);
                 }
-                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve",false){
+                if shape(&mut cols[1],"Bezier","Create an editable cubic curve",false){
                     self.add_analytic(Primitive::Cubic);
                 }
             });
@@ -120,7 +128,7 @@ impl Studio {
                 }
             });
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
-            .default_open(true).show(ui,|ui|{
+            .default_open(false).show(ui,|ui|{
                 let enabled=self.selected_id().is_some();
                 let single=self.selected_ids.len()==1;
                 if !single && enabled {
@@ -141,10 +149,10 @@ impl Studio {
                     }
                 });
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(single,egui::Button::new("↶ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Rotate -90")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
                     }
-                    if ui.add_enabled(single,egui::Button::new("↷ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Rotate +90")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
                     }
                 });
@@ -183,7 +191,7 @@ impl Studio {
         ui.small("V Select  •  N Edit nodes  •  P Pen");
         ui.small("Wheel zoom  •  Middle/right drag pan");
         ui.small("Shift-click add  •  Shift-drag box");
-        ui.small("Left→right box encloses · Right→left crosses");
+        ui.small("Left-right encloses; right-left crosses");
         ui.small("Ctrl+D Copy  •  Ctrl+Z Undo");
     }
 

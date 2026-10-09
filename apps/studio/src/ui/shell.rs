@@ -3,6 +3,7 @@
 use super::super::{EditMode,InspectorTab,PendingDocument,Studio,Workspace};
 use carvefoundry_core::{Primitive,ShapeKind};
 use eframe::egui;
+use super::icons::{self,Icon};
 
 impl Studio {
     pub(crate) fn show_shell(&mut self,ui:&mut egui::Ui){
@@ -100,11 +101,11 @@ impl Studio {
                 ui.separator();
                 let dirty=self.editor.project!=self.saved_project;
                 ui.label(if !self.has_saved_file {
-                    "◯ Unsaved new design"
+                    "Unsaved new design"
                 }else if dirty {
-                    "● Unsaved changes"
+                    "Unsaved changes"
                 }else {
-                    "✓ Saved"
+                    "Saved"
                 });
                 ui.separator();
                 ui.small("CAD only · no CNC export");
@@ -112,35 +113,35 @@ impl Studio {
         });
         egui::Panel::top("mode-ribbon").show(ui,|ui|{
             ui.horizontal_wrapped(|ui|{
-                ui.selectable_value(&mut self.workspace,Workspace::Drawing,"✎  Drawing");
-                ui.selectable_value(&mut self.workspace,Workspace::Toolpaths,"⚙  Toolpaths");
+                ui.selectable_value(&mut self.workspace,Workspace::Drawing,"Drawing");
+                ui.selectable_value(&mut self.workspace,Workspace::Toolpaths,"Toolpaths");
                 ui.separator();
                 if self.workspace==Workspace::Drawing{
                     ui.strong("MODES");
-                    if ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"↖ Select [V]")
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"Select [V]")
                         .on_hover_text("Select and drag complete vectors").clicked(){
                         self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
-                    if ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"◇ Nodes [N]")
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"Nodes [N]")
                         .on_hover_text("Pick and drag anchors and Bézier handles").clicked(){
                         self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
-                    if ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"✎ Pen [P]")
+                    if ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"Pen [P]")
                         .on_hover_text("Click an open polyline or closed polygon").clicked(){
                         self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
                     }
                     ui.separator();
-                    ui.strong("QUICK SHAPES");
-                    if ui.button("▭").on_hover_text("Rectangle").clicked(){
+                    ui.strong("SHAPES");
+                    if icons::button(ui,"Rect","Rectangle",Icon::Rectangle,79.0).clicked(){
                         self.choose_shape_tool(ShapeKind::Rectangle);
                     }
-                    if ui.button("◯").on_hover_text("Circle").clicked(){
+                    if icons::button(ui,"Circle","Circle",Icon::Circle,86.0).clicked(){
                         self.choose_shape_tool(ShapeKind::Circle);
                     }
-                    if ui.button("☆").on_hover_text("Star").clicked(){
+                    if icons::button(ui,"Star","Star",Icon::Star,79.0).clicked(){
                         self.choose_shape_tool(ShapeKind::Star);
                     }
-                    if ui.button("◠").on_hover_text("Circular arc").clicked(){
+                    if icons::button(ui,"Arc","Circular arc",Icon::Arc,75.0).clicked(){
                         self.add_analytic(Primitive::Arc);
                     }
                 }else{
@@ -148,11 +149,11 @@ impl Studio {
                         "Toolpaths not available · native CAM safety engine not implemented");
                 }
                 ui.separator();
-                if ui.add_enabled(self.editor.can_undo(),egui::Button::new("↶"))
+                if ui.add_enabled(self.editor.can_undo(),egui::Button::new("Undo"))
                     .on_hover_text("Undo, Ctrl+Z").clicked(){
                     self.editor.undo();self.reconcile_selection();
                 }
-                if ui.add_enabled(self.editor.can_redo(),egui::Button::new("↷"))
+                if ui.add_enabled(self.editor.can_redo(),egui::Button::new("Redo"))
                     .on_hover_text("Redo, Ctrl+Y").clicked(){
                     self.editor.redo();self.reconcile_selection();
                 }
@@ -190,7 +191,7 @@ impl Studio {
             });
         });
         egui::Panel::left("drawing-palette").resizable(true)
-            .default_size(247.0).min_size(212.0).max_size(330.0)
+            .default_size(270.0).min_size(232.0).max_size(390.0)
             .show(ui,|ui|{
                 egui::ScrollArea::vertical().id_salt("left-palette")
                     .auto_shrink([false,false]).show(ui,|ui|{
@@ -201,7 +202,7 @@ impl Studio {
                     });
             });
         egui::Panel::right("object-inspector").resizable(true)
-            .default_size(300.0).min_size(244.0).max_size(450.0)
+            .default_size(315.0).min_size(254.0).max_size(480.0)
             .show(ui,|ui|{
                 egui::ScrollArea::vertical().id_salt("right-properties")
                     .auto_shrink([false,false]).show(ui,|ui|self.inspector(ui));

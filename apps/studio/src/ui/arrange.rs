@@ -3,6 +3,7 @@
 use super::super::Studio;
 use carvefoundry_core::{Arrangement,Point,vector_bounds};
 use eframe::egui;
+use super::icons::{self,Icon};
 
 impl Studio{
     pub(crate) fn selection_envelope(&self)->Option<(Point,Point)>{
@@ -39,14 +40,17 @@ impl Studio{
         ui.group(|ui|{
             self.ensure_precision_reference();
             if let Some((low,high))=self.selection_envelope(){
-                ui.small(format!("{} selected · X {:.2}..{:.2} · Y {:.2}..{:.2} mm",
-                    count,low.x,high.x,low.y,high.y));
-                ui.horizontal_wrapped(|ui|{
+                ui.small(format!("{count} selected"));
+                ui.small(format!("X {:.2} to {:.2} mm",low.x,high.x));
+                ui.small(format!("Y {:.2} to {:.2} mm",low.y,high.y));
+                ui.horizontal(|ui|{
                     ui.label("Left X");
-                    ui.add(egui::DragValue::new(&mut self.precise_x)
+                    ui.add_sized([100.0,26.0],egui::DragValue::new(&mut self.precise_x)
                         .speed(0.1).suffix(" mm"));
+                });
+                ui.horizontal(|ui|{
                     ui.label("Bottom Y");
-                    ui.add(egui::DragValue::new(&mut self.precise_y)
+                    ui.add_sized([100.0,26.0],egui::DragValue::new(&mut self.precise_y)
                         .speed(0.1).suffix(" mm"));
                 });
                 ui.horizontal_wrapped(|ui|{
@@ -72,19 +76,24 @@ impl Studio{
                     .range(0.01..=1000.0).speed(0.05).suffix(" mm"));
             });
             let nudge=self.nudge_mm;
-            ui.horizontal_wrapped(|ui|{
-                if ui.add_enabled(one_or_more,egui::Button::new("←")).clicked(){
-                    self.move_selection(Point::new(-nudge,0.0));
-                }
-                if ui.add_enabled(one_or_more,egui::Button::new("→")).clicked(){
-                    self.move_selection(Point::new(nudge,0.0));
-                }
-                if ui.add_enabled(one_or_more,egui::Button::new("↑")).clicked(){
-                    self.move_selection(Point::new(0.0,nudge));
-                }
-                if ui.add_enabled(one_or_more,egui::Button::new("↓")).clicked(){
-                    self.move_selection(Point::new(0.0,-nudge));
-                }
+            ui.add_enabled_ui(one_or_more,|ui|{
+                ui.horizontal(|ui|{
+                    ui.add_space(42.0);
+                    if icons::button(ui,"Up","Nudge positive Y",Icon::Up,94.0).clicked(){
+                        self.move_selection(Point::new(0.0,nudge));
+                    }
+                });
+                ui.horizontal(|ui|{
+                    if icons::small(ui,"Nudge negative X",Icon::Left).clicked(){
+                        self.move_selection(Point::new(-nudge,0.0));
+                    }
+                    if icons::button(ui,"Down","Nudge negative Y",Icon::Down,99.0).clicked(){
+                        self.move_selection(Point::new(0.0,-nudge));
+                    }
+                    if icons::small(ui,"Nudge positive X",Icon::Right).clicked(){
+                        self.move_selection(Point::new(nudge,0.0));
+                    }
+                });
             });
             ui.small("Arrow keys: nudge one step · Shift+arrow: 10 steps");
         });
@@ -92,20 +101,29 @@ impl Studio{
         ui.label(egui::RichText::new("ALIGN SELECTED VECTORS")
             .strong().color(super::theme::ACCENT));
         ui.group(|ui|{
-            ui.small("Two or more selected vectors. Align each to the selection's bounding edges or centers.");
-            ui.horizontal_wrapped(|ui|{
-                for (label,mode,tip) in [
+            ui.small("Align by a selected edge or center.");
+            for group in [
+                [
                     ("Left",Arrangement::Left,"Align left edges"),
-                    ("Center X",Arrangement::HCenter,"Align horizontal centers"),
+                    ("Mid X",Arrangement::HCenter,"Align X centers"),
                     ("Right",Arrangement::Right,"Align right edges"),
+                ],
+                [
                     ("Bottom",Arrangement::Bottom,"Align bottom edges"),
-                    ("Center Y",Arrangement::VCenter,"Align vertical centers"),
+                    ("Mid Y",Arrangement::VCenter,"Align Y centers"),
                     ("Top",Arrangement::Top,"Align top edges"),
-                ]{
-                    if ui.add_enabled(two_or_more,egui::Button::new(label))
-                        .on_hover_text(tip).clicked(){self.arrange_selection(mode);}
-                }
-            });
+                ],
+            ] {
+                ui.columns(3,|columns|{
+                    for (col,(label,mode,tip)) in columns.iter_mut().zip(group){
+                        if col.add_enabled(two_or_more,
+                            egui::Button::new(label).min_size(egui::vec2(0.0,25.0)))
+                            .on_hover_text(tip).clicked(){
+                            self.arrange_selection(mode);
+                        }
+                    }
+                });
+            }
             ui.separator();
             ui.horizontal_wrapped(|ui|{
                 if ui.add_enabled(three_or_more,egui::Button::new("Space X evenly"))
@@ -123,7 +141,7 @@ impl Studio{
         ui.label(egui::RichText::new("PLACE GROUP ON MATERIAL")
             .strong().color(super::theme::ACCENT));
         ui.group(|ui|{
-            ui.small("Keep the selected vectors' spacing; move their combined bounds to stock edges or center.");
+            ui.small("Position the group against the material.");
             ui.horizontal_wrapped(|ui|{
                 for (label,mode) in [
                     ("Left edge",Arrangement::StockLeft),
