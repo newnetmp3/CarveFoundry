@@ -4,6 +4,7 @@
 use std::{collections::HashSet, fs::{self, OpenOptions}, io::Write, path::Path};
 use serde::{Deserialize, Serialize};
 use crate::geometry::{Point, validate_polygon};
+use crate::path::AnalyticPath;
 
 pub const MAX_COORD_MM: f64 = 100_000.0;
 pub const PROJECT_VERSION: u32 = 1;
@@ -84,13 +85,16 @@ pub struct Project {
     pub name: String,
     pub stock: Stock,
     pub contours: Vec<Contour>,
+    /// Analytic paths coexist with R0 polygon contours without changing their saved schema.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<AnalyticPath>,
     pub fixtures: Vec<Fixture>,
     pub next_id: u64,
 }
 impl Default for Project {
     fn default() -> Self {
         Self { schema_version:PROJECT_VERSION, name:"Untitled CNC design".into(),
-            stock:Stock::default(), contours:vec![], fixtures:vec![], next_id:1 }
+            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], next_id:1 }
     }
 }
 impl Project {
@@ -100,7 +104,7 @@ impl Project {
             return Err("Project name must be 1–256 characters".into());
         }
         self.stock.validate()?;
-        if self.contours.len()>512 || self.fixtures.len()>1024 {
+        if self.contours.len()+self.paths.len()>512 || self.fixtures.len()>1024 {
             return Err("Project exceeds contour or fixture limits".into());
         }
         let mut seen=HashSet::new();
@@ -108,6 +112,12 @@ impl Project {
             contour.validate()?;
             if !seen.insert(contour.id) || contour.id>=self.next_id {
                 return Err("Duplicate or unstable contour identifiers".into());
+            }
+        }
+        for path in &self.paths {
+            path.validate()?;
+            if !seen.insert(path.id) || path.id>=self.next_id {
+                return Err("Duplicate or unstable analytic path identity".into());
             }
         }
         for fixture in &self.fixtures { fixture.validate()?; }
@@ -122,6 +132,14 @@ impl Project {
                     || p.y>self.stock.height_mm) {
                 result.push(format!("{} extends outside configured stock",part.name));
             }
+        }
+        for path in &self.paths {
+            // Visualization-only: does not check cutter radius or holder clearance.
+            if let Ok(points)=path.preview_points(0.25)
+                && points.iter().any(|p| p.x<0.0 || p.y<0.0
+                    || p.x>self.stock.width_mm || p.y>self.stock.height_mm) {
+                    result.push(format!("{} extends outside configured stock",path.name));
+                }
         }
         if !self.fixtures.is_empty() {
             result.push(format!("{} fixture(s) recorded; machine clearance NOT verified",
@@ -179,6 +197,38 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn old_r0_project_opens_and_new_analytic_format_roundtrips() {
+        use crate::path::{AnalyticPath, Primitive, Curve};
+        let legacy=r#"{
+            "schema_version":1,"name":"Old layout",
+            "stock":{"width_mm":300.0,"height_mm":200.0,"thickness_mm":19.0},
+            "contours":[],"fixtures":[],"next_id":1
+        }"#;
+        let mut p=Project::decode(legacy.as_bytes()).unwrap();
+        assert!(p.paths.is_empty());
+        p.paths.push(AnalyticPath::preset(1,"Original curve".into(),
+            Point::new(20.0,20.0),Primitive::Cubic,70.0,25.0).unwrap());
+        p.next_id=2;
+        let encoded=p.encode().unwrap();
+        let reload=Project::decode(&encoded).unwrap();
+        assert_eq!(reload,p);
+        assert!(matches!(reload.paths[0].segments[0].curve,Curve::Cubic{..}));
+        assert_eq!(reload.paths[0].nodes[0].id,1);
+        assert_eq!(reload.paths[0].segments[0].id,3);
+    }
+    #[test]
+    fn ids_must_be_globally_distinct_across_polygon_and_analytic_paths(){
+        use crate::path::{AnalyticPath,Primitive};
+        let mut p=Project{next_id:2,..Project::default()};
+        p.contours.push(Contour{id:1,name:"Rectangle".into(),visible:true,
+            locked:false,origin:Point::new(0.0,0.0),
+            vertices:vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                Point::new(0.0,10.0)]});
+        p.paths.push(AnalyticPath::preset(1,"Duplicate ID".into(),
+            Point::new(0.0,0.0),Primitive::Line,10.0,10.0).unwrap());
+        assert!(p.validate().is_err());
+    }
     #[test]
     fn strict_project_roundtrip_and_schema_fail_closed() {
         let project=Project::default();
