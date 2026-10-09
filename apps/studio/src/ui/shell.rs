@@ -26,6 +26,14 @@ impl Studio {
                         .on_hover_text("Add SVG path geometry to this design as one Undo operation; reject unsupported curves or transforms").clicked(){
                         self.choose_import_svg();ui.close();
                     }
+                    if ui.button("Import DXF vectors…")
+                        .on_hover_text("Load 2D DXF lines, polylines, arcs, circles and clamped cubic splines as editable vectors; one Undo step").clicked(){
+                        self.choose_import_dxf();ui.close();
+                    }
+                    if ui.button("Export vectors as DXF…")
+                        .on_hover_text("Save an ASCII DXF drawing in millimetres; no machine code").clicked(){
+                        self.choose_export_dxf();ui.close();
+                    }
                     if ui.button("Export vectors as SVG…")
                         .on_hover_text("Save an SVG drawing; does not export machine instructions").clicked(){
                         self.choose_export_svg();ui.close();
@@ -47,7 +55,7 @@ impl Studio {
                     }
                     ui.weak("Open/Save use the native KDE file picker or this path.");
                     ui.separator();
-                    ui.small("Native projects use .cfd; SVG transfers vector outlines only.");
+                    ui.small("Native .cfd projects retain material and fixtures; SVG/DXF transfer outlines only.");
                     ui.small("Text, transforms, masks and elliptical SVG arcs must be converted to paths first.");
                 });
                 ui.menu_button("Edit",|ui|{
