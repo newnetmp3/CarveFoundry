@@ -49,7 +49,7 @@ impl Default for Studio {
             edit_mode: EditMode::Objects,
             shape_name: "New contour".into(),
             shape_width: 50.0, shape_height: 30.0,
-            zoom: 1.0, grid_step: 1.0, use_grid: true,
+            zoom: 1.0, grid_step: 1.0, use_grid: false,
             drag: None,
             drawing: Vec::new(),
             draw_closed: false,
@@ -130,6 +130,30 @@ impl Studio {
             self.edit_mode=EditMode::Nodes;
         }else {
             self.drawing=points;
+        }
+    }
+    fn apply_canvas_hit(&mut self, hit:Option<Hit>){
+        match hit {
+            Some(Hit::Node{path_id,node_id})=>{
+                self.selected_path=Some(path_id);self.selected=None;
+                self.selected_node=Some(node_id);self.selected_handle=None;
+            }
+            Some(Hit::Handle{path_id,segment_id,handle})=>{
+                self.selected_path=Some(path_id);self.selected=None;
+                self.selected_node=None;self.selected_handle=Some((segment_id,handle));
+            }
+            Some(Hit::Path(id))=>{
+                self.selected_path=Some(id);self.selected=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            Some(Hit::Contour(id))=>{
+                self.selected=Some(id);self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            None=>{
+                self.selected=None;self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
         }
     }
     fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
@@ -466,7 +490,7 @@ impl Studio {
                         self.selected_node=None;
                     }
                 });
-                ui.small("Arc anchors are fixed until radius-constrained node editing is implemented. Cubic controls move with their anchors.");
+                ui.small("Arc endpoints refit true circles while preserving sweep; Bézier controls follow their anchors.");
             }
             ui.separator();
             ui.label("Cubic control handles");
