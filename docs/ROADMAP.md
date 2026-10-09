@@ -222,3 +222,21 @@ Exact feature head `b091af41bac0a0a3d0f6c89737cc5b680b6d15b5` passed
 [CI `37876938223`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37876938223):
 48 core + 7 studio tests, strict Clippy, native Linux release compilation.
 Manual desktop acceptance remains separate; no CNC output is implemented.
+
+## Native precision transforms (active implementation)
+
+- Use **true geometry bounds** including exact cubic derivative extrema
+  and actual circular-arc quadrant extrema, not raster/preview sampling.
+- Align selected vectors by six edges/centers, evenly distribute >=3
+  by center spacing, and align a whole selection envelope to stock XY0,
+  center or far edges.
+- Position selected vector(s) at typed *bounding-left X / bottom Y*,
+  preserving their relative layout. Explicit Apply and Read buttons
+  prevent per-keystroke Undo spam.
+- Use arrow keys for configured positive/negative millimeter nudges,
+  Shift+arrow ×10, and matching on-screen buttons. Maintain one Undo per
+  accepted action and reject locked/hidden groups atomically.
+- Keep precision controls visible and grouped with design tools; any
+  UI issue on KDE Wayland is a prerequisite fix, not proof of usability
+  from green automated tests.
+- CNC machine preflight and G-code posting remain disabled.
