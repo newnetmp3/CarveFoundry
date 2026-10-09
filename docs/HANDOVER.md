@@ -221,3 +221,34 @@ Progress should be measured by common design workflows, not icon count.
 
 
 | 2026-10-09 | PR #105 merged drawing-first native Rust design workspace (menus/ribbon/palette/object inspector/material setup/KDE file picker) | [CI 37871191546](https://github.com/newnetmp3/CarveFoundry/actions/runs/37871191546) green: 38 core + 3 studio tests, Clippy and Linux release; main 3a467bd6 | Manual Wayland layout/input QA and source-first 2D text/SVG/DXF authoring |
+
+
+## Active usability slice — direct drag-to-draw shapes
+
+Branch `feature/rust-drag-to-draw-cad` implements a more natural creation
+workflow: choose a vector shape from the left palette or ribbon, then
+**mouse-down and drag its bounding box directly on the stock**. The
+drawing is a temporary display preview until the user releases the
+primary mouse button; a completed shape creates exactly one validated
+Undo history entry. A small/cancelled/out-of-bounds gesture does not
+alter the saved project. The shape tool stays active to repeat placement.
+Switch Select/Nodes/Pen or Escape to cancel the tool.
+
+- Pure Rust `crates/core/src/placement.rs` normalizes all drag
+  directions, preserves off-grid start and enforces finite size/bounds,
+  square Circle dimensions and Shift-aspect constraint.
+- `apps/studio/src/ui/canvas.rs` renders live editable-shape outline
+  and W/H size readout; no provisional objects are added to history.
+- The grouped palette, ribbon and Drawing menu now select tools
+  instead of instantly dropping arbitrary-offset shapes. For
+  keyboard-driven precision, use collapsed Vector Dimensions and
+  "Place exact-size" to add a shape at a known offset.
+- Regression tests cover any-corner drag, aspect lock, no movement,
+  invalid geometry, non-mutating tool selection, single-step Undo.
+- **CI pending.** Human Wayland QA not done. This is design-only;
+  native G-code toolpaths and preflight remain blocked.
+
+After merging, continue with normal design workflows: mouse-on-canvas
+numeric tool positioning, responsive sidebars, click-vs-drag Pen usability,
+native text and SVG vector interchange; do not equate passing CI with
+real KDE pointer QA.
