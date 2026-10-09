@@ -223,7 +223,7 @@ Exact feature head `b091af41bac0a0a3d0f6c89737cc5b680b6d15b5` passed
 48 core + 7 studio tests, strict Clippy, native Linux release compilation.
 Manual desktop acceptance remains separate; no CNC output is implemented.
 
-## Native precision transforms (active implementation)
+## Native precision transforms (implemented in PR #109)
 
 - Use **true geometry bounds** including exact cubic derivative extrema
   and actual circular-arc quadrant extrema, not raster/preview sampling.
@@ -245,3 +245,18 @@ Design usability follow-up: camera Fit Selection and accurate bounding-box
 measurement overlay added alongside precision transforms; ribbon shortcut
 buttons now consistently activate shape-placement mode. Neither camera
 controls nor measurement overlays mutate native project geometry.
+
+## Verified precision arrangement milestone — PR #109
+
+[PR #109](https://github.com/newnetmp3/CarveFoundry/pull/109)
+merged as `96a9e5ceeb529dc6927fd1ab1fc8f154415a26a0`,
+with exact head `7b4a22c8877ee36d044c8be856b5723f29d65568`
+passing [CI `37961368120`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37961368120):
+**53 core + 9 studio tests, strict Clippy and Linux release compilation**.
+True retained-curve bounds, group alignment, even spacing, numeric XY
+positioning, arrow-key nudges and camera fit are implemented and recorded
+in the editable Rust design workflow. Desktop Wayland usability is still
+unverified; the machining/NC release gates remain locked.
+
+**Next course:** manual interaction QA, followed by SVG/DXF interoperability,
+system-font typography and editable layer management in native Rust.
