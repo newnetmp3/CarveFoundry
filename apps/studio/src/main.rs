@@ -1,7 +1,7 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 use carvefoundry_core::{
-    Action, Contour, Editor, Fixture, Point, Project, Stock, polygon_contains,
+    Action, Editor, Fixture, Point, Project, polygon_contains,
 };
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
