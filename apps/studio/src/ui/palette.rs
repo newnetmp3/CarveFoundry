@@ -3,8 +3,13 @@ use super::super::{EditMode,Studio};
 use carvefoundry_core::{Action,Primitive,ShapeKind};
 use eframe::egui;
 
-fn shape(ui:&mut egui::Ui,label:&str,tip:&str)->bool {
-    ui.add_sized([91.0,38.0],egui::Button::new(label))
+fn shape(ui:&mut egui::Ui,label:&str,tip:&str,selected:bool)->bool {
+    let button=egui::Button::new(label).fill(if selected{
+        egui::Color32::from_rgb(38,108,160)
+    }else{
+        egui::Color32::from_rgb(49,63,80)
+    });
+    ui.add_sized([91.0,38.0],button)
         .on_hover_text(tip).clicked()
 }
 impl Studio {
