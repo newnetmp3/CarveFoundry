@@ -272,3 +272,18 @@ eye/lock and movement icons; two-column narrow tool palette; separate XY
 rows; clear selection measurement labels; focused node inspector when a
 node/handle is directly chosen; larger typography and responsive panels.
 Pending Rust CI and **separate human KDE/Wayland UI tests**. No CAM or NC output.
+
+## Verified UI selected-vector polish — PR #110
+
+[PR #110](https://github.com/newnetmp3/CarveFoundry/pull/110)
+merged to `main` at `55d6399b8f235f721048d1f1ec28ab9b60664feb`.
+Final PR commit `533a57769baab87428d52a9da1819d6a41b61fcb`
+passed [Rust native CI 37966080362](https://github.com/newnetmp3/CarveFoundry/actions/runs/37966080362):
+53 core tests, 10 studio tests, strict Clippy, and Linux release compilation.
+Font-independent icons, clearer creation tools, readable and stable precision
+XY inputs/align controls, selected-node Properties access and font/side-panel
+scale improvements are implemented and merged. **Manual KDE Wayland UI and
+pointer QA is not yet verified.** No CAM, NC output or format migration was enabled.
+
+**Next**: check actual desktop UI usability at multiple display scales;
+then source-preserving SVG/DXF vectors, system fonts and editable grouping.
