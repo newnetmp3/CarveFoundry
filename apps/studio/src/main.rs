@@ -623,139 +623,123 @@ impl Studio {
             (p.x-origin.x) as f64/scale as f64,
             (origin.y-p.y) as f64/scale as f64,
         );
-        // Read the hit candidates first; mutations below only use stable IDs.
-        let radius=10.0/scale as f64;
-        let point=pointer.map(to_world);
-        let contour_hit=point.and_then(|world|
-            self.editor.project.contours.iter().rev().find(|p|
-                p.visible && polygon_contains(&p.world_points(),world)).map(|p|p.id));
-        let analytic_hit=point.and_then(|world|
-            self.editor.project.paths.iter().rev().find(|p|
-                path_hit(p,world,radius)).map(|p|p.id));
-        let active_path=self.editor.project.paths.iter()
-            .find(|p|Some(p.id)==self.selected_path && p.visible);
-        let node_hit=if self.edit_mode==EditMode::Nodes {
-            point.and_then(|world|active_path.and_then(|path|
-                path.nodes.iter().filter(|n|
-                    point_distance(n.position.offset(path.origin.x,path.origin.y),world)<radius)
-                .min_by(|a,b|{
-                    let da=point_distance(a.position.offset(path.origin.x,path.origin.y),world);
-                    let db=point_distance(b.position.offset(path.origin.x,path.origin.y),world);
-                    da.total_cmp(&db)
-                }).map(|n|n.id)))
-        } else {None};
-        let control_hit=if self.edit_mode==EditMode::Nodes {
-            point.and_then(|world|active_path.and_then(|path|
-                path.segments.iter().flat_map(|seg|{
-                    let mut controls=Vec::new();
-                    if let Curve::Cubic{control1,control2}=seg.curve {
-                        controls.push((seg.id,1_u8,control1));
-                        controls.push((seg.id,2_u8,control2));
-                    }
-                    controls
-                }).filter(|(_,_,at)|point_distance(
-                    at.offset(path.origin.x,path.origin.y),world)<radius)
-                .min_by(|(_,_,a),(_,_,b)|{
-                    let da=point_distance(a.offset(path.origin.x,path.origin.y),world);
-                    let db=point_distance(b.offset(path.origin.x,path.origin.y),world);
-                    da.total_cmp(&db)
-                }).map(|(segment,handle,_)|(segment,handle))))
-        } else {None};
+        // Press-origin hit-testing is essential. The pointer may already have
+        // moved >10px by egui::Response::drag_started(), so hover hits miss.
+        let radius=9.0/scale as f64;
+        let pointer_world=pointer.map(to_world);
+        let pressed=ui.input(|i|i.pointer.press_origin())
+            .filter(|p|rect.contains(*p)).map(to_world);
+        let pick_mode=if self.edit_mode==EditMode::Nodes{
+            PickMode::Nodes
+        }else{PickMode::Objects};
+        let click_target=pointer_world.and_then(|p|
+            pick(&self.editor.project,p,radius,pick_mode));
+        let press_target=pressed.and_then(|p|
+            pick(&self.editor.project,p,radius,pick_mode));
 
-        if response.clicked() {
-            if self.edit_mode==EditMode::Nodes {
-                if let Some(node)=node_hit {
-                    self.selected_node=Some(node);
-                    self.selected_handle=None;
-                }else if let Some((segment,handle))=control_hit {
-                    self.selected_handle=Some((segment,handle));
-                    self.selected_node=None;
-                }else{
-                    self.selected_path=analytic_hit;
-                    self.selected_node=None;
-                    self.selected_handle=None;
-                    self.selected=None;
+        // Pen tool is explicit and non-destructive until Finish.
+        if self.edit_mode==EditMode::Draw {
+            if response.double_clicked(){
+                self.finish_drawing();
+            }else if response.clicked() && let Some(mut at)=pointer_world {
+                if self.use_grid && (0.1..=100.0).contains(&self.grid_step){
+                    at.x=(at.x/self.grid_step).round()*self.grid_step;
+                    at.y=(at.y/self.grid_step).round()*self.grid_step;
                 }
-            }else{
-                self.selected_path=analytic_hit;
-                self.selected=if analytic_hit.is_some(){None}else{contour_hit};
-                self.selected_node=None;
-                self.selected_handle=None;
+                if at.finite() && self.drawing.last().is_none_or(|p|
+                    (p.x-at.x).hypot(p.y-at.y)>0.001){
+                    self.drawing.push(at);
+                }
+            }
+        }else{
+            if response.clicked() {
+                self.apply_canvas_hit(click_target);
+            }
+            if response.drag_started() {
+                let result=match press_target {
+                    Some(Hit::Node{path_id,node_id}) if self.edit_mode==EditMode::Nodes=>{
+                        self.selected_path=Some(path_id);
+                        self.selected=None;
+                        self.selected_node=Some(node_id);
+                        self.selected_handle=None;
+                        self.editor.start_node_drag(path_id,node_id)
+                            .map(|at|ActiveDrag::Node(path_id,node_id,at))
+                    }
+                    Some(Hit::Handle{path_id,segment_id,handle})
+                        if self.edit_mode==EditMode::Nodes=>{
+                        self.selected_path=Some(path_id);
+                        self.selected=None;
+                        self.selected_node=None;
+                        self.selected_handle=Some((segment_id,handle));
+                        self.editor.start_control_drag(path_id,segment_id,handle)
+                            .map(|at|ActiveDrag::Control(path_id,segment_id,handle,at))
+                    }
+                    Some(Hit::Path(id)) if self.edit_mode==EditMode::Objects=>{
+                        self.selected_path=Some(id);self.selected=None;
+                        self.selected_node=None;self.selected_handle=None;
+                        self.editor.start_path_drag(id)
+                            .map(|at|ActiveDrag::Path(id,at))
+                    }
+                    Some(Hit::Contour(id)) if self.edit_mode==EditMode::Objects=>{
+                        self.selected_path=None;self.selected=Some(id);
+                        self.selected_node=None;self.selected_handle=None;
+                        self.editor.start_drag(id)
+                            .map(|at|ActiveDrag::Contour(id,at))
+                    }
+                    other=>{
+                        self.apply_canvas_hit(other);
+                        Ok(ActiveDrag::None)
+                    }
+                };
+                match result{
+                    Ok(ActiveDrag::None)=>self.drag=None,
+                    Ok(target)=>self.drag=Some(target),
+                    Err(error)=>{
+                        self.drag=None;
+                        self.status=format!("Cannot drag: {error}");
+                    }
+                }
+            }
+            if response.dragged() && let Some(drag)=self.drag {
+                let delta=response.drag_delta();
+                let shift=movement_delta(delta.x as f64/scale as f64,
+                    -delta.y as f64/scale as f64,
+                    if self.use_grid{Some(self.grid_step)}else{None});
+                let result=match drag {
+                    ActiveDrag::Contour(id,start)=>self.editor.preview_drag(
+                        id,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Path(id,start)=>self.editor.preview_path_drag(
+                        id,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Node(id,node,start)=>self.editor.preview_node_drag(
+                        id,node,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Control(id,seg,handle,start)=>
+                        self.editor.preview_control_drag(id,seg,handle,
+                            start.offset(shift.x,shift.y)),
+                    ActiveDrag::None=>Ok(()),
+                };
+                if let Err(error)=result{
+                    self.status=format!("Movement rejected: {error}");
+                }
+            }
+            if response.drag_stopped() {
+                self.editor.finish_drag();
+                self.drag=None;
             }
         }
-        if response.drag_started() {
-            let started=if self.edit_mode==EditMode::Nodes {
-                if let (Some(path_id),Some(node_id))=(self.selected_path,node_hit) {
-                    self.selected_node=Some(node_id);
-                    self.selected_handle=None;
-                    self.editor.start_node_drag(path_id,node_id)
-                        .map(|pos|ActiveDrag::Node(path_id,node_id,pos))
-                }else if let (Some(path_id),Some((segment,handle)))=
-                    (self.selected_path,control_hit) {
-                    self.selected_node=None;
-                    self.selected_handle=Some((segment,handle));
-                    self.editor.start_control_drag(path_id,segment,handle)
-                        .map(|pos|ActiveDrag::Control(path_id,segment,handle,pos))
-                }else {
-                    self.selected_path=analytic_hit;
-                    self.selected_node=None;
-                    self.selected_handle=None;
-                    Ok(ActiveDrag::None)
-                }
-            }else if let Some(id)=analytic_hit {
-                self.selected_path=Some(id);
-                self.selected=None;
-                self.editor.start_path_drag(id).map(|p|ActiveDrag::Path(id,p))
-            }else if let Some(id)=contour_hit {
-                self.selected=Some(id);
-                self.selected_path=None;
-                self.editor.start_drag(id).map(|p|ActiveDrag::Contour(id,p))
-            }else {
-                self.selected=None;
-                self.selected_path=None;
-                Ok(ActiveDrag::None)
-            };
-            match started {
-                Ok(ActiveDrag::None)=>self.drag=None,
-                Ok(other)=>self.drag=Some(other),
-                Err(reason)=>self.status=format!("Drag refused: {reason}"),
+        // Draw draft geometry as distinct temporary guides; never autosave
+        // uncommitted pen clicks into the actual design project.
+        if self.edit_mode==EditMode::Draw {
+            let mut points:Vec<Pos2>=self.drawing.iter().copied().map(screen).collect();
+            if let Some(here)=pointer && rect.contains(here){
+                points.push(here);
             }
-        }
-        if response.dragged() && let Some(target)=self.drag {
-            let pixels=response.drag_delta();
-            let (path_origin,start)=match target {
-                ActiveDrag::Contour(_,p)|ActiveDrag::Path(_,p)=>(Point::new(0.0,0.0),p),
-                ActiveDrag::Node(path_id,_,p)|ActiveDrag::Control(path_id,_,_,p)=>{
-                    let at=self.editor.project.paths.iter().find(|v|v.id==path_id)
-                        .map(|v|v.origin).unwrap_or(Point::new(0.0,0.0));
-                    (at,p)
-                }
-                ActiveDrag::None=>(Point::new(0.0,0.0),Point::new(0.0,0.0)),
-            };
-            let mut next=start.offset(
-                pixels.x as f64/scale as f64,
-                -pixels.y as f64/scale as f64,
-            );
-            if self.use_grid && self.grid_step.is_finite()
-                && (0.1..=100.0).contains(&self.grid_step) {
-                next.x=((next.x+path_origin.x)/self.grid_step).round()
-                    *self.grid_step-path_origin.x;
-                next.y=((next.y+path_origin.y)/self.grid_step).round()
-                    *self.grid_step-path_origin.y;
+            if points.len()>=2 {
+                painter.add(egui::Shape::line(points,
+                    Stroke::new(2.0,Color32::from_rgb(255,200,86))));
             }
-            let result=match target {
-                ActiveDrag::Contour(id,_)=>self.editor.preview_drag(id,next),
-                ActiveDrag::Path(id,_)=>self.editor.preview_path_drag(id,next),
-                ActiveDrag::Node(id,node,_)=>self.editor.preview_node_drag(id,node,next),
-                ActiveDrag::Control(id,seg,handle,_)=>
-                    self.editor.preview_control_drag(id,seg,handle,next),
-                ActiveDrag::None=>Ok(()),
-            };
-            if let Err(reason)=result {self.status=format!("Drag rejected: {reason}");}
-        }
-        if response.drag_stopped() {
-            self.editor.finish_drag();
-            self.drag=None;
+            for p in &self.drawing {
+                painter.circle_filled(screen(*p),4.0,Color32::WHITE);
+            }
         }
         if let Some(cursor)=response.hover_pos() {
             let world=to_world(cursor);
