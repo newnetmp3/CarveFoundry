@@ -472,8 +472,10 @@ mod tests {
         assert!(!e.project.paths[1].visible);
         assert!(e.undo());
         assert!(e.project.paths[1].visible);
-        assert!(e.undo());
-        assert!(e.undo());
+        assert!(e.undo()); // Center
+        assert!(e.undo()); // Reverse rotation
+        assert!(e.undo()); // Forward rotation
+        assert!(e.undo()); // Flip
         assert_eq!(e.project,before);
     }
     #[test]
