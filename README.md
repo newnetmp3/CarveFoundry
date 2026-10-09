@@ -3,7 +3,7 @@
 **New, native Rust CAD/CAM architecture.** This is a fresh implementation, not
 a wrapper, translation or UI adapter around the previous Python application.
 
-**Current milestone: 2D design foundation.** It has a real Rust project file,
+**Current milestone: 2D design foundation and experimental retained analytic paths.** It has a real Rust project file,
 finite polygon geometry and validation, drag-and-drop layout, undoable changes,
 stock setup, visual fixture inventory, and a dark native desktop workspace.
 
@@ -60,9 +60,9 @@ dependency**, and the UI cannot invoke a machine exporter that does not exist.
 
 ## Design controls
 
-Use **Add rectangle** to create a closed contour, click to select it, drag to
+Use **Add rectangle** to create a closed contour or create a retained **Line**, **Circular arc** or **Cubic Bézier** path. Choose **Move objects** to drag whole shapes or **Edit nodes** to drag individual analytic anchors and cubic handles. Click to select objects, drag to
 position it, or edit X/Y numerically. Locked contours cannot move or delete.
-Undo/Redo records each drag as one history action. Save/Open a project using
+Undo/Redo records each drag as one history action. The Inspector exposes numeric node and cubic-handle coordinates, midpoint insertion into straight edges, lossless line-node deletion, open/close, and path locking. Arc anchors currently refuse individual translation until proper circular constraints are available. Arcs and Béziers are serialized analytically in `.cfd`, not as sampled polylines. `.cfd` v1 from the original Rust reboot still loads; machining remains disabled. Save/Open a project using
 a typed `.cfd` path in the toolbar. Stock dimensions and basic fixture
 inventory live in the Inspector. Sample left-fence dimensions are an example
 only and require measurement before any machining capability is added.
