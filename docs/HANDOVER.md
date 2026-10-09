@@ -524,3 +524,42 @@ and a manual KDE file-dialog round-trip. Keep a clear distinction between
 SVG vector drawing export and CNC NC export (STILL DISABLED).
 Next after this coherent batch: DXF interchange, then true system-font
 text/vector conversion and layers.
+
+## Verified R1b native SVG path interchange — merged PR #112
+
+The owner confirmed **node dragging now works** on KDE Plasma/Wayland after
+PR #111. Subsequent SVG vector interoperability merged via
+[PR #112](https://github.com/newnetmp3/CarveFoundry/pull/112)
+as `cca178b15c3104bc45f3de05336003bb073a0072`.
+Exact tested feature head `043f21ee106734ea46c125c1f63a58df7cfa7aca`
+passed [Rust CI 37970424316](https://github.com/newnetmp3/CarveFoundry/actions/runs/37970424316):
+**57 core + 15 studio tests, strict Clippy and native Linux release build**.
+The first CI attempt needed a test-only `Debug` derive on InspectorTab;
+the final run was green.
+
+- Rust `crates/core/src/svg.rs` handles bounded SVG XML and path syntax
+  for M/L/H/V/C/A/Z, retaining line, circular arc and cubic Bézier sources
+  (stock-bottom-left XY0, SVG upper-left coordinates; millimetres).
+- No rasterization/tessellation for source data. Unsupported SVG text,
+  elliptical or rotated arcs, arbitrary path commands, shape elements,
+  transforms and multiple subpaths are explicitly rejected, not
+  silently flattened or dropped.
+- `Action::ImportPaths` merges any imported paths atomically, with
+  fresh project IDs and one Undo step; invalid paths leave design untouched.
+- File menu includes native Import SVG vectors / Export vectors as SVG,
+  with errors in status and original `.cfd` file state preserved.
+- SVG exports include analytic paths and legacy polygon contours,
+  not fixtures/material machining metadata and never G-code.
+- Details and step-by-step KDE acceptance in `docs/SVG_INTERCHANGE.md`.
+
+**Remaining real-world QA:** user should run Import and Export through KDE
+file picker, roundtrip an SVG with a circle/cubic/polyline, and confirm
+coordinates, scale, visibility and undo. CI does not prove portal interaction.
+
+**Next engineering course:** R1 DXF vector exchange (preserve
+straight/arc/cubic or explicitly reject unsupported spline constructs),
+system font text authoring/conversion, grouping/layers and further vector
+topology, while preserving edit and SVG round-trip guarantees. CNC export
+remains blocked by native CAM, postprocessor and physical preflight gates.
+
+| 2026-10-09 | PR #112 native source-preserving SVG vector interchange merged | [CI 37970424316](https://github.com/newnetmp3/CarveFoundry/actions/runs/37970424316) green: 57 core + 15 studio, Clippy, native Linux release; main `cca178b1` | KDE SVG import/export QA; then native DXF and system-font vector text |
