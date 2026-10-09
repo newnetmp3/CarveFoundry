@@ -227,6 +227,34 @@ impl Editor {
         self.project=candidate;
         Ok(())
     }
+    pub fn start_control_drag(&mut self,path_id:u64,segment_id:u64,handle:u8)
+        ->Result<Point,String>{
+        if self.drag_before.is_some(){return Err("Drag already active".into());}
+        let path=self.project.paths.iter().find(|p|p.id==path_id)
+            .ok_or("Analytic path ID not found")?;
+        if path.locked || !path.visible {return Err("Cannot edit hidden or locked path".into());}
+        let segment=path.segments.iter().find(|s|s.id==segment_id)
+            .ok_or("Segment ID not found")?;
+        let pos=match (&segment.curve,handle) {
+            (Curve::Cubic{control1,..},1)=>*control1,
+            (Curve::Cubic{control2,..},2)=>*control2,
+            _=>return Err("Expected cubic control handle one or two".into()),
+        };
+        self.drag_before=Some(self.project.clone());
+        Ok(pos)
+    }
+    pub fn preview_control_drag(&mut self,path_id:u64,segment_id:u64,handle:u8,position:Point)
+        ->Result<(),String>{
+        let baseline=self.drag_before.as_ref().ok_or("Drag not started")?;
+        let mut candidate=baseline.clone();
+        let path=candidate.paths.iter_mut().find(|p|p.id==path_id)
+            .ok_or("Analytic path ID not found")?;
+        if path.locked{return Err("Path is locked".into());}
+        path.move_control(segment_id,handle,position)?;
+        candidate.validate()?;
+        self.project=candidate;
+        Ok(())
+    }
     pub fn finish_drag(&mut self) {
         if let Some(before)=self.drag_before.take() && before!=self.project {
             self.store(before);
@@ -262,6 +290,20 @@ mod tests {
     }
 
 
+    #[test]
+    fn cubic_control_drag_is_atomic_and_undoable() {
+        let mut e=Editor::default();
+        e.apply(Action::AddAnalytic{name:"Cubic".into(),
+            origin:Point::new(0.0,0.0),kind:Primitive::Cubic,
+            width_mm:50.0,height_mm:25.0}).unwrap();
+        let original=e.project.clone();
+        let control=e.start_control_drag(1,3,1).unwrap();
+        e.preview_control_drag(1,3,1,control.offset(3.0,5.0)).unwrap();
+        assert!(e.preview_control_drag(1,3,1,Point::new(f64::INFINITY,0.0)).is_err());
+        e.finish_drag();
+        assert!(e.undo());
+        assert_eq!(e.project,original);
+    }
     #[test]
     fn analytic_creation_edit_and_undo_are_lossless() {
         let mut e=Editor::default();
