@@ -30,6 +30,7 @@ struct Studio {
     shape_width: f64,
     shape_height: f64,
     zoom: f32,
+    pan: Vec2,
     grid_step: f64,
     use_grid: bool,
     drag: Option<ActiveDrag>,
@@ -49,7 +50,7 @@ impl Default for Studio {
             edit_mode: EditMode::Objects,
             shape_name: "New contour".into(),
             shape_width: 50.0, shape_height: 30.0,
-            zoom: 1.0, grid_step: 1.0, use_grid: false,
+            zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
             drag: None,
             drawing: Vec::new(),
             draw_closed: false,
@@ -72,6 +73,7 @@ impl Studio {
         self.selected_handle = None;
         self.drag = None;
         self.drawing.clear();
+        self.pan=Vec2::ZERO;self.zoom=1.0;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
     }
     fn open_document(&mut self) {
@@ -85,6 +87,7 @@ impl Studio {
                 self.selected_handle = None;
                 self.drag = None;
                 self.drawing.clear();
+                self.pan=Vec2::ZERO;self.zoom=1.0;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
             }
             Err(error) => self.status = format!("Open rejected; original design kept: {error}"),
@@ -237,7 +240,7 @@ impl Studio {
         if v{self.edit_mode=EditMode::Objects;}
         if n{self.edit_mode=EditMode::Nodes;}
         if p{self.edit_mode=EditMode::Draw;self.drawing.clear();}
-        if fit{self.zoom=1.0;}
+        if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
     fn header(&mut self,ui:&mut egui::Ui) {
         ui.horizontal_wrapped(|ui|{
@@ -335,6 +338,14 @@ impl Studio {
         ui.small("First click-drag an anchor/handle directly. Drags start at mouse-down position. Grid snaps movement only and never jumps the node to grid.");
         ui.separator();
         ui.heading("EDIT OPERATIONS");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Rotate 90° ↺").clicked(){
+                self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
+            }
+            if ui.button("Rotate 90° ↻").clicked(){
+                self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
+            }
+        });
         ui.horizontal_wrapped(|ui|{
             if ui.button("Duplicate · Ctrl+D").clicked(){
                 self.run_selected(|id|Action::Duplicate{id});
@@ -601,18 +612,37 @@ impl Studio {
                 self.editor.project.contours.len(),self.editor.project.paths.len(),
                 self.editor.project.stock.width_mm,
                 self.editor.project.stock.height_mm));
-            ui.add(egui::Slider::new(&mut self.zoom,0.4..=4.0).text("Zoom"));
+            ui.add(egui::Slider::new(&mut self.zoom,0.25..=8.0).text("Zoom"));
+            if ui.button("Fit [F]").clicked(){
+                self.zoom=1.0;self.pan=Vec2::ZERO;
+            }
+            ui.small("Wheel zoom · Middle/right drag pan");
         });
         let size=ui.available_size().max(Vec2::splat(150.0));
         let (rect,response)=ui.allocate_exact_size(size,Sense::click_and_drag());
+        // Navigation does not modify the design or its Undo history.
+        let (mouse,wheel,pan_motion,pan_button)=ui.input(|i|(
+            i.pointer.hover_pos(),i.smooth_scroll_delta.y,
+            i.pointer.delta(),i.pointer.middle_down() || i.pointer.secondary_down()
+        ));
+        if let Some(mouse)=mouse && rect.contains(mouse) {
+            if pan_button {self.pan+=pan_motion;}
+            if wheel.abs()>0.05 {
+                let before=self.zoom;
+                self.zoom=(self.zoom*(wheel*0.002).exp()).clamp(0.25,8.0);
+                let ratio=self.zoom/before;
+                let relative=mouse-rect.center()-self.pan;
+                self.pan+=relative*(1.0-ratio);
+            }
+        }
         let painter=ui.painter_at(rect);
         painter.rect_filled(rect,0.0,Color32::from_rgb(18,23,32));
         let stock=&self.editor.project.stock;
         let scale=(((size.x-60.0)/stock.width_mm as f32)
             .min((size.y-60.0)/stock.height_mm as f32)).max(0.0001)*self.zoom;
         let origin=Pos2::new(
-            rect.center().x-stock.width_mm as f32*scale*0.5,
-            rect.center().y+stock.height_mm as f32*scale*0.5,
+            rect.center().x+self.pan.x-stock.width_mm as f32*scale*0.5,
+            rect.center().y+self.pan.y+stock.height_mm as f32*scale*0.5,
         );
         let screen=|p:Point|Pos2::new(
             origin.x+p.x as f32*scale,
@@ -740,7 +770,7 @@ impl Studio {
             if response.clicked() {
                 self.apply_canvas_hit(click_target);
             }
-            if response.drag_started() {
+            if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
                 let result=match press_target {
                     Some(Hit::Node{path_id,node_id}) if self.edit_mode==EditMode::Nodes=>{
                         self.selected_path=Some(path_id);
