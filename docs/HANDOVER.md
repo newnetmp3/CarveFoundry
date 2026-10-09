@@ -56,31 +56,38 @@ The owner explicitly requested starting CarveFoundry over from scratch in
   projects do not interoperate with legacy `.cf3d`; no safe NC export,
   preflight or CAM engine is installed.
 
-**Completed in active feature branch, CI unverified:** R1 first-class *analytic* vector data
-(line, circular arc, cubic Bézier), persistent IDs and exact/finite
-curve tessellation. Integrate selection/editing in a dedicated mode,
-with new-file schema roundtrip and Undo/Redo. Separate object drags
-from individual node handles. Keep R0 workflows intact and gate merges
-on Rust tests, strict Clippy and native Linux release CI.
-Avoid translating the old Python UI or importing unverified G-code.
+## Verified R1a — retained Rust analytic geometry and direct editing
 
-**Active PR staging:** `feature/rust-r1-analytic-vectors` adds
-`crates/core/src/path.rs` with retained analytic line/center-radius arc/cubic
-segments, persistent node/segment identities, bounded preview sampling, and
-strict schema/coordinate validation. `Project.paths` is optional in the
-unchanged `.cfd` schema version 1, preserving R0 JSON read compatibility.
-`Editor` now has typed path and node/handle/topology edits and atomic
-Undo/Redo drags. The native egui UI has separate Object/Nodes modes, path
-creation, numeric node/handle controls, line splitting, line-only deletion,
-open/close and visual anchor/handle editing. These are design tools only.
-**CI pending**; do not merge until native Linux tests, strict Clippy and
-release build are green on the final PR head. Arc endpoints currently refuse
-individual movement; no unverified curve flattening or NC.
+- [PR #101](https://github.com/newnetmp3/CarveFoundry/pull/101)
+  merged to main as **`49a58bf3b0270af52ac526ec05f65e3e2ad50010`**.
+  Exact merged-feature head `6511f900bf5b6aadfe67290c4fe059e601aaa9d1`
+  passed [Rust Reboot CI `37867505729`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37867505729):
+  **26 Rust tests, strict Clippy, native Linux release compilation**.
+- New `crates/core/src/path.rs` retains native Line / center-radius Arc /
+  Cubic Bézier source data with permanent node and segment identities,
+  finite coordinate/radius validation and bounded preview-only sampling.
+  No analytic arc/cubic is silently replaced with a sampled polygon.
+- `Project.paths` is an optional property in Rust-native `.cfd` schema v1.
+  Old reboot projects deserialize unchanged. Global object IDs are validated
+  across legacy polygon contours and analytic paths.
+- Typed `Editor` commands: create line/arc/cubic, translate path, exact node
+  / Bézier handle movements, split straight edges, remove line-only junctions,
+  open/close paths, lock/remove, 64-step Undo/Redo and one-Undo drag sessions.
+- Native egui has separate Object and Node modes with analytic path stroke,
+  visible node/control handles, numeric editing and topology actions.
+  Invalid operations roll back. Arc anchor mutations reject until circular
+  constraints preserve true radius and center.
+- **Not complete R1**: automatic node snapping, handle constraint tools,
+  analytic trim/join/chamfer/fillet, SVG/DXF, fonts/text, grouping and layers
+  remain. No 3D, CAM, toolpaths, fixture-aware preflight or NC export.
+  Physical KDE Plasma/Wayland and Onefinity tests remain unverified.
 
-**Next after merge:** R1b curve-constrained editing, accurate snapping and
-SVG/DXF design interchange, followed by layers/fonts, plus manual KDE
-Plasma Wayland interaction QA. Keep main Rust-only; do not resurrect the
-legacy Python UI.
+**Next engineering batch — R1b:** implement source-preserving SVG vector
+interchange, robust nearest-feature snapping, smooth-curve controls and
+dedicated analytic path selection. Keep zero Python dependencies and validate
+backwards `.cfd` compatibility. Deliver in meaningful, green-CI PRs,
+update this rolling handover after each merge, then run real KDE Wayland
+interaction QA. DO NOT migrate or reintroduce PySide6.
 
 **Physical test gate:** launch on KDE Plasma Wayland and exercise
 select/drag, Undo/Redo and file roundtrip. Perform actual Onefinity
@@ -103,3 +110,5 @@ No CNC export exists; physical Wayland/Onefinity tests remain outstanding.
 | 2026-10-08 | Pure Rust reboot merged to main via PR #99; Python GUI archived, incompatible legacy PRs closed | Rust `37862945581` green: 10 tests/Clippy/Linux release; main `909ae2a4` | R1 analytic vectors; KDE Wayland UI QA; no CNC until R6 |
 
 | 2026-10-08 | Implemented Rust R1a retained lines/arcs/cubics and direct node/handle editing, schema-compatible CFD persistence, strict undoable operations | `feature/rust-r1-analytic-vectors`, native CI pending | Verify green Rust CI, merge then update verified handover; next curve constraints and SVG/DXF |
+
+| 2026-10-08 | PR #101 R1a retained analytic curves and native direct node/handle editing merged to main | [Rust CI `37867505729`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37867505729): 26 tests, strict Clippy, native Linux release; main `49a58bf3` | R1b analytic SVG interchange/snapping/curves and physical KDE Wayland QA |

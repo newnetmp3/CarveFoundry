@@ -10,7 +10,7 @@ interfaces, informed by the archived code, without depending on it at runtime.
 | Phase | Deliverable | Acceptance | State |
 |---|---|---|---|
 | R0 | Pure Rust monorepo + working 2D canvas | Cargo workspace, geometry, stock/fixture model, versioned files, undo/redo, CI, native window | **Merged to main via PR #99; Rust CI passed; KDE/Onefinity QA pending** |
-| R1 | Professional vector CAD | Retained line/arc/cubic paths, node/handle editing, snapping, Bézier preservation, real fonts/text, SVG/DXF, layers/grouping, trim/extend, fillet/chamfer | **R1a active:** retained curves, stable nodes, typed Undo/Redo, UI direct editing; remaining text/import/trim/layers pending |
+| R1 | Professional vector CAD | Retained line/arc/cubic paths, node/handle editing, snapping, Bézier preservation, real fonts/text, SVG/DXF, layers/grouping, trim/extend, fillet/chamfer | **R1a merged PR #101, Rust CI passed:** retained curves, stable nodes, typed Undo/Redo, UI direct editing; remaining text/import/trim/layers pending |
 | R2 | 3D geometry workspace | Real mesh load/store, multi-part layers, camera/gizmos, material relief, procedural image-to-depth input, robust Wayland viewport QA | Planned |
 | R3 | Native job definition and tool library | Physical cutter profiles and materials, ordered typed CAM operations, UUID-linked sources, per-stage invalidation/dependency graph | Planned |
 | R4 | Rust 2D/2.5D CAM | Profile, pocket, engraving, V-carving, inlay, contour/texturing, clearance vs cutter geometry, operation arrays, performance parity | Planned |
@@ -23,10 +23,10 @@ interfaces, informed by the archived code, without depending on it at runtime.
 1. **R0 QA and usability:** Rust unit tests, strict Clippy and release build passed in [run 37862945581](https://github.com/newnetmp3/CarveFoundry/actions/runs/37862945581). Next improve exact vector selection,
    fixture editing/removal and save/load error feedback; measure native UI
    behavior on KDE Plasma/Wayland before declaring R0 fully accepted.
-2. **R1 analytic vector data core (implemented in active PR, CI pending):** persistent segment enum (line, circular
+2. **R1 analytic vector data core (merged PR #101, CI green):** persistent segment enum (line, circular
    arc, cubic Bézier), exact edge operations, stable node IDs and Undo, full
    schema roundtrip. Avoid sampling analytic curves as the canonical source.
-3. **R1 editor UI (initial slice in active PR):** Direct Selection mode and separate whole-object mode,
+3. **R1 editor UI (initial slice merged PR #101):** Direct Selection mode and separate whole-object mode,
    numeric coordinates, live snaps and keyboard modifiers, layers, SVG/DXF.
 4. **R2 mesh project store + live 3D view**, after successful R1 milestones.
 5. **R3/R4 typed CNC jobs**, no NC emitter until R6 passes independent tests.
@@ -56,7 +56,7 @@ files or infer compatibility.
 
 ## R1a analytic paths — implementation checkpoint
 
-The active `feature/rust-r1-analytic-vectors` branch introduces retained
+PR #101 merged to main (`49a58bf3b0270af52ac526ec05f65e3e2ad50010`), after [Rust native CI `37867505729`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37867505729) passed all 26 core tests, strict Clippy and native Linux release build on exact head `6511f900bf5b6aadfe67290c4fe059e601aaa9d1`. It introduces retained
 open/closed `AnalyticPath` objects with persistent node/segment IDs and
 first-class **Line / Circular Arc / Cubic Bézier** variants. Paths are stored
 in a new optional `paths` field of the existing `.cfd` schema v1, with
@@ -71,4 +71,13 @@ stored arcs/cubic controls, and is not used for CNC.
 removal are lossless today; arc endpoint edits fail closed until a constraint
 solver exists. Fixed-tolerance visual tessellation is not toolpath geometry.
 There is still no import of historic `.cf3d`, 3D, CAM, preflight or NC output.
-CI and physical Wayland tests must be reported independently.
+Automated Rust CI passed; physical KDE Wayland and Onefinity machining tests remain outstanding.
+
+### R1b next: stable analytic SVG + native feature snapping
+
+Implement a dedicated 2D source-preserving SVG reader/writer with safe bounds,
+roundtrip tests for line, arc and Bézier paths, and robust object/node/handle
+snaps without changing source identities. SVG curve import must validate every
+node and stop on unsupported commands; do not pretend lossless legacy CF3D
+conversion. Add tangent-aware curve handles before general trim/chamfer.
+Do not integrate CNC output until the R6 machine-safety gate passes.
