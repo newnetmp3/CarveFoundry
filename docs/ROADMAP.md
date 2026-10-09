@@ -320,3 +320,17 @@ separate, pending acceptance check. CNC output remains disabled.
 **Next**: validate the owner screencast's direct-node interaction on the
 updated desktop, then advance to source-preserving SVG/DXF and system-font
 editing with regression fixtures.
+
+
+## R1b native SVG authoring interoperability — active development
+
+User confirmed PR #111 node dragging works. Begin retained source SVG
+import/export on `feature/rust-r1-svg-vectors`:
+- Source-preserving cubic, true circular arc and straight path edges.
+- CAD millimetres bottom-left, SVG top-left, with explicit unit conversion.
+- Reject unsupported transforms/text/ellipses rather than silently flatten.
+- One undoable multi-path import; project-native .cfd unchanged.
+- File menu native portal chooser, SVG vector output only.
+- Roundtrip and hostile/unsupported input tests, CI gates, separate KDE
+  desktop acceptance. Native DXF, font text, and layers follow in R1.
+- No machine toolpaths, NC export or false cutting-ready claims.
