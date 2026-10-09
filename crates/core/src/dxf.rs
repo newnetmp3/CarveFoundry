@@ -523,19 +523,20 @@ mod tests{
                 approx(a_node.position.offset(a.origin.x,a.origin.y),b_node.position);
             }
             assert_eq!(a.segments.len(),b.segments.len());
+            let lhs_path_origin=a.origin;
             for (lhs,rhs) in a.segments.iter().zip(b.segments.iter()){
                 match (&lhs.curve,&rhs.curve){
                     (Curve::Line,Curve::Line)=>{},
                     (Curve::Arc{center:a,clockwise:ca},
                         Curve::Arc{center:b,clockwise:cb})=>{
-                        approx(a.offset(0.0,0.0),*b);
+                        approx(a.offset(lhs_path_origin.x,lhs_path_origin.y),*b);
                         assert_eq!(ca,cb);
                     }
                     (Curve::Cubic{control1:a,control2:c},
                         Curve::Cubic{control1:b,control2:d})=>{
                         // Translation already validated for path endpoints.
                         approx(a.offset(0.0,0.0),*b);
-                        approx(*c,*d);
+                        approx(c.offset(lhs_path_origin.x,lhs_path_origin.y),*d);
                     }
                     _=>panic!("curve type changed"),
                 }
