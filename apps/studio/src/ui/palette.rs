@@ -33,28 +33,28 @@ impl Studio {
             .color(super::theme::ACCENT));
         ui.group(|ui|{
             ui.horizontal_wrapped(|ui|{
-                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle"){
+                if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle",self.active_shape==Some(ShapeKind::Rectangle)){
                     self.choose_shape_tool(ShapeKind::Rectangle);
                 }
-                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation"){
+                if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation",self.active_shape==Some(ShapeKind::Circle)){
                     self.choose_shape_tool(ShapeKind::Circle);
                 }
-                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse"){
+                if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse",self.active_shape==Some(ShapeKind::Ellipse)){
                     self.choose_shape_tool(ShapeKind::Ellipse);
                 }
-                if shape(ui,"△ Triangle","Create a 3-sided closed vector"){
+                if shape(ui,"△ Triangle","Create a 3-sided closed vector",self.active_shape==Some(ShapeKind::Triangle)){
                     self.choose_shape_tool(ShapeKind::Triangle);
                 }
-                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector"){
+                if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector",self.active_shape==Some(ShapeKind::Hexagon)){
                     self.choose_shape_tool(ShapeKind::Hexagon);
                 }
-                if shape(ui,"☆ Star","Create a ten-node star outline"){
+                if shape(ui,"☆ Star","Create a ten-node star outline",self.active_shape==Some(ShapeKind::Star)){
                     self.choose_shape_tool(ShapeKind::Star);
                 }
-                if shape(ui,"Pentagon","Create a 5-sided outline"){
+                if shape(ui,"Pentagon","Create a 5-sided outline",self.active_shape==Some(ShapeKind::Pentagon)){
                     self.choose_shape_tool(ShapeKind::Pentagon);
                 }
-                if shape(ui,"Octagon","Create an 8-sided outline"){
+                if shape(ui,"Octagon","Create an 8-sided outline",self.active_shape==Some(ShapeKind::Octagon)){
                     self.choose_shape_tool(ShapeKind::Octagon);
                 }
             });
@@ -65,19 +65,19 @@ impl Studio {
             .color(super::theme::ACCENT));
         ui.group(|ui|{
             ui.horizontal_wrapped(|ui|{
-                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing"){
+                if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing",false){
                     self.edit_mode=EditMode::Draw;
                     self.active_shape=None;
                     self.shape_drag_start=None;
                     self.drawing.clear();
                 }
-                if shape(ui,"／ Line","Create an editable analytic straight segment"){
+                if shape(ui,"／ Line","Create an editable analytic straight segment",false){
                     self.add_analytic(Primitive::Line);
                 }
-                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends"){
+                if shape(ui,"◠ Arc","Create an exact circular arc with editable ends",false){
                     self.add_analytic(Primitive::Arc);
                 }
-                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve"){
+                if shape(ui,"〰 Bézier","Create an editable cubic Bézier curve",false){
                     self.add_analytic(Primitive::Cubic);
                 }
             });
