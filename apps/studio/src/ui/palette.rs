@@ -122,36 +122,40 @@ impl Studio {
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
             .default_open(true).show(ui,|ui|{
                 let enabled=self.selected_id().is_some();
+                let single=self.selected_ids.len()==1;
+                if !single && enabled {
+                    ui.small("Multi-selection: duplicate from Objects; drag together to move.");
+                }
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(enabled,egui::Button::new("Duplicate"))
+                    if ui.add_enabled(single,egui::Button::new("Duplicate"))
                         .on_hover_text("Create an editable copy, offset 8 mm").clicked(){
                         self.run_selected(|id|Action::Duplicate{id});
                     }
-                    if ui.add_enabled(enabled,egui::Button::new("Mirror X"))
+                    if ui.add_enabled(single,egui::Button::new("Mirror X"))
                         .on_hover_text("Mirror selected vector horizontally").clicked(){
                         self.run_selected(|id|Action::Flip{id,horizontal:true});
                     }
-                    if ui.add_enabled(enabled,egui::Button::new("Mirror Y"))
+                    if ui.add_enabled(single,egui::Button::new("Mirror Y"))
                         .on_hover_text("Mirror selected vector vertically").clicked(){
                         self.run_selected(|id|Action::Flip{id,horizontal:false});
                     }
                 });
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(enabled,egui::Button::new("↶ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("↶ Rotate 90°")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
                     }
-                    if ui.add_enabled(enabled,egui::Button::new("↷ Rotate 90°")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("↷ Rotate 90°")).clicked(){
                         self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
                     }
                 });
                 ui.horizontal_wrapped(|ui|{
-                    if ui.add_enabled(enabled,egui::Button::new("Center X")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Center X")).clicked(){
                         self.run_selected(|id|Action::Center{id,horizontal:true,vertical:false});
                     }
-                    if ui.add_enabled(enabled,egui::Button::new("Center Y")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Center Y")).clicked(){
                         self.run_selected(|id|Action::Center{id,horizontal:false,vertical:true});
                     }
-                    if ui.add_enabled(enabled,egui::Button::new("Center both")).clicked(){
+                    if ui.add_enabled(single,egui::Button::new("Center both")).clicked(){
                         self.run_selected(|id|Action::Center{id,horizontal:true,vertical:true});
                     }
                 });
@@ -160,6 +164,8 @@ impl Studio {
             .default_open(false).show(ui,|ui|{
                 ui.checkbox(&mut self.show_grid,"Show stock grid");
                 ui.checkbox(&mut self.use_grid,"Snap movement to grid");
+                ui.checkbox(&mut self.snap_features,"Snap endpoints, midpoints, stock corners")
+                    .on_hover_text("Snaps Pen points, exact placement, node and handle movements to real vector features. Uses a 10-pixel screen-space tolerance.");
                 ui.horizontal(|ui|{
                     ui.label("Spacing");
                     ui.add(egui::DragValue::new(&mut self.grid_step)
@@ -168,12 +174,14 @@ impl Studio {
                 if ui.button("Fit material [F]").clicked(){
                     self.zoom=1.0;self.pan=egui::Vec2::ZERO;
                 }
-                ui.weak("Snapping is off by default and never jumps existing nodes.");
+                ui.weak("Geometry snapping is on by default; grid snapping is off. Off-grid start points never jump.");
             });
         ui.add_space(8.0);
         ui.separator();
         ui.small("V Select  •  N Edit nodes  •  P Pen");
         ui.small("Wheel zoom  •  Middle/right drag pan");
+        ui.small("Shift-click add  •  Shift-drag box");
+        ui.small("Left→right box encloses · Right→left crosses");
         ui.small("Ctrl+D Copy  •  Ctrl+Z Undo");
     }
 

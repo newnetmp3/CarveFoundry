@@ -284,3 +284,30 @@ plus SVG/text/layer workflows. Do not confuse a green Rust CI with
 end-user input verification. Continue pure Rust only.
 
 | 2026-10-08 | PR #107 drag-to-size / exact click-to-place UX merged | [CI 37872863242](https://github.com/newnetmp3/CarveFoundry/actions/runs/37872863242) green: 47 tests, strict Clippy, release; main 49f96f57 | Manual KDE Wayland gesture QA; then multi-select and precise snapping |
+
+## Active usability batch — bulk vector selection and true-feature snapping
+
+Branch `feature/rust-multiselect-vector-snaps` introduces additive
+Shift/Ctrl-click selection, left→right enclosure and right→left crossing
+marquees, group drag with an atomic Undo step, and group duplicate/delete
+across retained analytic paths and R0 contours. Locked/hidden/unknown group
+members fail closed rather than moving a subset. These are editor selection
+state and typed operations, not changes to the `.cfd` file format.
+
+`crates/core/src/interaction.rs` now identifies exact source nodes,
+straight-segment midpoints and stock corners (not tessellation samples)
+using a screen-pixel tolerance. Use these as optional targets for Pen,
+exact-size click placement, node moves and Bézier handles. Grid snapping
+remains separate and off by default. Disable feature snaps in View &
+Snap when precision work requires entirely free movement.
+
+The right Objects tab shows highlighted multi-selection plus bulk actions,
+the central canvas shows marquee feedback and visual feature-snap targets,
+and the toolbar/status/help explain modifiers and selection count.
+Core regression cases cover batch validation, undo/cancel/duplicate/delete,
+crossing/enclosure semantics and finite/no-self snap candidates.
+
+**CI not yet verified; do NOT call merged or physically tested.** Confirm
+exact-head green tests/Clippy/Linux release before merging. KDE Plasma Wayland
+mouse capture, scaling and real tool feel remain manual acceptance.
+No CAM, G-code or controller changes.

@@ -1,4 +1,5 @@
 //! Validated undoable Rust design commands. Machine output is out of scope.
+use std::collections::HashSet;
 use crate::{geometry::Point, path::{AnalyticPath, Curve, PathSegment, Primitive}, project::{Contour, Fixture, Project, Stock}, shapes::{create_shape,polyline,ShapeKind}};
 
 #[derive(Clone, Debug)]
@@ -10,6 +11,9 @@ pub enum Action {
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
     ConvertContour {id:u64},
     Duplicate {id:u64},
+    DuplicateMany {ids:Vec<u64>},
+    RemoveMany {ids:Vec<u64>},
+    MoveMany {ids:Vec<u64>,delta:Point},
     Flip {id:u64,horizontal:bool},
     RotateQuarter {id:u64,clockwise:bool},
     Center {id:u64,horizontal:bool,vertical:bool},
@@ -106,6 +110,49 @@ impl Editor {
                 shape.validate()?;
                 next.contours.retain(|p|p.id!=id);
                 next.paths.push(shape);
+            }
+            Action::DuplicateMany{ids}=>{
+                Self::check_batch(&next,&ids)?;
+                for id in ids {
+                    let new_id=next.next_id;
+                    next.next_id=new_id.checked_add(1).ok_or("Vector IDs exhausted")?;
+                    if let Some(source)=next.paths.iter().find(|p|p.id==id){
+                        let mut copy=source.clone();
+                        copy.id=new_id;
+                        copy.name=format!("{} copy",source.name);
+                        copy.locked=false;
+                        copy.origin=copy.origin.offset(8.0,8.0);
+                        next.paths.push(copy);
+                    }else if let Some(source)=next.contours.iter().find(|p|p.id==id){
+                        let mut copy=source.clone();
+                        copy.id=new_id;
+                        copy.name=format!("{} copy",source.name);
+                        copy.locked=false;
+                        copy.origin=copy.origin.offset(8.0,8.0);
+                        next.contours.push(copy);
+                    }
+                }
+            }
+            Action::RemoveMany{ids}=>{
+                Self::check_batch(&next,&ids)?;
+                let selected:HashSet<u64>=ids.into_iter().collect();
+                next.paths.retain(|p|!selected.contains(&p.id));
+                next.contours.retain(|p|!selected.contains(&p.id));
+            }
+            Action::MoveMany{ids,delta}=>{
+                Self::check_batch(&next,&ids)?;
+                if !delta.finite(){return Err("Group movement must be finite".into());}
+                let selected:HashSet<u64>=ids.into_iter().collect();
+                for path in &mut next.paths {
+                    if selected.contains(&path.id){
+                        path.origin=path.origin.offset(delta.x,delta.y);
+                    }
+                }
+                for contour in &mut next.contours {
+                    if selected.contains(&contour.id){
+                        contour.origin=contour.origin.offset(delta.x,delta.y);
+                    }
+                }
             }
             Action::Duplicate{id}=>{
                 let new_id=next.next_id;
@@ -331,6 +378,56 @@ impl Editor {
         }
         Ok(())
     }
+    /// Validate the complete group *before* applying anything. Hidden,
+    /// locked, unknown and repeated IDs all fail closed.
+    fn check_batch(project:&Project,ids:&[u64])->Result<(),String>{
+        if ids.is_empty() || ids.len()>512 {
+            return Err("Select 1–512 vectors for a batch edit".into());
+        }
+        let mut unique=HashSet::new();
+        for &id in ids {
+            if !unique.insert(id){return Err("Duplicate group object ID".into());}
+            let path=project.paths.iter().find(|p|p.id==id);
+            let contour=project.contours.iter().find(|p|p.id==id);
+            match (path,contour) {
+                (Some(p),None) if p.visible&&!p.locked=>{},
+                (None,Some(p)) if p.visible&&!p.locked=>{},
+                (Some(_),None)|(None,Some(_))=>
+                    return Err("Group includes a hidden or locked vector".into()),
+                _=>return Err("Group contains an unknown vector ID".into()),
+            }
+        }
+        Ok(())
+    }
+
+    pub fn start_group_drag(&mut self,ids:&[u64])->Result<(),String>{
+        if self.drag_before.is_some(){return Err("Drag already active".into());}
+        Self::check_batch(&self.project,ids)?;
+        self.drag_before=Some(self.project.clone());
+        Ok(())
+    }
+
+    pub fn preview_group_drag(&mut self,ids:&[u64],delta:Point)->Result<(),String>{
+        let baseline=self.drag_before.as_ref().ok_or("Group drag not started")?;
+        Self::check_batch(baseline,ids)?;
+        if !delta.finite(){return Err("Group displacement must be finite".into());}
+        let mut next=baseline.clone();
+        let selected:HashSet<u64>=ids.iter().copied().collect();
+        for path in &mut next.paths{
+            if selected.contains(&path.id){
+                path.origin=path.origin.offset(delta.x,delta.y);
+            }
+        }
+        for contour in &mut next.contours{
+            if selected.contains(&contour.id){
+                contour.origin=contour.origin.offset(delta.x,delta.y);
+            }
+        }
+        next.validate()?;
+        self.project=next;
+        Ok(())
+    }
+
     pub fn start_drag(&mut self, id: u64) -> Result<Point,String> {
         if self.drag_before.is_some() {return Err("Drag already active".into());}
         let contour=self.project.contours.iter().find(|p|p.id==id)
@@ -460,6 +557,72 @@ mod tests {
             width_mm:50.,height_mm:20.}
     }
 
+
+    #[test]
+    fn batch_selection_drag_is_atomic_across_paths_and_legacy_contours(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Circle,
+            name:"Circle".into(),origin:Point::new(10.0,20.0),
+            width_mm:20.0,height_mm:20.0}).unwrap();
+        e.apply(Action::AddRectangle{name:"Old rectangle".into(),
+            origin:Point::new(50.0,40.0),width_mm:30.0,height_mm:10.0}).unwrap();
+        let original=e.project.clone();
+        e.start_group_drag(&[1,2]).unwrap();
+        e.preview_group_drag(&[1,2],Point::new(5.0,7.0)).unwrap();
+        e.preview_group_drag(&[1,2],Point::new(9.0,11.0)).unwrap();
+        assert_eq!(e.project.paths[0].origin,Point::new(19.0,31.0));
+        assert_eq!(e.project.contours[0].origin,Point::new(59.0,51.0));
+        assert!(e.preview_group_drag(&[1,2],Point::new(f64::NAN,0.0)).is_err());
+        assert_eq!(e.project.paths[0].origin,Point::new(19.0,31.0));
+        e.finish_drag();
+        assert!(e.undo());
+        assert_eq!(e.project,original);
+        assert!(e.redo());
+        assert_eq!(e.project.paths[0].origin,Point::new(19.0,31.0));
+    }
+    #[test]
+    fn batch_fail_closed_for_locked_hidden_missing_and_duplicate_ids(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Triangle,
+            name:"Triangle".into(),origin:Point::new(10.0,10.0),
+            width_mm:30.0,height_mm:30.0}).unwrap();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+            name:"Panel".into(),origin:Point::new(70.0,30.0),
+            width_mm:25.0,height_mm:25.0}).unwrap();
+        e.apply(Action::SetPathLocked{id:2,locked:true}).unwrap();
+        let baseline=e.project.clone();
+        for ids in [vec![],vec![1,1],vec![1,2],vec![1,99]]{
+            assert!(e.start_group_drag(&ids).is_err());
+            assert!(e.apply(Action::MoveMany{ids,
+                delta:Point::new(5.0,3.0)}).is_err());
+            assert_eq!(e.project,baseline);
+        }
+        e.apply(Action::SetPathLocked{id:2,locked:false}).unwrap();
+        e.apply(Action::SetVisible{id:2,visible:false}).unwrap();
+        assert!(e.start_group_drag(&[1,2]).is_err());
+    }
+    #[test]
+    fn batch_duplicate_and_delete_each_use_one_undo_step(){
+        let mut e=Editor::default();
+        for (id,kind) in [ShapeKind::Star,ShapeKind::Ellipse].into_iter().enumerate(){
+            e.apply(Action::AddShape{kind,name:format!("Shape {id}"),
+                origin:Point::new(10.0+id as f64*40.0,20.0),
+                width_mm:30.0,height_mm:25.0}).unwrap();
+        }
+        let original=e.project.clone();
+        e.apply(Action::DuplicateMany{ids:vec![1,2]}).unwrap();
+        assert_eq!(e.project.paths.len(),4);
+        assert_eq!(e.project.paths[2].id,3);
+        assert_eq!(e.project.paths[3].id,4);
+        assert!(e.project.paths[3].segments.iter()
+            .all(|s|matches!(s.curve,Curve::Cubic{..})));
+        e.apply(Action::RemoveMany{ids:vec![1,2]}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert!(e.undo());
+        assert_eq!(e.project.paths.len(),4);
+        assert!(e.undo());
+        assert_eq!(e.project,original);
+    }
 
     #[test]
     fn object_and_project_renaming_are_atomic_and_undoable(){

@@ -4,7 +4,7 @@ mod ui;
 use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind};
 use eframe::egui;
 use egui::Vec2;
-use std::path::Path;
+use std::{path::Path,collections::BTreeSet};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EditMode { Objects, Nodes, Draw }
@@ -14,13 +14,14 @@ enum Workspace { Drawing, Toolpaths }
 enum InspectorTab { Objects, Properties, Job }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ActiveDrag {
     None,
     Contour(u64,Point),
     Path(u64,Point),
     Node(u64,u64,Point),
     Control(u64,u64,u8,Point),
+    Group(Vec<u64>),
 }
 struct Studio {
     editor: Editor,
@@ -38,6 +39,10 @@ struct Studio {
     pending_open_path: Option<String>,
     cursor_world: Option<Point>,
     selected: Option<u64>,
+    selected_ids:BTreeSet<u64>,
+    marquee_start:Option<Point>,
+    marquee_extend:bool,
+    snap_features:bool,
     selected_path: Option<u64>,
     selected_node: Option<u64>,
     selected_handle: Option<(u64,u8)>,
@@ -76,6 +81,10 @@ impl Default for Studio {
             pending_open_path: None,
             cursor_world: None,
             selected: None,
+            selected_ids:BTreeSet::new(),
+            marquee_start:None,
+            marquee_extend:false,
+            snap_features:true,
             selected_path: None,
             selected_node: None,
             selected_handle: None,
@@ -114,6 +123,8 @@ impl Studio {
         self.pending_document=None;
         self.pending_open_path=None;
         self.selected = None;
+        self.selected_ids.clear();
+        self.marquee_start=None;
         self.selected_path = None;
         self.selected_node = None;
         self.selected_handle = None;
@@ -141,6 +152,8 @@ impl Studio {
                 self.pending_document=None;
                 self.pending_open_path=None;
                 self.selected = None;
+                self.selected_ids.clear();
+                self.marquee_start=None;
                 self.selected_path = None;
                 self.selected_node = None;
                 self.selected_handle = None;
@@ -209,19 +222,78 @@ impl Studio {
             self.save_document();
         }
     }
+    fn duplicate_selection(&mut self){
+        if self.selected_ids.len()>1{
+            let before=self.editor.project.next_id;
+            let count=self.selected_ids.len();
+            let ids=self.selected_ids.iter().copied().collect();
+            self.apply(Action::DuplicateMany{ids});
+            if self.editor.project.next_id==before+count as u64{
+                self.selected_ids=(before..before+count as u64).collect();
+                self.selected_path=None;self.selected=None;
+                self.reconcile_selection();
+            }
+        }else if let Some(id)=self.selected_id(){
+            let next=self.editor.project.next_id;
+            self.apply(Action::Duplicate{id});
+            if self.editor.project.paths.iter().any(|p|p.id==next)
+                ||self.editor.project.contours.iter().any(|p|p.id==next){
+                self.select_vector(Some(next),false);
+            }
+        }
+    }
     fn delete_selection(&mut self){
+        if self.selected_ids.len()>1{
+            let ids=self.selected_ids.iter().copied().collect();
+            self.apply(Action::RemoveMany{ids});
+            self.reconcile_selection();
+            return;
+        }
         if let Some(id)=self.selected_path {
             self.apply(Action::RemovePath{id});
             if !self.editor.project.paths.iter().any(|p|p.id==id){
                 self.selected_path=None;self.selected_node=None;
                 self.selected_handle=None;
+                self.reconcile_selection();
             }
         }else if let Some(id)=self.selected{
             self.apply(Action::Remove{id});
             if !self.editor.project.contours.iter().any(|p|p.id==id){
                 self.selected=None;
+                self.reconcile_selection();
             }
         }
+    }
+    fn reconcile_selection(&mut self){
+        self.selected_ids.retain(|id|
+            self.editor.project.paths.iter().any(|p|p.id==*id)
+            ||self.editor.project.contours.iter().any(|p|p.id==*id));
+        let primary=self.selected_id().filter(|id|self.selected_ids.contains(id))
+            .or_else(||self.selected_ids.iter().next_back().copied());
+        self.selected_path=primary.filter(|id|
+            self.editor.project.paths.iter().any(|p|p.id==*id));
+        self.selected=primary.filter(|id|
+            self.editor.project.contours.iter().any(|p|p.id==*id));
+        if self.selected_ids.is_empty(){
+            self.selected_node=None;self.selected_handle=None;
+        }
+    }
+    fn select_vector(&mut self,id:Option<u64>,additive:bool){
+        if !additive{self.selected_ids.clear();}
+        if let Some(id)=id{
+            if additive && self.selected_ids.contains(&id){
+                self.selected_ids.remove(&id);
+            }else{self.selected_ids.insert(id);}
+        }
+        self.selected_path=None;self.selected=None;
+        self.reconcile_selection();
+        if let Some(id)=id.filter(|id|self.selected_ids.contains(id)){
+            self.selected_path=self.editor.project.paths.iter()
+                .any(|p|p.id==id).then_some(id);
+            self.selected=self.editor.project.contours.iter()
+                .any(|p|p.id==id).then_some(id);
+        }
+        self.selected_node=None;self.selected_handle=None;
     }
     fn selected_id(&self)->Option<u64> {
         self.selected_path.or(self.selected)
@@ -238,8 +310,7 @@ impl Studio {
             height_mm:if kind==ShapeKind::Circle{size}else{self.shape_height},
         });
         if self.editor.project.paths.iter().any(|p|p.id==id){
-            self.selected_path=Some(id);self.selected=None;
-            self.selected_node=None;self.selected_handle=None;
+            self.select_vector(Some(id),false);
             self.edit_mode=EditMode::Objects;
         }
     }
@@ -268,10 +339,7 @@ impl Studio {
             height_mm:placement.height_mm,
         });
         if self.editor.project.paths.iter().any(|p|p.id==id){
-            self.selected_path=Some(id);
-            self.selected=None;
-            self.selected_node=None;
-            self.selected_handle=None;
+            self.select_vector(Some(id),false);
             self.inspector_tab=InspectorTab::Properties;
             self.shape_width=placement.width_mm;
             self.shape_height=placement.height_mm;
@@ -288,40 +356,33 @@ impl Studio {
             closed:self.draw_closed,
         });
         if self.editor.project.paths.iter().any(|p|p.id==id){
-            self.selected_path=Some(id);self.selected=None;
-            self.selected_node=None;self.selected_handle=None;
+            self.select_vector(Some(id),false);
             self.edit_mode=EditMode::Nodes;
         }else {
             self.drawing=points;
         }
     }
-    fn apply_canvas_hit(&mut self, hit:Option<Hit>){
+    fn apply_canvas_hit(&mut self,hit:Option<Hit>,additive:bool){
         match hit {
             Some(Hit::Node{path_id,node_id})=>{
-                self.selected_path=Some(path_id);self.selected=None;
-                self.selected_node=Some(node_id);self.selected_handle=None;
+                self.select_vector(Some(path_id),false);
+                self.selected_node=Some(node_id);
             }
             Some(Hit::Handle{path_id,segment_id,handle})=>{
-                self.selected_path=Some(path_id);self.selected=None;
-                self.selected_node=None;self.selected_handle=Some((segment_id,handle));
+                self.select_vector(Some(path_id),false);
+                self.selected_handle=Some((segment_id,handle));
             }
-            Some(Hit::Path(id))=>{
-                self.selected_path=Some(id);self.selected=None;
-                self.selected_node=None;self.selected_handle=None;
-            }
-            Some(Hit::Contour(id))=>{
-                self.selected=Some(id);self.selected_path=None;
-                self.selected_node=None;self.selected_handle=None;
-            }
-            None=>{
-                self.selected=None;self.selected_path=None;
-                self.selected_node=None;self.selected_handle=None;
-            }
+            Some(Hit::Path(id))=>self.select_vector(Some(id),additive),
+            Some(Hit::Contour(id))=>self.select_vector(Some(id),additive),
+            None=>self.select_vector(None,additive),
         }
     }
     fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
-        if let Some(id)=self.selected_id(){self.apply(action(id));}
-        else{self.status="Select a shape first".into();}
+        if self.selected_ids.len()!=1{
+            self.status="This operation requires exactly one selected vector".into();
+        }else if let Some(id)=self.selected_id(){
+            self.apply(action(id));
+        }
     }
     fn add_analytic(&mut self,kind:Primitive){
         let id=self.editor.project.next_id;
@@ -334,8 +395,7 @@ impl Studio {
             kind,width_mm:self.shape_width,height_mm:self.shape_height,
         });
         if self.editor.project.paths.iter().any(|p|p.id==id){
-            self.selected=None;
-            self.selected_path=Some(id);
+            self.select_vector(Some(id),false);
             self.selected_node=Some(1);
             self.selected_handle=None;
             self.edit_mode=EditMode::Nodes;
@@ -343,12 +403,13 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
+        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
                 || (cmd && i.key_pressed(egui::Key::Y)),
              cmd && i.key_pressed(egui::Key::D),
+             cmd && i.key_pressed(egui::Key::A),
              i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
              i.key_pressed(egui::Key::Escape),
              i.key_pressed(egui::Key::Enter),
@@ -369,6 +430,9 @@ impl Studio {
                 self.shape_drag_start=None;
                 self.shape_drag_delta=None;
                 self.status="Drawing tool cancelled".into();
+            }else if self.marquee_start.is_some(){
+                self.marquee_start=None;
+                self.status="Selection box cancelled".into();
             }else if self.drag.is_some(){
                 self.editor.cancel_drag();
                 self.drag=None;
@@ -377,24 +441,23 @@ impl Studio {
                 self.drawing.clear();
                 self.edit_mode=EditMode::Objects;
             }else{
-                self.selected=None;self.selected_path=None;
-                self.selected_node=None;self.selected_handle=None;
+                self.select_vector(None,false);
             }
             return;
         }
         if new{self.request_document(PendingDocument::New);}
         if open{self.choose_open_document();}
         if save{self.save_command();}
-        if undo{self.editor.undo();}
-        if redo{self.editor.redo();}
-        if duplicate && let Some(id)=self.selected_id(){
-            let next=self.editor.project.next_id;
-            self.apply(Action::Duplicate{id});
-            if self.editor.project.paths.iter().any(|p|p.id==next){
-                self.selected_path=Some(next);self.selected=None;
-            }else if self.editor.project.contours.iter().any(|p|p.id==next){
-                self.selected=Some(next);self.selected_path=None;
-            }
+        if undo{self.editor.undo();self.reconcile_selection();}
+        if redo{self.editor.redo();self.reconcile_selection();}
+        if duplicate{self.duplicate_selection();}
+        if select_all{
+            self.selected_ids=self.editor.project.paths.iter().filter(|p|p.visible)
+                .map(|p|p.id).chain(self.editor.project.contours.iter()
+                .filter(|p|p.visible).map(|p|p.id)).collect();
+            self.selected_path=None;self.selected=None;
+            self.reconcile_selection();
+            self.edit_mode=EditMode::Objects;
         }
         if delete{self.delete_selection();}
         if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
@@ -487,6 +550,21 @@ mod tests {
         assert_eq!(studio.editor.project,original);
     }
 
+    #[test]
+    fn additive_selection_toggles_without_changing_design(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Rectangle);
+        studio.add_shape(ShapeKind::Ellipse);
+        let baseline=studio.editor.project.clone();
+        studio.select_vector(Some(1),false);
+        studio.select_vector(Some(2),true);
+        assert_eq!(studio.selected_ids.len(),2);
+        studio.select_vector(Some(2),true);
+        assert_eq!(studio.selected_ids.iter().copied().collect::<Vec<_>>(),vec![1]);
+        studio.select_vector(None,false);
+        assert!(studio.selected_ids.is_empty());
+        assert_eq!(studio.editor.project,baseline);
+    }
     #[test]
     fn dirty_design_requires_confirmation_before_new(){
         let mut studio=Studio::default();
