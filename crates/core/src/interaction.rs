@@ -67,6 +67,68 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
     }
     None
 }
+/// Exact CAD reference points, never preview-tessellation vertices.
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum SnapKind { Vertex, Midpoint, StockCorner }
+#[derive(Clone,Copy,Debug,PartialEq)]
+pub struct SnapTarget {
+    pub point: Point,
+    pub kind: SnapKind,
+    pub object_id: Option<u64>,
+}
+/// Snap to real geometry (not approximation samples) within a screen-space
+/// tolerance converted to millimeters by the caller. Exclude the actively
+/// edited vector to prevent a dragged node snapping to itself.
+pub fn nearest_snap(project:&Project,cursor:Point,radius_mm:f64,
+    exclude_ids:&[u64])->Option<SnapTarget>{
+    if !cursor.finite() || !radius_mm.is_finite() || radius_mm<=0.0 {
+        return None;
+    }
+    let mut best=None;
+    let mut best_dist=radius_mm*radius_mm;
+    let mut consider=|p:Point,kind:SnapKind,id:Option<u64>|{
+        let d=sq(cursor,p);
+        if d<=best_dist && (d<best_dist || best.is_none()) {
+            best=Some(SnapTarget{point:p,kind,object_id:id});
+            best_dist=d;
+        }
+    };
+    for path in &project.paths{
+        if !path.visible || exclude_ids.contains(&path.id){continue;}
+        for node in &path.nodes{
+            consider(node.position.offset(path.origin.x,path.origin.y),
+                SnapKind::Vertex,Some(path.id));
+        }
+        for (i,segment) in path.segments.iter().enumerate(){
+            if !matches!(segment.curve,Curve::Line){continue;}
+            let a=path.nodes[i].position;
+            let b=path.nodes[(i+1)%path.nodes.len()].position;
+            consider(Point::new(path.origin.x+(a.x+b.x)/2.0,
+                path.origin.y+(a.y+b.y)/2.0),
+                SnapKind::Midpoint,Some(path.id));
+        }
+    }
+    for contour in &project.contours{
+        if !contour.visible || exclude_ids.contains(&contour.id){continue;}
+        for (i,a) in contour.vertices.iter().enumerate(){
+            let b=contour.vertices[(i+1)%contour.vertices.len()];
+            consider(a.offset(contour.origin.x,contour.origin.y),
+                SnapKind::Vertex,Some(contour.id));
+            consider(Point::new(contour.origin.x+(a.x+b.x)/2.0,
+                contour.origin.y+(a.y+b.y)/2.0),
+                SnapKind::Midpoint,Some(contour.id));
+        }
+    }
+    let stock=&project.stock;
+    for p in [Point::new(0.0,0.0),
+        Point::new(stock.width_mm,0.0),
+        Point::new(0.0,stock.height_mm),
+        Point::new(stock.width_mm,stock.height_mm)] {
+        consider(p,SnapKind::StockCorner,None);
+    }
+    best
+}
+
 /// Quantize MOVEMENT, never absolute coordinates: no initial snap jump.
 pub fn movement_delta(dx:f64,dy:f64,grid:Option<f64>)->Point {
     match grid {
@@ -86,6 +148,34 @@ mod tests {
             Point::new(20.0,10.0),Primitive::Cubic,40.0,20.0).unwrap());
         p
     }
+    #[test]
+    fn exact_geometry_snaps_to_nodes_and_line_midpoints(){
+        let mut p=project();
+        p.paths.push(AnalyticPath::preset(2,"Straight".into(),
+            Point::new(80.0,50.0),Primitive::Line,30.0,0.0).unwrap());
+        p.next_id=3;
+        assert_eq!(nearest_snap(&p,Point::new(80.2,50.1),1.0,&[]),
+            Some(SnapTarget{
+                point:Point::new(80.0,50.0),
+                kind:SnapKind::Vertex,object_id:Some(2)}));
+        assert_eq!(nearest_snap(&p,Point::new(94.6,50.0),1.0,&[]),
+            Some(SnapTarget{
+                point:Point::new(95.0,50.0),
+                kind:SnapKind::Midpoint,object_id:Some(2)}));
+        assert!(nearest_snap(&p,Point::new(95.0,50.0),1.0,&[2]).is_none());
+    }
+    #[test]
+    fn snapping_stock_corners_and_visibility_is_deterministic(){
+        let mut p=project();
+        p.paths[0].visible=false;
+        assert_eq!(nearest_snap(&p,Point::new(0.1,0.1),1.0,&[]),
+            Some(SnapTarget{point:Point::new(0.0,0.0),
+                kind:SnapKind::StockCorner,object_id:None}));
+        assert!(nearest_snap(&p,Point::new(20.0,10.0),1.0,&[]).is_none());
+        assert!(nearest_snap(&p,Point::new(f64::NAN,0.0),1.0,&[]).is_none());
+        assert!(nearest_snap(&p,Point::new(5.0,5.0),0.0,&[]).is_none());
+    }
+
     #[test]
     fn first_click_hit_node_without_preselection(){
         let p=project();
