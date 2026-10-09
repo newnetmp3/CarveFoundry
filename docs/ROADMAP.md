@@ -240,3 +240,8 @@ Manual desktop acceptance remains separate; no CNC output is implemented.
   UI issue on KDE Wayland is a prerequisite fix, not proof of usability
   from green automated tests.
 - CNC machine preflight and G-code posting remain disabled.
+
+Design usability follow-up: camera Fit Selection and accurate bounding-box
+measurement overlay added alongside precision transforms; ribbon shortcut
+buttons now consistently activate shape-placement mode. Neither camera
+controls nor measurement overlays mutate native project geometry.
