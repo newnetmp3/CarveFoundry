@@ -76,7 +76,7 @@ interaction is NOT verified by a GitHub compile or an automated geometry test.
 - New objects are selected automatically, displayed in Properties
   with editable numeric coordinates, and can be undone in one action.
 - Precise numeric size entry remains accessible in Vector Dimensions
-  with an explicit create-at-offset button.
+  with an exact-size click-to-place mode and ghost preview.
 - **Manual KDE Wayland QA required:** test pointer capture, fast dragging,
   modifier behavior, circle radius, reverse direction and no-commit
   cancellation on 100–150% display scales.
