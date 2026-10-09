@@ -21,10 +21,11 @@ impl Studio {
         if let Some(tool)=self.active_shape {
             ui.group(|ui|{
                 ui.strong(format!("{} drawing tool selected",tool.title()));
-                ui.label("Drag a diagonal on the stock to set the size.");
-                ui.small("Hold Shift for equal sides · Esc cancels tool");
+                ui.label(if self.exact_shape_placement{"Click the stock to position the precise-size vector."}else{"Drag a diagonal on the stock to set the size."});
+                ui.small(if self.exact_shape_placement{"Dimensions below · Esc cancels tool"}else{"Hold Shift for equal sides · Esc cancels tool"});
                 if ui.button("Exit shape tool [V]").clicked(){
                     self.active_shape=None;
+                    self.exact_shape_placement=false;
                     self.shape_drag_start=None;
                 }
             });
@@ -111,12 +112,11 @@ impl Studio {
                     cols[1].add(egui::DragValue::new(&mut self.shape_height)
                         .range(0.1..=10_000.0).speed(0.5));
                 });
-                ui.weak("For exact-size placement: enter dimensions and use the button below.");
+                ui.weak("For precise placement: enter dimensions, then click the stock position.");
                 if let Some(kind)=self.active_shape
-                    && ui.button(format!("Place exact-size {} at stock offset",kind.title()))
-                        .on_hover_text("Creates one vector using numeric dimensions at a small stock-relative offset").clicked(){
-                    self.add_shape(kind);
-                    self.active_shape=None;
+                    && ui.button(format!("Use exact size: {} (click stock)",kind.title()))
+                        .on_hover_text("Switches to click-to-place mode; no vector is created until you click stock").clicked(){
+                    self.choose_exact_shape_placement(kind);
                 }
             });
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
