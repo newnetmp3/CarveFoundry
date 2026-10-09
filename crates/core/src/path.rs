@@ -275,7 +275,7 @@ impl AnalyticPath {
                 return Err("Only line-only junctions can be removed losslessly".into());
             }
         }
-        let segment_to_remove=outgoing.unwrap_or(index-1);
+        let segment_to_remove=outgoing.unwrap_or_else(||index-1);
         self.segments.remove(segment_to_remove);
         self.nodes.remove(index);
         self.validate()
