@@ -187,13 +187,15 @@ bottom left, top-of-stock Z0, and no G-code until R6 preflight gates.
 
 | 2026-10-08 | Rust node-drag and tool-palette repair PR #103 merged to main | [Rust CI `37869621001`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37869621001) green: 38 tests, strict Clippy, native Linux release; main e78c3347 | Manual KDE/Wayland interaction QA; then SVG/DXF and CAD typography |
 
-## Drawing-first Rust UI redesign — PR #105 (CI pending)
+## Verified drawing-first Rust UI redesign — merged PR #105
 
 The owner supplied visual references from professional CNC drawing software
 and requested **interface usability first**, not a new isolated CAM feature.
-The implementation lives on feature/rust-design-workspace-ui and is subject
-to Rust tests, strict Clippy and native Linux release compilation before
-promotion. Manual KDE Plasma/Wayland interaction QA is still outstanding.
+The modular redesign was merged as [PR #105](https://github.com/newnetmp3/CarveFoundry/pull/105), main commit **3a467bd6473dadea0eb7a828814d58349e39df7a**.
+Exact feature head **86cf7415469feb6902c462ae57e6c3e7e664703a**
+passed [Rust CI run 37871191546](https://github.com/newnetmp3/CarveFoundry/actions/runs/37871191546):
+**38 core + 3 native studio tests, strict Clippy and Linux release build**.
+Manual KDE Plasma/Wayland interaction QA is **still outstanding**.
 
 - Original monolithic 900+ line studio source decomposed into a lean desktop
   coordinator and modules in apps/studio/src/ui:
@@ -217,3 +219,5 @@ promotion. Manual KDE Plasma/Wayland interaction QA is still outstanding.
 capture or mode confusion reported in Wayland QA before new drawing features.
 Progress should be measured by common design workflows, not icon count.
 
+
+| 2026-10-09 | PR #105 merged drawing-first native Rust design workspace (menus/ribbon/palette/object inspector/material setup/KDE file picker) | [CI 37871191546](https://github.com/newnetmp3/CarveFoundry/actions/runs/37871191546) green: 38 core + 3 studio tests, Clippy and Linux release; main 3a467bd6 | Manual Wayland layout/input QA and source-first 2D text/SVG/DXF authoring |
