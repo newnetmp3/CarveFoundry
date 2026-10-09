@@ -380,3 +380,25 @@ native vector interoperability (SVG/DXF), text and font handling, editable
 layers and more practical node-level design tools.
 
 | 2026-10-09 | PR #109 precision positioning and layout merged | [Rust CI `37961368120`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37961368120) green: 53 core + 9 studio, strict Clippy, Linux release; main `96a9e5ce` | KDE Wayland usability QA, then SVG/DXF/text authoring |
+
+
+## Active Rust editor screenshot usability recovery — 2026-10-09
+
+**Latest verified main before branch:** `2dede448676cecd2054a61b407e8b7b1b81e2b64`,
+[CI 37961850844](https://github.com/newnetmp3/CarveFoundry/actions/runs/37961850844)
+green. No open PRs at kickoff.
+
+Owner screenshot with a selected analytic polyline in Node mode demonstrates
+reproducible UX defects: Unicode icon placeholders, wrapped precision XY,
+small text and indirect access to the node inspector. The branch
+`feature/rust-editor-controls-ux` addresses these in **pure Rust** using
+font-independent egui vector icons, two-column tool grids, stable XY and nudge
+layout, enhanced text/sidebar sizing, and direct node/handle pick opening
+Properties without moving the vector. No .cfd schema, CAM or machine state
+was changed. Keep this screenshot-driven UX recovery before feature expansion.
+
+**Branch CI and manual KDE Wayland acceptance pending**: do not report a
+merge, successful compilation or machine QA until those results are checked.
+Next planned CAD milestones: native SVG/DXF interchange, system text/fonts,
+editable layers/grouping and direct curve topology tools. CNC posting stays
+disabled pending fixture/cutter/holder validation and posted-code preflight.
