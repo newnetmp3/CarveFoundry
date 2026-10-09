@@ -22,7 +22,7 @@ The owner explicitly requested starting CarveFoundry over from scratch in
 - Old unrelated open PRs #32 and #33 refer to the archived Python GUI;
   do NOT merge them into the reboot. They were not changed in this reboot.
 
-## Baseline R0 — implemented pending verification
+## Verified baseline R0 — merged on main
 
 - `crates/core/src/geometry.rs`: finite closed polygons, crossing/touching
   checks, point selection.
@@ -39,10 +39,35 @@ The owner explicitly requested starting CarveFoundry over from scratch in
 - `.github/workflows/rust.yml`: native Rust tests, Clippy, release compile
   and file-format/geometry safety gates.
 
-**First thing to do next:** inspect live CI, fix compile/Clippy failures,
-record successful run and merge/promote the clean reboot only when green.
-Then begin R1 first-class analytic vector geometry and editing. Do not
-spend time porting Python UI wiring.
+**Validated source state:**
+- [PR #99](https://github.com/newnetmp3/CarveFoundry/pull/99) clean Rust
+  reboot merged to `main` as `909ae2a4eef989515cb93d66cf9de41f4709f0f3`.
+- Exact feature head `916cffe80dd8f1860aa7f4c3552f529eab3db310`
+  passed [Rust Reboot CI `37862945581`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37862945581):
+  10 Rust core tests, strict Clippy and Linux native release build passed.
+  Failed earlier CI runs were lint-only and repaired before this green run.
+- `main` now contains only 15 Rust workspace, docs, GitHub CI and launcher
+  files. No Python, PySide6, old CF3D conversion, old UI or old CI remains
+  in its working tree.
+- Superseded PR #98 and old Python-only PRs #32/#33 were closed with
+  explanatory comments. All remain in Git history; no features were
+  merged from them into the reboot.
+- **CNC and physical QA are NOT validated.** Design-only `.cfd`
+  projects do not interoperate with legacy `.cf3d`; no safe NC export,
+  preflight or CAM engine is installed.
+
+**Next engineering batch:** R1 first-class *analytic* vector data
+(line, circular arc, cubic Bézier), persistent IDs and exact/finite
+curve tessellation. Integrate selection/editing in a dedicated mode,
+with new-file schema roundtrip and Undo/Redo. Separate object drags
+from individual node handles. Keep R0 workflows intact and gate merges
+on Rust tests, strict Clippy and native Linux release CI.
+Avoid translating the old Python UI or importing unverified G-code.
+
+**Physical test gate:** launch on KDE Plasma Wayland and exercise
+select/drag, Undo/Redo and file roundtrip. Perform actual Onefinity
+scrap testing only after CNC stages, posted preflight, fixture
+verification and tool-change probing are implemented.
 
 ## Safety-critical invariant summary
 
@@ -56,3 +81,5 @@ No CNC export exists; physical Wayland/Onefinity tests remain outstanding.
 | Date | Work | Verification | Next |
 |---|---|---|---|
 | 2026-10-08 | Preserve old application; create clean pure Rust workspace with R0 geometry, design editor, file schema and UI | CI pending | Validate full Linux build, record commit, proceed R1 |
+
+| 2026-10-08 | Pure Rust reboot merged to main via PR #99; Python GUI archived, incompatible legacy PRs closed | Rust `37862945581` green: 10 tests/Clippy/Linux release; main `909ae2a4` | R1 analytic vectors; KDE Wayland UI QA; no CNC until R6 |
