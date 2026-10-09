@@ -491,3 +491,36 @@ Next after confirming mouse QA: precise vector import/export and font/text
 CAD editing. Never regress absolute drag preview to per-frame deltas.
 
 | 2026-10-09 | PR #111 cumulative drag regression repair merged | [Rust CI 37968221186](https://github.com/newnetmp3/CarveFoundry/actions/runs/37968221186): 53 core + 14 studio, Clippy and Linux release green; main `7ee5cba2` | Retest node/shape/whole-vector drags on KDE Wayland; then SVG/DXF/text |
+
+
+## Active pure-Rust SVG path interchange — October 9, 2026
+
+Owner confirmed on KDE Plasma/Wayland that direct node dragging from PR #111
+**now works**. This closes the previously reported cursor-tracking blocker;
+it does not validate every other mouse/scale behavior.
+
+Next roadmap stage branch: `feature/rust-r1-svg-vectors` from verified
+main `d16ecb9e3c0b27caf6dd3c75be296226a5fadbac`.
+
+Implementation staged for CI:
+- `crates/core/src/svg.rs`: bounded, strict SVG path reader/writer,
+  true analytic line/circular arc/cubic segments (no preview sampling),
+  mm and viewBox coordinates with CAD bottom-left conversion.
+- Explicit error on unsupported curves, elliptical arcs, transformed
+  geometry, unsupported shape elements and multi-subpath declarations.
+  XML parsing does not interpret scripts, images or references as geometry.
+- Stable per-path node/segment identities; native .cfd schema unchanged.
+- One undoable `Editor::ImportPaths` transaction validates all vectors
+  before mutating a saved design. The imported geometry is separately
+  assigned unique project IDs. Both vector and legacy polygon outlines
+  can be SVG-exported without G-code or fixtures.
+- KDE native File menu uses XDG picker for Import SVG vectors and
+  Export SVG drawing; errors leave current design intact.
+- Core and studio tests for analytic round-trip, relative closure,
+  unsupported geometry rejection, all-or-none imports and Undo.
+
+**Verification pending:** CI tests, strict Clippy, native Linux release
+and a manual KDE file-dialog round-trip. Keep a clear distinction between
+SVG vector drawing export and CNC NC export (STILL DISABLED).
+Next after this coherent batch: DXF interchange, then true system-font
+text/vector conversion and layers.

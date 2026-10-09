@@ -4,13 +4,13 @@ mod ui;
 use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind};
 use eframe::egui;
 use egui::Vec2;
-use std::{path::Path,collections::BTreeSet};
+use std::{path::Path,collections::BTreeSet,fs};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Workspace { Drawing, Toolpaths }
-#[derive(Clone,Copy,PartialEq,Eq)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum InspectorTab { Objects, Properties, Job }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
@@ -226,6 +226,61 @@ impl Studio {
             if path.extension().is_none(){path.set_extension("cfd");}
             self.project_path=path.to_string_lossy().into_owned();
             self.save_document();
+        }
+    }
+    /// SVG import merges editable paths into the current design, preserving
+    /// the original .cfd identity and recording exactly one Undo operation.
+    fn import_svg_bytes(&mut self,bytes:&[u8])->Result<usize,String>{
+        let vectors=carvefoundry_core::import_svg(bytes)?;
+        let count=vectors.paths.len();
+        let width=vectors.width_mm;
+        let height=vectors.height_mm;
+        let start=self.editor.project.next_id;
+        self.editor.apply(Action::ImportPaths{paths:vectors.paths})?;
+        self.selected_ids=(start..start+count as u64).collect();
+        self.selected=None;
+        self.selected_path=None;
+        self.selected_node=None;
+        self.selected_handle=None;
+        self.reconcile_selection();
+        self.edit_mode=EditMode::Objects;
+        self.active_shape=None;
+        self.inspector_tab=InspectorTab::Objects;
+        self.status=format!("Imported {count} SVG paths ({width:.2} × {height:.2} mm SVG canvas). Design stock unchanged; CNC export disabled");
+        Ok(count)
+    }
+    fn choose_import_svg(&mut self){
+        let choice=rfd::FileDialog::new()
+            .add_filter("SVG vector paths",&["svg"]).pick_file();
+        if let Some(path)=choice{
+            let result=(||{
+                let meta=fs::metadata(&path).map_err(|e|e.to_string())?;
+                if meta.len()>16*1024*1024{
+                    return Err("SVG exceeds 16 MiB limit".to_string());
+                }
+                let bytes=fs::read(&path).map_err(|e|e.to_string())?;
+                self.import_svg_bytes(&bytes)
+            })();
+            if let Err(error)=result{
+                self.status=format!("SVG import rejected; design unchanged: {error}");
+            }
+        }
+    }
+    fn choose_export_svg(&mut self){
+        let initial=Path::new(&self.project_path).file_stem()
+            .and_then(|v|v.to_str()).filter(|s|!s.is_empty())
+            .unwrap_or("drawing");
+        let choice=rfd::FileDialog::new()
+            .add_filter("SVG vector drawing",&["svg"])
+            .set_file_name(format!("{initial}.svg")).save_file();
+        if let Some(mut path)=choice{
+            if path.extension().is_none(){path.set_extension("svg");}
+            let result=carvefoundry_core::export_svg(&self.editor.project)
+                .and_then(|svg|fs::write(&path,svg).map_err(|e|e.to_string()));
+            self.status=match result{
+                Ok(())=>format!("Exported native analytic SVG to {}",path.display()),
+                Err(error)=>format!("SVG export failed: {error}"),
+            };
         }
     }
     fn duplicate_selection(&mut self){
@@ -700,6 +755,21 @@ mod tests {
         assert_eq!(studio.editor.project,before);
     }
 
+    #[test]
+    fn svg_import_is_one_undo_and_failed_import_is_non_mutating(){
+        let mut studio=Studio::default();
+        let empty=studio.editor.project.clone();
+        let svg=br#"<svg width="300mm" height="200mm"><path d="M 10 10 L 20 20"/></svg>"#;
+        studio.import_svg_bytes(svg).unwrap();
+        assert_eq!(studio.editor.project.paths.len(),1);
+        assert_eq!(studio.selected_ids.len(),1);
+        assert_eq!(studio.inspector_tab,InspectorTab::Objects);
+        let imported=studio.editor.project.clone();
+        assert!(studio.import_svg_bytes(br#"<svg><rect/></svg>"#).is_err());
+        assert_eq!(studio.editor.project,imported);
+        assert!(studio.editor.undo());
+        assert_eq!(studio.editor.project,empty);
+    }
     #[test]
     fn switching_workspaces_cannot_generate_nc_or_mutate_design(){
         let mut studio=Studio::default();

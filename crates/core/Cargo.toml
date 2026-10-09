@@ -9,3 +9,7 @@ description = "Pure Rust project, geometry and editing engine for CarveFoundry"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+
+# Bounded XML + SVG path syntax parsing; never execute SVG scripts or resolve network resources.
+roxmltree = "0.20"
+svgtypes = "0.16"

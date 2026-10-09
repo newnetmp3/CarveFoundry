@@ -21,6 +21,16 @@ impl Studio {
                         self.choose_open_document();
                         ui.close();
                     }
+                    ui.separator();
+                    if ui.button("Import SVG vectors…")
+                        .on_hover_text("Add SVG path geometry to this design as one Undo operation; reject unsupported curves or transforms").clicked(){
+                        self.choose_import_svg();ui.close();
+                    }
+                    if ui.button("Export vectors as SVG…")
+                        .on_hover_text("Save an SVG drawing; does not export machine instructions").clicked(){
+                        self.choose_export_svg();ui.close();
+                    }
+                    ui.separator();
                     if ui.button("Save  Ctrl+S").clicked(){
                         self.save_command();ui.close();
                     }
@@ -37,7 +47,8 @@ impl Studio {
                     }
                     ui.weak("Open/Save use the native KDE file picker or this path.");
                     ui.separator();
-                    ui.small("Projects are Rust-native; historic CF3D files cannot be opened.");
+                    ui.small("Native projects use .cfd; SVG transfers vector outlines only.");
+                    ui.small("Text, transforms, masks and elliptical SVG arcs must be converted to paths first.");
                 });
                 ui.menu_button("Edit",|ui|{
                     if ui.add_enabled(self.editor.can_undo(),

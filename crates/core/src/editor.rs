@@ -10,6 +10,8 @@ pub enum Action {
     RenamePath {id:u64,name:String},
     RenameProject {name:String},
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
+    /// Atomic SVG vector import: assign fresh project-wide identities.
+    ImportPaths {paths:Vec<AnalyticPath>},
     ConvertContour {id:u64},
     Duplicate {id:u64},
     DuplicateMany {ids:Vec<u64>},
@@ -101,6 +103,18 @@ impl Editor {
                 let path=polyline(id,name,Point::new(0.0,0.0),points,closed)?;
                 next.next_id=id.checked_add(1).ok_or("Path ID exhausted")?;
                 next.paths.push(path);
+            }
+            Action::ImportPaths{paths}=>{
+                if paths.is_empty() || paths.len()>512{
+                    return Err("SVG import must contain 1 to 512 paths".into());
+                }
+                for mut path in paths {
+                    path.validate()?;
+                    path.id=next.next_id;
+                    next.next_id=next.next_id.checked_add(1)
+                        .ok_or("SVG imported vector identities exhausted")?;
+                    next.paths.push(path);
+                }
             }
             Action::ConvertContour{id}=>{
                 let contour=next.contours.iter().find(|p|p.id==id)
@@ -571,6 +585,22 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn svg_import_is_all_or_nothing_one_history_entry(){
+        let mut e=Editor::default();
+        let mut source=AnalyticPath::preset(1,"Curve".into(),
+            Point::new(5.0,5.0),Primitive::Cubic,20.0,10.0).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::ImportPaths{paths:vec![source.clone(),source.clone()]})
+            .unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!((e.project.paths[0].id,e.project.paths[1].id),(1,2));
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+        source.nodes[0].position.x=f64::NAN;
+        assert!(e.apply(Action::ImportPaths{paths:vec![source]}).is_err());
+        assert_eq!(e.project,before);
+    }
     fn rect() -> Action {
         Action::AddRectangle{name:"Panel".into(),origin:Point::new(20.,30.),
             width_mm:50.,height_mm:20.}
