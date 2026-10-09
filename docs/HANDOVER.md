@@ -112,3 +112,41 @@ No CNC export exists; physical Wayland/Onefinity tests remain outstanding.
 | 2026-10-08 | Implemented Rust R1a retained lines/arcs/cubics and direct node/handle editing, schema-compatible CFD persistence, strict undoable operations | `feature/rust-r1-analytic-vectors`, native CI pending | Verify green Rust CI, merge then update verified handover; next curve constraints and SVG/DXF |
 
 | 2026-10-08 | PR #101 R1a retained analytic curves and native direct node/handle editing merged to main | [Rust CI `37867505729`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37867505729): 26 tests, strict Clippy, native Linux release; main `49a58bf3` | R1b analytic SVG interchange/snapping/curves and physical KDE Wayland QA |
+
+## Usability recovery — PR #103 (active, not merged until green CI)
+
+The user reported the initial Rust vector editor as extremely unusable
+(particularly node motion, missing CAD tools). Root causes found:
+
+1. Previous drag hit-testing used current cursor after egui's drag
+   threshold, rather than the original button-down position. First
+   gesture would miss small nodes/controls, and direct path selection
+   was required before any node drag.
+2. Absolute-coordinate grid snapping changed the node position abruptly
+   on the first movement. Default snapping enabled made this worse.
+3. R0 rectangle creation saved non-node-editable polygon contours,
+   whereas R1 paths had editable nodes; this was inconsistent with
+   user expectations.
+4. Arc endpoint dragging always rejected, preventing obvious edits.
+
+`fix/rust-editor-usability-tools`:
+- Adds pure `crates/core/src/interaction.rs` first-press, topmost
+  node/handle/edge selection plus relative movement snapping and unit
+  regressions. Mouse wheel zoom, middle/right pan, Fit View, new
+  object/direct-node/Pen modes.
+- Adds `crates/core/src/shapes.rs`: editable rectangle, star, polygon,
+  circle/ellipse Bézier constructors; lines and 3-point+ polylines
+  from Pen. All use versioned `.cfd` analytic vectors.
+- Arc endpoint motion refits a true circle preserving signed sweep,
+  no source flattening; invalid moves remain transactional.
+- Adds undoable duplication, rotate ±90°, mirror X/Y, align stock center,
+  visibility toggles, keyboard shortcuts.
+- Benchmarked or verified hardware UX: **NOT YET**. Must run CI Rust tests,
+  strict Clippy and native Linux release, then manually test KDE
+  Plasma/Wayland pointer/drag/cancel/selection flow.
+
+**Next after this usability PR:** resolve any KDE/Wayland QA regressions
+first, add precision transformations and keyboard workflows, then
+SVG/DXF, fonts/text, layers, and further CNC-free CAD authoring.
+Don't reactivate the retired PySide6 application. Preserve stock XY0
+bottom left, top-of-stock Z0, and no G-code until R6 preflight gates.

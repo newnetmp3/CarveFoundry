@@ -1,9 +1,18 @@
 //! Validated undoable Rust design commands. Machine output is out of scope.
-use crate::{geometry::Point, path::{AnalyticPath, Curve, PathSegment, Primitive}, project::{Contour, Fixture, Project, Stock}};
+use crate::{geometry::Point, path::{AnalyticPath, Curve, PathSegment, Primitive}, project::{Contour, Fixture, Project, Stock}, shapes::{create_shape,polyline,ShapeKind}};
 
 #[derive(Clone, Debug)]
 pub enum Action {
     AddRectangle { name: String, origin: Point, width_mm: f64, height_mm: f64 },
+    AddShape {kind:ShapeKind,name:String,origin:Point,width_mm:f64,height_mm:f64},
+    AddPolyline {name:String,points:Vec<Point>,closed:bool},
+    ConvertContour {id:u64},
+    Duplicate {id:u64},
+    Flip {id:u64,horizontal:bool},
+    RotateQuarter {id:u64,clockwise:bool},
+    Center {id:u64,horizontal:bool,vertical:bool},
+    SetVisible {id:u64,visible:bool},
+
     AddAnalytic { name: String, origin: Point, kind: Primitive, width_mm: f64, height_mm: f64 },
     MovePath { id: u64, origin: Point },
     MoveNode { path_id: u64, node_id: u64, position: Point },
@@ -63,6 +72,157 @@ impl Editor {
                         Point::new(width_mm,height_mm),Point::new(0.,height_mm),
                     ],
                 });
+            }
+            Action::AddShape{kind,name,origin,width_mm,height_mm}=>{
+                let id=next.next_id;
+                let path=create_shape(id,name,origin,kind,width_mm,height_mm)?;
+                next.next_id=id.checked_add(1).ok_or("Shape ID exhausted")?;
+                next.paths.push(path);
+            }
+            Action::AddPolyline{name,points,closed}=>{
+                let id=next.next_id;
+                let path=polyline(id,name,Point::new(0.0,0.0),points,closed)?;
+                next.next_id=id.checked_add(1).ok_or("Path ID exhausted")?;
+                next.paths.push(path);
+            }
+            Action::ConvertContour{id}=>{
+                let contour=next.contours.iter().find(|p|p.id==id)
+                    .ok_or("Legacy contour ID not found")?;
+                if contour.locked{return Err("Unlock contour before converting".into());}
+                let mut shape=polyline(contour.id,contour.name.clone(),
+                    contour.origin,contour.vertices.clone(),true)?;
+                shape.visible=contour.visible;
+                shape.validate()?;
+                next.contours.retain(|p|p.id!=id);
+                next.paths.push(shape);
+            }
+            Action::Duplicate{id}=>{
+                let new_id=next.next_id;
+                next.next_id=new_id.checked_add(1).ok_or("Duplicate ID exhausted")?;
+                if let Some(source)=next.paths.iter().find(|p|p.id==id) {
+                    let mut clone=source.clone();
+                    clone.id=new_id;
+                    clone.name=format!("{} copy",source.name);
+                    clone.locked=false;
+                    clone.origin=clone.origin.offset(8.0,8.0);
+                    next.paths.push(clone);
+                }else if let Some(source)=next.contours.iter().find(|p|p.id==id){
+                    let mut clone=source.clone();
+                    clone.id=new_id;
+                    clone.name=format!("{} copy",source.name);
+                    clone.locked=false;
+                    clone.origin=clone.origin.offset(8.0,8.0);
+                    next.contours.push(clone);
+                }else{return Err("Nothing selected to duplicate".into());}
+            }
+            Action::Flip{id,horizontal}=>{
+                if let Some(path)=next.paths.iter_mut().find(|p|p.id==id){
+                    if path.locked{return Err("Path is locked".into());}
+                    let lo=path.nodes.iter().map(|n|if horizontal{n.position.x}
+                        else{n.position.y}).fold(f64::INFINITY,f64::min);
+                    let hi=path.nodes.iter().map(|n|if horizontal{n.position.x}
+                        else{n.position.y}).fold(f64::NEG_INFINITY,f64::max);
+                    let reflect=|p:&mut Point|{
+                        if horizontal{p.x=lo+hi-p.x;}else{p.y=lo+hi-p.y;}
+                    };
+                    for node in &mut path.nodes{reflect(&mut node.position);}
+                    for seg in &mut path.segments {
+                        match &mut seg.curve{
+                            Curve::Line=>{},
+                            Curve::Arc{center,clockwise}=>{
+                                reflect(center);*clockwise=!*clockwise;
+                            },
+                            Curve::Cubic{control1,control2}=>{
+                                reflect(control1);reflect(control2);
+                            },
+                        }
+                    }
+                }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
+                    if contour.locked{return Err("Contour is locked".into());}
+                    let lo=contour.vertices.iter().map(|n|if horizontal{n.x}else{n.y})
+                        .fold(f64::INFINITY,f64::min);
+                    let hi=contour.vertices.iter().map(|n|if horizontal{n.x}else{n.y})
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    for p in &mut contour.vertices{
+                        if horizontal {p.x=lo+hi-p.x;}else{p.y=lo+hi-p.y;}
+                    }
+                }else{return Err("Nothing selected to flip".into());}
+            }
+            Action::RotateQuarter{id,clockwise}=>{
+                if let Some(path)=next.paths.iter_mut().find(|p|p.id==id) {
+                    if path.locked{return Err("Path is locked".into());}
+                    let bounds=path.nodes.iter().map(|n|n.position);
+                    let min_x=bounds.clone().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=path.nodes.iter().map(|n|n.position.x)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=path.nodes.iter().map(|n|n.position.y)
+                        .fold(f64::INFINITY,f64::min);
+                    let max_y=path.nodes.iter().map(|n|n.position.y)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let pivot=Point::new((min_x+max_x)/2.0,(min_y+max_y)/2.0);
+                    let rotate=|p:&mut Point|{
+                        let x=p.x-pivot.x;let y=p.y-pivot.y;
+                        if clockwise{
+                            p.x=pivot.x+y;p.y=pivot.y-x;
+                        }else{
+                            p.x=pivot.x-y;p.y=pivot.y+x;
+                        }
+                    };
+                    for node in &mut path.nodes{rotate(&mut node.position);}
+                    for seg in &mut path.segments{
+                        match &mut seg.curve{
+                            Curve::Line=>{},
+                            Curve::Arc{center,..}=>rotate(center),
+                            Curve::Cubic{control1,control2}=>{
+                                rotate(control1);rotate(control2);
+                            },
+                        }
+                    }
+                }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
+                    if contour.locked{return Err("Contour is locked".into());}
+                    let min_x=contour.vertices.iter().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=contour.vertices.iter().map(|p|p.x)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=contour.vertices.iter().map(|p|p.y).fold(f64::INFINITY,f64::min);
+                    let max_y=contour.vertices.iter().map(|p|p.y)
+                        .fold(f64::NEG_INFINITY,f64::max);
+                    let cx=(min_x+max_x)/2.0;let cy=(min_y+max_y)/2.0;
+                    for p in &mut contour.vertices{
+                        let x=p.x-cx;let y=p.y-cy;
+                        if clockwise{p.x=cx+y;p.y=cy-x;}
+                        else{p.x=cx-y;p.y=cy+x;}
+                    }
+                }else{return Err("Nothing selected to rotate".into());}
+            }
+            Action::Center{id,horizontal,vertical}=>{
+                let stock_center=Point::new(next.stock.width_mm*0.5,
+                    next.stock.height_mm*0.5);
+                if let Some(path)=next.paths.iter_mut().find(|p|p.id==id){
+                    if path.locked{return Err("Path is locked".into());}
+                    let points=path.preview_points(0.1)?;
+                    let min_x=points.iter().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=points.iter().map(|p|p.x).fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=points.iter().map(|p|p.y).fold(f64::INFINITY,f64::min);
+                    let max_y=points.iter().map(|p|p.y).fold(f64::NEG_INFINITY,f64::max);
+                    if horizontal{path.origin.x+=stock_center.x-(min_x+max_x)*0.5;}
+                    if vertical{path.origin.y+=stock_center.y-(min_y+max_y)*0.5;}
+                }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
+                    if contour.locked{return Err("Contour is locked".into());}
+                    let points=contour.world_points();
+                    let min_x=points.iter().map(|p|p.x).fold(f64::INFINITY,f64::min);
+                    let max_x=points.iter().map(|p|p.x).fold(f64::NEG_INFINITY,f64::max);
+                    let min_y=points.iter().map(|p|p.y).fold(f64::INFINITY,f64::min);
+                    let max_y=points.iter().map(|p|p.y).fold(f64::NEG_INFINITY,f64::max);
+                    if horizontal{contour.origin.x+=stock_center.x-(min_x+max_x)*0.5;}
+                    if vertical{contour.origin.y+=stock_center.y-(min_y+max_y)*0.5;}
+                }else{return Err("Nothing selected to center".into());}
+            }
+            Action::SetVisible{id,visible}=>{
+                if let Some(path)=next.paths.iter_mut().find(|p|p.id==id){
+                    path.visible=visible;
+                }else if let Some(contour)=next.contours.iter_mut().find(|p|p.id==id){
+                    contour.visible=visible;
+                }else{return Err("Nothing selected for visibility".into());}
             }
             Action::AddAnalytic{name,origin,kind,width_mm,height_mm} => {
                 let id=next.next_id;
@@ -291,6 +451,80 @@ mod tests {
 
 
     #[test]
+    fn all_creation_tools_create_editable_paths_and_preserve_history(){
+        let mut e=Editor::default();
+        for kind in [ShapeKind::Rectangle,ShapeKind::Triangle,ShapeKind::Hexagon,
+            ShapeKind::Pentagon,ShapeKind::Octagon,ShapeKind::Star,
+            ShapeKind::Ellipse,ShapeKind::Circle] {
+            e.apply(Action::AddShape{kind,name:kind.title().into(),
+                origin:Point::new(5.0,5.0),width_mm:40.0,height_mm:30.0}).unwrap();
+        }
+        assert_eq!(e.project.paths.len(),8);
+        assert!(e.project.paths.iter().all(|p|p.closed));
+        assert_eq!(Project::decode(&e.project.encode().unwrap()).unwrap(),e.project);
+    }
+    #[test]
+    fn copy_flip_center_visibility_are_undoable_and_preserve_curves(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Ellipse,name:"Oval".into(),
+            origin:Point::new(8.0,12.0),width_mm:40.0,height_mm:30.0}).unwrap();
+        e.apply(Action::Duplicate{id:1}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!(e.project.paths[1].id,2);
+        let before=e.project.clone();
+        e.apply(Action::Flip{id:2,horizontal:true}).unwrap();
+        assert!(e.project.paths[1].segments.iter()
+            .all(|s|matches!(s.curve,Curve::Cubic{..})));
+        e.apply(Action::RotateQuarter{id:2,clockwise:true}).unwrap();
+        e.apply(Action::RotateQuarter{id:2,clockwise:false}).unwrap();
+        assert!(e.project.paths[1].segments.iter()
+            .all(|s|matches!(s.curve,Curve::Cubic{..})));
+        e.apply(Action::Center{id:2,horizontal:true,vertical:true}).unwrap();
+        e.apply(Action::SetVisible{id:2,visible:false}).unwrap();
+        assert!(!e.project.paths[1].visible);
+        assert!(e.undo());
+        assert!(e.project.paths[1].visible);
+        assert!(e.undo()); // Center
+        assert!(e.undo()); // Reverse rotation
+        assert!(e.undo()); // Forward rotation
+        assert!(e.undo()); // Flip
+        assert_eq!(e.project,before);
+    }
+    #[test]
+    fn existing_r0_contours_can_be_converted_losslessly_to_editable_paths(){
+        let mut e=Editor::default();
+        e.apply(Action::AddRectangle{
+            name:"Legacy rectangle".into(),origin:Point::new(12.0,18.0),
+            width_mm:30.0,height_mm:15.0,
+        }).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::ConvertContour{id:1}).unwrap();
+        assert!(e.project.contours.is_empty());
+        assert_eq!(e.project.paths[0].id,1);
+        assert_eq!(e.project.paths[0].nodes.len(),4);
+        assert_eq!(e.project.paths[0].origin,Point::new(12.0,18.0));
+        e.apply(Action::MoveNode{path_id:1,node_id:1,
+            position:Point::new(-2.0,0.0)}).unwrap();
+        assert!(e.undo());
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+    }
+    #[test]
+    fn freeform_polyline_and_locked_tools_fail_closed(){
+        let mut e=Editor::default();
+        e.apply(Action::AddPolyline{name:"Sketch".into(),closed:false,
+            points:vec![Point::new(2.0,3.0),Point::new(6.0,3.0),
+                Point::new(8.0,10.0)]}).unwrap();
+        assert_eq!(e.project.paths[0].segments.len(),2);
+        e.apply(Action::SetPathLocked{id:1,locked:true}).unwrap();
+        let source=e.project.clone();
+        for action in [Action::Flip{id:1,horizontal:true},
+            Action::Center{id:1,horizontal:true,vertical:true}] {
+            assert!(e.apply(action).is_err());
+            assert_eq!(e.project,source);
+        }
+    }
+    #[test]
     fn cubic_control_drag_is_atomic_and_undoable() {
         let mut e=Editor::default();
         e.apply(Action::AddAnalytic{name:"Cubic".into(),
@@ -325,18 +559,21 @@ mod tests {
         assert_eq!(decoded.paths[0].nodes[0].id,node);
     }
     #[test]
-    fn editing_arc_anchors_is_rejected_without_change() {
+    fn editing_arc_anchors_refits_circle_with_undo_and_atomic_drag(){
         let mut e=Editor::default();
         e.apply(Action::AddAnalytic{name:"Arch".into(),
             origin:Point::new(0.0,0.0),kind:Primitive::Arc,
             width_mm:50.0,height_mm:20.0}).unwrap();
         let before=e.project.clone();
-        assert!(e.apply(Action::MoveNode{path_id:1,node_id:1,
-            position:Point::new(2.0,2.0)}).is_err());
+        e.apply(Action::MoveNode{path_id:1,node_id:1,
+            position:Point::new(2.0,2.0)}).unwrap();
+        e.project.paths[0].validate().unwrap();
+        assert!(e.undo());
         assert_eq!(e.project,before);
-        let node=e.start_node_drag(1,1).unwrap();
-        assert!(e.preview_node_drag(1,1,node.offset(2.0,1.0)).is_err());
-        e.cancel_drag();
+        let anchor=e.start_node_drag(1,1).unwrap();
+        e.preview_node_drag(1,1,anchor.offset(2.0,1.0)).unwrap();
+        e.finish_drag();
+        assert!(e.undo());
         assert_eq!(e.project,before);
     }
     #[test]

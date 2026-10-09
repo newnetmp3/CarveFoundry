@@ -1,14 +1,15 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 use carvefoundry_core::{
-    Action, AnalyticPath, Curve, Editor, Fixture, Point, Primitive, Project, polygon_contains,
+    Action, Curve, Editor, Fixture, Hit, PickMode, Point, Primitive, Project,
+    ShapeKind, movement_delta, pick,
 };
 use eframe::egui;
 use egui::{Color32, Pos2, Sense, Stroke, Vec2};
 use std::path::Path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum EditMode { Objects, Nodes }
+enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone, Copy)]
 enum ActiveDrag {
     None,
@@ -17,22 +18,6 @@ enum ActiveDrag {
     Node(u64,u64,Point),
     Control(u64,u64,u8,Point),
 }
-fn point_distance(a:Point,b:Point)->f64 {(a.x-b.x).hypot(a.y-b.y)}
-fn line_distance(p:Point,a:Point,b:Point)->f64 {
-    let dx=b.x-a.x;
-    let dy=b.y-a.y;
-    let len=dx*dx+dy*dy;
-    if len<=1e-12 {return point_distance(p,a);}
-    let t=(((p.x-a.x)*dx+(p.y-a.y)*dy)/len).clamp(0.0,1.0);
-    point_distance(p,Point::new(a.x+t*dx,a.y+t*dy))
-}
-fn path_hit(path:&AnalyticPath,point:Point,tol_mm:f64)->bool {
-    if !path.visible {return false;}
-    let Ok(points)=path.preview_points(0.4) else{return false;};
-    points.windows(2).any(|v|line_distance(point,v[0],v[1])<=tol_mm)
-        || (path.closed && polygon_contains(&points,point))
-}
-
 struct Studio {
     editor: Editor,
     project_path: String,
@@ -45,9 +30,12 @@ struct Studio {
     shape_width: f64,
     shape_height: f64,
     zoom: f32,
+    pan: Vec2,
     grid_step: f64,
     use_grid: bool,
     drag: Option<ActiveDrag>,
+    drawing: Vec<Point>,
+    draw_closed: bool,
     status: String,
 }
 impl Default for Studio {
@@ -62,8 +50,10 @@ impl Default for Studio {
             edit_mode: EditMode::Objects,
             shape_name: "New contour".into(),
             shape_width: 50.0, shape_height: 30.0,
-            zoom: 1.0, grid_step: 1.0, use_grid: true,
+            zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
             drag: None,
+            drawing: Vec::new(),
+            draw_closed: false,
             status: "Ready · Rust design file only · CNC export disabled".into(),
         }
     }
@@ -82,6 +72,8 @@ impl Studio {
         self.selected_node = None;
         self.selected_handle = None;
         self.drag = None;
+        self.drawing.clear();
+        self.pan=Vec2::ZERO;self.zoom=1.0;
         self.status = "New independent Rust design · No legacy CF3D converter".into();
     }
     fn open_document(&mut self) {
@@ -94,6 +86,8 @@ impl Studio {
                 self.selected_node = None;
                 self.selected_handle = None;
                 self.drag = None;
+                self.drawing.clear();
+                self.pan=Vec2::ZERO;self.zoom=1.0;
                 self.status = "Opened native Rust design; CNC machining not implemented".into();
             }
             Err(error) => self.status = format!("Open rejected; original design kept: {error}"),
@@ -105,18 +99,69 @@ impl Studio {
             Err(error) => format!("Save failed: {error}"),
         };
     }
-    fn add_rectangle(&mut self) {
-        let id = self.editor.project.next_id;
-        let pos=10.0+(self.editor.project.contours.len()%10) as f64*8.0;
-        self.apply(Action::AddRectangle {
-            name:self.shape_name.clone(), origin:Point::new(pos,pos),
-            width_mm:self.shape_width, height_mm:self.shape_height,
+    fn selected_id(&self)->Option<u64> {
+        self.selected_path.or(self.selected)
+    }
+    fn add_shape(&mut self,kind:ShapeKind){
+        let id=self.editor.project.next_id;
+        let offset=10.0+(self.editor.project.paths.len()%8) as f64*12.0;
+        let size=if kind==ShapeKind::Circle {
+            self.shape_width.min(self.shape_height)
+        }else{self.shape_width};
+        self.apply(Action::AddShape{
+            kind,name:format!("{} {}",self.shape_name,kind.title()),
+            origin:Point::new(offset,offset),width_mm:size,
+            height_mm:if kind==ShapeKind::Circle{size}else{self.shape_height},
         });
-        if self.editor.project.contours.iter().any(|p|p.id==id) {
-            self.selected=Some(id);
-            self.selected_path=None;
-            self.selected_node=None;
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Objects;
         }
+    }
+    fn finish_drawing(&mut self){
+        let points=std::mem::take(&mut self.drawing);
+        if points.is_empty(){return;}
+        let id=self.editor.project.next_id;
+        self.apply(Action::AddPolyline {
+            name:format!("{} Polyline",self.shape_name),points:points.clone(),
+            closed:self.draw_closed,
+        });
+        if self.editor.project.paths.iter().any(|p|p.id==id){
+            self.selected_path=Some(id);self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Nodes;
+        }else {
+            self.drawing=points;
+        }
+    }
+    fn apply_canvas_hit(&mut self, hit:Option<Hit>){
+        match hit {
+            Some(Hit::Node{path_id,node_id})=>{
+                self.selected_path=Some(path_id);self.selected=None;
+                self.selected_node=Some(node_id);self.selected_handle=None;
+            }
+            Some(Hit::Handle{path_id,segment_id,handle})=>{
+                self.selected_path=Some(path_id);self.selected=None;
+                self.selected_node=None;self.selected_handle=Some((segment_id,handle));
+            }
+            Some(Hit::Path(id))=>{
+                self.selected_path=Some(id);self.selected=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            Some(Hit::Contour(id))=>{
+                self.selected=Some(id);self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            None=>{
+                self.selected=None;self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+        }
+    }
+    fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
+        if let Some(id)=self.selected_id(){self.apply(action(id));}
+        else{self.status="Select a shape first".into();}
     }
     fn add_analytic(&mut self,kind:Primitive){
         let id=self.editor.project.next_id;
@@ -135,6 +180,67 @@ impl Studio {
             self.selected_handle=None;
             self.edit_mode=EditMode::Nodes;
         }
+    }
+    fn keyboard(&mut self,ui:&egui::Ui){
+        if ui.ctx().egui_wants_keyboard_input(){return;}
+        let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit)=ui.input(|i|{
+            let cmd=i.modifiers.command;
+            (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
+             (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
+                || (cmd && i.key_pressed(egui::Key::Y)),
+             cmd && i.key_pressed(egui::Key::D),
+             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+             i.key_pressed(egui::Key::Escape),
+             i.key_pressed(egui::Key::Enter),
+             !cmd && i.key_pressed(egui::Key::V),
+             !cmd && i.key_pressed(egui::Key::N),
+             !cmd && i.key_pressed(egui::Key::P),
+             !cmd && i.key_pressed(egui::Key::F))
+        });
+        if escape{
+            if self.drag.is_some(){
+                self.editor.cancel_drag();
+                self.drag=None;
+                self.status="Drag cancelled · original geometry restored".into();
+            }else if self.edit_mode==EditMode::Draw{
+                self.drawing.clear();
+                self.edit_mode=EditMode::Objects;
+            }else{
+                self.selected=None;self.selected_path=None;
+                self.selected_node=None;self.selected_handle=None;
+            }
+            return;
+        }
+        if undo{self.editor.undo();}
+        if redo{self.editor.redo();}
+        if duplicate && let Some(id)=self.selected_id(){
+            let next=self.editor.project.next_id;
+            self.apply(Action::Duplicate{id});
+            if self.editor.project.paths.iter().any(|p|p.id==next){
+                self.selected_path=Some(next);self.selected=None;
+            }else if self.editor.project.contours.iter().any(|p|p.id==next){
+                self.selected=Some(next);self.selected_path=None;
+            }
+        }
+        if delete{
+            if let Some(id)=self.selected_path{
+                self.apply(Action::RemovePath{id});
+                if !self.editor.project.paths.iter().any(|p|p.id==id){
+                    self.selected_path=None;self.selected_node=None;
+                    self.selected_handle=None;
+                }
+            }else if let Some(id)=self.selected{
+                self.apply(Action::Remove{id});
+                if !self.editor.project.contours.iter().any(|p|p.id==id){
+                    self.selected=None;
+                }
+            }
+        }
+        if enter && self.edit_mode==EditMode::Draw{self.finish_drawing();}
+        if v{self.edit_mode=EditMode::Objects;}
+        if n{self.edit_mode=EditMode::Nodes;}
+        if p{self.edit_mode=EditMode::Draw;self.drawing.clear();}
+        if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
     }
     fn header(&mut self,ui:&mut egui::Ui) {
         ui.horizontal_wrapped(|ui|{
@@ -162,7 +268,7 @@ impl Studio {
         ui.heading("DESIGN TOOLS");
         ui.small("All geometry, history and file operations run natively in Rust.");
         ui.separator();
-        ui.strong("ADD CLOSED CONTOUR");
+        ui.strong("DRAW / CREATE");
         ui.label("Name");
         ui.text_edit_singleline(&mut self.shape_name);
         ui.horizontal(|ui|{
@@ -175,7 +281,36 @@ impl Studio {
             ui.add(egui::DragValue::new(&mut self.shape_height)
                 .range(0.1..=10_000.0).suffix(" mm"));
         });
-        if ui.button("＋ Add rectangle").clicked(){self.add_rectangle();}
+        ui.label("Basic shapes");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("▭ Rectangle").clicked(){self.add_shape(ShapeKind::Rectangle);}
+            if ui.button("◯ Circle").clicked(){self.add_shape(ShapeKind::Circle);}
+            if ui.button("⬭ Ellipse").clicked(){self.add_shape(ShapeKind::Ellipse);}
+        });
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("△ Triangle").clicked(){self.add_shape(ShapeKind::Triangle);}
+            if ui.button("Pentagon").clicked(){self.add_shape(ShapeKind::Pentagon);}
+            if ui.button("Hexagon").clicked(){self.add_shape(ShapeKind::Hexagon);}
+            if ui.button("Octagon").clicked(){self.add_shape(ShapeKind::Octagon);}
+            if ui.button("☆ Star").clicked(){self.add_shape(ShapeKind::Star);}
+        });
+        if ui.button("✎ Draw polyline / polygon").clicked(){
+            self.edit_mode=EditMode::Draw;
+            self.drawing.clear();
+            self.selected_node=None;self.selected_handle=None;
+        }
+        if self.edit_mode==EditMode::Draw {
+            ui.checkbox(&mut self.draw_closed,"Close outline into polygon");
+            ui.label(format!("{} points · click canvas to add",self.drawing.len()));
+            ui.horizontal(|ui|{
+                if ui.add_enabled(self.drawing.len()>=if self.draw_closed{3}else{2},
+                    egui::Button::new("Finish ↵")).clicked(){self.finish_drawing();}
+                if ui.button("Cancel Esc").clicked(){
+                    self.drawing.clear();self.edit_mode=EditMode::Objects;
+                }
+            });
+            ui.small("Click each point on stock · Enter/double-click finishes · Escape cancels. Grid snap optional.");
+        }
         ui.separator();
         ui.strong("ADD RETAINED ANALYTIC PATH");
         ui.horizontal_wrapped(|ui|{
@@ -186,24 +321,62 @@ impl Studio {
         ui.small("Line/arc/cubic remain mathematical segments in .cfd. The displayed linework is preview-only.");
         ui.separator();
         ui.heading("EDIT MODE");
-        ui.horizontal(|ui|{
-            ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"Move objects");
-            ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"Edit nodes");
+        ui.horizontal_wrapped(|ui|{
+            ui.selectable_value(&mut self.edit_mode,EditMode::Objects,"V · Select");
+            ui.selectable_value(&mut self.edit_mode,EditMode::Nodes,"N · Nodes");
+            ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"P · Pen");
         });
         ui.small("Object mode translates complete contours/paths. Node mode edits anchors and cubic handles without flattening curves.");
         ui.separator();
         ui.heading("POSITION");
-        ui.checkbox(&mut self.use_grid,"Snap drag to stock XY grid");
+        ui.checkbox(&mut self.use_grid,"Snap drag delta to grid");
         ui.horizontal(|ui|{
             ui.label("Grid");
             ui.add(egui::DragValue::new(&mut self.grid_step)
                 .range(0.1..=100.0).suffix(" mm"));
         });
-        ui.small("Stock XY0 is bottom-left. Object/node/control drags become a single Undo action.");
+        ui.small("First click-drag an anchor/handle directly. Drags start at mouse-down position. Grid snaps movement only and never jumps the node to grid.");
         ui.separator();
-        ui.heading("NEXT MILESTONES");
-        ui.label("• Arc constraint and tangent controls");
-        ui.label("• SVG/DXF, fonts and text");
+        ui.heading("EDIT OPERATIONS");
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Rotate 90° ↺").clicked(){
+                self.run_selected(|id|Action::RotateQuarter{id,clockwise:false});
+            }
+            if ui.button("Rotate 90° ↻").clicked(){
+                self.run_selected(|id|Action::RotateQuarter{id,clockwise:true});
+            }
+        });
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Duplicate · Ctrl+D").clicked(){
+                self.run_selected(|id|Action::Duplicate{id});
+            }
+            if ui.button("Flip X").clicked(){
+                self.run_selected(|id|Action::Flip{id,horizontal:true});
+            }
+            if ui.button("Flip Y").clicked(){
+                self.run_selected(|id|Action::Flip{id,horizontal:false});
+            }
+        });
+        ui.horizontal_wrapped(|ui|{
+            if ui.button("Center X").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:true,vertical:false});
+            }
+            if ui.button("Center Y").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:false,vertical:true});
+            }
+            if ui.button("Center both").clicked(){
+                self.run_selected(|id|Action::Center{id,horizontal:true,vertical:true});
+            }
+        });
+        ui.horizontal(|ui|{
+            if ui.button("Show").clicked(){
+                self.run_selected(|id|Action::SetVisible{id,visible:true});
+            }
+            if ui.button("Hide").clicked(){
+                self.run_selected(|id|Action::SetVisible{id,visible:false});
+            }
+        });
+        ui.small("Ctrl+Z Undo · Ctrl+Shift+Z/Ctrl+Y Redo · Delete removes selection · Escape cancels drag · F fits view.");
         ui.label("• True 3D mesh viewport");
         ui.label("• Native machining operations");
         ui.label("• Fixture-aware CAM safety");
@@ -286,6 +459,18 @@ impl Studio {
             let mut locked=contour.locked;
             if ui.checkbox(&mut locked,"Lock contour").changed(){
                 self.apply(Action::SetLocked{id:contour.id,locked});
+            }
+            ui.small("Legacy R0 polygon: convert to analytic lines to move individual nodes.");
+            if ui.add_enabled(!locked,egui::Button::new(
+                "Convert to editable nodes"
+            )).clicked(){
+                self.apply(Action::ConvertContour{id:contour.id});
+                if self.editor.project.paths.iter().any(|p|p.id==contour.id){
+                    self.selected_path=Some(contour.id);
+                    self.selected=None;
+                    self.selected_node=None;
+                    self.edit_mode=EditMode::Nodes;
+                }
             }
             if ui.add_enabled(!contour.locked,
                 egui::Button::new("Delete selected contour")).clicked(){
@@ -389,7 +574,7 @@ impl Studio {
                         self.selected_node=None;
                     }
                 });
-                ui.small("Arc anchors are fixed until radius-constrained node editing is implemented. Cubic controls move with their anchors.");
+                ui.small("Arc endpoints refit true circles while preserving sweep; Bézier controls follow their anchors.");
             }
             ui.separator();
             ui.label("Cubic control handles");
@@ -439,18 +624,37 @@ impl Studio {
                 self.editor.project.contours.len(),self.editor.project.paths.len(),
                 self.editor.project.stock.width_mm,
                 self.editor.project.stock.height_mm));
-            ui.add(egui::Slider::new(&mut self.zoom,0.4..=4.0).text("Zoom"));
+            ui.add(egui::Slider::new(&mut self.zoom,0.25..=8.0).text("Zoom"));
+            if ui.button("Fit [F]").clicked(){
+                self.zoom=1.0;self.pan=Vec2::ZERO;
+            }
+            ui.small("Wheel zoom · Middle/right drag pan");
         });
         let size=ui.available_size().max(Vec2::splat(150.0));
         let (rect,response)=ui.allocate_exact_size(size,Sense::click_and_drag());
+        // Navigation does not modify the design or its Undo history.
+        let (mouse,wheel,pan_motion,pan_button)=ui.input(|i|(
+            i.pointer.hover_pos(),i.smooth_scroll_delta.y,
+            i.pointer.delta(),i.pointer.middle_down() || i.pointer.secondary_down()
+        ));
+        if let Some(mouse)=mouse && rect.contains(mouse) {
+            if pan_button {self.pan+=pan_motion;}
+            if wheel.abs()>0.05 {
+                let before=self.zoom;
+                self.zoom=(self.zoom*(wheel*0.002).exp()).clamp(0.25,8.0);
+                let ratio=self.zoom/before;
+                let relative=mouse-rect.center()-self.pan;
+                self.pan+=relative*(1.0-ratio);
+            }
+        }
         let painter=ui.painter_at(rect);
         painter.rect_filled(rect,0.0,Color32::from_rgb(18,23,32));
         let stock=&self.editor.project.stock;
         let scale=(((size.x-60.0)/stock.width_mm as f32)
             .min((size.y-60.0)/stock.height_mm as f32)).max(0.0001)*self.zoom;
         let origin=Pos2::new(
-            rect.center().x-stock.width_mm as f32*scale*0.5,
-            rect.center().y+stock.height_mm as f32*scale*0.5,
+            rect.center().x+self.pan.x-stock.width_mm as f32*scale*0.5,
+            rect.center().y+self.pan.y+stock.height_mm as f32*scale*0.5,
         );
         let screen=|p:Point|Pos2::new(
             origin.x+p.x as f32*scale,
@@ -546,139 +750,123 @@ impl Studio {
             (p.x-origin.x) as f64/scale as f64,
             (origin.y-p.y) as f64/scale as f64,
         );
-        // Read the hit candidates first; mutations below only use stable IDs.
-        let radius=10.0/scale as f64;
-        let point=pointer.map(to_world);
-        let contour_hit=point.and_then(|world|
-            self.editor.project.contours.iter().rev().find(|p|
-                p.visible && polygon_contains(&p.world_points(),world)).map(|p|p.id));
-        let analytic_hit=point.and_then(|world|
-            self.editor.project.paths.iter().rev().find(|p|
-                path_hit(p,world,radius)).map(|p|p.id));
-        let active_path=self.editor.project.paths.iter()
-            .find(|p|Some(p.id)==self.selected_path && p.visible);
-        let node_hit=if self.edit_mode==EditMode::Nodes {
-            point.and_then(|world|active_path.and_then(|path|
-                path.nodes.iter().filter(|n|
-                    point_distance(n.position.offset(path.origin.x,path.origin.y),world)<radius)
-                .min_by(|a,b|{
-                    let da=point_distance(a.position.offset(path.origin.x,path.origin.y),world);
-                    let db=point_distance(b.position.offset(path.origin.x,path.origin.y),world);
-                    da.total_cmp(&db)
-                }).map(|n|n.id)))
-        } else {None};
-        let control_hit=if self.edit_mode==EditMode::Nodes {
-            point.and_then(|world|active_path.and_then(|path|
-                path.segments.iter().flat_map(|seg|{
-                    let mut controls=Vec::new();
-                    if let Curve::Cubic{control1,control2}=seg.curve {
-                        controls.push((seg.id,1_u8,control1));
-                        controls.push((seg.id,2_u8,control2));
-                    }
-                    controls
-                }).filter(|(_,_,at)|point_distance(
-                    at.offset(path.origin.x,path.origin.y),world)<radius)
-                .min_by(|(_,_,a),(_,_,b)|{
-                    let da=point_distance(a.offset(path.origin.x,path.origin.y),world);
-                    let db=point_distance(b.offset(path.origin.x,path.origin.y),world);
-                    da.total_cmp(&db)
-                }).map(|(segment,handle,_)|(segment,handle))))
-        } else {None};
+        // Press-origin hit-testing is essential. The pointer may already have
+        // moved >10px by egui::Response::drag_started(), so hover hits miss.
+        let radius=9.0/scale as f64;
+        let pointer_world=pointer.map(to_world);
+        let pressed=ui.input(|i|i.pointer.press_origin())
+            .filter(|p|rect.contains(*p)).map(to_world);
+        let pick_mode=if self.edit_mode==EditMode::Nodes{
+            PickMode::Nodes
+        }else{PickMode::Objects};
+        let click_target=pointer_world.and_then(|p|
+            pick(&self.editor.project,p,radius,pick_mode));
+        let press_target=pressed.and_then(|p|
+            pick(&self.editor.project,p,radius,pick_mode));
 
-        if response.clicked() {
-            if self.edit_mode==EditMode::Nodes {
-                if let Some(node)=node_hit {
-                    self.selected_node=Some(node);
-                    self.selected_handle=None;
-                }else if let Some((segment,handle))=control_hit {
-                    self.selected_handle=Some((segment,handle));
-                    self.selected_node=None;
-                }else{
-                    self.selected_path=analytic_hit;
-                    self.selected_node=None;
-                    self.selected_handle=None;
-                    self.selected=None;
+        // Pen tool is explicit and non-destructive until Finish.
+        if self.edit_mode==EditMode::Draw {
+            if response.double_clicked(){
+                self.finish_drawing();
+            }else if response.clicked() && let Some(mut at)=pointer_world {
+                if self.use_grid && (0.1..=100.0).contains(&self.grid_step){
+                    at.x=(at.x/self.grid_step).round()*self.grid_step;
+                    at.y=(at.y/self.grid_step).round()*self.grid_step;
                 }
-            }else{
-                self.selected_path=analytic_hit;
-                self.selected=if analytic_hit.is_some(){None}else{contour_hit};
-                self.selected_node=None;
-                self.selected_handle=None;
+                if at.finite() && self.drawing.last().is_none_or(|p|
+                    (p.x-at.x).hypot(p.y-at.y)>0.001){
+                    self.drawing.push(at);
+                }
+            }
+        }else{
+            if response.clicked() {
+                self.apply_canvas_hit(click_target);
+            }
+            if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
+                let result=match press_target {
+                    Some(Hit::Node{path_id,node_id}) if self.edit_mode==EditMode::Nodes=>{
+                        self.selected_path=Some(path_id);
+                        self.selected=None;
+                        self.selected_node=Some(node_id);
+                        self.selected_handle=None;
+                        self.editor.start_node_drag(path_id,node_id)
+                            .map(|at|ActiveDrag::Node(path_id,node_id,at))
+                    }
+                    Some(Hit::Handle{path_id,segment_id,handle})
+                        if self.edit_mode==EditMode::Nodes=>{
+                        self.selected_path=Some(path_id);
+                        self.selected=None;
+                        self.selected_node=None;
+                        self.selected_handle=Some((segment_id,handle));
+                        self.editor.start_control_drag(path_id,segment_id,handle)
+                            .map(|at|ActiveDrag::Control(path_id,segment_id,handle,at))
+                    }
+                    Some(Hit::Path(id)) if self.edit_mode==EditMode::Objects=>{
+                        self.selected_path=Some(id);self.selected=None;
+                        self.selected_node=None;self.selected_handle=None;
+                        self.editor.start_path_drag(id)
+                            .map(|at|ActiveDrag::Path(id,at))
+                    }
+                    Some(Hit::Contour(id)) if self.edit_mode==EditMode::Objects=>{
+                        self.selected_path=None;self.selected=Some(id);
+                        self.selected_node=None;self.selected_handle=None;
+                        self.editor.start_drag(id)
+                            .map(|at|ActiveDrag::Contour(id,at))
+                    }
+                    other=>{
+                        self.apply_canvas_hit(other);
+                        Ok(ActiveDrag::None)
+                    }
+                };
+                match result{
+                    Ok(ActiveDrag::None)=>self.drag=None,
+                    Ok(target)=>self.drag=Some(target),
+                    Err(error)=>{
+                        self.drag=None;
+                        self.status=format!("Cannot drag: {error}");
+                    }
+                }
+            }
+            if response.dragged() && let Some(drag)=self.drag {
+                let delta=response.drag_delta();
+                let shift=movement_delta(delta.x as f64/scale as f64,
+                    -delta.y as f64/scale as f64,
+                    if self.use_grid{Some(self.grid_step)}else{None});
+                let result=match drag {
+                    ActiveDrag::Contour(id,start)=>self.editor.preview_drag(
+                        id,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Path(id,start)=>self.editor.preview_path_drag(
+                        id,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Node(id,node,start)=>self.editor.preview_node_drag(
+                        id,node,start.offset(shift.x,shift.y)),
+                    ActiveDrag::Control(id,seg,handle,start)=>
+                        self.editor.preview_control_drag(id,seg,handle,
+                            start.offset(shift.x,shift.y)),
+                    ActiveDrag::None=>Ok(()),
+                };
+                if let Err(error)=result{
+                    self.status=format!("Movement rejected: {error}");
+                }
+            }
+            if response.drag_stopped() {
+                self.editor.finish_drag();
+                self.drag=None;
             }
         }
-        if response.drag_started() {
-            let started=if self.edit_mode==EditMode::Nodes {
-                if let (Some(path_id),Some(node_id))=(self.selected_path,node_hit) {
-                    self.selected_node=Some(node_id);
-                    self.selected_handle=None;
-                    self.editor.start_node_drag(path_id,node_id)
-                        .map(|pos|ActiveDrag::Node(path_id,node_id,pos))
-                }else if let (Some(path_id),Some((segment,handle)))=
-                    (self.selected_path,control_hit) {
-                    self.selected_node=None;
-                    self.selected_handle=Some((segment,handle));
-                    self.editor.start_control_drag(path_id,segment,handle)
-                        .map(|pos|ActiveDrag::Control(path_id,segment,handle,pos))
-                }else {
-                    self.selected_path=analytic_hit;
-                    self.selected_node=None;
-                    self.selected_handle=None;
-                    Ok(ActiveDrag::None)
-                }
-            }else if let Some(id)=analytic_hit {
-                self.selected_path=Some(id);
-                self.selected=None;
-                self.editor.start_path_drag(id).map(|p|ActiveDrag::Path(id,p))
-            }else if let Some(id)=contour_hit {
-                self.selected=Some(id);
-                self.selected_path=None;
-                self.editor.start_drag(id).map(|p|ActiveDrag::Contour(id,p))
-            }else {
-                self.selected=None;
-                self.selected_path=None;
-                Ok(ActiveDrag::None)
-            };
-            match started {
-                Ok(ActiveDrag::None)=>self.drag=None,
-                Ok(other)=>self.drag=Some(other),
-                Err(reason)=>self.status=format!("Drag refused: {reason}"),
+        // Draw draft geometry as distinct temporary guides; never autosave
+        // uncommitted pen clicks into the actual design project.
+        if self.edit_mode==EditMode::Draw {
+            let mut points:Vec<Pos2>=self.drawing.iter().copied().map(screen).collect();
+            if let Some(here)=pointer && rect.contains(here){
+                points.push(here);
             }
-        }
-        if response.dragged() && let Some(target)=self.drag {
-            let pixels=response.drag_delta();
-            let (path_origin,start)=match target {
-                ActiveDrag::Contour(_,p)|ActiveDrag::Path(_,p)=>(Point::new(0.0,0.0),p),
-                ActiveDrag::Node(path_id,_,p)|ActiveDrag::Control(path_id,_,_,p)=>{
-                    let at=self.editor.project.paths.iter().find(|v|v.id==path_id)
-                        .map(|v|v.origin).unwrap_or(Point::new(0.0,0.0));
-                    (at,p)
-                }
-                ActiveDrag::None=>(Point::new(0.0,0.0),Point::new(0.0,0.0)),
-            };
-            let mut next=start.offset(
-                pixels.x as f64/scale as f64,
-                -pixels.y as f64/scale as f64,
-            );
-            if self.use_grid && self.grid_step.is_finite()
-                && (0.1..=100.0).contains(&self.grid_step) {
-                next.x=((next.x+path_origin.x)/self.grid_step).round()
-                    *self.grid_step-path_origin.x;
-                next.y=((next.y+path_origin.y)/self.grid_step).round()
-                    *self.grid_step-path_origin.y;
+            if points.len()>=2 {
+                painter.add(egui::Shape::line(points,
+                    Stroke::new(2.0,Color32::from_rgb(255,200,86))));
             }
-            let result=match target {
-                ActiveDrag::Contour(id,_)=>self.editor.preview_drag(id,next),
-                ActiveDrag::Path(id,_)=>self.editor.preview_path_drag(id,next),
-                ActiveDrag::Node(id,node,_)=>self.editor.preview_node_drag(id,node,next),
-                ActiveDrag::Control(id,seg,handle,_)=>
-                    self.editor.preview_control_drag(id,seg,handle,next),
-                ActiveDrag::None=>Ok(()),
-            };
-            if let Err(reason)=result {self.status=format!("Drag rejected: {reason}");}
-        }
-        if response.drag_stopped() {
-            self.editor.finish_drag();
-            self.drag=None;
+            for p in &self.drawing {
+                painter.circle_filled(screen(*p),4.0,Color32::WHITE);
+            }
         }
         if let Some(cursor)=response.hover_pos() {
             let world=to_world(cursor);
@@ -691,6 +879,7 @@ impl Studio {
 }
 impl eframe::App for Studio {
     fn ui(&mut self,ui:&mut egui::Ui,_frame:&mut eframe::Frame){
+        self.keyboard(ui);
         egui::Panel::top("top").show(ui,|ui|self.header(ui));
         egui::Panel::bottom("status").show(ui,|ui|{
             ui.horizontal_wrapped(|ui|{

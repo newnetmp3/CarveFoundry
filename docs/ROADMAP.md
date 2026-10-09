@@ -81,3 +81,28 @@ snaps without changing source identities. SVG curve import must validate every
 node and stop on unsupported commands; do not pretend lossless legacy CF3D
 conversion. Add tangent-aware curve handles before general trim/chamfer.
 Do not integrate CNC output until the R6 machine-safety gate passes.
+
+## R1 usability remediation / day-to-day CAD tools
+
+The first analytic vector release passed Rust CI but has serious usability
+gaps. The active repair PR #103 prioritizes **functional direct manipulation**
+before adding more esoteric geometry features. Its acceptance includes:
+
+1. Drag nodes/handles on **first gesture** using mouse-down press origin;
+   exact coordinates cannot shift before pointer movement.
+2. Snap the **movement delta** only, OFF by default; preserve true
+   circular arc/Bézier data and reject invalid transforms atomically.
+3. Native editable shape palette, Pen-click polygon/polyline, duplicate,
+   rotate, flip, align, hide/show, undo/redo and keyboard workflows.
+4. Pointer-centered wheel zoom, middle/right-drag pan, Fit View; no
+   invisible camera adjustments when selecting geometry.
+5. Automated hit-test, edit transaction, curve preservation and project
+   format regression checks, strict Clippy and Linux release compilation.
+6. Explicit **manual** KDE Plasma/Wayland UX smoke test before any
+   claim of real-device usability. The machine/CAM preflight gate remains
+   closed.
+
+The 2D canvas should be assessed by ordinary tasks (draw polygon, select,
+move node, undo, copy, mirror, save/reopen), **not** simply number of
+buttons or Rust code size. Next major R1 scope remains SVG/DXF, real
+font/text authoring, editable layers and advanced curve tool topology.
