@@ -13,36 +13,48 @@ impl Studio {
             ui.heading("DRAWING");
             ui.weak("2D vectors");
         });
+        if let Some(tool)=self.active_shape {
+            ui.group(|ui|{
+                ui.strong(format!("{} drawing tool selected",tool.title()));
+                ui.label("Drag a diagonal on the stock to set the size.");
+                ui.small("Hold Shift for equal sides · Esc cancels tool");
+                if ui.button("Exit shape tool [V]").clicked(){
+                    self.active_shape=None;
+                    self.shape_drag_start=None;
+                }
+            });
+        }
         ui.label(egui::RichText::new("1  CREATE VECTORS").strong()
             .color(super::theme::ACCENT));
         ui.group(|ui|{
             ui.horizontal_wrapped(|ui|{
                 if shape(ui,"▭ Rectangle","Create a 4-node editable rectangle"){
-                    self.add_shape(ShapeKind::Rectangle);
+                    self.choose_shape_tool(ShapeKind::Rectangle);
                 }
                 if shape(ui,"◯ Circle","Create a 4-cubic editable circle approximation"){
-                    self.add_shape(ShapeKind::Circle);
+                    self.choose_shape_tool(ShapeKind::Circle);
                 }
                 if shape(ui,"⬭ Ellipse","Create a 4-cubic editable ellipse"){
-                    self.add_shape(ShapeKind::Ellipse);
+                    self.choose_shape_tool(ShapeKind::Ellipse);
                 }
                 if shape(ui,"△ Triangle","Create a 3-sided closed vector"){
-                    self.add_shape(ShapeKind::Triangle);
+                    self.choose_shape_tool(ShapeKind::Triangle);
                 }
                 if shape(ui,"⬡ Hexagon","Create a 6-sided editable vector"){
-                    self.add_shape(ShapeKind::Hexagon);
+                    self.choose_shape_tool(ShapeKind::Hexagon);
                 }
                 if shape(ui,"☆ Star","Create a ten-node star outline"){
-                    self.add_shape(ShapeKind::Star);
+                    self.choose_shape_tool(ShapeKind::Star);
                 }
                 if shape(ui,"Pentagon","Create a 5-sided outline"){
-                    self.add_shape(ShapeKind::Pentagon);
+                    self.choose_shape_tool(ShapeKind::Pentagon);
                 }
                 if shape(ui,"Octagon","Create an 8-sided outline"){
-                    self.add_shape(ShapeKind::Octagon);
+                    self.choose_shape_tool(ShapeKind::Octagon);
                 }
             });
         });
+        ui.small("Click a shape tool, then drag its size on the stock. The project changes only when you release.");
         ui.add_space(5.0);
         ui.label(egui::RichText::new("2  DRAW PATHS").strong()
             .color(super::theme::ACCENT));
@@ -50,6 +62,8 @@ impl Studio {
             ui.horizontal_wrapped(|ui|{
                 if shape(ui,"⌁ Polyline [P]","Click vertices on stock; Enter closes the drawing"){
                     self.edit_mode=EditMode::Draw;
+                    self.active_shape=None;
+                    self.shape_drag_start=None;
                     self.drawing.clear();
                 }
                 if shape(ui,"／ Line","Create an editable analytic straight segment"){
@@ -92,7 +106,14 @@ impl Studio {
                     cols[1].add(egui::DragValue::new(&mut self.shape_height)
                         .range(0.1..=10_000.0).speed(0.5));
                 });
-                ui.weak("Dimensions apply to newly created vectors.");
+                ui.weak("For exact-size placement: enter dimensions and use the button below.");
+                if let Some(kind)=self.active_shape {
+                    if ui.button(format!("Place exact-size {} at stock offset",kind.title()))
+                        .on_hover_text("Creates one vector using numeric dimensions at a small stock-relative offset").clicked(){
+                        self.add_shape(kind);
+                        self.active_shape=None;
+                    }
+                }
             });
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
             .default_open(true).show(ui,|ui|{
