@@ -145,14 +145,25 @@ Do not resume Python GUI conversion or unlock CNC export prematurely.
 
 Focus shifts from adding disconnected features to restoring a discoverable,
 drawing-first desktop experience inspired by established CNC design workflows.
-The native shell must have recognizable File/Edit/View menus, a clear
-mode toolbar, grouped drawing tools, a large material canvas, object tree,
-precision Properties panel, stock setup and readable status bar. Components
+Merged as [PR #105](https://github.com/newnetmp3/CarveFoundry/pull/105)
+at main **3a467bd6473dadea0eb7a828814d58349e39df7a**.
+The native shell now has recognizable File/Edit/View menus, a mode ribbon,
+grouped drawing tools, a large light-material canvas with coordinate rulers,
+object tree, precise Properties panel, Material setup and status bar. Components
 are individually owned by Rust UI modules; no legacy Python UI is revived.
 
 Open/Save As uses the KDE XDG portal with cancellation behavior and unsaved
 project protection. A read-only Toolpaths workspace preserves the machine
-safety boundary. Accept only after green tests, strict Clippy, native Linux
-release compile and **separate human KDE/Wayland QA**. Specific acceptance
+safety boundary. Automated validation passed: [Rust CI 37871191546](https://github.com/newnetmp3/CarveFoundry/actions/runs/37871191546) on exact head 86cf7415
+(38 Rust core + 3 studio tests, strict Clippy, native Linux release).
+**Separate human KDE/Wayland QA is NOT complete.** Specific acceptance
 cases and screenshots are listed in docs/UI_DESIGN.md.
 
+
+### UI priority before new engine milestones
+
+Use docs/UI_DESIGN.md and docs/UX_SMOKE.md for real KDE/Wayland
+acceptance. Fix clipping, scaling, pen-node dragging, keyboard focus,
+native portal dialogs and material/property-pane regressions before
+implementing unsupported CAD/CAM tooling. Do not claim to have matched
+every feature of commercial software, or unlock NC export.
