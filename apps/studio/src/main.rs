@@ -182,7 +182,7 @@ impl Studio {
         }
     }
     fn keyboard(&mut self,ui:&egui::Ui){
-        if ui.ctx().wants_keyboard_input(){return;}
+        if ui.ctx().egui_wants_keyboard_input(){return;}
         let (undo,redo,duplicate,delete,escape,enter,v,n,p,fit)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
