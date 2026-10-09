@@ -344,7 +344,7 @@ and stock-positioning controls. Draft input fields do not modify the
 project until the user clicks Set X/Y. Each accepted edit is a single
 Undo operation. Undo/Redo still uses the existing project history.
 
-**CI pending and KDE Wayland desktop UI QA NOT performed.**
+**CI verified as green; KDE Wayland desktop UI QA NOT performed.**
 Machine output, toolpaths, posted NC and controller operation remain blocked.
 
 Follow-on: test keyboard modifiers, stock alignment, zero movement,
@@ -357,3 +357,26 @@ canvas; **Shift+F** or **Fit selection** zooms/centers the currently selected
 vectors without modifying the project. Fixed quick-shape ribbon buttons to
 activate the same drag-to-draw tool as the grouped palette, eliminating the
 older arbitrary-offset spawn behavior from that shortcut route.
+
+## Verified Rust precision layout milestone — merged PR #109
+
+- Merged [PR #109](https://github.com/newnetmp3/CarveFoundry/pull/109)
+  into main at **`96a9e5ceeb529dc6927fd1ab1fc8f154415a26a0`**.
+- Final exact feature head
+  **`7b4a22c8877ee36d044c8be856b5723f29d65568`**
+  passed [native Rust CI `37961368120`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37961368120):
+  **53 core + 9 studio tests**, strict Clippy and Linux release build.
+- Exact analytic vector bounding boxes underpin align/distribute, group
+  alignment to material, typed lower-left X/Y, keyboard/on-screen
+  nudging, Shift+F Fit Selection and canvas dimension display.
+  Top-ribbon quick shapes consistently activate drag-to-draw.
+- All geometry edits remain atomic, validated and undoable. CNC CAM,
+  preflight and post-processing remain *disabled*.
+- **Not verified:** manual KDE Plasma/Wayland mouse, keys, XDG portal
+  and display-scaling QA (see `docs/UX_SMOKE.md`).
+
+Next prioritize interactive QA on real desktop, then complete durable
+native vector interoperability (SVG/DXF), text and font handling, editable
+layers and more practical node-level design tools.
+
+| 2026-10-09 | PR #109 precision positioning and layout merged | [Rust CI `37961368120`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37961368120) green: 53 core + 9 studio, strict Clippy, Linux release; main `96a9e5ce` | KDE Wayland usability QA, then SVG/DXF/text authoring |
