@@ -475,18 +475,21 @@ mod tests {
         assert_eq!(decoded.paths[0].nodes[0].id,node);
     }
     #[test]
-    fn editing_arc_anchors_is_rejected_without_change() {
+    fn editing_arc_anchors_refits_circle_with_undo_and_atomic_drag(){
         let mut e=Editor::default();
         e.apply(Action::AddAnalytic{name:"Arch".into(),
             origin:Point::new(0.0,0.0),kind:Primitive::Arc,
             width_mm:50.0,height_mm:20.0}).unwrap();
         let before=e.project.clone();
-        assert!(e.apply(Action::MoveNode{path_id:1,node_id:1,
-            position:Point::new(2.0,2.0)}).is_err());
+        e.apply(Action::MoveNode{path_id:1,node_id:1,
+            position:Point::new(2.0,2.0)}).unwrap();
+        e.project.paths[0].validate().unwrap();
+        assert!(e.undo());
         assert_eq!(e.project,before);
-        let node=e.start_node_drag(1,1).unwrap();
-        assert!(e.preview_node_drag(1,1,node.offset(2.0,1.0)).is_err());
-        e.cancel_drag();
+        let anchor=e.start_node_drag(1,1).unwrap();
+        e.preview_node_drag(1,1,anchor.offset(2.0,1.0)).unwrap();
+        e.finish_drag();
+        assert!(e.undo());
         assert_eq!(e.project,before);
     }
     #[test]
