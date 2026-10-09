@@ -176,7 +176,7 @@ shape spawning with direct bounding-box drawing on the stock. Preview
 without modifying the model; commit a single Undo operation on
 mouse release. Shift constrains proportions, Circles stay square,
 Escape and tiny drags do not change the project, and the numeric
-size controls remain available for exact-size placement.
+size controls allow precise click-to-place positioning with an uncommitted ghost preview.
 Bounded/finite geometry, off-grid origin and reverse-direction
 gestures are checked in pure Rust tests. No NC output is enabled.
 CI and manual KDE Wayland acceptance are separate gates.
