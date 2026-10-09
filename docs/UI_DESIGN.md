@@ -80,3 +80,29 @@ interaction is NOT verified by a GitHub compile or an automated geometry test.
 - **Manual KDE Wayland QA required:** test pointer capture, fast dragging,
   modifier behavior, circle radius, reverse direction and no-commit
   cancellation on 100–150% display scales.
+
+
+## Selected-vector screenshot QA — October 9, 2026
+
+Owner screenshot: KDE Plasma/Wayland native Rust editor, one analytic polyline
+selected in Node mode. Visible problems: missing-font pictograms render as
+empty squares, numeric placement fields wrap, tiny text and tool buttons,
+and the right Objects tab hides numeric node editing.
+
+Branch `feature/rust-editor-controls-ux` targets:
+- Native egui glyph painting for quick shapes, visibility, locks and nudges
+  so that tool affordances do not rely on a font's icon glyph coverage.
+- Short readable labels and two-column shape/path palette at compact widths.
+- Separate X and Y precision control rows, bounded selection measurement
+  readouts and predictable alignment button rows.
+- Automatically opening Properties when a node or Bezier handle is picked
+  on the drawing, with no geometry mutation merely from switching tabs.
+- Readable body/button typography and increased resizable sidebar defaults.
+
+Manual KDE Wayland QA remains a REQUIRED gate and is not replaced by CI:
+- [ ] At 100%, 125%, 150% scaling, no missing-glyph tool buttons remain.
+- [ ] At 1280x800 and 1920x1080, shape/path buttons and X/Y values are visible.
+- [ ] Select polyline, drag node, and edit exact X/Y from Properties.
+- [ ] Eye and lock controls act on the intended object independently.
+- [ ] X/Y precision changes, nudges and alignment remain one-Undo actions.
+- [ ] Drawing, save/load, viewport zoom/pan and existing shortcuts still work.
