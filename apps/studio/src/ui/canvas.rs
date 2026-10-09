@@ -544,6 +544,11 @@ mod drag_regression_tests {
         editor.finish_drag();
         assert!(editor.undo());
         assert_eq!(editor.project,initial);
+        // The earlier creation action is still undoable; a drag should
+        // contribute exactly one separate history entry.
+        assert!(editor.can_undo());
+        assert!(editor.undo());
+        assert!(editor.project.paths.is_empty());
         assert!(!editor.can_undo());
     }
 
