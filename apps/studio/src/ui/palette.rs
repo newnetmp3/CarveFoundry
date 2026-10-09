@@ -112,12 +112,11 @@ impl Studio {
                         .range(0.1..=10_000.0).speed(0.5));
                 });
                 ui.weak("For exact-size placement: enter dimensions and use the button below.");
-                if let Some(kind)=self.active_shape {
-                    if ui.button(format!("Place exact-size {} at stock offset",kind.title()))
+                if let Some(kind)=self.active_shape
+                    && ui.button(format!("Place exact-size {} at stock offset",kind.title()))
                         .on_hover_text("Creates one vector using numeric dimensions at a small stock-relative offset").clicked(){
-                        self.add_shape(kind);
-                        self.active_shape=None;
-                    }
+                    self.add_shape(kind);
+                    self.active_shape=None;
                 }
             });
         egui::CollapsingHeader::new("4  ARRANGE & TRANSFORM")
