@@ -415,10 +415,12 @@ impl Studio {
             Some(Hit::Node{path_id,node_id})=>{
                 self.select_vector(Some(path_id),false);
                 self.selected_node=Some(node_id);
+                self.inspector_tab=InspectorTab::Properties;
             }
             Some(Hit::Handle{path_id,segment_id,handle})=>{
                 self.select_vector(Some(path_id),false);
                 self.selected_handle=Some((segment_id,handle));
+                self.inspector_tab=InspectorTab::Properties;
             }
             Some(Hit::Path(id))=>self.select_vector(Some(id),additive),
             Some(Hit::Contour(id))=>self.select_vector(Some(id),additive),
