@@ -220,8 +220,7 @@ mod tests {
     #[test]
     fn ids_must_be_globally_distinct_across_polygon_and_analytic_paths(){
         use crate::path::{AnalyticPath,Primitive};
-        let mut p=Project::default();
-        p.next_id=2;
+        let mut p=Project{next_id:2,..Project::default()};
         p.contours.push(Contour{id:1,name:"Rectangle".into(),visible:true,
             locked:false,origin:Point::new(0.0,0.0),
             vertices:vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
