@@ -366,3 +366,24 @@ atomic, one-step undoable, and cannot modify .cfd material/fixtures.
 Native KDE File menu provides Import DXF and Export DXF drawing, not NC.
 Regressions, strict CI and separate real desktop QA required before mark done.
 Next: system-font text and editable layers/grouping.
+
+## Verified native DXF vector interoperability — PR #113
+
+[PR #113](https://github.com/newnetmp3/CarveFoundry/pull/113)
+merged as 08bf16847a65e21b1f58323dd57992d23b490a90.
+Its exact tested head 4f0dc1b581f46a26c536c5955ce8e8df5264548e
+passed [CI 37972805832](https://github.com/newnetmp3/CarveFoundry/actions/runs/37972805832):
+61 core + 16 studio tests, strict Clippy, native Linux release.
+
+Native source-preserving DXF: 2D LINE, LWPOLYLINE with circular bulges,
+ARC/CIRCLE, and clamped four-point cubic SPLINE. Explicit linear units,
+bounded 2D validation, fail-closed unsupported entity handling.
+On native-to-native roundtrips DXF XDATA preserves compound vector grouping
+and properties. Import uses one Undo transaction, leaves stock/fixtures
+unchanged, and cannot enable machine-export functionality. Native File
+menu Import DXF/Export DXF now available. KDE portal/external CAD
+interoperability still requires a real desktop test.
+
+**Next:** system-font typography with adjustable editable text/vector
+outline workflow, followed by first-class grouping and layers, precision
+join/trim/offset, and further safe DXF entity support.
