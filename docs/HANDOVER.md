@@ -285,7 +285,7 @@ end-user input verification. Continue pure Rust only.
 
 | 2026-10-08 | PR #107 drag-to-size / exact click-to-place UX merged | [CI 37872863242](https://github.com/newnetmp3/CarveFoundry/actions/runs/37872863242) green: 47 tests, strict Clippy, release; main 49f96f57 | Manual KDE Wayland gesture QA; then multi-select and precise snapping |
 
-## Active usability batch — bulk vector selection and true-feature snapping
+## Verified R1 selection and snapping — PR #108 merged
 
 Branch `feature/rust-multiselect-vector-snaps` introduces additive
 Shift/Ctrl-click selection, left→right enclosure and right→left crossing
@@ -307,7 +307,13 @@ and the toolbar/status/help explain modifiers and selection count.
 Core regression cases cover batch validation, undo/cancel/duplicate/delete,
 crossing/enclosure semantics and finite/no-self snap candidates.
 
-**CI not yet verified; do NOT call merged or physically tested.** Confirm
-exact-head green tests/Clippy/Linux release before merging. KDE Plasma Wayland
-mouse capture, scaling and real tool feel remain manual acceptance.
+[PR #108](https://github.com/newnetmp3/CarveFoundry/pull/108)
+merged as main **`7ad69fef3125834898adb24cf68323f5f0ced3f6`**.
+Its exact feature head **`b091af41bac0a0a3d0f6c89737cc5b680b6d15b5`**
+passed [Rust native CI `37876938223`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37876938223):
+**48 core tests + 7 studio tests**, strict Clippy and Linux release build.
+KDE Plasma Wayland mouse capture, scaling and real tool feel are
+**not** verified by these automated checks.
 No CAM, G-code or controller changes.
+
+| 2026-10-08 | PR #108 bulk vector selection and exact endpoint/midpoint/stock-corner snapping merged | [Rust CI `37876938223`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37876938223): 48 core + 7 studio, strict Clippy, Linux release; main `7ad69fef` | Real KDE/Wayland interaction QA; then multi-object alignment, SVG/DXF, typography |
