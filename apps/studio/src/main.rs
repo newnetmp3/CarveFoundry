@@ -25,6 +25,7 @@ enum ActiveDrag {
 struct Studio {
     editor: Editor,
     saved_project: Project,
+    has_saved_file: bool,
     project_path: String,
     rename_target: Option<u64>,
     rename_draft: String,
@@ -58,7 +59,8 @@ impl Default for Studio {
         Self {
             editor: Editor::default(),
             saved_project: Project::default(),
-            project_path: "carvefoundry-design.cfd".into(),
+            has_saved_file: false,
+            project_path: "untitled.cfd".into(),
             rename_target: None,
             rename_draft: String::new(),
             project_name_draft: Project::default().name,
@@ -94,6 +96,8 @@ impl Studio {
     fn new_document(&mut self) {
         self.editor = Editor::default();
         self.saved_project=self.editor.project.clone();
+        self.project_path="untitled.cfd".into();
+        self.has_saved_file=false;
         self.project_name_draft=self.editor.project.name.clone();
         self.rename_target=None;
         self.rename_draft.clear();
@@ -116,6 +120,7 @@ impl Studio {
             Ok(editor) => {
                 self.editor = editor;
                 self.saved_project=self.editor.project.clone();
+                self.has_saved_file=true;
                 self.project_name_draft=self.editor.project.name.clone();
                 self.rename_target=None;
                 self.rename_draft.clear();
@@ -139,10 +144,15 @@ impl Studio {
         self.status = match self.editor.project.save(Path::new(&self.project_path)) {
             Ok(()) => {
                 self.saved_project=self.editor.project.clone();
+                self.has_saved_file=true;
                 format!("Saved native Rust design to {}",self.project_path)
             }
             Err(error) => format!("Save failed: {error}"),
         };
+    }
+    fn save_command(&mut self){
+        if self.has_saved_file{self.save_document();}
+        else{self.choose_save_as();}
     }
     fn request_document(&mut self,command:PendingDocument) {
         if self.editor.project!=self.saved_project {
@@ -314,7 +324,7 @@ impl Studio {
         }
         if new{self.request_document(PendingDocument::New);}
         if open{self.choose_open_document();}
-        if save{self.save_document();}
+        if save{self.save_command();}
         if undo{self.editor.undo();}
         if redo{self.editor.redo();}
         if duplicate && let Some(id)=self.selected_id(){
