@@ -175,7 +175,7 @@ impl Studio {
                 ui.checkbox(&mut self.show_grid,"Show stock grid");
                 ui.checkbox(&mut self.use_grid,"Snap movement to grid");
                 ui.checkbox(&mut self.snap_features,"Snap endpoints, midpoints, stock corners")
-                    .on_hover_text("Snaps Pen points, exact placement, node and handle movements to real vector features. Uses a 10-pixel screen-space tolerance.");
+                    .on_hover_text("Snaps Pen points, placement, nodes and handles to real vector features within 10 pixels. Hold Alt while dragging a node/handle for unrestricted movement.");
                 ui.horizontal(|ui|{
                     ui.label("Spacing");
                     ui.add(egui::DragValue::new(&mut self.grid_step)
