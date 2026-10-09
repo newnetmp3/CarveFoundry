@@ -10,7 +10,7 @@ use std::{path::Path,collections::BTreeSet,fs};
 enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Workspace { Drawing, Toolpaths }
-#[derive(Clone,Copy,PartialEq,Eq)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum InspectorTab { Objects, Properties, Job }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
