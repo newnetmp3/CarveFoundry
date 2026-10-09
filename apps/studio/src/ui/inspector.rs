@@ -87,12 +87,11 @@ impl Studio {
             if let Some(p)=self.editor.project.paths.iter().find(|p|p.id==id){
                 ui.label(&p.name);
                 ui.small(format!("{} nodes · {} segments",p.nodes.len(),p.segments.len()));
-                if let Some(node_id)=self.selected_node {
-                    if let Some(node)=p.nodes.iter().find(|node|node.id==node_id){
-                        ui.strong(format!("Node #{}  X {:.2}  Y {:.2} mm",
-                            node_id,node.position.x,node.position.y));
-                        ui.small("Open Properties to edit exact node coordinates.");
-                    }
+                if let Some(node_id)=self.selected_node
+                    && let Some(node)=p.nodes.iter().find(|node|node.id==node_id) {
+                    ui.strong(format!("Node #{}  X {:.2}  Y {:.2} mm",
+                        node_id,node.position.x,node.position.y));
+                    ui.small("Open Properties to edit exact node coordinates.");
                 }
             }else if let Some(p)=self.editor.project.contours.iter().find(|p|p.id==id){
                 ui.label(&p.name);
