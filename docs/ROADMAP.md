@@ -260,3 +260,15 @@ unverified; the machining/NC release gates remain locked.
 
 **Next course:** manual interaction QA, followed by SVG/DXF interoperability,
 system-font typography and editable layer management in native Rust.
+
+
+## Active R1 editor screenshot polish
+
+KDE Wayland selected-path screenshots (2026-10-09) show incorrect fallback
+font glyphs and cramped X/Y and shape tool arrangements. Before advancing
+toward SVG/DXF, typography and layers, improve the existing *usable* tool
+surface. Branch `feature/rust-editor-controls-ux`: egui-native drawn toolbar,
+eye/lock and movement icons; two-column narrow tool palette; separate XY
+rows; clear selection measurement labels; focused node inspector when a
+node/handle is directly chosen; larger typography and responsive panels.
+Pending Rust CI and **separate human KDE/Wayland UI tests**. No CAM or NC output.
