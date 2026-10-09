@@ -545,7 +545,8 @@ impl Studio {
         let to_world=|p:Pos2|Point::new(
             (p.x-origin.x) as f64/scale as f64,
             (origin.y-p.y) as f64/scale as f64,
-         // Read the hit candidates first; mutations below only use stable IDs.
+        );
+        // Read the hit candidates first; mutations below only use stable IDs.
         let radius=10.0/scale as f64;
         let point=pointer.map(to_world);
         let contour_hit=point.and_then(|world|
@@ -678,7 +679,6 @@ impl Studio {
         if response.drag_stopped() {
             self.editor.finish_drag();
             self.drag=None;
-        }
         }
         if let Some(cursor)=response.hover_pos() {
             let world=to_world(cursor);
