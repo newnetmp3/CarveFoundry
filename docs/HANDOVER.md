@@ -351,3 +351,9 @@ Follow-on: test keyboard modifiers, stock alignment, zero movement,
 mixed analytic/legacy selections, changing window sizes and real monitor
 scales on KDE; then improve selection behavior and implement native text /
 SVG / DXF interoperability without reopening the retired Python GUI.
+
+Additional UI: precise selection envelope and dimension readout on the
+canvas; **Shift+F** or **Fit selection** zooms/centers the currently selected
+vectors without modifying the project. Fixed quick-shape ribbon buttons to
+activate the same drag-to-draw tool as the grouped palette, eliminating the
+older arbitrary-offset spawn behavior from that shortcut route.
