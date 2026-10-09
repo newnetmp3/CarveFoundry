@@ -58,6 +58,10 @@ struct Studio {
     pan: Vec2,
     grid_step: f64,
     use_grid: bool,
+    nudge_mm:f64,
+    precise_selection:Vec<u64>,
+    precise_x:f64,
+    precise_y:f64,
     drag: Option<ActiveDrag>,
     drawing: Vec<Point>,
     draw_closed: bool,
@@ -96,6 +100,7 @@ impl Default for Studio {
             shape_name: "New vector".into(),
             shape_width: 50.0, shape_height: 30.0,
             zoom: 1.0, pan:Vec2::ZERO, grid_step: 1.0, use_grid: false,
+            nudge_mm:1.0,precise_selection:Vec::new(),precise_x:0.0,precise_y:0.0,
             drag: None,
             drawing: Vec::new(),
             draw_closed: false,
@@ -240,6 +245,25 @@ impl Studio {
                 ||self.editor.project.contours.iter().any(|p|p.id==next){
                 self.select_vector(Some(next),false);
             }
+        }
+    }
+    fn selected_vector_ids(&self)->Vec<u64>{
+        self.selected_ids.iter().copied().collect()
+    }
+    fn arrange_selection(&mut self,mode:carvefoundry_core::Arrangement){
+        let ids=self.selected_vector_ids();
+        self.apply(Action::Arrange{ids,mode});
+        self.precise_selection.clear();
+    }
+    fn move_selection(&mut self,delta:Point){
+        let ids=self.selected_vector_ids();
+        if ids.is_empty(){
+            self.status="Select at least one editable vector to move".into();
+        }else if !delta.finite(){
+            self.status="Movement exceeds finite coordinate limits".into();
+        }else{
+            self.apply(Action::MoveMany{ids,delta});
+            self.precise_selection.clear();
         }
     }
     fn delete_selection(&mut self){
@@ -403,7 +427,7 @@ impl Studio {
     }
     fn keyboard(&mut self,ui:&egui::Ui){
         if ui.ctx().egui_wants_keyboard_input(){return;}
-        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,new,open,save,r,c)=ui.input(|i|{
+        let (undo,redo,duplicate,select_all,delete,escape,enter,v,n,p,fit,new,open,save,r,c,arrows,coarse)=ui.input(|i|{
             let cmd=i.modifiers.command;
             (cmd && i.key_pressed(egui::Key::Z) && !i.modifiers.shift,
              (cmd && i.key_pressed(egui::Key::Z) && i.modifiers.shift)
@@ -421,7 +445,12 @@ impl Studio {
              cmd && i.key_pressed(egui::Key::O),
              cmd && i.key_pressed(egui::Key::S),
              !cmd && i.key_pressed(egui::Key::R),
-             !cmd && i.key_pressed(egui::Key::C))
+             !cmd && i.key_pressed(egui::Key::C),
+             (i.key_pressed(egui::Key::ArrowRight) as i32
+                -i.key_pressed(egui::Key::ArrowLeft) as i32,
+              i.key_pressed(egui::Key::ArrowUp) as i32
+                -i.key_pressed(egui::Key::ArrowDown) as i32),
+             i.modifiers.shift)
         });
         if escape{
             if self.active_shape.is_some(){
@@ -465,6 +494,13 @@ impl Studio {
         if n{self.edit_mode=EditMode::Nodes;self.active_shape=None;self.shape_drag_start=None;self.shape_drag_delta=None;}
         if p{self.edit_mode=EditMode::Draw;self.active_shape=None;
             self.shape_drag_start=None;self.shape_drag_delta=None;self.drawing.clear();}
+        if arrows!=(0,0) && !self.selected_ids.is_empty()
+            && self.edit_mode==EditMode::Objects
+            && self.active_shape.is_none(){
+            let step=self.nudge_mm*if coarse{10.0}else{1.0};
+            self.move_selection(Point::new(arrows.0 as f64*step,
+                arrows.1 as f64*step));
+        }
         if r{self.choose_shape_tool(ShapeKind::Rectangle);}
         if c{self.choose_shape_tool(ShapeKind::Circle);}
         if fit{self.zoom=1.0;self.pan=Vec2::ZERO;}
@@ -563,6 +599,22 @@ mod tests {
         assert_eq!(studio.selected_ids.iter().copied().collect::<Vec<_>>(),vec![1]);
         studio.select_vector(None,false);
         assert!(studio.selected_ids.is_empty());
+        assert_eq!(studio.editor.project,baseline);
+    }
+    #[test]
+    fn exact_multi_vector_move_is_a_single_history_step(){
+        let mut studio=Studio::default();
+        studio.add_shape(ShapeKind::Rectangle);
+        studio.add_shape(ShapeKind::Ellipse);
+        studio.selected_ids=[1,2].into_iter().collect();
+        studio.reconcile_selection();
+        let baseline=studio.editor.project.clone();
+        studio.move_selection(Point::new(12.5,-3.75));
+        assert_eq!(studio.editor.project.paths[0].origin,
+            baseline.paths[0].origin.offset(12.5,-3.75));
+        assert_eq!(studio.editor.project.paths[1].origin,
+            baseline.paths[1].origin.offset(12.5,-3.75));
+        assert!(studio.editor.undo());
         assert_eq!(studio.editor.project,baseline);
     }
     #[test]
