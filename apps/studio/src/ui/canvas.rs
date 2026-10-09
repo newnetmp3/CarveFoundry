@@ -209,22 +209,20 @@ impl Studio {
                 let final_delta=if response.drag_stopped(){
                     self.shape_drag_delta.take().unwrap_or(snapped)
                 }else{snapped};
-                if let Ok(placement)=shape_placement(start,final_delta,kind,square){
-                    if let Ok(preview)=create_shape(1,"Draft".into(),placement.origin,
-                        kind,placement.width_mm,placement.height_mm){
-                        if let Ok(outline)=preview.preview_points(0.4){
-                            let points:Vec<Pos2>=outline.into_iter().map(screen).collect();
-                            painter.add(egui::Shape::closed_line(points,
-                                Stroke::new(2.0,super::theme::SELECTION)));
-                            let top=screen(Point::new(placement.origin.x,
-                                placement.origin.y+placement.height_mm));
-                            painter.text(top+Vec2::new(6.0,-8.0),
-                                egui::Align2::LEFT_BOTTOM,
-                                format!("{:.2} × {:.2} mm",
-                                    placement.width_mm,placement.height_mm),
-                                egui::FontId::monospace(12.0),super::theme::SELECTION);
-                        }
-                    }
+                if let Ok(placement)=shape_placement(start,final_delta,kind,square)
+                    && let Ok(preview)=create_shape(1,"Draft".into(),placement.origin,
+                        kind,placement.width_mm,placement.height_mm)
+                    && let Ok(outline)=preview.preview_points(0.4) {
+                    let points:Vec<Pos2>=outline.into_iter().map(screen).collect();
+                    painter.add(egui::Shape::closed_line(points,
+                        Stroke::new(2.0,super::theme::SELECTION)));
+                    let top=screen(Point::new(placement.origin.x,
+                        placement.origin.y+placement.height_mm));
+                    painter.text(top+Vec2::new(6.0,-8.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        format!("{:.2} × {:.2} mm",
+                            placement.width_mm,placement.height_mm),
+                        egui::FontId::monospace(12.0),super::theme::SELECTION);
                 }
                 if response.drag_stopped() {
                     self.shape_drag_start=None;
