@@ -6,6 +6,19 @@ use carvefoundry_core::{Curve,Hit,PickMode,Point,movement_delta,pick,
     create_shape,shape_placement};
 use eframe::egui;
 use egui::{Color32,Pos2,Sense,Stroke,Vec2};
+/// Return displacement from the INITIAL pointer press, not one frame of mouse motion.
+/// egui Response::drag_delta is a *per-frame* delta and must never drive an
+/// Editor preview that rebuilds geometry from its pre-drag snapshot.
+fn total_drag_world(response:&egui::Response,scale:f32,grid:Option<f64>)->Point {
+    let total=response.total_drag_delta().unwrap_or_default();
+    cumulative_drag_world(total,scale,grid)
+}
+
+fn cumulative_drag_world(total:Vec2,scale:f32,grid:Option<f64>)->Point {
+    movement_delta(total.x as f64/scale as f64,
+        -total.y as f64/scale as f64,grid)
+}
+
 impl Studio {
     pub(crate) fn canvas(&mut self,ui:&mut egui::Ui) {
         ui.horizontal(|ui|{
@@ -206,10 +219,16 @@ impl Studio {
         let press_target=pressed.and_then(|p|
             pick(&self.editor.project,p,radius,pick_mode));
 
-        if self.snap_features
+        let snap_suppressed=ui.input(|i|i.modifiers.alt);
+        let editing_path=self.drag.as_ref().and_then(|drag|match drag{
+            ActiveDrag::Node(id,..)|ActiveDrag::Control(id,..)=>Some(*id),
+            _=>None,
+        });
+        let exclusions:Vec<u64>=editing_path.into_iter().collect();
+        if self.snap_features && !snap_suppressed
             && let Some(world)=pointer_world
             && let Some(snap)=nearest_snap(&self.editor.project,
-                world,10.0/scale as f64,&[]){
+                world,10.0/scale as f64,&exclusions){
             let target=screen(snap.point);
             painter.circle_stroke(target,7.0,Stroke::new(1.6,super::theme::SELECTION));
             painter.line_segment([target+Vec2::new(-4.0,0.0),
@@ -272,9 +291,7 @@ impl Studio {
                 }
             }
             if let Some(start)=self.shape_drag_start {
-                let delta=response.drag_delta();
-                let snapped=movement_delta(delta.x as f64/scale as f64,
-                    -delta.y as f64/scale as f64,
+                let snapped=total_drag_world(&response,scale,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let square=ui.input(|i|i.modifiers.shift);
                 if response.dragged(){
@@ -393,9 +410,7 @@ impl Studio {
                 }
             }
             if response.dragged() && let Some(drag)=self.drag.clone() {
-                let delta=response.drag_delta();
-                let shift=movement_delta(delta.x as f64/scale as f64,
-                    -delta.y as f64/scale as f64,
+                let shift=total_drag_world(&response,scale,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let result=match drag {
                     ActiveDrag::Group(ids)=>self.editor.preview_group_drag(&ids,shift),
@@ -405,7 +420,7 @@ impl Studio {
                         id,start.offset(shift.x,shift.y)),
                     ActiveDrag::Node(id,node,start)=>{
                         let mut position=start.offset(shift.x,shift.y);
-                        if self.snap_features
+                        if self.snap_features && !snap_suppressed
                             && let Some(path)=self.editor.project.paths.iter()
                                 .find(|p|p.id==id){
                             let world=position.offset(path.origin.x,path.origin.y);
@@ -419,7 +434,7 @@ impl Studio {
                     }
                     ActiveDrag::Control(id,seg,handle,start)=>{
                         let mut position=start.offset(shift.x,shift.y);
-                        if self.snap_features
+                        if self.snap_features && !snap_suppressed
                             && let Some(path)=self.editor.project.paths.iter()
                                 .find(|p|p.id==id){
                             let world=position.offset(path.origin.x,path.origin.y);
@@ -480,5 +495,92 @@ impl Studio {
                 format!("X {:.2} · Y {:.2} mm",world.x,world.y),
                 egui::FontId::monospace(12.),Color32::WHITE);
         }
+    }
+}
+
+#[cfg(test)]
+mod drag_regression_tests {
+    use super::*;
+
+    #[test]
+    fn cumulative_pointer_motion_is_not_each_frames_motion() {
+        // A slow pointer can move ~2px/frame but end up 84px from its
+        // press point. Absolute preview commands MUST see the 84px.
+        let screen_totals=[
+            Vec2::new(2.0,-1.0),
+            Vec2::new(32.0,-12.0),
+            Vec2::new(84.0,-36.0),
+            Vec2::new(84.0,-36.0), // stationary frame must not reset shape
+        ];
+        let positions:Vec<_>=screen_totals.into_iter()
+            .map(|total|cumulative_drag_world(total,2.0,None)).collect();
+        assert_eq!(positions[0],Point::new(1.0,0.5));
+        assert_eq!(positions[1],Point::new(16.0,6.0));
+        assert_eq!(positions[2],Point::new(42.0,18.0));
+        assert_eq!(positions[3],positions[2]);
+    }
+
+    #[test]
+    fn cumulative_node_drag_is_one_undoable_edit() {
+        use carvefoundry_core::{Action,Editor,ShapeKind};
+        let mut editor=Editor::default();
+        editor.apply(Action::AddShape{
+            kind:ShapeKind::Rectangle,name:"Test".into(),
+            origin:Point::new(20.0,20.0),
+            width_mm:40.0,height_mm:30.0,
+        }).unwrap();
+        let initial=editor.project.clone();
+        let node_id=editor.project.paths[0].nodes[0].id;
+        let start=editor.start_node_drag(1,node_id).unwrap();
+
+        for total in [Vec2::new(4.0,-2.0),
+            Vec2::new(30.0,-20.0),Vec2::new(30.0,-20.0)] {
+            let delta=cumulative_drag_world(total,2.0,None);
+            editor.preview_node_drag(1,node_id,
+                start.offset(delta.x,delta.y)).unwrap();
+        }
+        assert_eq!(editor.project.paths[0].nodes[0].position,
+            start.offset(15.0,10.0));
+        editor.finish_drag();
+        assert!(editor.undo());
+        assert_eq!(editor.project,initial);
+        // The earlier creation action is still undoable; a drag should
+        // contribute exactly one separate history entry.
+        assert!(editor.can_undo());
+        assert!(editor.undo());
+        assert!(editor.project.paths.is_empty());
+        assert!(!editor.can_undo());
+    }
+
+    #[test]
+    fn cumulative_whole_vector_drag_uses_complete_distance() {
+        use carvefoundry_core::{Action,Editor,ShapeKind};
+        let mut editor=Editor::default();
+        editor.apply(Action::AddShape{
+            kind:ShapeKind::Rectangle,name:"Test".into(),
+            origin:Point::new(20.0,20.0),
+            width_mm:40.0,height_mm:30.0,
+        }).unwrap();
+        let initial=editor.project.clone();
+        let start=editor.start_path_drag(1).unwrap();
+        for total in [Vec2::new(5.0,0.0),Vec2::new(50.0,20.0)] {
+            let delta=cumulative_drag_world(total,2.0,None);
+            editor.preview_path_drag(1,start.offset(delta.x,delta.y))
+                .unwrap();
+        }
+        assert_eq!(editor.project.paths[0].origin,Point::new(45.0,10.0));
+        editor.finish_drag();
+        assert!(editor.undo());
+        assert_eq!(editor.project,initial);
+    }
+
+    #[test]
+    fn snapped_total_drag_preserves_sub_grid_press_origin() {
+        let start=Point::new(35.75,70.125);
+        let motion=cumulative_drag_world(Vec2::new(53.0,-19.0),
+            2.0,Some(5.0));
+        assert_eq!(motion,Point::new(25.0,10.0));
+        assert_eq!(start.offset(motion.x,motion.y),
+            Point::new(60.75,80.125));
     }
 }

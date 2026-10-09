@@ -236,6 +236,8 @@ impl Studio {
                 ui.label("Drag blank stock  Marquee: left→right encloses, right→left crosses");
                 ui.label("Drag selected vectors  Move together with one Undo");
                 ui.label("N  Edit nodes and Bézier handles");
+                ui.label("Node/handle drag  Moves from original press point, even across many frames");
+                ui.label("Alt while dragging  Temporarily ignore feature snapping");
                 ui.label("P  Draw point-by-point polyline or polygon");
                 ui.label("Shape button  →  drag its size on the stock");
                 ui.label("Shift while drawing  Equal sides; Esc  Cancel drawing tool");
