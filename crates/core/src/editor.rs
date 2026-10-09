@@ -6,6 +6,7 @@ pub enum Action {
     AddRectangle { name: String, origin: Point, width_mm: f64, height_mm: f64 },
     AddShape {kind:ShapeKind,name:String,origin:Point,width_mm:f64,height_mm:f64},
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
+    ConvertContour {id:u64},
     Duplicate {id:u64},
     Flip {id:u64,horizontal:bool},
     RotateQuarter {id:u64,clockwise:bool},
@@ -83,6 +84,17 @@ impl Editor {
                 let path=polyline(id,name,Point::new(0.0,0.0),points,closed)?;
                 next.next_id=id.checked_add(1).ok_or("Path ID exhausted")?;
                 next.paths.push(path);
+            }
+            Action::ConvertContour{id}=>{
+                let contour=next.contours.iter().find(|p|p.id==id)
+                    .ok_or("Legacy contour ID not found")?;
+                if contour.locked{return Err("Unlock contour before converting".into());}
+                let mut shape=polyline(contour.id,contour.name.clone(),
+                    contour.origin,contour.vertices.clone(),true)?;
+                shape.visible=contour.visible;
+                shape.validate()?;
+                next.contours.retain(|p|p.id!=id);
+                next.paths.push(shape);
             }
             Action::Duplicate{id}=>{
                 let new_id=next.next_id;
@@ -476,6 +488,25 @@ mod tests {
         assert!(e.undo()); // Reverse rotation
         assert!(e.undo()); // Forward rotation
         assert!(e.undo()); // Flip
+        assert_eq!(e.project,before);
+    }
+    #[test]
+    fn existing_r0_contours_can_be_converted_losslessly_to_editable_paths(){
+        let mut e=Editor::default();
+        e.apply(Action::AddRectangle{
+            name:"Legacy rectangle".into(),origin:Point::new(12.0,18.0),
+            width_mm:30.0,height_mm:15.0,
+        }).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::ConvertContour{id:1}).unwrap();
+        assert!(e.project.contours.is_empty());
+        assert_eq!(e.project.paths[0].id,1);
+        assert_eq!(e.project.paths[0].nodes.len(),4);
+        assert_eq!(e.project.paths[0].origin,Point::new(12.0,18.0));
+        e.apply(Action::MoveNode{path_id:1,node_id:1,
+            position:Point::new(-2.0,0.0)}).unwrap();
+        assert!(e.undo());
+        assert!(e.undo());
         assert_eq!(e.project,before);
     }
     #[test]
