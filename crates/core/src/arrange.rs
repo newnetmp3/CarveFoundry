@@ -163,9 +163,9 @@ pub fn arrangement_offsets(project:&Project,ids:&[u64],mode:Arrangement)
         }).collect());
     }
     let target=if is_stock(mode){
-        let group_min=bounds.iter().map(|(_,b)|val(*b,mode))
+        let group_min=bounds.iter().map(|(_,b)|if is_x{b.min.x}else{b.min.y})
             .fold(f64::INFINITY,f64::min);
-        let group_max=bounds.iter().map(|(_,b)|val(*b,mode))
+        let group_max=bounds.iter().map(|(_,b)|if is_x{b.max.x}else{b.max.y})
             .fold(f64::NEG_INFINITY,f64::max);
         // Stock target for matching group boundary or center.
         let dim=if is_x{project.stock.width_mm}else{project.stock.height_mm};
