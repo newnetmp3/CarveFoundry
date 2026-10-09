@@ -2,6 +2,7 @@
 //! first-press hit testing and direct drag behavior.
 use super::super::{Studio,EditMode,ActiveDrag};
 use carvefoundry_core::{Curve,Hit,PickMode,Point,movement_delta,pick,
+    nearest_snap,marquee_ids,SnapKind,
     create_shape,shape_placement};
 use eframe::egui;
 use egui::{Color32,Pos2,Sense,Stroke,Vec2};
@@ -101,7 +102,7 @@ impl Studio {
         for part in &self.editor.project.contours {
             if !part.visible{continue;}
             let points=part.world_points().into_iter().map(&screen).collect();
-            let chosen=Some(part.id)==self.selected;
+            let chosen=self.selected_ids.contains(&part.id);
             painter.add(egui::Shape::closed_line(points,
                 Stroke::new(if chosen{2.5}else{1.5},
                     if chosen{super::theme::SELECTION}
@@ -110,7 +111,7 @@ impl Studio {
         for path in &self.editor.project.paths {
             if !path.visible {continue;}
             let Ok(polyline)=path.preview_points(0.3) else {continue;};
-            let chosen=self.selected_path==Some(path.id);
+            let chosen=self.selected_ids.contains(&path.id);
             let style=Stroke::new(if chosen{2.6}else{1.6},
                 if chosen{super::theme::SELECTION}
                 else{super::theme::VECTOR});
@@ -186,6 +187,24 @@ impl Studio {
         let press_target=pressed.and_then(|p|
             pick(&self.editor.project,p,radius,pick_mode));
 
+        if self.snap_features
+            && let Some(world)=pointer_world
+            && let Some(snap)=nearest_snap(&self.editor.project,
+                world,10.0/scale as f64,&[]){
+            let target=screen(snap.point);
+            painter.circle_stroke(target,7.0,Stroke::new(1.6,super::theme::SELECTION));
+            painter.line_segment([target+Vec2::new(-4.0,0.0),
+                target+Vec2::new(4.0,0.0)],
+                Stroke::new(1.0,super::theme::SELECTION));
+            let name=match snap.kind{
+                SnapKind::Vertex=>"Endpoint",
+                SnapKind::Midpoint=>"Midpoint",
+                SnapKind::StockCorner=>"Stock corner",
+            };
+            painter.text(target+Vec2::new(9.0,-8.0),egui::Align2::LEFT_BOTTOM,
+                name,egui::FontId::monospace(10.0),super::theme::SELECTION);
+        }
+
         // A shape tool creates one object per mouse gesture. Until release,
         // the project/Undo history are completely unchanged.
         if let Some(kind)=self.active_shape {
@@ -198,8 +217,11 @@ impl Studio {
                 }else{self.shape_height};
                 if let Some(cursor)=response.hover_pos()
                     && back.contains(cursor) {
-                    let origin=to_world(cursor);
-                    if let Ok(preview)=create_shape(1,"Draft".into(),origin,
+                    let mut at=to_world(cursor);
+                    if self.snap_features
+                        && let Some(snap)=nearest_snap(&self.editor.project,
+                            at,10.0/scale as f64,&[]){at=snap.point;}
+                    if let Ok(preview)=create_shape(1,"Draft".into(),at,
                         kind,width,height)
                         && let Ok(polyline)=preview.preview_points(0.4) {
                         let screen_points:Vec<Pos2>=polyline.into_iter().map(screen).collect();
@@ -209,14 +231,22 @@ impl Studio {
                 }
                 if response.clicked() && let Some(cursor)=pointer
                     && back.contains(cursor) {
+                    let mut at=to_world(cursor);
+                    if self.snap_features
+                        && let Some(snap)=nearest_snap(&self.editor.project,
+                            at,10.0/scale as f64,&[]){at=snap.point;}
                     self.create_drag_shape(kind,carvefoundry_core::ShapePlacement{
-                        origin:to_world(cursor),width_mm:width,height_mm:height,
+                        origin:at,width_mm:width,height_mm:height,
                     });
                 }
             }else{
             if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
                 self.shape_drag_start=ui.input(|i|i.pointer.press_origin())
-                    .filter(|at|back.contains(*at)).map(to_world);
+                    .filter(|at|back.contains(*at)).map(to_world)
+                    .map(|at|if self.snap_features{
+                        nearest_snap(&self.editor.project,at,10.0/scale as f64,&[])
+                            .map_or(at,|snap|snap.point)
+                    }else{at});
                 self.shape_drag_delta=None;
                 if self.shape_drag_start.is_none(){
                     self.status="Start drawing inside the material outline".into();
@@ -265,7 +295,11 @@ impl Studio {
             if response.double_clicked(){
                 self.finish_drawing();
             }else if response.clicked() && let Some(mut at)=pointer_world {
-                if self.use_grid && (0.1..=100.0).contains(&self.grid_step){
+                let feature_snap=if self.snap_features{
+                    nearest_snap(&self.editor.project,at,10.0/scale as f64,&[])
+                }else{None};
+                if let Some(snap)=feature_snap{at=snap.point;}
+                else if self.use_grid && (0.1..=100.0).contains(&self.grid_step){
                     at.x=(at.x/self.grid_step).round()*self.grid_step;
                     at.y=(at.y/self.grid_step).round()*self.grid_step;
                 }
@@ -276,13 +310,26 @@ impl Studio {
             }
         }else{
             if response.clicked() {
-                self.apply_canvas_hit(click_target);
+                let additive=ui.input(|i|i.modifiers.shift || i.modifiers.command);
+                self.apply_canvas_hit(click_target,additive);
             }
             if response.drag_started() && ui.input(|i|i.pointer.primary_down()) {
-                let result=match press_target {
+                let selection_extend=ui.input(|i|i.modifiers.shift || i.modifiers.command);
+                let hit_id=match press_target{
+                    Some(Hit::Path(id))|Some(Hit::Contour(id))=>Some(id),
+                    _=>None,
+                };
+                let result=if let Some(id)=hit_id
+                    && !selection_extend
+                    && self.selected_ids.len()>1
+                    && self.selected_ids.contains(&id)
+                    && self.edit_mode==EditMode::Objects{
+                    let ids:Vec<u64>=self.selected_ids.iter().copied().collect();
+                    self.editor.start_group_drag(&ids)
+                        .map(|()|ActiveDrag::Group(ids))
+                }else{match press_target {
                     Some(Hit::Node{path_id,node_id}) if self.edit_mode==EditMode::Nodes=>{
-                        self.selected_path=Some(path_id);
-                        self.selected=None;
+                        self.select_vector(Some(path_id),false);
                         self.selected_node=Some(node_id);
                         self.selected_handle=None;
                         self.editor.start_node_drag(path_id,node_id)
@@ -290,30 +337,33 @@ impl Studio {
                     }
                     Some(Hit::Handle{path_id,segment_id,handle})
                         if self.edit_mode==EditMode::Nodes=>{
-                        self.selected_path=Some(path_id);
-                        self.selected=None;
+                        self.select_vector(Some(path_id),false);
                         self.selected_node=None;
                         self.selected_handle=Some((segment_id,handle));
                         self.editor.start_control_drag(path_id,segment_id,handle)
                             .map(|at|ActiveDrag::Control(path_id,segment_id,handle,at))
                     }
                     Some(Hit::Path(id)) if self.edit_mode==EditMode::Objects=>{
-                        self.selected_path=Some(id);self.selected=None;
-                        self.selected_node=None;self.selected_handle=None;
+                        self.select_vector(Some(id),false);
                         self.editor.start_path_drag(id)
                             .map(|at|ActiveDrag::Path(id,at))
                     }
                     Some(Hit::Contour(id)) if self.edit_mode==EditMode::Objects=>{
-                        self.selected_path=None;self.selected=Some(id);
-                        self.selected_node=None;self.selected_handle=None;
+                        self.select_vector(Some(id),false);
                         self.editor.start_drag(id)
                             .map(|at|ActiveDrag::Contour(id,at))
                     }
                     other=>{
-                        self.apply_canvas_hit(other);
+                        if self.edit_mode==EditMode::Objects
+                            && other.is_none(){
+                            self.marquee_start=pressed;
+                            self.marquee_extend=selection_extend;
+                        }else if !selection_extend{
+                            self.apply_canvas_hit(other,false);
+                        }
                         Ok(ActiveDrag::None)
                     }
-                };
+                }};
                 match result{
                     Ok(ActiveDrag::None)=>self.drag=None,
                     Ok(target)=>self.drag=Some(target),
@@ -323,21 +373,45 @@ impl Studio {
                     }
                 }
             }
-            if response.dragged() && let Some(drag)=self.drag {
+            if response.dragged() && let Some(drag)=self.drag.clone() {
                 let delta=response.drag_delta();
                 let shift=movement_delta(delta.x as f64/scale as f64,
                     -delta.y as f64/scale as f64,
                     if self.use_grid{Some(self.grid_step)}else{None});
                 let result=match drag {
+                    ActiveDrag::Group(ids)=>self.editor.preview_group_drag(&ids,shift),
                     ActiveDrag::Contour(id,start)=>self.editor.preview_drag(
                         id,start.offset(shift.x,shift.y)),
                     ActiveDrag::Path(id,start)=>self.editor.preview_path_drag(
                         id,start.offset(shift.x,shift.y)),
-                    ActiveDrag::Node(id,node,start)=>self.editor.preview_node_drag(
-                        id,node,start.offset(shift.x,shift.y)),
-                    ActiveDrag::Control(id,seg,handle,start)=>
-                        self.editor.preview_control_drag(id,seg,handle,
-                            start.offset(shift.x,shift.y)),
+                    ActiveDrag::Node(id,node,start)=>{
+                        let mut position=start.offset(shift.x,shift.y);
+                        if self.snap_features
+                            && let Some(path)=self.editor.project.paths.iter()
+                                .find(|p|p.id==id){
+                            let world=position.offset(path.origin.x,path.origin.y);
+                            if let Some(snap)=nearest_snap(&self.editor.project,
+                                world,10.0/scale as f64,&[id]){
+                                position=Point::new(snap.point.x-path.origin.x,
+                                    snap.point.y-path.origin.y);
+                            }
+                        }
+                        self.editor.preview_node_drag(id,node,position)
+                    }
+                    ActiveDrag::Control(id,seg,handle,start)=>{
+                        let mut position=start.offset(shift.x,shift.y);
+                        if self.snap_features
+                            && let Some(path)=self.editor.project.paths.iter()
+                                .find(|p|p.id==id){
+                            let world=position.offset(path.origin.x,path.origin.y);
+                            if let Some(snap)=nearest_snap(&self.editor.project,
+                                world,10.0/scale as f64,&[id]){
+                                position=Point::new(snap.point.x-path.origin.x,
+                                    snap.point.y-path.origin.y);
+                            }
+                        }
+                        self.editor.preview_control_drag(id,seg,handle,position)
+                    },
                     ActiveDrag::None=>Ok(()),
                 };
                 if let Err(error)=result{
@@ -347,7 +421,23 @@ impl Studio {
             if response.drag_stopped() {
                 self.editor.finish_drag();
                 self.drag=None;
+                if let Some(start)=self.marquee_start.take()
+                    && let Some(end)=pointer_world{
+                    let found=marquee_ids(&self.editor.project,start,end);
+                    if !self.marquee_extend{self.select_vector(None,false);}
+                    for id in found{self.selected_ids.insert(id);}
+                    self.reconcile_selection();
+                    self.status=format!("{} vectors selected",self.selected_ids.len());
+                }
             }
+        }
+        if let Some(start)=self.marquee_start
+            && let Some(end)=pointer_world {
+            let a=screen(start);
+            let b=screen(end);
+            painter.rect_stroke(egui::Rect::from_two_pos(a,b),0.0,
+                Stroke::new(1.0,super::theme::SELECTION),
+                egui::StrokeKind::Inside);
         }
         // Draw draft geometry as distinct temporary guides; never autosave
         // uncommitted pen clicks into the actual design project.
