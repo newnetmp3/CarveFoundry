@@ -140,3 +140,19 @@ feedback, fix any remaining blockers, then continue with native 2D authoring,
 SVG/DXF and typography. Do not treat automated tests as interactive QA.
 Do not resume Python GUI conversion or unlock CNC export prematurely.
 
+
+## R1 UI usability milestone — PR #105
+
+Focus shifts from adding disconnected features to restoring a discoverable,
+drawing-first desktop experience inspired by established CNC design workflows.
+The native shell must have recognizable File/Edit/View menus, a clear
+mode toolbar, grouped drawing tools, a large material canvas, object tree,
+precision Properties panel, stock setup and readable status bar. Components
+are individually owned by Rust UI modules; no legacy Python UI is revived.
+
+Open/Save As uses the KDE XDG portal with cancellation behavior and unsaved
+project protection. A read-only Toolpaths workspace preserves the machine
+safety boundary. Accept only after green tests, strict Clippy, native Linux
+release compile and **separate human KDE/Wayland QA**. Specific acceptance
+cases and screenshots are listed in docs/UI_DESIGN.md.
+

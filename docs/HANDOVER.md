@@ -186,3 +186,34 @@ Don't reactivate the retired PySide6 application. Preserve stock XY0
 bottom left, top-of-stock Z0, and no G-code until R6 preflight gates.
 
 | 2026-10-08 | Rust node-drag and tool-palette repair PR #103 merged to main | [Rust CI `37869621001`](https://github.com/newnetmp3/CarveFoundry/actions/runs/37869621001) green: 38 tests, strict Clippy, native Linux release; main e78c3347 | Manual KDE/Wayland interaction QA; then SVG/DXF and CAD typography |
+
+## Drawing-first Rust UI redesign — PR #105 (CI pending)
+
+The owner supplied visual references from professional CNC drawing software
+and requested **interface usability first**, not a new isolated CAM feature.
+The implementation lives on feature/rust-design-workspace-ui and is subject
+to Rust tests, strict Clippy and native Linux release compilation before
+promotion. Manual KDE Plasma/Wayland interaction QA is still outstanding.
+
+- Original monolithic 900+ line studio source decomposed into a lean desktop
+  coordinator and modules in apps/studio/src/ui:
+  shell.rs, palette.rs, inspector.rs, canvas.rs, theme.rs.
+- Desktop layout now has a File/Edit/View/Drawing/Help menu, fast mode and
+  shape ribbon, grouped left-side vector tools, expanded material canvas,
+  right-side Objects/Properties/Material tabs and context status strip.
+- Reliable native KDE/Wayland Open/Save As using the XDG Desktop Portal.
+  New/dirty project protections, first Save As, explicit naming actions.
+- Existing drawing engine, stable IDs, hit-testing, Pen, transforms and
+  undo/redo stay Rust-native. Core now adds validated project/path rename
+  commands instead of generating per-keyboard-stroke Undo states.
+- Higher-contrast material canvas, bounded background grid and rulers,
+  all-path node grips in direct mode, readable selection colors, pan/zoom.
+- Toolpaths area explicitly read-only: **no NC export, CAM safety or
+  physical CNC validation**.
+- Acceptance checklist: docs/UI_DESIGN.md alongside docs/UX_SMOKE.md.
+  CI is not proof of correct physical pointer behavior or Wayland scaling.
+
+**Follow-on:** fix any clipping, mis-sized controls, file picker, mouse
+capture or mode confusion reported in Wayland QA before new drawing features.
+Progress should be measured by common design workflows, not icon count.
+

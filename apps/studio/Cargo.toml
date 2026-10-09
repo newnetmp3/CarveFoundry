@@ -9,3 +9,6 @@ description = "CarveFoundry native Rust CAD/CAM desktop (safe CAD foundation)"
 [dependencies]
 carvefoundry-core = { path = "../../crates/core" }
 eframe = { version = "=0.36.2", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+
+# Native KDE/Wayland file chooser via XDG desktop portal (no GTK3 build dependency).
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal"] }

@@ -29,7 +29,7 @@ rename .cf3d files to .cfd.
 Install the native toolchain and system OpenGL/Wayland libraries:
 
 ```bash
-sudo pacman -S --needed rust cargo pkgconf libxkbcommon wayland mesa
+sudo pacman -S --needed rust cargo pkgconf libxkbcommon wayland mesa xdg-desktop-portal xdg-desktop-portal-kde
 git clone https://github.com/newnetmp3/CarveFoundry.git
 cd CarveFoundry
 cargo run -p carvefoundry-studio --release
@@ -48,7 +48,12 @@ crates/core/                     Pure Rust versioned project + geometry + editor
   src/geometry.rs                Finite closed-polygon validation and hit testing
   src/editor.rs                  Validated commands, drag transaction, Undo/Redo
 apps/studio/                     Native eframe/egui UI
-  src/main.rs                    Canvas, panels, stock/fixture/contour editing
+  src/main.rs                    Compact desktop application state and shortcuts
+  src/ui/shell.rs                Menu/ribbon, workspaces, status and file dialogs
+  src/ui/palette.rs              Drawing, dimension, transform and snap tools
+  src/ui/inspector.rs            Object tree, precise properties and material
+  src/ui/canvas.rs               Main 2D stock sheet, bounded grid, rulers and drag
+  src/ui/theme.rs                Contrast, spacing and CAD UI colors
 docs/ROADMAP.md                  New implementation phases and acceptance gates
 docs/SAFETY.md                   Known machine-side requirements, blocked exports
 docs/HANDOVER.md                 Rolling development checkpoint
@@ -58,14 +63,41 @@ docs/HANDOVER.md                 Rolling development checkpoint
 Modules are split by ownership. Geometry and project validation have **no UI
 dependency**, and the UI cannot invoke a machine exporter that does not exist.
 
-## Design controls
+## Native vector design workspace
 
-Use **Add rectangle** to create a closed contour or create a retained **Line**, **Circular arc** or **Cubic Bézier** path. Choose **Move objects** to drag whole shapes or **Edit nodes** to drag individual analytic anchors and cubic handles. Click to select objects, drag to
-position it, or edit X/Y numerically. Locked contours cannot move or delete.
-Undo/Redo records each drag as one history action. The Inspector exposes numeric node and cubic-handle coordinates, midpoint insertion into straight edges, lossless line-node deletion, open/close, and path locking. Arc anchors currently refuse individual translation until proper circular constraints are available. Arcs and Béziers are serialized analytically in `.cfd`, not as sampled polylines. `.cfd` v1 from the original Rust reboot still loads; machining remains disabled. Save/Open a project using
-a typed `.cfd` path in the toolbar. Stock dimensions and basic fixture
-inventory live in the Inspector. Sample left-fence dimensions are an example
-only and require measurement before any machining capability is added.
+The interface is organized for a drawing-first CAD workflow. The menu bar
+provides File, Edit, View, Drawing and Help; the mode ribbon exposes Select
+(V), Node Edit (N) and Pen (P), shape shortcuts, Undo/Redo and Fit. The left
+palette groups vector creation, dimensions, transform and snap controls,
+with a wide stock drawing area in the center. The right inspector separates
+Objects, Properties and Material settings; the bottom line displays current
+mode, pointer XY, stock dimensions and snap status.
+
+**Files:** Use File > Open design or Save As to invoke the KDE/Wayland-native
+XDG Portal chooser. Ctrl+O and Ctrl+S work in normal canvas focus. A newly
+created design opens Save As on its first save and unsaved changes are
+confirmed before New/Open. Old native Rust CFD files remain readable.
+Historic CF3D conversion is not supported.
+
+**Drawing:** New editable shapes include Rectangle, Circle, Ellipse,
+Triangle, Pentagon, Hexagon, Octagon and Star, plus Line, Arc and cubic
+Bézier paths. Click to draw points with Pen; Enter/double-click finishes
+an open polyline or closed polygon. Use the object tree to select, hide
+or lock individual vectors, and Properties for numeric node/handle edits.
+Exact circular arc endpoints can refit without flattening geometry. Circles
+and ellipses use four cubic Bézier segments as visual approximations.
+
+**Navigation:** Mouse wheel zooms under the pointer, middle/right mouse
+drag pans, F fits material. V moves whole objects, N edits anchors, P starts
+a polyline. Ctrl+Z Undo, Ctrl+Y or Ctrl+Shift+Z Redo, Ctrl+D Duplicate,
+Delete Remove. Snap movement is OFF by default; turning it on quantizes
+movement, not the existing anchor position.
+
+**Machining:** The Toolpaths workspace is deliberately informational, not
+an NC export interface. This application does not yet generate CNC output.
+
+Detailed UI acceptance targets and an *uncompleted* physical KDE Plasma
+Wayland checklist are in [docs/UI_DESIGN.md](docs/UI_DESIGN.md).
 
 ## Core testing
 
