@@ -185,3 +185,22 @@ Next prioritize interactive position/size feedback, multi-object
 selection, actual vector snapping and vector editing ergonomics,
 then SVG/text/layer tools. Do not substitute a decorative UI for
 working CAD operations.
+
+## Verified UI slice — direct geometry placement
+
+[PR #107](https://github.com/newnetmp3/CarveFoundry/pull/107)
+merged as `49f96f577b2b72fdfb6eee5ae7ab7ce64f878708`, with
+[Rust CI run 37872863242](https://github.com/newnetmp3/CarveFoundry/actions/runs/37872863242)
+green on exact feature head `d420fc10da94943b8d12d6629f01ebf8c5806649`:
+**47 tests, strict Clippy, native Linux release build**.
+Users can now draw CAD shapes by press-drag-release on stock, with
+noncommittal live outlines and width/height, inverse-corner drawing,
+Shift/Circle constraints, relative snapping and one undoable commit.
+The numeric alternative places exact-size objects at the clicked stock
+position with a ghost preview. CAD data is still Rust-native and no
+cutting, CAM or machine-safety feature is enabled.
+
+**Next:** confirm actual KDE Wayland pointer behavior; then deliver
+multi-object selection, stronger 2D geometry snapping, text, SVG/DXF,
+layers and conventional CAD transformation tools. CNC preflight remains
+a separate future release gate.
