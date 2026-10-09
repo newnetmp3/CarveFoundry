@@ -219,10 +219,16 @@ impl Studio {
         let press_target=pressed.and_then(|p|
             pick(&self.editor.project,p,radius,pick_mode));
 
-        if self.snap_features
+        let snap_suppressed=ui.input(|i|i.modifiers.alt);
+        let editing_path=self.drag.as_ref().and_then(|drag|match drag{
+            ActiveDrag::Node(id,..)|ActiveDrag::Control(id,..)=>Some(*id),
+            _=>None,
+        });
+        let exclusions:Vec<u64>=editing_path.into_iter().collect();
+        if self.snap_features && !snap_suppressed
             && let Some(world)=pointer_world
             && let Some(snap)=nearest_snap(&self.editor.project,
-                world,10.0/scale as f64,&[]){
+                world,10.0/scale as f64,&exclusions){
             let target=screen(snap.point);
             painter.circle_stroke(target,7.0,Stroke::new(1.6,super::theme::SELECTION));
             painter.line_segment([target+Vec2::new(-4.0,0.0),
@@ -414,7 +420,7 @@ impl Studio {
                         id,start.offset(shift.x,shift.y)),
                     ActiveDrag::Node(id,node,start)=>{
                         let mut position=start.offset(shift.x,shift.y);
-                        if self.snap_features
+                        if self.snap_features && !snap_suppressed
                             && let Some(path)=self.editor.project.paths.iter()
                                 .find(|p|p.id==id){
                             let world=position.offset(path.origin.x,path.origin.y);
@@ -428,7 +434,7 @@ impl Studio {
                     }
                     ActiveDrag::Control(id,seg,handle,start)=>{
                         let mut position=start.offset(shift.x,shift.y);
-                        if self.snap_features
+                        if self.snap_features && !snap_suppressed
                             && let Some(path)=self.editor.project.paths.iter()
                                 .find(|p|p.id==id){
                             let world=position.offset(path.origin.x,path.origin.y);
@@ -512,6 +518,55 @@ mod drag_regression_tests {
         assert_eq!(positions[1],Point::new(16.0,6.0));
         assert_eq!(positions[2],Point::new(42.0,18.0));
         assert_eq!(positions[3],positions[2]);
+    }
+
+    #[test]
+    fn cumulative_node_drag_is_one_undoable_edit() {
+        use carvefoundry_core::{Action,Editor,ShapeKind};
+        let mut editor=Editor::default();
+        editor.apply(Action::AddShape{
+            kind:ShapeKind::Rectangle,name:"Test".into(),
+            origin:Point::new(20.0,20.0),
+            width_mm:40.0,height_mm:30.0,
+        }).unwrap();
+        let initial=editor.project.clone();
+        let node_id=editor.project.paths[0].nodes[0].id;
+        let start=editor.start_node_drag(1,node_id).unwrap();
+
+        for total in [Vec2::new(4.0,-2.0),
+            Vec2::new(30.0,-20.0),Vec2::new(30.0,-20.0)] {
+            let delta=cumulative_drag_world(total,2.0,None);
+            editor.preview_node_drag(1,node_id,
+                start.offset(delta.x,delta.y)).unwrap();
+        }
+        assert_eq!(editor.project.paths[0].nodes[0].position,
+            start.offset(15.0,10.0));
+        editor.finish_drag();
+        assert!(editor.undo());
+        assert_eq!(editor.project,initial);
+        assert!(!editor.can_undo());
+    }
+
+    #[test]
+    fn cumulative_whole_vector_drag_uses_complete_distance() {
+        use carvefoundry_core::{Action,Editor,ShapeKind};
+        let mut editor=Editor::default();
+        editor.apply(Action::AddShape{
+            kind:ShapeKind::Rectangle,name:"Test".into(),
+            origin:Point::new(20.0,20.0),
+            width_mm:40.0,height_mm:30.0,
+        }).unwrap();
+        let initial=editor.project.clone();
+        let start=editor.start_path_drag(1).unwrap();
+        for total in [Vec2::new(5.0,0.0),Vec2::new(50.0,20.0)] {
+            let delta=cumulative_drag_world(total,2.0,None);
+            editor.preview_path_drag(1,start.offset(delta.x,delta.y))
+                .unwrap();
+        }
+        assert_eq!(editor.project.paths[0].origin,Point::new(45.0,10.0));
+        editor.finish_drag();
+        assert!(editor.undo());
+        assert_eq!(editor.project,initial);
     }
 
     #[test]
