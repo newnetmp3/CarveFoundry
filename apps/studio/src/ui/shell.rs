@@ -1,7 +1,7 @@
 //! Native desktop shell: familiar menu, mode ribbon, drawing palette,
 //! object tree, material setup and large central sheet workspace.
 use super::super::{EditMode,InspectorTab,PendingDocument,Studio,Workspace};
-use carvefoundry_core::{Action,Primitive,ShapeKind};
+use carvefoundry_core::{Primitive,ShapeKind};
 use eframe::egui;
 
 impl Studio {
