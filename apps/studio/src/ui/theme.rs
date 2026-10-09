@@ -2,7 +2,8 @@
 use eframe::egui::{self, Color32};
 
 pub(crate) fn install(ctx:&egui::Context) {
-    let mut style=(*ctx.style()).clone();
+    ctx.set_theme(egui::Theme::Dark);
+    let mut style=(*ctx.style_of(egui::Theme::Dark)).clone();
     style.visuals=egui::Visuals::dark();
     style.visuals.window_fill=Color32::from_rgb(27,33,42);
     style.visuals.panel_fill=Color32::from_rgb(30,37,48);
@@ -16,7 +17,7 @@ pub(crate) fn install(ctx:&egui::Context) {
     style.spacing.item_spacing=egui::vec2(6.0,6.0);
     style.spacing.button_padding=egui::vec2(10.0,6.0);
     style.spacing.interact_size.y=30.0;
-    ctx.set_style(style);
+    ctx.set_style_of(egui::Theme::Dark,style);
 }
 
 pub(crate) const ACCENT:Color32=Color32::from_rgb(114,186,222);
