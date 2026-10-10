@@ -300,7 +300,7 @@ mod tests{
     }
     #[test]
     fn screenshot_regression_closed_polygon_crosses_curved_blue_bezier(){
-        let mut p=crate::shapes::polyline(1,"Five edges".into(),
+        let p=crate::shapes::polyline(1,"Five edges".into(),
             Point::new(0.0,0.0),
             vec![Point::new(70.0,70.0),Point::new(110.0,45.0),
                 Point::new(150.0,70.0),Point::new(140.0,115.0),
