@@ -605,7 +605,7 @@ files, and SVG/DXF interoperability QA. [R0–R7 roadmap diagram](ROADMAP_DIAGRA
 reflects verified delivery but does not equate CAD CI with a finished
 machine-control application.
 
-## R1i — continuing cubic Bézier and true circular-arc endpoints (active)
+## R1i — continuing cubic Bézier and true circular-arc endpoints (delivered)
 
 React to user KDE screenshot where Extend to Reference was disabled
 for an OPEN Bézier despite exactly two vectors selected. Extend native
@@ -616,3 +616,31 @@ one atomic Undo, bounded polynomial extrapolation, and clear disabled
 reasons for closed/hidden/locked sources. Strict Rust CI and KDE manual
 acceptance required. R1 broader advanced offsets and corner solvers
 remain future work; CNC/NC export still gated.
+
+## Verified R1i — exact open cubic Bézier/circular source extension
+
+[PR #121](https://github.com/newnetmp3/CarveFoundry/pull/121)
+merged `7f58424451301b8b9be8fbe447b6ab61be0c69a1`; exact source
+`901460c7447aff05bb0a38c820693cf544b3daa9` passed
+[CI 38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523):
+**104 core + 18 studio = 122 tests**, strict Clippy and native Linux
+release build.
+
+Source-accurate Extend to Reference now works on OPEN line, true
+circular arc and cubic Bézier source terminals. Béziers continue
+the source polynomial beyond the original parameter range and
+retain its geometric tangent/curvature; circular arcs preserve
+original center/radius/winding. New nodes/segments are independent
+CAD source entities and one undoable operation; existing curve nodes
+and handles remain unmodified. Runtime is bounded by mm reach,
+one-turn arcs and limited cubic extrapolation; unsupported crossings
+reject instead of inventing a preview polyline. UI explains
+closed/hidden/locked source restrictions, particularly relevant to
+owner's screenshot with a closed pentagon + open Bézier.
+See [CURVE_EXTENSION.md](CURVE_EXTENSION.md) and
+[complete roadmap diagram](ROADMAP_DIAGRAM.md).
+
+**Next R1 CAD:** robust general curved offsets, multi-curve junction
+fillets/chamfers, full KDE real-pointer acceptance and third-party
+SVG/DXF golden file roundtrips. R2–R7 are future phases; NC machine
+output remains locked by the R6 safety gates.
