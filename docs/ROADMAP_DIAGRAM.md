@@ -1,12 +1,13 @@
 # CarveFoundry — full Rust roadmap and verified progress
 
 **Snapshot:** 2026-10-10. Latest verified code merge:
-[R1h Extend-to-Boundary PR #120](https://github.com/newnetmp3/CarveFoundry/pull/120),
-`51ab853abb19922f9e589fad0766613a4f5dc863`.
-Exact feature head `809f716595cda32a5ce565672fabe602941c8c8f`
-passed [Rust CI #38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760):
-**99 core + 18 studio = 117 tests**, strict Clippy and Linux native
-release compilation. Marker contrast PR #119 merged separately.
+[R1i curved endpoint extension PR #121](https://github.com/newnetmp3/CarveFoundry/pull/121),
+`7f58424451301b8b9be8fbe447b6ab61be0c69a1`.
+Exact tested head `901460c7447aff05bb0a38c820693cf544b3daa9`
+passed [Rust CI #38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523):
+**104 core + 18 studio = 122 tests**, strict Clippy and native Linux
+release. Older numbered marker contrast PR #119 and straight extension
+PR #120 are also merged.
 
 ```mermaid
 flowchart TD
@@ -22,8 +23,9 @@ flowchart TD
         F2["DONE · Cubic–line/arc/cubic crossing fix · PR #118<br/>Tangent roots and original-source validation"]
         G1["DONE · High-contrast numbered crossing badges · PR #119"]
         G2["DONE · Extend straight endpoint to line/arc/Bézier<br/>nearest bounded crossing · PR #120"]
-        G["NEXT R1i · Source-exact advanced curved offsets,<br/>complex junctions and CAD desktop QA"]
-        A --> B --> C --> D --> E --> F --> F2 --> G1 --> G2 --> G
+        G3["DONE · Open cubic and circular-arc source extension · PR #121<br/>Retained original curves and bounded smooth continuation"]
+        G["NEXT · Robust mixed/cubic curved offsets,<br/>complex junctions, KDE and interoperability QA"]
+        A --> B --> C --> D --> E --> F --> F2 --> G1 --> G2 --> G3 --> G
     end
     QA["R1 desktop acceptance gate<br/>KDE/Wayland pointer UX · SVG/DXF roundtrip · golden geometry"]
     R2["R2 · Native 3D geometry workspace<br/>PLANNED · meshes/reliefs/viewport"]
@@ -55,5 +57,6 @@ vastly in scope from R1 and are not equally weighted. Machine NC export
 remains disabled until all independent R6 validation gates are ready.
 
 See [INTERSECTION_EDITING.md](INTERSECTION_EDITING.md) for supported
-line/arc/Bézier intersections and [TOPOLOGY_EDITING.md](TOPOLOGY_EDITING.md)
-for Extend-to-Boundary and source-preserving offset limits.
+line/arc/Bézier intersections, [CURVE_EXTENSION.md](CURVE_EXTENSION.md)
+for exact Bézier/arc extension, and [TOPOLOGY_EDITING.md](TOPOLOGY_EDITING.md)
+for other source-preserving numeric edits.
