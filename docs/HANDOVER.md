@@ -883,3 +883,55 @@ Next R1 work after verified merge: general cubic intersections and
 mathematically robust curved offsets, targeted extend-to-boundary,
 complex corner situations, and real KDE Wayland UX QA. CNC postprocessing
 and NC output remain locked.
+
+## Verified R1g exact-intersection and closed-circle CAD — merged PR #117
+
+[PR #117](https://github.com/newnetmp3/CarveFoundry/pull/117)
+merged into `main` as **5663414c7f55db12dfe15734d51fa6790d7fd6dd**.
+Exact final feature head **c583cf3cd585d82eb729efbecaf5bc2367ba9f2a**
+passed [Rust CI #38012411651](https://github.com/newnetmp3/CarveFoundry/actions/runs/38012411651):
+**86 core tests + 17 studio tests (103 total), strict Clippy, native
+Linux release build**. First run passed all tests but failed a
+non-geometric strict Clippy duplicated-branch lint in the new radius
+helper; corrected final run green.
+
+Implementation:
+- `crates/core/src/intersections.rs`: exact analytic intersections on
+  retained line-line, line-true circular arc, and arc-arc segment pairs.
+  On-demand candidate scan (<=150k edge pairs, <=128 hits), finite bounds,
+  sweep restriction, tangent deduplication. Cubic and coincident-arc pairs
+  counted as unsupported instead of being preview-sampled.
+- `Action::SplitAtIntersection` and `TrimAtIntersection` recompute and
+  revalidate the selected source/reference geometry immediately before
+  atomic, one-history-step edit. Moved/missing/hidden/locked sources fail.
+  Terminal-only trim is limited to open-path Start/End segments. No
+  fabrication of an intersection when a reference has changed.
+- Native Studio `Edit Vector Topology` panel adds Find intersections,
+  numbered list and canvas markers, on-canvas marker pick mode which
+  suspends ordinary vector selection while active.
+- Line-line corner true circular fillet and chamfer now support CLOSED
+  contours (including first/wraparound vertex), still rejecting
+  unsupported curved corners.
+- `topology::offset_exact` adds source-exact circular offset for one
+  open true circular arc or full concentric all-arc closed circle, along
+  with pre-existing straight-line offsets. General cubic/mixed offsets
+  fail closed. Native Circle shape currently uses cubic approximations,
+  not exact circular arcs: its general curved offset remains blocked.
+- `docs/INTERSECTION_EDITING.md` explains scope, explicit errors and
+  full desktop acceptance checks; `docs/ROADMAP_DIAGRAM.md` shows R0-R7
+  with R1g delivered and R1h/desktop QA outstanding.
+
+**Manual KDE Plasma/Wayland QA remains necessary**: crossing list and
+marker click, Split/Trim and Undo, stale-crossing revalidation, closed
+fillets at every vertex, offset exact arc vs cubic Circle, SVG/DXF
+independent geometry viewer. CI does NOT demonstrate mouse performance
+or production machine behavior. CNC G-code/NC export is disabled.
+
+**NEXT R1h:** robust analytic cubic intersections, targeted
+extend-to-boundary, general mathematically sound curved offsets,
+line/arc/cubic corner workflows, native 2D editor UX/QA and file-format
+golden fixtures. R2-R7 remain future phases; machine output gates R6.
+User requests `1` to continue, take a substantial next verified slice
+without repeated approvals.
+
+| 2026-10-10 | PR #117 exact crossings / closed corners / circular offsets merged | [CI 38012411651](https://github.com/newnetmp3/CarveFoundry/actions/runs/38012411651): 86 core + 17 studio, Clippy, Linux release; main 5663414c | R1h cubic intersection geometry, KDE pointer and independent interchange acceptance |
