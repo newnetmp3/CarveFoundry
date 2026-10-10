@@ -801,3 +801,52 @@ still required. Next R1 continuation: click-targeted intersection trim,
 closed-path corners, analytic curved offsets, fillet construction across
 arc/line and arc/cubic junctions, then complete KDE acceptance before R2.
 No CNC postprocessing/NC emission.
+
+## Verified R1f exact analytic topology — merged PR #116
+
+[PR #116](https://github.com/newnetmp3/CarveFoundry/pull/116)
+merged to main at **5e5747bd6d6f1abd10ffd9d9c5bf9f1233a52a05**.
+Final tested source head **2c378a3986ac96458f3a2377d1f344cc7923feed**
+passed [Rust CI #38011306582](https://github.com/newnetmp3/CarveFoundry/actions/runs/38011306582):
+**78 core + 17 studio = 95 tests, strict Clippy, native Linux release**.
+
+- Native Rust `crates/core/src/topology.rs` is an exact-source analytic
+  editing module, not a sampled display-geometry operation. It includes
+  line/circular-arc/cubic splitting (exact Bézier de Casteljau subdivision);
+  trimming the first or last open-path segment by fraction; straight-line
+  endpoint extension; joining two oriented open paths while reversing
+  circular sweep or cubic handle order and adding a real straight bridge
+  if a small nonzero gap is allowed.
+- New parallel offset remains deliberately restricted to **straight-only**
+  open/closed contours: intersection-based miter joins and bounded
+  displacement. Closed offset polygon is checked against self-intersection.
+  General curved offsets and pathological open-path overlaps require
+  a future robust native geometric solver, not a preview approximation.
+- Interior *open* line-line corners support true tangent circular fillets
+  and straight chamfers. Closed-loop corners and arc/cubic corner cases
+  remain explicitly unsupported.
+- All editing commands use atomic `Editor::apply`, original geometry
+  validation, meaningful failures, Undo, layer/group lock protection,
+  text source checks for joining, and layer preservation for new offsets.
+- Studio Drawing palette includes **Edit Vector Topology**, numeric
+  fraction/mm controls, edge chooser, start/end toggle, Join selected,
+  Split, Trim, Extend, Offset, Fillet, Chamfer. Standalone feature guide
+  `docs/TOPOLOGY_EDITING.md` includes acceptance and limitations.
+- Automated Rust geometric fixtures check exact preservation of sampled
+  curve points for split/trim (sampling only in TEST comparison), true
+  arc radius, coordinate handling, orientation-aware joins, offset
+  non-mutation and undo. Samples are NEVER stored as curves.
+
+**Manual real KDE Plasma/Wayland checks still not run:** use an open
+polyline with a 90-degree corner for fillet, test a cubic/arc split,
+join endpoints of two separate open paths, offset a rectangle and Undo.
+Check export/reimport in independent vector viewers. This is the FIRST
+topology tranche, not full R1 completion; no CAM/G-code exists.
+
+**NEXT R1g:** real click-targeted intersection splitting/trimming,
+general mathematically sound curved offsets, closed contour corner
+fillet/chamfer, more precise DXF/SVG acceptance and desktop QA before R2.
+`docs/ROADMAP_DIAGRAM.md` now visualizes all phases R0–R7 including
+the new verified R1f slice. CNC/NC export remains gated under R6.
+
+| 2026-10-09/10 | PR #116 exact Rust topology slice merged | [CI #38011306582](https://github.com/newnetmp3/CarveFoundry/actions/runs/38011306582): 78 core + 17 studio, strict Clippy, Linux release; merge 5e5747bd | KDE topology QA, R1g intersection-aware tools and curved offsets |
