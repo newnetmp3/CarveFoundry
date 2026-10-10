@@ -21,14 +21,20 @@ disabled**.
    If either vector has moved, become hidden, or the crossing is invalid,
    the edit rejects without any project mutation or Undo entry.
 
-Supported source/reference segment pairs are **line-line, line-circular
-arc, and circular arc-circular arc**. Tangencies are deduplicated.
-Reference-only endpoint crossings and interior source fractions are
-handled deterministically. Overlapping coincident circles and **any
-pair containing a cubic Bézier** are NOT solved here: they are counted
-as unsupported, not approximated or silently changed. At most 128
-visible crossings and 150,000 edge pairs may be examined per scan;
-hide unrelated vectors to narrow huge designs.
+Supported source/reference segment pairs include **line-line,
+line–circular arc, arc–arc, cubic Bézier–line, cubic–true-circle arc,
+and cubic–cubic**. Polynomial root isolation handles cubic/line and
+cubic/circle tangencies; bounded convex-hull interval subdivision
+and source-curve refinement handle cubic–cubic. This uses the original
+analytic geometry, never the preview polygon. Tangencies and duplicate
+edge hits are deduplicated. Only source interior fractions can be split,
+while reference endpoints may be used.
+
+Overlapping coincident curves and numerically unresolved configurations
+remain explicitly unsupported; a nonzero count reports these exceptions,
+not every Bézier pair. At most 128 visible crossings and 150,000
+source/reference edge pairs may be examined per scan. Hide unrelated
+vectors to narrow huge designs.
 
 Intersections are source-accurate CAD geometry and preserve original
 segment types. A scan is intentionally temporary UI data; it is never
