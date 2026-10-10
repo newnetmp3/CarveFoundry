@@ -62,7 +62,7 @@ impl Studio {
             let target=if source==ids[0]{ids[1]}else{ids[0]};
             let source_path=self.editor.project.paths.iter()
                 .find(|p|p.id==source).cloned();
-            let source_ok=source_path.is_some_and(|p|
+            let source_ok=source_path.as_ref().is_some_and(|p|
                 !p.closed && self.editor.project.editable_vector(source));
             let target_ok=self.editor.project.paths.iter().any(|p|p.id==target)
                 && self.editor.project.effective_visible(target);
