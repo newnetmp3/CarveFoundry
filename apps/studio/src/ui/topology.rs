@@ -35,6 +35,87 @@ impl Studio {
                 }
             });
         }
+        ui.separator();
+        ui.strong("INTERSECTIONS · EXACT LINE / CIRCLE");
+        if self.topology_scan_source!=only{
+            self.topology_crossings.clear();
+            self.topology_selected_crossing=0;
+            self.topology_scan_source=None;
+            self.topology_pick_crossing=false;
+        }
+        if let Some(source_id)=only{
+            ui.horizontal_wrapped(|ui|{
+                if ui.button("Find intersections").on_hover_text(
+                    "Scan current source vector against other visible analytic paths. Exact line-line, line-arc and arc-arc crossings only; cubic pairs are counted and skipped.").clicked(){
+                    self.topology_pick_crossing=false;
+                    match carvefoundry_core::find_intersections(
+                        &self.editor.project,source_id){
+                        Ok(scan)=>{
+                            self.topology_crossings=scan.hits;
+                            self.topology_skipped_pairs=scan.unsupported_pairs;
+                            self.topology_scan_source=Some(source_id);
+                            self.topology_selected_crossing=0;
+                            self.status=format!("Found {} exact crossings; {} unsupported edge pairs",
+                                self.topology_crossings.len(),
+                                self.topology_skipped_pairs);
+                        }
+                        Err(error)=>{
+                            self.topology_crossings.clear();
+                            self.topology_scan_source=None;
+                            self.status=format!("Intersection scan rejected: {error}");
+                        }
+                    }
+                }
+                if !self.topology_crossings.is_empty(){
+                    ui.checkbox(&mut self.topology_pick_crossing,"Pick marker on canvas")
+                        .on_hover_text("Click a numbered crossing marker; this temporarily suspends normal object selection.");
+                }
+            });
+            if self.topology_scan_source==Some(source_id) {
+                if self.topology_crossings.is_empty(){
+                    ui.small(format!("No supported interior crossings ({} unsupported edge pairs).",
+                        self.topology_skipped_pairs));
+                }else{
+                    let i=self.topology_selected_crossing.min(self.topology_crossings.len()-1);
+                    self.topology_selected_crossing=i;
+                    egui::ComboBox::from_id_salt(("crossing",source_id))
+                        .selected_text(format!("Crossing {} of {}",i+1,self.topology_crossings.len()))
+                        .width(ui.available_width().min(245.0))
+                        .show_ui(ui,|ui|{
+                            for (j,hit) in self.topology_crossings.iter().enumerate(){
+                                ui.selectable_value(&mut self.topology_selected_crossing,j,
+                                    format!("#{} · X {:.3}  Y {:.3} mm · vector {}",
+                                        j+1,hit.position.x,hit.position.y,hit.target_path_id));
+                            }
+                        });
+                    let hit=self.topology_crossings[i].clone();
+                    ui.small(format!("Edge {} at t={:.5} · reference vector {}",
+                        hit.source_segment_id,hit.source_t,hit.target_path_id));
+                    ui.small(format!("{} unsupported edge pairs not scanned.",
+                        self.topology_skipped_pairs));
+                    ui.horizontal_wrapped(|ui|{
+                        if ui.button("Split at crossing")
+                            .on_hover_text("Revalidate exact crossing against current paths. Split the source edge analytically; one Undo step.").clicked(){
+                            self.apply(Action::SplitAtIntersection{hit:hit.clone()});
+                            self.topology_crossings.clear();
+                            self.topology_pick_crossing=false;
+                            self.topology_scan_source=None;
+                        }
+                        if ui.button("Trim end to crossing")
+                            .on_hover_text("Trim the selected open path's Start or End terminal segment exactly to this crossing; intermediate segment crossings are refused.").clicked(){
+                            self.apply(Action::TrimAtIntersection{
+                                hit,at_start:self.topology_at_start,
+                            });
+                            self.topology_crossings.clear();
+                            self.topology_pick_crossing=false;
+                            self.topology_scan_source=None;
+                        }
+                    });
+                }
+            }
+        }else{
+            ui.small("Select one source vector, then scan against other visible vectors.");
+        }
         let Some(path)=selected else{
             ui.small("Select one editable analytic vector, or two open paths to Join.");
             return;
@@ -104,8 +185,9 @@ impl Studio {
         });
         ui.separator();
         ui.label("PARALLEL OFFSETS AND CORNERS");
+        ui.small("Offset: straight contours or exact circular arcs / concentric circle chains.");
         if ui.add_enabled(eligible,egui::Button::new("Create offset vector"))
-            .on_hover_text("New editable parallel outline; open paths: + left / - right, closed: + outward / - inward. Straight edges only; rejects ambiguous/self-intersecting offsets.").clicked(){
+            .on_hover_text("New editable offset; open: + left / - right, closed: + outward / - inward. Exact straight paths or single circular arcs and concentric circular rings; general Béziers rejected.").clicked(){
             let newid=self.editor.project.next_id;
             self.apply(Action::OffsetLines{path_id,
                 distance_mm:self.topology_distance_mm});
@@ -117,20 +199,20 @@ impl Studio {
         ui.horizontal_wrapped(|ui|{
             if ui.add_enabled(eligible&&node.is_some(),
                 egui::Button::new("Fillet selected node"))
-                .on_hover_text("Select an INTERIOR line-line node in Nodes mode. Builds a true tangent circular arc with this radius.").clicked()
+                .on_hover_text("Select a line-line node in Nodes mode (open interior or any closed corner); creates a true radius/center tangent arc.").clicked()
                 && let Some(node_id)=node{
                 self.apply(Action::Corner{path_id,node_id,
                     size_mm:self.topology_distance_mm,fillet:true});
             }
             if ui.add_enabled(eligible&&node.is_some(),
                 egui::Button::new("Chamfer selected node"))
-                .on_hover_text("Select an interior line-line node in Nodes mode. Bevel both adjacent edges by this distance.").clicked()
+                .on_hover_text("Select a line-line node (open interior or closed vertex) in Nodes mode. Bevel both edges by this distance.").clicked()
                 && let Some(node_id)=node{
                 self.apply(Action::Corner{path_id,node_id,
                     size_mm:self.topology_distance_mm,fillet:false});
             }
         });
-        ui.small("Fillet/chamfer: open line-line interior node only. Curve offsets and closed-corner fillets remain unavailable until exact algorithms land.");
+        ui.small("Corners: line-line only, including closed loops. Cubic/mixed curve offset and intersections remain unsupported.");
     }
 }
 fn curve_name(c:Curve)->&'static str{
