@@ -13,12 +13,14 @@ impl Studio {
         });
         ui.horizontal_wrapped(|ui|{
             ui.selectable_value(&mut self.inspector_tab,InspectorTab::Objects,"Objects");
+            ui.selectable_value(&mut self.inspector_tab,InspectorTab::Layers,"Layers");
             ui.selectable_value(&mut self.inspector_tab,InspectorTab::Properties,"Properties");
             ui.selectable_value(&mut self.inspector_tab,InspectorTab::Job,"Material");
         });
         ui.separator();
         match self.inspector_tab{
             InspectorTab::Objects=>self.objects_tab(ui),
+            InspectorTab::Layers=>self.layers_panel(ui),
             InspectorTab::Properties=>self.object_properties(ui),
             InspectorTab::Job=>self.job_tab(ui),
         }
@@ -28,6 +30,8 @@ impl Studio {
         ui.label(format!("{n} vectors  ·  {} fixtures",self.editor.project.fixtures.len()));
         ui.small("Click to select · Shift/Ctrl-click to add or remove. Drag blank canvas for a selection box.");
         ui.label(format!("{} selected",self.selected_ids.len()));
+        ui.separator();
+        self.groups_panel(ui);
         ui.separator();
         let entries:Vec<_>=self.editor.project.paths.iter().map(|p|
             (p.id,p.name.clone(),p.visible,p.locked,true))
@@ -39,6 +43,14 @@ impl Studio {
             .show(ui,|ui|{
                 for (id,name,visible,locked,is_path) in entries {
                     let selected=self.selected_ids.contains(&id);
+                    let layer=self.editor.project.layer_for(id);
+                    let group=self.editor.project.group_for(id)
+                        .map(|g|g.name.clone());
+                    let readable=if let Some(group)=group{
+                        format!("↳ {name}  ({group})")
+                    }else if layer!=0{
+                        format!("{}  [L{}]",name,layer)
+                    }else{name};
                     ui.horizontal(|ui|{
                         if icons::small(ui,if visible{"Hide vector"}else{"Show vector"},
                             if visible{Icon::Eye}else{Icon::Hidden})
@@ -49,7 +61,7 @@ impl Studio {
                                 if is_path{self.apply(Action::SetPathLocked{id,locked:!locked});}
                                 else{self.apply(Action::SetLocked{id,locked:!locked});}
                             }
-                        if ui.selectable_label(selected,name)
+                        if ui.selectable_label(selected,readable)
                             .on_hover_text("Select and inspect this vector").clicked(){
                             let additive=ui.input(|i|i.modifiers.shift||i.modifiers.command);
                             self.select_vector(Some(id),additive);
