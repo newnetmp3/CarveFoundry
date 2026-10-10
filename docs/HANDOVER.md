@@ -935,3 +935,24 @@ User requests `1` to continue, take a substantial next verified slice
 without repeated approvals.
 
 | 2026-10-10 | PR #117 exact crossings / closed corners / circular offsets merged | [CI 38012411651](https://github.com/newnetmp3/CarveFoundry/actions/runs/38012411651): 86 core + 17 studio, Clippy, Linux release; main 5663414c | R1h cubic intersection geometry, KDE pointer and independent interchange acceptance |
+
+## Active bug fix — omitted cubic crossings from R1g
+
+The owner supplied a KDE screenshot showing "2 crossings; 5 unsupported
+edge pairs" with a five-edge polygon and a blue curved vector. The
+original intersection dispatcher returned an unsupported marker for
+every pair involving Curve::Cubic. This is a real analytic geometry gap.
+
+Branch fix/r1g-bezier-intersections introduces a pure Rust Bézier
+intersection solver for cubic-line, cubic-true-circle (polynomial
+root isolation, tangent roots) and cubic-cubic (control-hull interval
+subdivision and original-source Newton refinement). Overlaps and
+unresolved degenerate cases are explicitly reported as unsupported.
+The editor continues to validate hits before atomic Undoable edits.
+Tests include screenshot-style polygon/cubic geometry, reverse
+parameter order, line/circle tangencies and identical-curve refusal.
+
+CI/merge still pending. After final green tests, strict Clippy and Linux
+release, update rolling handover with PR/run/test/merge details. Owner
+KDE/Wayland original-project regression still required.
+CNC/NC generation remains disabled.
