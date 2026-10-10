@@ -913,7 +913,7 @@ mod tests {
         }).unwrap();
         editor.apply(Action::AddPolyline{
             name:"Reference".into(),closed:false,
-            points:vec![Point::new(35.0,-20.0),Point::new(35.0,70.0)],
+            points:vec![Point::new(31.0,-20.0),Point::new(31.0,70.0)],
         }).unwrap();
         let original=editor.project.clone();
         editor.apply(Action::ExtendToBoundary{
