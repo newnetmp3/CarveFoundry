@@ -1110,7 +1110,62 @@ and circle radius/winding, undo, invalid paths/limits. Manual user's
 exact KDE artwork screenshot, external SVG/DXF and source edit workflow
 still require acceptance. See docs/CURVE_EXTENSION.md.
 
-**CI PENDING**: wait for final Rust core/studio tests, strict Clippy and
-native Linux release; merge only when green. Update HANDOVER/ROADMAP/
-ROADMAP_DIAGRAM with PR/head/CI/test/merge after verification.
+**Final CI/merge verification:** see the section below. Keep manual
+KDE and independent file-format verification separate.
 R1 remains in progress, R2-R7 are not implemented; CNC/NC remains disabled.
+
+## Verified R1i — open Bézier and circular endpoint extension, PR #121
+
+The owner's KDE screenshot showed two selected analytic vectors
+(closed polygon and open Bézier), but **Extend end to reference** was
+greyed out because UI required the source terminal segment to be a
+straight line. User reply "1" requested continuing the proposal to
+support curved endpoint extension.
+
+[PR #121](https://github.com/newnetmp3/CarveFoundry/pull/121)
+merged into main as `7f58424451301b8b9be8fbe447b6ab61be0c69a1`.
+The EXACT tested feature head
+`901460c7447aff05bb0a38c820693cf544b3daa9`
+passed [Rust CI 38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523):
+**104 core + 18 studio = 122 Rust tests, strict Clippy, Linux release**.
+Early CI runs found and fixed two UI borrow/move errors; final exact
+revision green.
+
+Delivered pure Rust `crates/core/src/curve_extension.rs`, which
+adds source-preserving continuation for any OPEN analytic path whose
+selected terminal is:
+- Line: existing straight endpoint extension unchanged.
+- True circular arc: adds a new arc of the original exact center,
+  radius and winding direction up to the nearest forward source-accurate
+  reference crossing; max one-turn arc span.
+- Cubic Bézier: algebraically reparameterizes the SAME original cubic
+  polynomial beyond t=0/t=1 to the first forward source-accurate
+  crossing against line/true arc/cubic reference. Appends a new retained
+  cubic segment with original node/segment IDs and controls unchanged;
+  geometric position, tangent direction, and curvature are smooth
+  (G2 continuity). Bounded cubic continuation to two additional
+  normalized parameter lengths, with arc-length reach in millimetres.
+  Original curve is never flattened to preview geometry.
+
+The existing `Action::ExtendToBoundary` checks current source
+lock/visibility/reference state, preserves independent reference
+geometry and remains a single Undo/Redo edit. The Drawing topology
+panel now enables OPEN Bézier/arc sources and explains *why* a source
+is disabled (closed, hidden, locked), instead of silently restricting
+to straight segments. Source dropdown picks open Bézier vs closed
+polygon. Meaningful errors for nonintersection, zero derivative,
+unresolved overlapping reference, max reach and node count.
+
+**Manual KDE Plasma/Wayland acceptance still due** on user's actual
+blue Bézier/orange polygon file. The mathematically continued Bézier
+MAY NOT cross that particular polygon; in that case the action should
+be enabled but return "no forward source-curve intersection" rather
+than silently bending a curve. Inspect new segments, Undo, save/reopen
+and independent SVG/DXF exports. See docs/CURVE_EXTENSION.md.
+
+`docs/ROADMAP_DIAGRAM.md` now marks PR #121 delivered in R1.
+R1 is NOT fully complete; general mixed/cubic offset, advanced curve
+corners and deep KDE/Wayland UX + file-interchange QA remain.
+R2–R7 are future work and CNC/G-code/NC output remains disabled.
+
+| 2026-10-10 | PR #121 open cubic/arc extension merged | [CI 38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523): 122 tests, Clippy and Linux release; merge 7f584244 | KDE user's exact Bézier screenshot, advanced offsets/corner QA |
