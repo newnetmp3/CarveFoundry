@@ -11,7 +11,7 @@ vector is the reference and is never modified. The command is one Undo step.
 | --- | --- |
 | Straight line | Continue the existing line to the nearest forward intersection |
 | True circular arc | Continue the same exact circle, preserving radius, center and winding, and stop at the nearest forward intersection |
-| Cubic Bézier | Continue the **original cubic polynomial outside its original parameter domain**, find the first source-accurate intersection, and append the restricted polynomial as a new cubic Bézier segment; this preserves position, tangent and curvature continuity across the seam (C²) |
+| Cubic Bézier | Continue the **original cubic polynomial outside its original parameter domain**, find the first source-accurate intersection, and append the restricted polynomial as a new cubic Bézier segment; this preserves position, tangent and curvature continuity across the seam (G² geometric continuity) |
 
 The code uses the source-geometry intersection engine for references composed
 of lines, true circular arcs or cubic Béziers. It does not infer editing
