@@ -10,15 +10,34 @@ pub(crate) struct FaceChoice{
     pub(crate) style:String,
 }
 impl Studio{
+    fn ensure_system_fonts(&mut self){
+        if self.font_scanned{return;}
+        self.font_scanned=true;
+        self.font_database.load_system_fonts();
+        for face in self.font_database.faces(){
+            if let Some((family,_))=face.families.first(){
+                self.font_choices.push(FaceChoice{
+                    family:family.clone(),
+                    postscript:face.post_script_name.clone(),
+                    style:format!("{:?} · weight {}",face.style,face.weight.0),
+                });
+            }
+        }
+        self.font_choices.sort_by(|a,b|
+            (&a.family,&a.style,&a.postscript).cmp(&(&b.family,&b.style,&b.postscript)));
+        self.font_choices.dedup_by(|a,b|
+            a.family==b.family && a.postscript==b.postscript);
+    }
     pub(crate) fn start_text(&mut self){
+        self.ensure_system_fonts();
         self.text_edit_id=None;
         self.text_spec=TextSpec{
             text:"US NAVY".into(),family:String::new(),postscript:String::new(),
             height_mm:24.0,tracking_mm:0.0,origin:Point::new(20.0,80.0),
         };
         if let Some(choice)=self.font_choices.iter().find(|f|
-            f.family=="DejaVu Sans" && f.style=="Normal")
-            .or_else(||self.font_choices.iter().find(|f|f.style=="Normal"))
+            f.family=="DejaVu Sans" && f.style.starts_with("Normal"))
+            .or_else(||self.font_choices.iter().find(|f|f.style.starts_with("Normal")))
             .or_else(||self.font_choices.first()){
             self.text_spec.family=choice.family.clone();
             self.text_spec.postscript=choice.postscript.clone();
@@ -27,6 +46,7 @@ impl Studio{
         self.text_dialog=true;
     }
     pub(crate) fn edit_text_for_path(&mut self,id:u64){
+        self.ensure_system_fonts();
         if let Some(run)=self.editor.project.text_runs.iter()
             .find(|run|run.outline_ids.contains(&id)).cloned(){
             self.text_spec=run.spec;
@@ -84,7 +104,7 @@ impl Studio{
                 if family!=self.text_spec.family{
                     self.text_spec.family=family.clone();
                     if let Some(f)=self.font_choices.iter()
-                        .find(|f|f.family==family && f.style=="Normal")
+                        .find(|f|f.family==family && f.style.starts_with("Normal"))
                         .or_else(||self.font_choices.iter().find(|f|f.family==family)){
                         self.text_spec.postscript=f.postscript.clone();
                     }
