@@ -93,7 +93,7 @@ impl Editor {
             Action::Flip{id,..}|Action::RotateQuarter{id,..}|
             Action::Center{id,..}|Action::RemovePath{id}|
             Action::Remove{id}|Action::SetPathClosed{id,..}|
-            Action::Duplicate{id}=>Some(*id),
+            Action::Duplicate{id}|Action::ConvertContour{id}=>Some(*id),
             Action::MoveNode{path_id,..}|Action::MoveControl{path_id,..}|
             Action::InsertNodeAfter{path_id,..}|Action::RemoveNode{path_id,..}
                 =>Some(*path_id),
