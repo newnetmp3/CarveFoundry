@@ -125,3 +125,15 @@ markers, click one, split and Undo. Also check tangencies (one marker),
 coincident cubic overlap (unsupported), stale moved references (reject),
 and SVG/DXF roundtrip retaining true cubic segments.
 CI cannot replace actual KDE/Wayland pointer testing.
+
+## Verified Bézier repair — PR #118
+
+[PR #118](https://github.com/newnetmp3/CarveFoundry/pull/118)
+was merged to main at c3f1afc3 after
+[CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809)
+passed **111 Rust tests**, strict Clippy and Linux release.
+This resolves the known unconditional skip of all cubic-containing
+edge pairs. True coincidence or computationally unresolved overlap
+is still explicitly unsupported; that count is not silently hidden.
+The owner should retest the original five-edge/blue curve design on
+KDE Plasma Wayland and report any remaining skipped crossings.
