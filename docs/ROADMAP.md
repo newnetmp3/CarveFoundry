@@ -400,3 +400,24 @@ outlines work with existing SVG/DXF. Missing fonts on another computer
 must not make saved outlines disappear. Font licensing restrictions are
 respected. Later R1e: grouping, layers and outline trimming/joining.
 CNC exporter remains disabled. Separate KDE manual QA pending.
+
+## Verified R1d editable typography — PR #114
+
+[PR #114](https://github.com/newnetmp3/CarveFoundry/pull/114)
+merged to main as fe3cf4c4da05da64d9ea34467750d2ead71cb229.
+Exact head 87d21253006bcea2e459139e98b78b3b96cd973b passed
+[CI 38008575719](https://github.com/newnetmp3/CarveFoundry/actions/runs/38008575719):
+**65 core + 17 studio tests, strict Clippy, native Linux release build**.
+
+Installed system font family and style picker, retained source editable text,
+metric height/spacing/baseline, exact quadratic-to-cubic source geometry,
+portable saved vector outlines, one-step Undo regeneration, source baseline
+movement during full-label group drag, and source metadata in backward
+compatible .cfd are implemented. No font assets are bundled.
+Manual KDE real-font usability and third-party SVG/DXF checks are still due.
+Text shaping beyond single-line basic glyph advances remains future work.
+
+**Next course:** R1e genuine vector groups/layers with clear object tree
+and atomic visibility/locking/selection operations; improve text group UX,
+then precise trim/join/offset, then safe native 2.5D/3D CAM milestones.
+CNC/NC posting remains disabled until machine-safety validation.
