@@ -66,6 +66,11 @@ impl Studio {
                 }
             });
         });
+        if ui.add_sized([ui.available_width(),30.0],
+            egui::Button::new("Text — system fonts…"))
+            .on_hover_text("Compose editable text outlines with installed TrueType/OpenType fonts").clicked(){
+            self.start_text();
+        }
         ui.small("Click a shape tool, then drag its size on the stock. The project changes only when you release.");
         ui.add_space(5.0);
         ui.label(egui::RichText::new("2  DRAW PATHS").strong()
