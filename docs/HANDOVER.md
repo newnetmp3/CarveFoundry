@@ -956,3 +956,51 @@ CI/merge still pending. After final green tests, strict Clippy and Linux
 release, update rolling handover with PR/run/test/merge details. Owner
 KDE/Wayland original-project regression still required.
 CNC/NC generation remains disabled.
+
+## Verified screenshot-driven Bézier intersection fix — PR #118
+
+The user's Arch KDE screenshot of a five-segment closed orange path
+crossed by a blue Bézier showed "2 exact crossings; 5 unsupported edge
+pairs". The R1g dispatcher skipped ALL Curve::Cubic-containing pairs.
+This bug was reproduced and fixed in
+[PR #118](https://github.com/newnetmp3/CarveFoundry/pull/118),
+merged to main as **c3f1afc3a7d794b534583b76078edba3bf1a3dee**.
+Final tested head **dccd3d38b7a6022ac2f8cf315ceafb030e4b654c**
+passed [Rust CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809):
+**94 core tests + 17 studio tests = 111**, strict Clippy and native
+Linux release compilation.
+
+New pure Rust crates/core/src/bezier_intersections.rs evaluates source
+cubic-line polynomial roots (degree 3), cubic-true-circle polynomial
+roots (degree 6), and bounded cubic-cubic Bézier hull subdivision with
+original analytic curve Newton residual verification. The polynomial
+root finder partitions by derivative critical points to detect
+tangencies, including even-multiplicity roots. No flattened preview
+geometry substitutes for source vectors. Coincident/incomplete/unsafe
+edge pairs remain explicitly unsupported instead of fabricated matches.
+The existing full GUI pick-marker mode, exact source fractions, stale
+hit revalidation, one-history-step Undo and source curve definitions
+are unchanged. UI heading/tooltips now accurately include Béziers and
+describe true unresolved overlaps rather than falsely implying all
+cubics are unsupported. Primary intersection guide updated.
+
+Automated tests include a screenshot-inspired closed five-edge shape
+versus curved Bézier, reversed source/reference fraction consistency,
+multi-hit cubic-line/cubic-cubic examples, line/cubic tangencies,
+cubic-arc/circle hits, coincident Bézier refusals and stale-scan tests.
+
+**Actual original KDE design still needs manual acceptance**:
+git pull origin main; cargo run --release -p carvefoundry-studio;
+select the closed five-edge object, Find intersections, inspect newly
+numbered crossing markers along the blue cubic. Crossings should no
+longer show five unsupported pairs solely because they involve a cubic.
+Capture the source .cfd or follow-up screenshot if any actual missed
+crossing remains, especially endpoints, coincident segments or
+within-path self-intersections; those are separate topology gaps.
+
+Next R1h: robust source-preserving cubic/mixed offsets, advanced
+intersection-based extensions/complex corners, source selection UX
+and independent KDE Wayland/third-party file QA. All CAM/NC machine
+output remains disabled pending R6.
+
+| 2026-10-10 | PR #118 Bézier crossing regression repaired | [CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809): 94 core + 17 studio, strict Clippy, Linux release; merged c3f1afc3 | Owner's original 5-edge design desktop QA; R1h offset/extend |
