@@ -1,12 +1,12 @@
 # CarveFoundry — full Rust roadmap and verified progress
 
 **Snapshot:** 2026-10-10. Latest verified code merge:
-[Bézier crossing repair PR #118](https://github.com/newnetmp3/CarveFoundry/pull/118),
-`c3f1afc3a7d794b534583b76078edba3bf1a3dee`.
-Exact tested head `dccd3d38b7a6022ac2f8cf315ceafb030e4b654c`
-passed [Rust CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809):
-**94 core + 17 studio = 111 tests**, strict Clippy and Linux native
-release compilation.
+[R1h Extend-to-Boundary PR #120](https://github.com/newnetmp3/CarveFoundry/pull/120),
+`51ab853abb19922f9e589fad0766613a4f5dc863`.
+Exact feature head `809f716595cda32a5ce565672fabe602941c8c8f`
+passed [Rust CI #38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760):
+**99 core + 18 studio = 117 tests**, strict Clippy and Linux native
+release compilation. Marker contrast PR #119 merged separately.
 
 ```mermaid
 flowchart TD
@@ -20,8 +20,10 @@ flowchart TD
         E["DONE · Source-exact numeric split/trim/join,<br/>straight offsets and open corners · PR #116"]
         F["DONE · Real line/arc crossings + markers,<br/>closed line corners and circular offsets · PR #117"]
         F2["DONE · Cubic–line/arc/cubic crossing fix · PR #118<br/>Tangent roots and original-source validation"]
-        G["NEXT R1h · Advanced curved offsets,<br/>targeted extend, complex junctions,<br/>complete KDE and file-interchange QA"]
-        A --> B --> C --> D --> E --> F --> F2 --> G
+        G1["DONE · High-contrast numbered crossing badges · PR #119"]
+        G2["DONE · Extend straight endpoint to line/arc/Bézier<br/>nearest bounded crossing · PR #120"]
+        G["NEXT R1i · Source-exact advanced curved offsets,<br/>complex junctions and CAD desktop QA"]
+        A --> B --> C --> D --> E --> F --> F2 --> G1 --> G2 --> G
     end
     QA["R1 desktop acceptance gate<br/>KDE/Wayland pointer UX · SVG/DXF roundtrip · golden geometry"]
     R2["R2 · Native 3D geometry workspace<br/>PLANNED · meshes/reliefs/viewport"]
@@ -39,7 +41,7 @@ flowchart TD
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Most baseline 2D CAD, interop, text, groups/layers, exact split/trim/join, line/true-circle intersections and corners | Robust mixed/cubic offsets, targeted extend, advanced multi-curve corners, full KDE UX and independent SVG/DXF fixtures |
+| **R1** | Most baseline 2D CAD, interop, text, groups/layers, exact split/trim/join, line/true-circle intersections and corners | Robust mixed/cubic offsets, advanced multi-curve corners, full KDE UX and independent SVG/DXF fixtures |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -53,4 +55,5 @@ vastly in scope from R1 and are not equally weighted. Machine NC export
 remains disabled until all independent R6 validation gates are ready.
 
 See [INTERSECTION_EDITING.md](INTERSECTION_EDITING.md) for supported
-line/arc/Bézier crossing combinations and source-preserving offset limits.
+line/arc/Bézier intersections and [TOPOLOGY_EDITING.md](TOPOLOGY_EDITING.md)
+for Extend-to-Boundary and source-preserving offset limits.
