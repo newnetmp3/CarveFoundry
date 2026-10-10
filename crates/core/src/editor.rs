@@ -56,6 +56,13 @@ impl Editor {
         project.validate()?;
         Ok(Self {project,undo:vec![],redo:vec![],drag_before:None})
     }
+    fn move_complete_text_sources(next:&mut Project,selected:&HashSet<u64>,delta:Point){
+        for run in &mut next.text_runs{
+            if run.outline_ids.iter().all(|id|selected.contains(id)){
+                run.spec.origin=run.spec.origin.offset(delta.x,delta.y);
+            }
+        }
+    }
     pub fn can_undo(&self) -> bool { !self.undo.is_empty() }
     pub fn can_redo(&self) -> bool { !self.redo.is_empty() }
     fn store(&mut self, before: Project) {
@@ -205,6 +212,7 @@ impl Editor {
                         contour.origin=contour.origin.offset(delta.x,delta.y);
                     }
                 }
+                Self::move_complete_text_sources(&mut next,&selected,delta);
             }
             Action::Arrange{ids,mode}=>{
                 Self::check_batch(&next,&ids)?;
@@ -497,6 +505,7 @@ impl Editor {
                 contour.origin=contour.origin.offset(delta.x,delta.y);
             }
         }
+        Self::move_complete_text_sources(&mut next,&selected,delta);
         next.validate()?;
         self.project=next;
         Ok(())
@@ -648,6 +657,13 @@ mod tests {
         assert_eq!(run.outline_ids,vec![2,3]);
         let persisted=crate::Project::decode(&e.project.encode().unwrap()).unwrap();
         assert_eq!(persisted,e.project);
+        let glyph_ids=run.outline_ids.clone();
+        e.start_group_drag(&glyph_ids).unwrap();
+        e.preview_group_drag(&glyph_ids,Point::new(12.0,5.0)).unwrap();
+        assert_eq!(e.project.text_runs[0].spec.origin,Point::new(27.0,30.0));
+        e.finish_drag();
+        assert!(e.undo());
+        assert_eq!(e.project,persisted);
         let mut changed=spec;
         changed.text="N".into();
         e.apply(Action::SetText{id:Some(run.id),spec:changed.clone(),
