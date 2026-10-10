@@ -203,7 +203,7 @@ mod tests{
         let mut b=GeometryBuilder{x:0.0,y:0.0,scale:1.0,origin:Point::new(0.0,0.0),
             current:Contour::default(),ready:Vec::new(),error:None};
         b.move_to(0.0,0.0);b.quad_to(4.0,6.0,8.0,0.0);
-        b.line_to(0.0,0.0);b.close();
+        b.line_to(9.0,-2.0);b.line_to(0.0,0.0);b.close();
         let p=convert(b.finish().unwrap().remove(0),"Curve".into()).unwrap();
         let Curve::Cubic{control1,control2}=p.segments[0].curve else{panic!("not a cubic");};
         assert!((control1.x-8.0/3.0).abs()<1e-10);
