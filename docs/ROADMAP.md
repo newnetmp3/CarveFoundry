@@ -543,3 +543,25 @@ source-checked bounded cubic-cubic intersections and tangency handling.
 Retain same hit metadata, canvas markers, stale-hit validation and Undo.
 Reject overlap/indeterminate curves; do not sample displayed polylines
 as editable vector geometry. CI and owner KDE design retest pending.
+
+## Verified Bézier intersection repair — PR #118
+
+[PR #118](https://github.com/newnetmp3/CarveFoundry/pull/118)
+merged as **c3f1afc3a7d794b534583b76078edba3bf1a3dee**.
+Exact source head **dccd3d38b7a6022ac2f8cf315ceafb030e4b654c**
+passed [Rust CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809):
+**94 core + 17 studio = 111 tests, strict Clippy and native release**.
+
+Screenshot-reported five skipped cubic edge pairs prompted bounded
+source-geometry cubic–line (degree 3), cubic–true circle (degree 6)
+and cubic–cubic intersections. Cubic-line/circle tangencies and
+multiple crossings now have tests, plus original-source cubic–cubic
+refinement, explicit overlap refusal and screenshot-style regression.
+The native inspector supports corresponding marker selection/editing
+without changing editable Bézier geometry. Owner's actual KDE design
+acceptance remains outstanding.
+
+R1h now prioritizes mathematically robust general curved offsets,
+targeted extend-to-boundary, complex corners and desktop/interchange
+QA. Full roadmap: [ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md).
+CNC NC output remains disabled.
