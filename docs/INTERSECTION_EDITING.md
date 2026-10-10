@@ -81,3 +81,17 @@ preview-polyline approximations.
 - [ ] Verify CNC toolpath and machine NC export are still inaccessible.
 
 Desktop/independent SVG/DXF acceptance has NOT been established by CI.
+
+## Verified code checkpoint — PR #117
+
+[PR #117](https://github.com/newnetmp3/CarveFoundry/pull/117)
+merged at `5663414c7f55db12dfe15734d51fa6790d7fd6dd`
+after [Rust CI #38012411651](https://github.com/newnetmp3/CarveFoundry/actions/runs/38012411651)
+passed **103 tests**, strict Clippy and Linux native release.
+These are automated checks. The KDE Plasma/Wayland pointer and external
+CAD file-interchange acceptance checklist above remains **unverified**.
+
+The **Circle** shape constructed in the UI uses four cubic Bézier
+segments, not actual circular arcs. Exact concentric circle offset
+therefore requires a true circular-arc source, e.g. a DXF CIRCLE.
+General cubic offsets are not yet enabled.
