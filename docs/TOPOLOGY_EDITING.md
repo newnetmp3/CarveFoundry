@@ -85,7 +85,7 @@ validated as analytic lines, but overlapping distant segments in a
 pathological open polyline are not yet exhaustively checked. Visually
 review complex offsets until a robust general contour solver ships.
 
-## R1h — Extend a straight endpoint to another vector (in development)
+## R1h — Extend a straight endpoint to another vector (implemented)
 
 Use **Drawing → Edit Vector Topology**, select **exactly two** analytic
 vectors, and choose **Extend one open straight end to reference**.
@@ -123,3 +123,16 @@ There is no line/cubic/circle preview sampling or machine NC output.
 
 This is one source-exact R1h tranche, NOT a general curve extrapolation,
 mixed/cubic offset or machining capability.
+
+## Verified R1h checkpoint
+
+[PR #120](https://github.com/newnetmp3/CarveFoundry/pull/120)
+merged into main at `51ab853abb19922f9e589fad0766613a4f5dc863`.
+Its exact tested revision `809f716595cda32a5ce565672fabe602941c8c8f`
+passed [CI 38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760):
+**117 Rust tests, strict Clippy and native Linux release build**.
+
+The contrast improvement to crossing numbers was independently
+merged in PR #119, with 112 tests and Linux release checks passing.
+Live KDE/Wayland mouse/zoom and independent external CAD geometry
+inspection are still required; this milestone does not unlock CAM/NC.
