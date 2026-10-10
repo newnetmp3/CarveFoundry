@@ -234,3 +234,16 @@ open vectors without curve flattening, create new straight-contour
 offsets, and fillet/chamfer an open line-line corner. Unsupported
 complex geometry is explicitly refused rather than polygonized.
 See [topology controls and limitations](docs/TOPOLOGY_EDITING.md).
+
+
+## Exact intersections and closed/circular editing (R1g)
+
+Select a native vector, open **Drawing → Edit Vector Topology → Find
+intersections**, choose a crossing from the numbered canvas markers
+or list, then Split or Trim at the crossing in one Undo step.
+Supported crossing pairs are line-line, line-arc and arc-arc (true
+circles). Closed straight-edged contours now support genuine circular
+fillets and straight chamfers. Exact offsets also handle individual
+true circular arcs and concentric all-arc circles. No fake sampled
+cubic intersections or machine NC instructions are produced.
+See [R1g geometry acceptance and limitations](docs/INTERSECTION_EDITING.md).
