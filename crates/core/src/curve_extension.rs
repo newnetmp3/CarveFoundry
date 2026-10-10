@@ -90,7 +90,7 @@ fn insert(path:&AnalyticPath,at_start:bool,new_tip:Point,curve:Curve)
 /// Continue an open endpoint to the nearest forward crossing with a separate
 /// analytic reference path. Segment type remains line / circle / cubic.
 /// Cubic continuation follows the original *polynomial*, preserving the
-/// source's position, tangent and curvature at the seam (C2 continuity).
+/// source's position, tangent and curvature at the seam (G2 geometric continuity).
 /// Its parameter horizon is capped to avoid unlimited extrapolation.
 pub fn extend_to_reference(source:&AnalyticPath,target:&AnalyticPath,
     at_start:bool,max_mm:f64)->Result<AnalyticPath,String>{
