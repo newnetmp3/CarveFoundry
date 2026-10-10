@@ -604,3 +604,15 @@ targeted curve editing, real KDE/Wayland GUI testing, project golden
 files, and SVG/DXF interoperability QA. [R0–R7 roadmap diagram](ROADMAP_DIAGRAM.md)
 reflects verified delivery but does not equate CAD CI with a finished
 machine-control application.
+
+## R1i — continuing cubic Bézier and true circular-arc endpoints (active)
+
+React to user KDE screenshot where Extend to Reference was disabled
+for an OPEN Bézier despite exactly two vectors selected. Extend native
+Rust CAD terminal curve support to retain original polynomial Bézier
+shape and true circular arc source types, with new analytic continuation
+segments at the nearest actual boundary crossing. No preview sampling,
+one atomic Undo, bounded polynomial extrapolation, and clear disabled
+reasons for closed/hidden/locked sources. Strict Rust CI and KDE manual
+acceptance required. R1 broader advanced offsets and corner solvers
+remain future work; CNC/NC export still gated.

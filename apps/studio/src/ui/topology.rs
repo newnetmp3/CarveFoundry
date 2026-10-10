@@ -35,7 +35,7 @@ impl Studio {
                 }
             });
             ui.separator();
-            ui.label("EXTEND ONE OPEN STRAIGHT END TO REFERENCE");
+            ui.label("EXTEND OPEN LINE / ARC / BÉZIER TO REFERENCE");
             let ids=self.selected_ids.iter().copied().collect::<Vec<_>>();
             if !ids.contains(&self.topology_extend_source){
                 self.topology_extend_source=ids[0];
@@ -60,17 +60,15 @@ impl Studio {
             });
             let source=self.topology_extend_source;
             let target=if source==ids[0]{ids[1]}else{ids[0]};
-            let source_ok=self.editor.project.paths.iter().any(|p|
-                p.id==source && !p.closed
-                    && matches!(p.segments[
-                        if self.topology_at_start{0}else{p.segments.len()-1}
-                    ].curve,Curve::Line))
-                && self.editor.project.editable_vector(source);
+            let source_path=self.editor.project.paths.iter()
+                .find(|p|p.id==source).cloned();
+            let source_ok=source_path.as_ref().is_some_and(|p|
+                !p.closed && self.editor.project.editable_vector(source));
             let target_ok=self.editor.project.paths.iter().any(|p|p.id==target)
                 && self.editor.project.effective_visible(target);
             if ui.add_enabled(source_ok&&target_ok,
                 egui::Button::new("Extend end to reference"))
-                .on_hover_text("Extend this OPEN straight endpoint to the nearest forward crossing on the OTHER selected vector (line, true arc or Bézier). Both vectors remain exact; reference untouched. Collinear overlap rejects.")
+                .on_hover_text("Extend the selected OPEN endpoint along its source geometry: straight continues straight, a true circular arc follows its radius/center, and a Bézier continues the original cubic polynomial with smooth tangent and curvature. Stops at nearest exact crossing with the other selected vector. Source remains editable; Undo restores.")
                 .clicked(){
                 self.apply(Action::ExtendToBoundary{
                     source_path_id:source,target_path_id:target,
@@ -78,7 +76,29 @@ impl Studio {
                     max_distance_mm:self.topology_extension_limit_mm,
                 });
             }
-            ui.small("Refers to the other selected vector. Reaches only forward in a straight line; chooses closest true crossing. Undo restores endpoint.");
+            if let Some(p)=source_path{
+                if p.closed{
+                    ui.small("This source is CLOSED: choose the open Bézier or arc as Source.");
+                }else if !self.editor.project.editable_vector(source){
+                    ui.small("Source is locked or hidden; unlock and show it to extend.");
+                }else{
+                    let curve=p.segments[
+                        if self.topology_at_start{0}else{p.segments.len()-1}
+                    ].curve;
+                    let mode=match curve{
+                        Curve::Line=>"Straight endpoint: extends on its existing line",
+                        Curve::Arc{..}=>"Circular endpoint: continues exact circle and winding",
+                        Curve::Cubic{..}=>"Bézier endpoint: continues exact polynomial with G² geometric smoothness",
+                    };
+                    ui.small(mode);
+                }
+            }else{
+                ui.small("Choose a source analytic vector to extend.");
+            }
+            if !target_ok{
+                ui.small("Reference is missing or hidden; choose two visible analytic vectors.");
+            }
+            ui.small("The other selected vector is the reference. A failed or out-of-reach crossing reports why; Undo restores geometry.");
         }
         ui.separator();
         ui.strong("INTERSECTIONS · LINES / ARCS / BÉZIERS");

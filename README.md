@@ -265,3 +265,13 @@ with the other vector (including Bézier or true-arc references).
 Start/End, source/target and maximum reach are adjustable.
 One Undo restores the original; overlapping or unsupported cases
 are rejected. See [Topology editing and QA](docs/TOPOLOGY_EDITING.md).
+
+### Curved endpoint extension (R1i)
+
+**Edit Vector Topology → Extend end to reference** supports OPEN analytic
+lines, true circular arcs and cubic Bézier endpoints. Select two vectors,
+choose the open Source, Start/End and maximum reach. For Béziers, the
+original cubic polynomial continues smoothly to an actual source-curve
+intersection; arcs remain circular. Closed shapes may serve as references,
+not sources. Failures explain missing crossings instead of quietly
+changing geometry. See [Curve Extension](docs/CURVE_EXTENSION.md).

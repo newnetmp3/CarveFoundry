@@ -14,6 +14,7 @@ pub mod text;
 pub mod organization;
 pub mod topology;
 pub mod intersections;
+pub mod curve_extension;
 mod bezier_intersections;
 pub use editor::{Action, Editor};
 pub use shapes::{create_shape, polyline, ShapeKind};

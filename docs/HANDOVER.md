@@ -1079,3 +1079,38 @@ files. R2-R7 remain planned, and G-code/NC remains gated in R6.
 
 | 2026-10-10 | PR #119 marker badges merged | [CI 38014413520](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014413520): 112 tests, Clippy, Linux release | Manual KDE contrast |
 | 2026-10-10 | PR #120 Extend-to-Boundary merged | [CI 38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760): 117 tests, Clippy, Linux release | R1i advanced curve offsets and desktop QA |
+
+## Active R1i — curved endpoint extension addressing owner's KDE screenshot
+
+User selected two vectors (closed pentagon and open Bézier source #5),
+but Extend end to reference was disabled because the UI hard-coded
+`Curve::Line` eligibility. User replied "1" to the proposal to extend
+curved endpoints, meaning CONTINUE.
+
+Branch `feature/rust-r1i-extend-curved-ends` adds a Rust
+`curve_extension.rs` module handling exact source-polynomial cubic
+continuation and true circular-arc continuation (same center, radius and
+winding) to first validated forward crossing with a distinct analytic
+reference. The exact source intersection engine handles reference lines,
+true circular arcs and cubic Béziers. Straight terminals still dispatch
+to the preexisting line extension. Original source geometry retained
+as-is; a new analytic segment and node are added, reversible in one Undo
+transaction. Cubic continuation algebraically reparameterizes the
+existing degree-three polynomial outside [0,1], preserving position, tangent direction and geometric curvature at the seam, not approximated by a straight
+tangent line. Curved reach measured by bounded numerical arc-length,
+not sampled design geometry. Restrict cubic polynomial extrapolation to
+two parameter lengths and arcs to less than one revolution; reject
+indeterminate/overlap cases or no crossing.
+UI now allows open curve terminals and displays the reason if a source
+is closed/locked/hidden, instead of inexplicable greying. Source dropdown
+allows the user to pick the open Bézier rather than the closed pentagon.
+
+Tests: cubic forward/backward polynomial continuation, retained curves
+and circle radius/winding, undo, invalid paths/limits. Manual user's
+exact KDE artwork screenshot, external SVG/DXF and source edit workflow
+still require acceptance. See docs/CURVE_EXTENSION.md.
+
+**CI PENDING**: wait for final Rust core/studio tests, strict Clippy and
+native Linux release; merge only when green. Update HANDOVER/ROADMAP/
+ROADMAP_DIAGRAM with PR/head/CI/test/merge after verification.
+R1 remains in progress, R2-R7 are not implemented; CNC/NC remains disabled.
