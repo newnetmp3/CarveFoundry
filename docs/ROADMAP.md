@@ -421,3 +421,15 @@ Text shaping beyond single-line basic glyph advances remains future work.
 and atomic visibility/locking/selection operations; improve text group UX,
 then precise trim/join/offset, then safe native 2.5D/3D CAM milestones.
 CNC/NC posting remains disabled until machine-safety validation.
+
+## R1e — native vector layers/groups (active)
+
+Branch feature/rust-r1e-layers-groups introduces backward-compatible
+persistent flat groups and custom design layers, layer assignments,
+visibility, locking and independent Undo actions. Object-mode selection,
+marquee and drag treat a group as one unit; Node mode still edits geometry
+directly. Hidden/locked design structures are excluded from hit tests/
+snapping and guarded against editing; source Bézier curves, font outlines
+and SVG/DXF interchange remain unchanged. Strict Rust CI, desktop scaling
+and KDE/Wayland pointer QA required before marking verified. Machine NC
+output remains closed. Next R1f: analytic trim/join/offset editing.
