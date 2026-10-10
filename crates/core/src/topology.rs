@@ -263,7 +263,7 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     let Curve::Arc{center,clockwise}=source.segments[0].curve else {
         return Err("A true circular arc is required for exact circular offset".into());
     };
-    if source.segments.iter().any(|s|s.curve!=Curve::Arc{center,clockwise}){
+    if source.segments.iter().any(|s|s.curve!=(Curve::Arc{center,clockwise})){
         return Err("Circle offset requires one common center and sweep direction".into());
     }
     let radius=dist(point(source,0),center);
@@ -277,7 +277,7 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     let ratio=new_radius/radius;
     let mut draft=source.clone();
     for node in &mut draft.nodes{
-        node.position=add(center,mul(sub(node.position,center),ratio));
+        node.position=add(center,scale(sub(node.position,center),ratio));
     }
     draft.name=format!("{} arc offset {mm:.2} mm",source.name);
     draft.validate()?;
