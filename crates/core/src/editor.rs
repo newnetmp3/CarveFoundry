@@ -159,14 +159,22 @@ impl Editor {
                     return Err("Text requires 1–512 retained outline contours".into());
                 }
                 for p in &paths{p.validate()?;}
+                let mut inherited_layer=0;
+                let mut inherited_group=None;
                 let label_id=if let Some(id)=id {
                     let label=next.text_runs.iter().find(|run|run.id==id)
                         .ok_or("Editable text source not found")?;
-                    if label.outline_ids.iter().any(|old|
-                        next.paths.iter().find(|p|p.id==*old).is_none_or(|p|p.locked)){
-                        return Err("Text contains missing/locked outline; unlock before editing".into());
+                    if label.outline_ids.iter().any(|old|!next.editable_vector(*old)){
+                        return Err("Text is missing or locked/hidden; unlock its layer and group before editing".into());
                     }
                     let obsolete:HashSet<_>=label.outline_ids.iter().copied().collect();
+                    let layer=next.layer_for(label.outline_ids[0]);
+                    if label.outline_ids.iter().all(|old|next.layer_for(*old)==layer){
+                        inherited_layer=layer;
+                    }
+                    inherited_group=next.groups.iter().find(|g|
+                        label.outline_ids.iter().all(|old|g.members.contains(old)))
+                        .map(|g|g.id);
                     next.paths.retain(|p|!obsolete.contains(&p.id));
                     next.text_runs.retain(|run|run.id!=id);
                     id
@@ -180,8 +188,18 @@ impl Editor {
                     p.id=next.next_id;
                     next.next_id=next.next_id.checked_add(1)
                         .ok_or("Text outline IDs exhausted")?;
+                    if inherited_layer!=0{
+                        next.layer_members.push(crate::organization::LayerMember{
+                            vector_id:p.id,layer_id:inherited_layer,
+                        });
+                    }
                     outline_ids.push(p.id);
                     next.paths.push(p);
+                }
+                if let Some(group_id)=inherited_group
+                    && let Some(group)=next.groups.iter_mut()
+                        .find(|g|g.id==group_id){
+                    group.members.extend_from_slice(&outline_ids);
                 }
                 next.text_runs.push(crate::text::TextRun{
                     id:label_id,spec,outline_ids,
