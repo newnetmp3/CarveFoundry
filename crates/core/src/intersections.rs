@@ -440,6 +440,19 @@ mod tests{
         assert!((d-15.0).abs()<1e-7);
     }
     #[test]
+    fn extend_chooses_nearest_true_circular_arc_crossing(){
+        let source=segment(1,Point::new(10.0,15.0),Point::new(20.0,15.0));
+        let mut arc=segment(2,Point::new(30.0,10.0),Point::new(50.0,10.0));
+        arc.segments[0].curve=Curve::Arc{
+            center:Point::new(40.0,10.0),clockwise:true
+        };
+        let (hit,d)=nearest_extension_crossing(&source,&arc,false,40.0).unwrap();
+        let nearest_x=40.0-(100.0_f64-25.0).sqrt();
+        assert!((hit.x-nearest_x).abs()<1e-8);
+        assert!((hit.y-15.0).abs()<1e-8);
+        assert!((d-(nearest_x-20.0)).abs()<1e-8);
+    }
+    #[test]
     fn extension_collinear_overlap_fails_closed(){
         let src=segment(1,Point::new(10.0,0.0),Point::new(20.0,0.0));
         let overlap=segment(2,Point::new(25.0,0.0),Point::new(35.0,0.0));
