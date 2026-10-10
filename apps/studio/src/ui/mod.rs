@@ -5,4 +5,5 @@ mod arrange;
 mod inspector;
 mod palette;
 mod shell;
+pub(crate) mod text;
 mod icons;
