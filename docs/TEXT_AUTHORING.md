@@ -48,3 +48,15 @@ to prevent silent regeneration over an incomplete word.
 - [ ] Verify stock/fixtures unchanged and NC/CNC output still disabled.
 
 CI cannot validate every installed font or KDE portal interaction.
+
+## Verified source/position contract (PR #114)
+
+After creating text, selecting all its outline contours and moving them
+together also updates the retained baseline coordinates. Regeneration
+therefore retains the new position. Manual movement or node modification
+of only one contour remains a direct outline edit: a subsequent text-source
+update deliberately resets that shape to the font-defined contour.
+
+Core/studio regression tests passed in CI #38008575719, including real
+installed-font cubic extraction, but actual KDE desktop interaction,
+font picker presentation and external SVG/DXF validation remain outstanding.
