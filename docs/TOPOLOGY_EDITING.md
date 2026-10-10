@@ -84,3 +84,42 @@ self-intersection/degeneracy checks. Open path offsets are bounded and
 validated as analytic lines, but overlapping distant segments in a
 pathological open polyline are not yet exhaustively checked. Visually
 review complex offsets until a robust general contour solver ships.
+
+## R1h — Extend a straight endpoint to another vector (in development)
+
+Use **Drawing → Edit Vector Topology**, select **exactly two** analytic
+vectors, and choose **Extend one open straight end to reference**.
+Choose which selected vector is the **source**, select its Start or End
+terminal, and enter a **maximum forward reach** in millimetres. The other
+selected vector becomes the reference boundary.
+
+The source must be an open path whose chosen terminal edge is straight.
+Only its existing terminal node is moved, in the edge's forward direction.
+The reference may be a straight path, a true circular arc, or a cubic
+Bézier (including a closed multi-edge contour). Intersection coordinates
+come from the previously verified exact-source line/arc/Bézier
+intersection engine; the nearest forward crossing inside the maximum
+reach is chosen. Reference paths are NEVER modified.
+
+Operations validate current source/reference state and remain one-step
+Undo/Redo. Hidden reference, locked source, no forward crossing,
+overlapping collinear reference, unsupported degenerate curve, exceeding
+maximum reach or closed source fail explicitly without changing geometry.
+There is no line/cubic/circle preview sampling or machine NC output.
+
+### KDE/Wayland manual acceptance
+
+- [ ] Create horizontal open line ending at X 20, reference vertical
+      line at X 35. Select both, choose source and End, reach 20 mm.
+      Extend to X 35; Undo restores X 20.
+- [ ] Repeat with a reference Bézier crossing at X 35 and a true arc
+      with two possible crossings. Nearest *forward* crossing wins.
+- [ ] Choose Start to extend backwards toward a different vector.
+- [ ] Reach shorter than the gap rejects, as does a collinear
+      overlapping reference or a hidden/locked source.
+- [ ] Save/reopen .cfd, export/reimport SVG/DXF, verify original
+      source line and reference curve identities remain analytic.
+- [ ] Repeat with layer/group selection and observe status messages.
+
+This is one source-exact R1h tranche, NOT a general curve extrapolation,
+mixed/cubic offset or machining capability.
