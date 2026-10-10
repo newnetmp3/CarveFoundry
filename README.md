@@ -215,3 +215,13 @@ outlines from the saved text settings in one undoable transaction. The .cfd
 keeps text metadata and curves; missing system fonts prevent reflow but
 not viewing existing paths. Individual node edits are allowed, but a later
 text reflow replaces those glyph contours. See docs/TEXT_AUTHORING.md.
+
+## Native Rust Layers and Groups (R1e)
+
+Use the **Organize** menu or right-side **Objects** / **Layers** tabs to
+create named groups from a multi-vector selection and assign vectors to
+layers. Each group can be selected and moved as a whole in Select mode;
+Node mode still edits individual nodes. Layers and groups have
+visibility/locking controls, with one-step Undo and .cfd persistence.
+A virtual Base layer always exists. SVG/DXF exports are still vector
+art only; groups/layers are design organization metadata in native .cfd.

@@ -38,6 +38,17 @@ pub enum Action {
     Rename { id: u64, name: String },
     SetLocked { id: u64, locked: bool },
     Remove { id: u64 },
+    AddLayer{name:String},
+    RenameLayer{id:u64,name:String},
+    SetLayerVisible{id:u64,visible:bool},
+    SetLayerLocked{id:u64,locked:bool},
+    AssignLayer{ids:Vec<u64>,layer_id:u64},
+    RemoveLayer{id:u64},
+    MakeGroup{ids:Vec<u64>,name:String},
+    RenameGroup{id:u64,name:String},
+    SetGroupVisible{id:u64,visible:bool},
+    SetGroupLocked{id:u64,locked:bool},
+    Ungroup{id:u64},
     ChangeStock(Stock),
     AddFixture(Fixture),
 }
@@ -73,6 +84,23 @@ impl Editor {
     pub fn apply(&mut self, action: Action) -> Result<(),String> {
         if self.drag_before.is_some() {
             return Err("Finish the active drag before editing another object".into());
+        }
+        // Layer/group locks apply to existing individual tools, not only
+        // multi-selection operations. Visibility/lock toggles remain possible.
+        let edited=match &action{
+            Action::MovePath{id,..}|Action::Move{id,..}|
+            Action::RenamePath{id,..}|Action::Rename{id,..}|
+            Action::Flip{id,..}|Action::RotateQuarter{id,..}|
+            Action::Center{id,..}|Action::RemovePath{id}|
+            Action::Remove{id}|Action::SetPathClosed{id,..}|
+            Action::Duplicate{id}|Action::ConvertContour{id}=>Some(*id),
+            Action::MoveNode{path_id,..}|Action::MoveControl{path_id,..}|
+            Action::InsertNodeAfter{path_id,..}|Action::RemoveNode{path_id,..}
+                =>Some(*path_id),
+            _=>None,
+        };
+        if let Some(id)=edited && !self.project.editable_vector(id){
+            return Err("Vector, group or layer is hidden/locked".into());
         }
         let mut next=self.project.clone();
         match action {
@@ -131,14 +159,22 @@ impl Editor {
                     return Err("Text requires 1–512 retained outline contours".into());
                 }
                 for p in &paths{p.validate()?;}
+                let mut inherited_layer=0;
+                let mut inherited_group=None;
                 let label_id=if let Some(id)=id {
                     let label=next.text_runs.iter().find(|run|run.id==id)
                         .ok_or("Editable text source not found")?;
-                    if label.outline_ids.iter().any(|old|
-                        next.paths.iter().find(|p|p.id==*old).is_none_or(|p|p.locked)){
-                        return Err("Text contains missing/locked outline; unlock before editing".into());
+                    if label.outline_ids.iter().any(|old|!next.editable_vector(*old)){
+                        return Err("Text is missing or locked/hidden; unlock its layer and group before editing".into());
                     }
                     let obsolete:HashSet<_>=label.outline_ids.iter().copied().collect();
+                    let layer=next.layer_for(label.outline_ids[0]);
+                    if label.outline_ids.iter().all(|old|next.layer_for(*old)==layer){
+                        inherited_layer=layer;
+                    }
+                    inherited_group=next.groups.iter().find(|g|
+                        label.outline_ids.iter().all(|old|g.members.contains(old)))
+                        .map(|g|g.id);
                     next.paths.retain(|p|!obsolete.contains(&p.id));
                     next.text_runs.retain(|run|run.id!=id);
                     id
@@ -152,8 +188,18 @@ impl Editor {
                     p.id=next.next_id;
                     next.next_id=next.next_id.checked_add(1)
                         .ok_or("Text outline IDs exhausted")?;
+                    if inherited_layer!=0{
+                        next.layer_members.push(crate::organization::LayerMember{
+                            vector_id:p.id,layer_id:inherited_layer,
+                        });
+                    }
                     outline_ids.push(p.id);
                     next.paths.push(p);
+                }
+                if let Some(group_id)=inherited_group
+                    && let Some(group)=next.groups.iter_mut()
+                        .find(|g|g.id==group_id){
+                    group.members.extend_from_slice(&outline_ids);
                 }
                 next.text_runs.push(crate::text::TextRun{
                     id:label_id,spec,outline_ids,
@@ -445,6 +491,93 @@ impl Editor {
                 if item.locked {return Err("Contour is locked".into());}
                 next.contours.retain(|p|p.id!=id);
             }
+            Action::AddLayer{name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Layer name must be 1–128 printable characters".into());
+                }
+                let id=next.next_id;
+                next.next_id=id.checked_add(1).ok_or("Layer identifiers exhausted")?;
+                next.layers.push(crate::organization::DesignLayer{
+                    id,name,visible:true,locked:false,
+                });
+            }
+            Action::RenameLayer{id,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Layer needs a short printable name".into());
+                }
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.name=name;
+            }
+            Action::SetLayerVisible{id,visible}=>{
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.visible=visible;
+            }
+            Action::SetLayerLocked{id,locked}=>{
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.locked=locked;
+            }
+            Action::AssignLayer{ids,layer_id}=>{
+                Self::check_batch(&next,&ids)?;
+                if layer_id!=0 && !next.layers.iter().any(|l|l.id==layer_id){
+                    return Err("Target layer does not exist".into());
+                }
+                if layer_id!=0 && next.layers.iter().any(|l|
+                    l.id==layer_id && (l.locked || !l.visible)){
+                    return Err("Destination layer is hidden or locked".into());
+                }
+                let targets:HashSet<u64>=ids.iter().copied().collect();
+                next.layer_members.retain(|m|!targets.contains(&m.vector_id));
+                for vector_id in ids {
+                    if layer_id!=0{
+                        next.layer_members.push(crate::organization::LayerMember{
+                            vector_id,layer_id,
+                        });
+                    }
+                }
+            }
+            Action::RemoveLayer{id}=>{
+                if !next.layers.iter().any(|l|l.id==id){
+                    return Err("Layer ID not found".into());
+                }
+                // Move contents back to virtual Base before dropping layer.
+                next.layer_members.retain(|m|m.layer_id!=id);
+                next.layers.retain(|l|l.id!=id);
+            }
+            Action::MakeGroup{ids,name}=>{
+                Self::check_batch(&next,&ids)?;
+                if ids.len()<2 || !crate::organization::valid_name(&name){
+                    return Err("Select 2+ editable vectors and a valid group name".into());
+                }
+                if ids.iter().any(|id|next.group_for(*id).is_some()){
+                    return Err("Ungroup existing objects before regrouping".into());
+                }
+                let id=next.next_id;
+                next.next_id=id.checked_add(1).ok_or("Group IDs exhausted")?;
+                next.groups.push(crate::organization::VectorGroup{
+                    id,name,members:ids,visible:true,locked:false,
+                });
+            }
+            Action::RenameGroup{id,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Group needs a printable name".into());
+                }
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.name=name;
+            }
+            Action::SetGroupVisible{id,visible}=>{
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.visible=visible;
+            }
+            Action::SetGroupLocked{id,locked}=>{
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.locked=locked;
+            }
+            Action::Ungroup{id}=>{
+                if !next.groups.iter().any(|g|g.id==id){
+                    return Err("Unknown group ID".into());
+                }
+                next.groups.retain(|g|g.id!=id);
+            }
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
         }
@@ -453,6 +586,13 @@ impl Editor {
         let existing:HashSet<u64>=next.paths.iter().map(|p|p.id).collect();
         next.text_runs.retain(|run|
             run.outline_ids.iter().all(|id|existing.contains(id)));
+        let all_vectors:HashSet<u64>=next.paths.iter().map(|p|p.id)
+            .chain(next.contours.iter().map(|p|p.id)).collect();
+        next.layer_members.retain(|m|all_vectors.contains(&m.vector_id));
+        for group in &mut next.groups{
+            group.members.retain(|id|all_vectors.contains(id));
+        }
+        next.groups.retain(|g|g.members.len()>=2);
         next.validate()?;
         if next!=self.project {
             let before=std::mem::replace(&mut self.project,next);
@@ -472,8 +612,8 @@ impl Editor {
             let path=project.paths.iter().find(|p|p.id==id);
             let contour=project.contours.iter().find(|p|p.id==id);
             match (path,contour) {
-                (Some(p),None) if p.visible&&!p.locked=>{},
-                (None,Some(p)) if p.visible&&!p.locked=>{},
+                (Some(_),None)|(None,Some(_))
+                    if project.editable_vector(id)=>{},
                 (Some(_),None)|(None,Some(_))=>
                     return Err("Group includes a hidden or locked vector".into()),
                 _=>return Err("Group contains an unknown vector ID".into()),
@@ -513,6 +653,9 @@ impl Editor {
 
     pub fn start_drag(&mut self, id: u64) -> Result<Point,String> {
         if self.drag_before.is_some() {return Err("Drag already active".into());}
+        if !self.project.editable_vector(id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let contour=self.project.contours.iter().find(|p|p.id==id)
             .ok_or("Contour ID not found")?;
         if contour.locked || !contour.visible {
@@ -557,6 +700,9 @@ impl Editor {
     }
     pub fn start_node_drag(&mut self,path_id:u64,node_id:u64)->Result<Point,String>{
         if self.drag_before.is_some(){return Err("Drag already active".into());}
+        if !self.project.editable_vector(path_id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let path=self.project.paths.iter().find(|p|p.id==path_id)
             .ok_or("Analytic path ID not found")?;
         if path.locked || !path.visible {return Err("Cannot edit hidden or locked path".into());}
@@ -581,6 +727,9 @@ impl Editor {
     pub fn start_control_drag(&mut self,path_id:u64,segment_id:u64,handle:u8)
         ->Result<Point,String>{
         if self.drag_before.is_some(){return Err("Drag already active".into());}
+        if !self.project.editable_vector(path_id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let path=self.project.paths.iter().find(|p|p.id==path_id)
             .ok_or("Analytic path ID not found")?;
         if path.locked || !path.visible {return Err("Cannot edit hidden or locked path".into());}
@@ -635,6 +784,119 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn true_groups_and_layers_roundtrip_selection_visibility_lock_and_undo(){
+        let mut editor=Editor::default();
+        for i in 0..3{
+            editor.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+                name:format!("Vector {i}"),origin:Point::new(i as f64*25.0,10.0),
+                width_mm:15.0,height_mm:15.0}).unwrap();
+        }
+        let pristine=editor.project.clone();
+        editor.apply(Action::AddLayer{name:"Lettering".into()}).unwrap();
+        let layer=editor.project.layers[0].id;
+        editor.apply(Action::AssignLayer{ids:vec![1,2],layer_id:layer}).unwrap();
+        editor.apply(Action::MakeGroup{ids:vec![1,2],name:"Badge".into()}).unwrap();
+        let group=editor.project.groups[0].id;
+        assert_eq!(editor.project.expand_groups([1]),vec![1,2]);
+        assert!(editor.project.effective_visible(2));
+        assert!(!editor.project.effective_locked(2));
+        let saved=Project::decode(&editor.project.encode().unwrap()).unwrap();
+        assert_eq!(saved,editor.project);
+        editor.apply(Action::SetLayerVisible{id:layer,visible:false}).unwrap();
+        assert!(!editor.project.effective_visible(1));
+        assert!(editor.project.effective_visible(3));
+        assert!(editor.apply(Action::MoveMany{ids:vec![1,2],
+            delta:Point::new(5.0,0.0)}).is_err());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::SetGroupLocked{id:group,locked:true}).unwrap();
+        assert!(editor.project.effective_locked(1));
+        assert!(editor.apply(Action::MovePath{id:1,origin:Point::new(60.0,60.0)}).is_err());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::Ungroup{id:group}).unwrap();
+        assert!(editor.project.groups.is_empty());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::RemoveLayer{id:layer}).unwrap();
+        assert!(editor.project.layers.is_empty());
+        assert!(editor.project.layer_members.is_empty());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::RemoveMany{ids:vec![1,2]}).unwrap();
+        assert!(editor.project.groups.is_empty());
+        assert!(editor.project.layer_members.is_empty());
+        assert_eq!(editor.project.paths.len(),1);
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        // Invalid re-grouping is atomic.
+        assert!(editor.apply(Action::MakeGroup{ids:vec![1,3],
+            name:"Overlapping".into()}).is_err());
+        assert_eq!(editor.project,saved);
+        // Original project remains reachable through sequential Undo.
+        assert!(editor.undo()); // group
+        assert!(editor.undo()); // assignment
+        assert!(editor.undo()); // add layer
+        assert_eq!(editor.project,pristine);
+    }
+    #[test]
+    fn whole_group_drag_is_one_history_entry_and_respects_layer_lock(){
+        let mut editor=Editor::default();
+        for i in 0..2{
+            editor.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+                name:format!("Rect {i}"),origin:Point::new(i as f64*25.0,10.0),
+                width_mm:12.0,height_mm:12.0}).unwrap();
+        }
+        editor.apply(Action::MakeGroup{ids:vec![1,2],name:"Both".into()}).unwrap();
+        let before=editor.project.clone();
+        editor.start_group_drag(&[1,2]).unwrap();
+        editor.preview_group_drag(&[1,2],Point::new(3.0,6.0)).unwrap();
+        editor.preview_group_drag(&[1,2],Point::new(17.0,9.0)).unwrap();
+        editor.finish_drag();
+        assert_eq!(editor.project.paths[0].origin,Point::new(17.0,19.0));
+        assert_eq!(editor.project.paths[1].origin,Point::new(42.0,19.0));
+        assert!(editor.undo());
+        assert_eq!(editor.project,before);
+        editor.apply(Action::AddLayer{name:"Locked".into()}).unwrap();
+        let id=editor.project.layers[0].id;
+        editor.apply(Action::AssignLayer{ids:vec![1],layer_id:id}).unwrap();
+        editor.apply(Action::SetLayerLocked{id,locked:true}).unwrap();
+        assert!(editor.start_group_drag(&[1,2]).is_err());
+    }
+    #[test]
+    fn reflow_text_preserves_layer_and_flat_group_membership(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{text:"AB".into(),
+            family:"Example".into(),postscript:"Example".into(),
+            height_mm:15.0,tracking_mm:0.0,origin:Point::new(12.0,25.0)};
+        let glyph=crate::shapes::create_shape(1,"Letter".into(),spec.origin,
+            ShapeKind::Rectangle,8.0,12.0).unwrap();
+        e.apply(Action::SetText{id:None,spec:spec.clone(),
+            paths:vec![glyph.clone(),glyph.clone()]}).unwrap();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+            name:"Badge".into(),origin:Point::new(50.0,35.0),
+            width_mm:10.0,height_mm:10.0}).unwrap();
+        e.apply(Action::AddLayer{name:"Letters".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![2,3],layer_id:layer}).unwrap();
+        e.apply(Action::MakeGroup{ids:vec![2,3,4],name:"Logo".into()}).unwrap();
+        let before=e.project.clone();
+        let mut next=spec;
+        next.text="A".into();
+        e.apply(Action::SetText{id:Some(1),spec:next,paths:vec![glyph]})
+            .unwrap();
+        let new_ids=e.project.text_runs[0].outline_ids.clone();
+        assert_eq!(new_ids.len(),1);
+        assert_eq!(e.project.layer_for(new_ids[0]),layer);
+        assert_eq!(e.project.groups.len(),1);
+        assert_eq!(e.project.expand_groups([4]),vec![4,new_ids[0]]);
+        assert_eq!(e.project.groups[0].members.len(),2);
+        let saved=Project::decode(&e.project.encode().unwrap()).unwrap();
+        assert_eq!(saved,e.project);
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+    }
     #[test]
     fn text_creation_edit_undo_and_native_project_roundtrip(){
         let mut e=Editor::default();

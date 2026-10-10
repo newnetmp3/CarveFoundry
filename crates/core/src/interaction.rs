@@ -27,7 +27,7 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
         // Topmost handles/nodes are clickable even when their path was not
         // selected earlier. Selecting an object is NOT a prerequisite.
         let mut best:Option<(f64,Hit)>=None;
-        for path in project.paths.iter().rev().filter(|p|p.visible) {
+        for path in project.paths.iter().rev().filter(|p|project.effective_visible(p.id)) {
             for node in &path.nodes {
                 let world=node.position.offset(path.origin.x,path.origin.y);
                 let d=sq(world,point).sqrt();
@@ -50,7 +50,7 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
         }
         if let Some((_,target))=best{return Some(target);}
     }
-    for path in project.paths.iter().rev().filter(|p|p.visible) {
+    for path in project.paths.iter().rev().filter(|p|project.effective_visible(p.id)) {
         if let Ok(points)=path.preview_points(0.4)
             && (points.windows(2).any(|edge|
                 segment_distance(point,edge[0],edge[1])<=radius_mm)
@@ -58,7 +58,7 @@ pub fn pick(project:&Project, point:Point, radius_mm:f64, mode:PickMode)
             return Some(Hit::Path(path.id));
         }
     }
-    for contour in project.contours.iter().rev().filter(|p|p.visible) {
+    for contour in project.contours.iter().rev().filter(|p|project.effective_visible(p.id)) {
         let pts=contour.world_points();
         if polygon_contains(&pts,point) || pts.iter().enumerate().any(|(i,a)|
             segment_distance(point,*a,pts[(i+1)%pts.len()])<=radius_mm) {
@@ -84,11 +84,11 @@ pub fn marquee_ids(project:&Project,start:Point,end:Point)->Vec<u64>{
         else{lo_x<=max_x&&hi_x>=min_x&&lo_y<=max_y&&hi_y>=min_y}
     };
     let mut ids=Vec::new();
-    for path in project.paths.iter().filter(|p|p.visible){
+    for path in project.paths.iter().filter(|p|project.effective_visible(p.id)){
         if let Ok(points)=path.preview_points(0.35)
             && matches(&points){ids.push(path.id);}
     }
-    for contour in project.contours.iter().filter(|p|p.visible){
+    for contour in project.contours.iter().filter(|p|project.effective_visible(p.id)){
         if matches(&contour.world_points()){ids.push(contour.id);}
     }
     ids
@@ -121,7 +121,7 @@ pub fn nearest_snap(project:&Project,cursor:Point,radius_mm:f64,
         }
     };
     for path in &project.paths{
-        if !path.visible || exclude_ids.contains(&path.id){continue;}
+        if !project.effective_visible(path.id) || exclude_ids.contains(&path.id){continue;}
         for node in &path.nodes{
             consider(node.position.offset(path.origin.x,path.origin.y),
                 SnapKind::Vertex,Some(path.id));
@@ -136,7 +136,7 @@ pub fn nearest_snap(project:&Project,cursor:Point,radius_mm:f64,
         }
     }
     for contour in &project.contours{
-        if !contour.visible || exclude_ids.contains(&contour.id){continue;}
+        if !project.effective_visible(contour.id) || exclude_ids.contains(&contour.id){continue;}
         for (i,a) in contour.vertices.iter().enumerate(){
             let b=contour.vertices[(i+1)%contour.vertices.len()];
             consider(a.offset(contour.origin.x,contour.origin.y),

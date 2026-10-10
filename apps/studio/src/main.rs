@@ -11,7 +11,7 @@ enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Workspace { Drawing, Toolpaths }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-enum InspectorTab { Objects, Properties, Job }
+enum InspectorTab { Objects, Layers, Properties, Job }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
 #[derive(Clone)]
@@ -30,6 +30,10 @@ struct Studio {
     project_path: String,
     rename_target: Option<u64>,
     rename_draft: String,
+    group_name_draft:String,
+    layer_name_draft:String,
+    active_group_id:Option<u64>,
+    active_layer_id:Option<u64>,
     project_name_draft: String,
     workspace: Workspace,
     inspector_tab: InspectorTab,
@@ -84,6 +88,9 @@ impl Default for Studio {
             project_path: "untitled.cfd".into(),
             rename_target: None,
             rename_draft: String::new(),
+            group_name_draft:"New group".into(),
+            layer_name_draft:"New layer".into(),
+            active_group_id:None,active_layer_id:None,
             project_name_draft: Project::default().name,
             workspace: Workspace::Drawing,
             inspector_tab: InspectorTab::Objects,
@@ -137,6 +144,8 @@ impl Studio {
         self.project_name_draft=self.editor.project.name.clone();
         self.rename_target=None;
         self.rename_draft.clear();
+        self.active_group_id=None;
+        self.active_layer_id=None;
         self.workspace=Workspace::Drawing;
         self.inspector_tab=InspectorTab::Objects;
         self.pending_document=None;
@@ -452,9 +461,17 @@ impl Studio {
     fn select_vector(&mut self,id:Option<u64>,additive:bool){
         if !additive{self.selected_ids.clear();}
         if let Some(id)=id{
-            if additive && self.selected_ids.contains(&id){
-                self.selected_ids.remove(&id);
-            }else{self.selected_ids.insert(id);}
+            let expanded=if self.edit_mode==EditMode::Objects{
+                self.editor.project.expand_groups([id])
+            }else{vec![id]};
+            let all_present=expanded.iter().all(|id|self.selected_ids.contains(id));
+            for member in expanded{
+                if additive && all_present{
+                    self.selected_ids.remove(&member);
+                }else{
+                    self.selected_ids.insert(member);
+                }
+            }
         }
         self.selected_path=None;self.selected=None;
         self.reconcile_selection();
@@ -548,6 +565,15 @@ impl Studio {
             Some(Hit::Path(id))=>self.select_vector(Some(id),additive),
             Some(Hit::Contour(id))=>self.select_vector(Some(id),additive),
             None=>self.select_vector(None,additive),
+        }
+    }
+    fn select_entire_group(&mut self,id:u64){
+        if let Some(group)=self.editor.project.groups.iter().find(|g|g.id==id){
+            self.selected_ids=group.members.iter().copied().collect();
+            self.selected_path=None;self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Objects;
+            self.reconcile_selection();
         }
     }
     fn run_selected(&mut self,action:impl FnOnce(u64)->Action){

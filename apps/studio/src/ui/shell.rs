@@ -79,6 +79,16 @@ impl Studio {
                         ui.close();
                     }
                 });
+                ui.menu_button("Organize",|ui|{
+                    if ui.button("Groups and vectors").clicked(){
+                        self.inspector_tab=InspectorTab::Objects;
+                        ui.close();
+                    }
+                    if ui.button("Manage layers").clicked(){
+                        self.inspector_tab=InspectorTab::Layers;
+                        ui.close();
+                    }
+                });
                 ui.menu_button("View",|ui|{
                     if ui.button("Fit material  F").clicked(){
                         self.zoom=1.0;self.pan=egui::Vec2::ZERO;ui.close();
