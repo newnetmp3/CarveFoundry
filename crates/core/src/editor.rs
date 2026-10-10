@@ -767,6 +767,86 @@ impl Editor {
 mod tests {
     use super::*;
     #[test]
+    fn true_groups_and_layers_roundtrip_selection_visibility_lock_and_undo(){
+        let mut editor=Editor::default();
+        for i in 0..3{
+            editor.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+                name:format!("Vector {i}"),origin:Point::new(i as f64*25.0,10.0),
+                width_mm:15.0,height_mm:15.0}).unwrap();
+        }
+        let pristine=editor.project.clone();
+        editor.apply(Action::AddLayer{name:"Lettering".into()}).unwrap();
+        let layer=editor.project.layers[0].id;
+        editor.apply(Action::AssignLayer{ids:vec![1,2],layer_id:layer}).unwrap();
+        editor.apply(Action::MakeGroup{ids:vec![1,2],name:"Badge".into()}).unwrap();
+        let group=editor.project.groups[0].id;
+        assert_eq!(editor.project.expand_groups([1]),vec![1,2]);
+        assert!(editor.project.effective_visible(2));
+        assert!(!editor.project.effective_locked(2));
+        let saved=Project::decode(&editor.project.encode().unwrap()).unwrap();
+        assert_eq!(saved,editor.project);
+        editor.apply(Action::SetLayerVisible{id:layer,visible:false}).unwrap();
+        assert!(!editor.project.effective_visible(1));
+        assert!(editor.project.effective_visible(3));
+        assert!(editor.apply(Action::MoveMany{ids:vec![1,2],
+            delta:Point::new(5.0,0.0)}).is_err());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::SetGroupLocked{id:group,locked:true}).unwrap();
+        assert!(editor.project.effective_locked(1));
+        assert!(editor.apply(Action::MovePath{id:1,origin:Point::new(60.0,60.0)}).is_err());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::Ungroup{id:group}).unwrap();
+        assert!(editor.project.groups.is_empty());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::RemoveLayer{id:layer}).unwrap();
+        assert!(editor.project.layers.is_empty());
+        assert!(editor.project.layer_members.is_empty());
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        editor.apply(Action::RemoveMany{ids:vec![1,2]}).unwrap();
+        assert!(editor.project.groups.is_empty());
+        assert!(editor.project.layer_members.is_empty());
+        assert_eq!(editor.project.paths.len(),1);
+        assert!(editor.undo());
+        assert_eq!(editor.project,saved);
+        // Invalid re-grouping is atomic.
+        assert!(editor.apply(Action::MakeGroup{ids:vec![1,3],
+            name:"Overlapping".into()}).is_err());
+        assert_eq!(editor.project,saved);
+        // Original project remains reachable through sequential Undo.
+        assert!(editor.undo()); // group
+        assert!(editor.undo()); // assignment
+        assert!(editor.undo()); // add layer
+        assert_eq!(editor.project,pristine);
+    }
+    #[test]
+    fn whole_group_drag_is_one_history_entry_and_respects_layer_lock(){
+        let mut editor=Editor::default();
+        for i in 0..2{
+            editor.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+                name:format!("Rect {i}"),origin:Point::new(i as f64*25.0,10.0),
+                width_mm:12.0,height_mm:12.0}).unwrap();
+        }
+        editor.apply(Action::MakeGroup{ids:vec![1,2],name:"Both".into()}).unwrap();
+        let before=editor.project.clone();
+        editor.start_group_drag(&[1,2]).unwrap();
+        editor.preview_group_drag(&[1,2],Point::new(3.0,6.0)).unwrap();
+        editor.preview_group_drag(&[1,2],Point::new(17.0,9.0)).unwrap();
+        editor.finish_drag();
+        assert_eq!(editor.project.paths[0].origin,Point::new(17.0,19.0));
+        assert_eq!(editor.project.paths[1].origin,Point::new(42.0,19.0));
+        assert!(editor.undo());
+        assert_eq!(editor.project,before);
+        editor.apply(Action::AddLayer{name:"Locked".into()}).unwrap();
+        let id=editor.project.layers[0].id;
+        editor.apply(Action::AssignLayer{ids:vec![1],layer_id:id}).unwrap();
+        editor.apply(Action::SetLayerLocked{id,locked:true}).unwrap();
+        assert!(editor.start_group_drag(&[1,2]).is_err());
+    }
+    #[test]
     fn text_creation_edit_undo_and_native_project_roundtrip(){
         let mut e=Editor::default();
         let spec=crate::text::TextSpec{
