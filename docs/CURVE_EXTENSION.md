@@ -67,3 +67,14 @@ the 256-node path limit. No partial CAD edit is saved on failure.
 **Safety:** this is CAD-only vector authoring. No postprocessors,
 machining toolpaths, or machine NC export are enabled. CI cannot replace
 desktop pointer/geometry acceptance.
+
+## Verified automated checkpoint
+
+[PR #121](https://github.com/newnetmp3/CarveFoundry/pull/121)
+merged at `7f58424451301b8b9be8fbe447b6ab61be0c69a1`
+after exact head `901460c7447aff05bb0a38c820693cf544b3daa9`
+passed [CI 38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523):
+**122 tests, strict Clippy, Linux native release build**.
+This is source geometry and UI compilation validation, not an actual
+KDE screenshot reproduction or externally certified CAD interchange.
+Please test on the original saved polygon/Bézier design.
