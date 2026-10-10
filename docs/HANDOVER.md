@@ -738,3 +738,44 @@ join/trim/offset topology.
 
 Update this handover with final PR, verified head/run, merge SHA, and exact
 test count once all gates pass.
+
+## Verified R1e native vector groups/layers — merged PR #115
+
+[PR #115](https://github.com/newnetmp3/CarveFoundry/pull/115)
+merged to `main` at **1034c32628bcc12b0e2322f209d9b1ccf366db08**.
+Final exact feature head **7ec60f4c2124b65c901092549de8a4c87afd2ea8**
+passed [CI #38010068138](https://github.com/newnetmp3/CarveFoundry/actions/runs/38010068138):
+**69 core tests + 17 studio tests (86 total), strict Clippy and native
+Linux release compilation**.
+
+- Optional layer/group metadata in backward-compatible .cfd: persistent
+  named custom layers, vector memberships, named flat groups. Virtual
+  Base layer (ID 0) is always available. Vector/group/layer identities
+  are checked against duplicates, missing references and invalid state.
+- Objects explorer: group multi-selected vectors, select/drag full groups
+  in Object mode, rename and ungroup, independently hide/lock groups.
+  Node mode still supports individual editable anchors.
+- Dedicated Layers explorer: create, rename, delete, assign membership,
+  and toggle visibility or locks. Hidden vectors excluded from drawing,
+  picking, marquee and snapping. Geometry edits respect effective locks.
+- All organization state changes are individually undoable; deleting a
+  member cleans layer/group references and removes invalid small groups.
+- Regenerating editable text can preserve common source-layer assignment
+  and an existing encompassing vector group. Regression fixtures verify
+  text reflow, group drag, undo and project save/restore.
+- No changes to analytic curve identities, SVG/DXF authoring data,
+  cutter constraints or CNC NC output.
+
+**Manual KDE Plasma/Wayland UI acceptance remains pending**: multi-object
+selection, group dragging, group hide/lock, layer assignment and
+visibility, .cfd reopen, Ctrl+Z/Ctrl+Y, and text regeneration should be
+tested on the user's desktop. CI only proves automated tests/build.
+
+The full progress diagram lives in
+[docs/ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md). R0 code is complete with
+desktop acceptance outstanding; R1 is advanced but **not fully done**;
+R2–R7 are not yet implemented. **Next:** R1f source-accurate trim/join,
+extend, offset, fillet/chamfer and associated geometry correctness QA.
+CNC CAM/posted NC safeguards remain a later isolated gate.
+
+| 2026-10-09 | PR #115 native layers and groups merged | [CI 38010068138](https://github.com/newnetmp3/CarveFoundry/actions/runs/38010068138): 69 core + 17 studio, strict Clippy, Linux release; merged 1034c326 | Real KDE groups/layers QA; R1f trim/join/offset; CNC export closed |
