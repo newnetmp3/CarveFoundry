@@ -36,6 +36,8 @@ pub enum Action {
     SplitSegment{path_id:u64,segment_id:u64,t:f64},
     TrimEndpoint{path_id:u64,at_start:bool,t:f64},
     ExtendLine{path_id:u64,at_start:bool,distance_mm:f64},
+    ExtendToBoundary{source_path_id:u64,target_path_id:u64,
+        at_start:bool,max_distance_mm:f64},
     Corner{path_id:u64,node_id:u64,size_mm:f64,fillet:bool},
     JoinOpen{first_id:u64,second_id:u64,tolerance_mm:f64},
     OffsetLines{path_id:u64,distance_mm:f64},
@@ -104,6 +106,7 @@ impl Editor {
             Action::Center{id,..}|Action::RemovePath{id}|
             Action::Remove{id}|Action::SetPathClosed{id,..}|
             Action::Duplicate{id}|Action::ConvertContour{id}=>Some(*id),
+            Action::ExtendToBoundary{source_path_id,..}=>Some(*source_path_id),
             Action::SplitAtIntersection{hit}|
             Action::TrimAtIntersection{hit,..}=>Some(hit.source_path_id),
             Action::SplitSegment{path_id,..}|
@@ -475,6 +478,25 @@ impl Editor {
                 let path=next.paths.iter_mut().find(|p|p.id==path_id)
                     .ok_or("Path does not exist")?;
                 *path=crate::topology::trim_endpoint(path,at_start,t)?;
+            }
+            Action::ExtendToBoundary{source_path_id,target_path_id,
+                at_start,max_distance_mm}=>{
+                if source_path_id==target_path_id{
+                    return Err("Select two different source/reference paths".into());
+                }
+                if !next.effective_visible(target_path_id){
+                    return Err("Reference boundary must be visible".into());
+                }
+                let source=next.paths.iter().find(|p|p.id==source_path_id)
+                    .ok_or("Source analytic vector no longer exists")?;
+                let target=next.paths.iter().find(|p|p.id==target_path_id)
+                    .ok_or("Reference analytic vector no longer exists")?;
+                let (_,length)=crate::intersections::nearest_extension_crossing(
+                    source,target,at_start,max_distance_mm)?;
+                let changed=crate::topology::extend_line(source,at_start,length)?;
+                let index=next.paths.iter().position(|p|p.id==source_path_id)
+                    .ok_or("Source analytic vector no longer exists")?;
+                next.paths[index]=changed;
             }
             Action::ExtendLine{path_id,at_start,distance_mm}=>{
                 let path=next.paths.iter_mut().find(|p|p.id==path_id)
@@ -883,6 +905,35 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn extend_to_reference_is_atomic_undoable_and_preserves_source_line(){
+        let mut e=Editor::default();
+        e.apply(Action::AddPolyline{name:"Horizontal".into(),closed:false,
+            points:vec![Point::new(10.0,10.0),Point::new(20.0,10.0)]}).unwrap();
+        e.apply(Action::AddPolyline{name:"Vertical".into(),closed:false,
+            points:vec![Point::new(35.0,0.0),Point::new(35.0,25.0)]}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::ExtendToBoundary{source_path_id:1,
+            target_path_id:2,at_start:false,max_distance_mm:20.0}).unwrap();
+        assert_eq!(e.project.paths[0].nodes[1].position,
+            Point::new(35.0,10.0));
+        assert_eq!(e.project.paths[1],before.paths[1]);
+        assert!(e.undo());assert_eq!(e.project,before);
+        assert!(e.apply(Action::ExtendToBoundary{source_path_id:1,
+            target_path_id:2,at_start:false,max_distance_mm:10.0}).is_err());
+        assert_eq!(e.project,before);
+        e.apply(Action::SetPathLocked{id:1,locked:true}).unwrap();
+        let locked=e.project.clone();
+        assert!(e.apply(Action::ExtendToBoundary{source_path_id:1,
+            target_path_id:2,at_start:false,max_distance_mm:20.0}).is_err());
+        assert_eq!(e.project,locked);
+        e.apply(Action::SetPathLocked{id:1,locked:false}).unwrap();
+        e.apply(Action::SetPathVisible{id:2,visible:false}).unwrap();
+        let hidden=e.project.clone();
+        assert!(e.apply(Action::ExtendToBoundary{source_path_id:1,
+            target_path_id:2,at_start:false,max_distance_mm:20.0}).is_err());
+        assert_eq!(e.project,hidden);
+    }
     #[test]
     fn intersection_edits_revalidate_and_undo_source_exactly(){
         let mut editor=Editor::default();
