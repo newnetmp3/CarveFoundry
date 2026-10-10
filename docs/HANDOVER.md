@@ -652,3 +652,53 @@ merged or hardware-tested until final run green. Manual Arch KDE/Wayland
 font list, portal scaling and multiline/non-Latin font limitations require
 desktop QA. Next R1e: grouping/layers and outline editing/trim.
 CNC posting/machine output is still intentionally disabled.
+
+## Verified R1d retained system-font typography — merged PR #114
+
+[PR #114](https://github.com/newnetmp3/CarveFoundry/pull/114)
+merged to main at **fe3cf4c4da05da64d9ea34467750d2ead71cb229**.
+Exact tested feature head **87d21253006bcea2e459139e98b78b3b96cd973b**
+passed [Rust CI #38008575719](https://github.com/newnetmp3/CarveFoundry/actions/runs/38008575719):
+**65 core + 17 studio = 82 tests, strict Clippy, Linux release build**.
+Green validation included installed-font extraction of a real rounded glyph,
+exact quadratic/cubic math, text save/restore, text create/regenerate Undo,
+safe outline detachment, and entire text group drag with baseline updating.
+
+Implemented:
+- Pure-Rust fontdb system font discovery + typeface variant dropdown;
+  ttf-parser exact TrueType/OpenType glyph geometry, exact quadratic degree
+  elevation to cubic Bézier paths, no raster/vector sampling.
+- Native Drawing Text tool and Properties -> Edit text source.
+  Single-line UTF-8 text, height/tracking, XY baseline controls.
+- Optional serde-default text_runs metadata in backward-compatible .cfd;
+  individual glyph contours remain ordinary editable analytic paths usable
+  even when original system font is not installed.
+- Atomic SetText create/regenerate with one Undo history step and no
+  partially imported invalid glyphs; missing/locked/out-of-bounds glyph
+  validation fails without changing the design.
+- Moving all outlines together also moves the retained text baseline
+  (so later text reflow keeps the chosen location).
+- Font binaries are NOT embedded/distributed. Font embedding permissions
+  are checked. SVG/DXF output uses generated ordinary vector outlines.
+
+Important constraints: single line, no full Unicode shaping/ligatures or
+bidirectional/variable axis handling, no kerning in this first tranche.
+Editing text from source rebuilds all glyph outlines and overwrites manual
+node tweaks; deleting one glyph breaks the original text-link intentionally
+but leaves remaining independent paths intact.
+A missing font on another computer prevents text reflow but **does not**
+remove the saved vector outlines. Source metadata is currently an association
+across individual glyph vectors, not yet a first-class grouping/layer feature.
+
+**Manual acceptance remaining:** real Arch/KDE Plasma Wayland font dropdown
+performance/variants, selected glyph editing, source reflow, physical mouse
+group movement and SVG/DXF vector export in independent viewers.
+See docs/TEXT_AUTHORING.md.
+
+**NEXT:** native Rust first-class grouping/layers + group-object UX
+(selection/hiding/locking/rename and retained text groups), precise
+join/trim/offset topology tooling, then more capable font shaping and
+fixture-aware CAM modules with machine safety gates. CNC/NC export is
+still disabled and must not be enabled without dedicated validation.
+
+| 2026-10-09 | PR #114 system-font vector text merged | [CI 38008575719](https://github.com/newnetmp3/CarveFoundry/actions/runs/38008575719): 65 core + 17 studio, strict Clippy and native Linux release; merged fe3cf4c4 | KDE font picker and vector-text QA; grouping/layers next |
