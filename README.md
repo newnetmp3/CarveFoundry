@@ -254,3 +254,14 @@ The Find intersections scanner includes true cubic Bézier with line,
 circular arc and cubic sources, with a source-validated bounded solver.
 Degenerate/coincident curves remain explicitly unsupported.
 See docs/INTERSECTION_EDITING.md for acceptance and limits.
+
+### High-contrast crossings and exact boundary extension (R1h)
+
+Numbered intersection markers now carry dark contrasting labels
+and stay within the canvas viewport. Select two analytic vectors in
+the Drawing topology panel and use **Extend end to reference** to
+extend the chosen open straight terminal to the nearest exact crossing
+with the other vector (including Bézier or true-arc references).
+Start/End, source/target and maximum reach are adjustable.
+One Undo restores the original; overlapping or unsupported cases
+are rejected. See [Topology editing and QA](docs/TOPOLOGY_EDITING.md).
