@@ -30,6 +30,9 @@ pub enum Action {
     MoveNode { path_id: u64, node_id: u64, position: Point },
     MoveControl { path_id: u64, segment_id: u64, handle: u8, position: Point },
     /// Exact geometry topology operations; all must validate atomically.
+    /// Rechecks intersection geometry against current project on every edit.
+    SplitAtIntersection{hit:crate::intersections::IntersectionHit},
+    TrimAtIntersection{hit:crate::intersections::IntersectionHit,at_start:bool},
     SplitSegment{path_id:u64,segment_id:u64,t:f64},
     TrimEndpoint{path_id:u64,at_start:bool,t:f64},
     ExtendLine{path_id:u64,at_start:bool,distance_mm:f64},
@@ -101,6 +104,8 @@ impl Editor {
             Action::Center{id,..}|Action::RemovePath{id}|
             Action::Remove{id}|Action::SetPathClosed{id,..}|
             Action::Duplicate{id}|Action::ConvertContour{id}=>Some(*id),
+            Action::SplitAtIntersection{hit}|
+            Action::TrimAtIntersection{hit,..}=>Some(hit.source_path_id),
             Action::SplitSegment{path_id,..}|
             Action::TrimEndpoint{path_id,..}|
             Action::ExtendLine{path_id,..}|
@@ -441,6 +446,26 @@ impl Editor {
                 if path.locked{return Err("Path is locked".into());}
                 path.move_control(segment_id,handle,position)?;
             }
+            Action::SplitAtIntersection{hit}=>{
+                let verified=crate::intersections::select_verified(&next,&hit)?;
+                let path=next.paths.iter_mut().find(|p|p.id==hit.source_path_id)
+                    .ok_or("Source path no longer exists")?;
+                *path=crate::topology::split_segment(
+                    path,hit.source_segment_id,verified.source_t)?.0;
+            }
+            Action::TrimAtIntersection{hit,at_start}=>{
+                let verified=crate::intersections::select_verified(&next,&hit)?;
+                let path=next.paths.iter_mut().find(|p|p.id==hit.source_path_id)
+                    .ok_or("Source path no longer exists")?;
+                if path.closed{return Err("Trim at crossing needs an open path".into());}
+                let terminal=if at_start{
+                    path.segments.first().map(|s|s.id)
+                }else{path.segments.last().map(|s|s.id)};
+                if terminal!=Some(hit.source_segment_id){
+                    return Err("Selected crossing is not on the chosen terminal edge".into());
+                }
+                *path=crate::topology::trim_endpoint(path,at_start,verified.source_t)?;
+            }
             Action::SplitSegment{path_id,segment_id,t}=>{
                 let path=next.paths.iter_mut().find(|p|p.id==path_id)
                     .ok_or("Path does not exist")?;
@@ -492,7 +517,7 @@ impl Editor {
                 let original=next.paths.iter().find(|p|p.id==path_id)
                     .ok_or("Selected vector is not an analytic path")?;
                 let layer=next.layer_for(path_id);
-                let mut parallel=crate::topology::offset_lines(original,distance_mm)?;
+                let mut parallel=crate::topology::offset_exact(original,distance_mm)?;
                 parallel.id=next.next_id;
                 next.next_id=next.next_id.checked_add(1)
                     .ok_or("Offset path identity exhausted")?;
@@ -858,6 +883,50 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn intersection_edits_revalidate_and_undo_source_exactly(){
+        let mut editor=Editor::default();
+        editor.apply(Action::AddPolyline{name:"Horizontal".into(),closed:false,
+            points:vec![Point::new(0.0,0.0),Point::new(20.0,0.0)]}).unwrap();
+        editor.apply(Action::AddPolyline{name:"Vertical".into(),closed:false,
+            points:vec![Point::new(8.0,-10.0),Point::new(8.0,10.0)]}).unwrap();
+        let baseline=editor.project.clone();
+        let hits=crate::intersections::find_intersections(&editor.project,1).unwrap();
+        assert_eq!(hits.hits.len(),1);
+        let hit=hits.hits[0].clone();
+        editor.apply(Action::SplitAtIntersection{hit:hit.clone()}).unwrap();
+        assert_eq!(editor.project.paths[0].nodes.len(),3);
+        assert!(editor.undo());
+        assert_eq!(editor.project,baseline);
+        editor.apply(Action::TrimAtIntersection{
+            hit:hit.clone(),at_start:true}).unwrap();
+        assert_eq!(editor.project.paths[0].nodes[0].position,Point::new(8.0,0.0));
+        assert!(editor.undo());
+        assert_eq!(editor.project,baseline);
+        editor.apply(Action::MovePath{id:2,origin:Point::new(4.0,0.0)}).unwrap();
+        let before=editor.project.clone();
+        assert!(editor.apply(Action::SplitAtIntersection{hit:hit.clone()}).is_err());
+        assert_eq!(editor.project,before);
+        editor.apply(Action::SetPathLocked{id:1,locked:true}).unwrap();
+        assert!(editor.apply(Action::TrimAtIntersection{
+            hit,at_start:true}).is_err());
+    }
+    #[test]
+    fn arc_offset_is_independent_and_undoable_in_same_layer(){
+        let mut editor=Editor::default();
+        editor.apply(Action::AddAnalytic{name:"Arc".into(),
+            origin:Point::new(10.0,10.0),kind:Primitive::Arc,
+            width_mm:40.0,height_mm:20.0}).unwrap();
+        editor.apply(Action::AddLayer{name:"Arc contours".into()}).unwrap();
+        let layer=editor.project.layers[0].id;
+        editor.apply(Action::AssignLayer{ids:vec![1],layer_id:layer}).unwrap();
+        let before=editor.project.clone();
+        editor.apply(Action::OffsetLines{path_id:1,distance_mm:3.0}).unwrap();
+        assert_eq!(editor.project.paths.len(),2);
+        assert_eq!(editor.project.layer_for(editor.project.paths[1].id),layer);
+        assert_eq!(editor.project.paths[0],before.paths[0]);
+        assert!(editor.undo());assert_eq!(editor.project,before);
+    }
     #[test]
     fn exact_topology_is_atomic_undoable_and_layer_safe(){
         let mut e=Editor::default();
