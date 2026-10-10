@@ -270,7 +270,7 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     if source.nodes.iter().any(|n|(dist(n.position,center)-radius).abs()>1e-7*radius.max(1.0)){
         return Err("Circular arc radii are inconsistent".into());
     }
-    let new_radius=radius+if source.closed{mm}else if clockwise{mm}else{-mm};
+    let new_radius=radius+if source.closed || clockwise{mm}else{-mm};
     if new_radius<0.001 {
         return Err("Offset radius collapses or reverses direction".into());
     }
