@@ -928,7 +928,7 @@ mod tests {
             target_path_id:2,at_start:false,max_distance_mm:20.0}).is_err());
         assert_eq!(e.project,locked);
         e.apply(Action::SetPathLocked{id:1,locked:false}).unwrap();
-        e.apply(Action::SetPathVisible{id:2,visible:false}).unwrap();
+        e.apply(Action::SetVisible{id:2,visible:false}).unwrap();
         let hidden=e.project.clone();
         assert!(e.apply(Action::ExtendToBoundary{source_path_id:1,
             target_path_id:2,at_start:false,max_distance_mm:20.0}).is_err());
