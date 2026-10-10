@@ -455,3 +455,17 @@ and production/machine QA (R7) phases remain future work.
 **Full visual phase diagram:**
 [docs/ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md) — R0 through R7, explicit
 finished R1 subfeatures, next tasks, and machine-output safety gate.
+
+## Active R1f — exact line/arc/cubic topology
+
+Branch feature/rust-r1f-exact-vector-topology adds a first numeric vector
+topology suite: exact de Casteljau Bézier splitting, retained circular arc
+splitting/trimming, open-end line extension, endpoint join with exact
+orientation-reversal and optional true straight connecting edge, mitered
+line-only offsets, and line-line corner chamfers/tangent circular fillets.
+Drawing palette provides discoverable controls. Edits are one undoable
+transaction and reject locked/hidden or unsupported geometry. General
+curve offsets, arbitrary intersection trimming/extension and closed
+contour corner fillets remain future work, not falsely declared complete.
+Rust CI and physical KDE/Wayland interaction still need acceptance.
+No CAM/NC output is enabled.
