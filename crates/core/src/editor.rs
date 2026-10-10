@@ -85,6 +85,23 @@ impl Editor {
         if self.drag_before.is_some() {
             return Err("Finish the active drag before editing another object".into());
         }
+        // Layer/group locks apply to existing individual tools, not only
+        // multi-selection operations. Visibility/lock toggles remain possible.
+        let edited=match &action{
+            Action::MovePath{id,..}|Action::Move{id,..}|
+            Action::RenamePath{id,..}|Action::Rename{id,..}|
+            Action::Flip{id,..}|Action::RotateQuarter{id,..}|
+            Action::Center{id,..}|Action::RemovePath{id}|
+            Action::Remove{id}|Action::SetPathClosed{id,..}|
+            Action::Duplicate{id}=>Some(*id),
+            Action::MoveNode{path_id,..}|Action::MoveControl{path_id,..}|
+            Action::InsertNodeAfter{path_id,..}|Action::RemoveNode{path_id,..}
+                =>Some(*path_id),
+            _=>None,
+        };
+        if let Some(id)=edited && !self.project.editable_vector(id){
+            return Err("Vector, group or layer is hidden/locked".into());
+        }
         let mut next=self.project.clone();
         match action {
             Action::AddRectangle{name,origin,width_mm,height_mm} => {
@@ -578,7 +595,7 @@ impl Editor {
             let contour=project.contours.iter().find(|p|p.id==id);
             match (path,contour) {
                 (Some(_),None)|(None,Some(_))
-                    if project.editable_vector(*id)=>{},
+                    if project.editable_vector(id)=>{},
                 (Some(_),None)|(None,Some(_))=>
                     return Err("Group includes a hidden or locked vector".into()),
                 _=>return Err("Group contains an unknown vector ID".into()),
