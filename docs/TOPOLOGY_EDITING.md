@@ -70,3 +70,17 @@ editable as line, arc and cubic source segments.
 
 **CI does not replace visual geometry or machine QA.** CNC output is
 blocked pending the independent R6 machine-safety release gate.
+
+## Verified automated checkpoint
+
+[PR #116](https://github.com/newnetmp3/CarveFoundry/pull/116)
+merged after [Rust CI #38011306582](https://github.com/newnetmp3/CarveFoundry/actions/runs/38011306582)
+passed 95 Rust tests, strict Clippy and native Linux release build.
+Physical KDE/Wayland editing and independent SVG/DXF curve QA are
+still outstanding.
+
+**Offset clarification:** closed line-only contours have explicit
+self-intersection/degeneracy checks. Open path offsets are bounded and
+validated as analytic lines, but overlapping distant segments in a
+pathological open polyline are not yet exhaustively checked. Visually
+review complex offsets until a robust general contour solver ships.
