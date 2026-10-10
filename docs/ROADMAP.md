@@ -566,7 +566,7 @@ targeted extend-to-boundary, complex corners and desktop/interchange
 QA. Full roadmap: [ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md).
 CNC NC output remains disabled.
 
-## R1h — Targeted extend-to-boundary and marker contrast (active)
+## R1h — Targeted extend-to-boundary and marker contrast (delivered)
 
 Native intersection markers gain dark high-contrast badge backgrounds
 and edge-safe placement (PR #119). Extend-to-Boundary uses a straight
@@ -577,3 +577,30 @@ extension distance. Unsupported collinear overlap/closed source/missing
 reference and locked vectors reject without mutation. Distinct from
 arbitrary tangent/cubic extrapolation, curved offset solving and CAM.
 Strict CI, real KDE Wayland UX and external file QA are separate gates.
+
+## Verified R1h — readable crossing labels and boundary extension
+
+[PR #119](https://github.com/newnetmp3/CarveFoundry/pull/119)
+merged as `398b5e75e262852685bb9c6ad973ee5c0009c580` and passed
+[CI 38014413520](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014413520):
+**94 core + 18 studio tests, strict Clippy, native Linux release**.
+Intersection marker numbering now has opaque dark rounded high-contrast
+badges, cyan/amber rings and viewport-edge-aware label placement.
+
+[PR #120](https://github.com/newnetmp3/CarveFoundry/pull/120)
+merged as `51ab853abb19922f9e589fad0766613a4f5dc863` after final
+[CI 38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760):
+**99 core + 18 studio tests, strict Clippy, native Linux release**.
+New pure Rust Extend-to-Boundary targets the nearest exact forward
+intersection of one OPEN straight terminal with a separate visible
+line/true-circle/Bézier vector, within a bounded maximum reach. Native
+two-vector UI selects source/target, Start/End and reach. Source lock,
+reference visibility, collinear overlap, degenerate curves, and no
+crossing are validated fail-closed; one Undo preserves source and
+reference vector semantics. No G-code/NC.
+
+**Next R1i:** exact robust curved offsets, complex junction fillets and
+targeted curve editing, real KDE/Wayland GUI testing, project golden
+files, and SVG/DXF interoperability QA. [R0–R7 roadmap diagram](ROADMAP_DIAGRAM.md)
+reflects verified delivery but does not equate CAD CI with a finished
+machine-control application.
