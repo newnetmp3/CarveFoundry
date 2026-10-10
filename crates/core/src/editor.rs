@@ -491,9 +491,8 @@ impl Editor {
                     .ok_or("Source analytic vector no longer exists")?;
                 let target=next.paths.iter().find(|p|p.id==target_path_id)
                     .ok_or("Reference analytic vector no longer exists")?;
-                let (_,length)=crate::intersections::nearest_extension_crossing(
+                let changed=crate::curve_extension::extend_to_reference(
                     source,target,at_start,max_distance_mm)?;
-                let changed=crate::topology::extend_line(source,at_start,length)?;
                 let index=next.paths.iter().position(|p|p.id==source_path_id)
                     .ok_or("Source analytic vector no longer exists")?;
                 next.paths[index]=changed;
@@ -905,6 +904,55 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn extending_cubic_and_true_arc_paths_is_atomic_and_reversible(){
+        let mut editor=Editor::default();
+        editor.apply(Action::AddAnalytic{
+            name:"Editable cubic".into(),origin:Point::new(10.0,20.0),
+            kind:Primitive::Cubic,width_mm:20.0,height_mm:10.0,
+        }).unwrap();
+        editor.apply(Action::AddPolyline{
+            name:"Reference".into(),closed:false,
+            points:vec![Point::new(35.0,-20.0),Point::new(35.0,70.0)],
+        }).unwrap();
+        let original=editor.project.clone();
+        editor.apply(Action::ExtendToBoundary{
+            source_path_id:1,target_path_id:2,
+            at_start:false,max_distance_mm:70.0,
+        }).unwrap();
+        assert_eq!(editor.project.paths[0].nodes.len(),3);
+        assert!(matches!(editor.project.paths[0].segments[1].curve,
+            Curve::Cubic{..}));
+        assert_eq!(editor.project.paths[0].segments[0],original.paths[0].segments[0]);
+        assert_eq!(editor.project.paths[1],original.paths[1]);
+        assert!(editor.undo());
+        assert_eq!(editor.project,original);
+        let no_hit=editor.project.clone();
+        assert!(editor.apply(Action::ExtendToBoundary{
+            source_path_id:1,target_path_id:2,
+            at_start:false,max_distance_mm:0.001,
+        }).is_err());
+        assert_eq!(editor.project,no_hit);
+
+        editor.apply(Action::AddAnalytic{
+            name:"True arc".into(),origin:Point::new(0.0,0.0),
+            kind:Primitive::Arc,width_mm:20.0,height_mm:10.0,
+        }).unwrap();
+        editor.apply(Action::AddPolyline{
+            name:"Arc reference".into(),closed:false,
+            points:vec![Point::new(17.0,-50.0),Point::new(17.0,50.0)],
+        }).unwrap();
+        let before_arc=editor.project.clone();
+        editor.apply(Action::ExtendToBoundary{
+            source_path_id:3,target_path_id:4,
+            at_start:false,max_distance_mm:60.0,
+        }).unwrap();
+        assert_eq!(editor.project.paths[2].nodes.len(),3);
+        assert!(matches!(editor.project.paths[2].segments[1].curve,
+            Curve::Arc{..}));
+        assert!(editor.undo());
+        assert_eq!(editor.project,before_arc);
+    }
     #[test]
     fn extend_to_reference_is_atomic_undoable_and_preserves_source_line(){
         let mut e=Editor::default();
