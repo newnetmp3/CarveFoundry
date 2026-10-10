@@ -1,7 +1,7 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 mod ui;
-use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind};
+use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind,TextSpec};
 use eframe::egui;
 use egui::Vec2;
 use std::{path::Path,collections::BTreeSet,fs};
@@ -35,6 +35,13 @@ struct Studio {
     inspector_tab: InspectorTab,
     show_grid: bool,
     show_help: bool,
+    font_database: fontdb::Database,
+    font_choices: Vec<ui::text::FaceChoice>,
+    font_scanned:bool,
+    text_dialog:bool,
+    text_edit_id:Option<u64>,
+    text_error:String,
+    text_spec:TextSpec,
     pending_document: Option<PendingDocument>,
     pending_open_path: Option<String>,
     cursor_world: Option<Point>,
@@ -82,6 +89,12 @@ impl Default for Studio {
             inspector_tab: InspectorTab::Objects,
             show_grid: true,
             show_help: false,
+            font_database:fontdb::Database::new(),
+            font_choices:Vec::new(),font_scanned:false,
+            text_dialog:false,text_edit_id:None,text_error:String::new(),
+            text_spec:TextSpec{text:"US NAVY".into(),family:String::new(),
+                postscript:String::new(),height_mm:24.0,tracking_mm:0.0,
+                origin:Point::new(20.0,80.0)},
             pending_document: None,
             pending_open_path: None,
             cursor_world: None,
