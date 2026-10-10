@@ -171,6 +171,66 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
         },
     }
 }
+/// Extend a terminal straight-edge ray to the NEAREST source-accurate
+/// crossing with another path. The reference stays unchanged. An overlap
+/// (non-unique boundary) is a hard error, not an arbitrary guessed result.
+pub fn nearest_extension_crossing(source:&AnalyticPath,target:&AnalyticPath,
+    at_start:bool,max_distance_mm:f64)->Result<(Point,f64),String>{
+    if source.id==target.id {
+        return Err("Choose two different analytic vectors".into());
+    }
+    if source.closed{return Err("Extend to boundary requires an open source path".into());}
+    if !max_distance_mm.is_finite() || !(0.001..=10000.0).contains(&max_distance_mm){
+        return Err("Maximum extension must be 0.001–10000 mm".into());
+    }
+    let n=source.nodes.len();
+    let edge=if at_start{0}else{source.segments.len()-1};
+    if !matches!(source.segments[edge].curve,Curve::Line){
+        return Err("Only an open straight terminal edge can extend to a boundary".into());
+    }
+    let index=if at_start{0}else{n-1};
+    let inner=if at_start{1}else{n-2};
+    let tip=source.nodes[index].position.offset(source.origin.x,source.origin.y);
+    let previous=source.nodes[inner].position.offset(source.origin.x,source.origin.y);
+    let outward=sub(tip,previous);
+    let direction_len=norm(outward);
+    if direction_len<1e-9{return Err("Source terminal edge has no direction".into());}
+    let direction=mul(outward,1.0/direction_len);
+    let ray=Edge{a:tip,b:add(tip,mul(direction,max_distance_mm)),
+        curve:Curve::Line};
+    let mut best:Option<(Point,f64)>=None;
+    for j in 0..target.segments.len(){
+        let reference=Edge::in_world(target,j);
+        if matches!(reference.curve,Curve::Line){
+            let dir=sub(reference.b,reference.a);
+            let len=norm(dir);
+            if len>1e-9
+                && cross(direction,dir).abs()<=1e-10*len
+                && cross(sub(reference.a,tip),direction).abs()<1e-7{
+                let a=dot(sub(reference.a,tip),direction);
+                let b=dot(sub(reference.b,tip),direction);
+                if a.max(b)>0.001 && a.min(b)<max_distance_mm{
+                    return Err("Reference overlaps the extension ray; boundary is ambiguous".into());
+                }
+            }
+        }
+        let (hits,unsupported)=intersect(ray,reference);
+        if unsupported{
+            return Err("Reference contains an overlapping or unresolved crossing; isolate simpler geometry".into());
+        }
+        for (p,t,_) in hits{
+            let distance=t*max_distance_mm;
+            if distance<0.001-1e-8 || distance>max_distance_mm+1e-7 {
+                continue;
+            }
+            if best.is_none_or(|(_,earlier)|distance<earlier){
+                best=Some((p,distance));
+            }
+        }
+    }
+    best.ok_or_else(||format!("No forward crossing within {max_distance_mm:.3} mm of the selected terminal end"))
+}
+
 pub fn segment_crossings(source:&AnalyticPath,source_segment_id:u64,
     target:&AnalyticPath,target_segment_id:u64)->Result<(Vec<IntersectionHit>,bool),String>{
     if source.id==target.id {
@@ -350,6 +410,56 @@ mod tests{
         };
         let (hits,failed)=segment_crossings(&curve,3,&other,3).unwrap();
         assert!(!failed);assert_eq!(hits.len(),2);
+    }
+    #[test]
+    fn extends_ray_to_nearest_line_not_distant_crossing(){
+        let horizontal=segment(1,Point::new(10.0,10.0),Point::new(20.0,10.0));
+        let near=segment(2,Point::new(35.0,0.0),Point::new(35.0,25.0));
+        let (target,distance)=nearest_extension_crossing(&horizontal,&near,false,20.0).unwrap();
+        assert_eq!(target,Point::new(35.0,10.0));
+        assert!((distance-15.0).abs()<1e-9);
+        assert!(nearest_extension_crossing(&horizontal,&near,false,14.0).is_err());
+        assert!(nearest_extension_crossing(&horizontal,&near,true,25.0).is_err());
+        let west=segment(3,Point::new(2.0,0.0),Point::new(2.0,25.0));
+        let (point,distance)=nearest_extension_crossing(&horizontal,&west,true,10.0).unwrap();
+        assert_eq!(point,Point::new(2.0,10.0));
+        assert!((distance-8.0).abs()<1e-9);
+    }
+    #[test]
+    fn extend_ray_detects_true_cubic_boundary_and_distinct_origins(){
+        let mut src=segment(1,Point::new(0.0,0.0),Point::new(10.0,0.0));
+        src.origin=Point::new(10.0,25.0);
+        let mut cubic=segment(2,Point::new(0.0,-10.0),Point::new(0.0,10.0));
+        cubic.origin=Point::new(35.0,25.0);
+        cubic.segments[0].curve=Curve::Cubic{
+            control1:Point::new(0.0,-3.0),control2:Point::new(0.0,3.0)
+        };
+        let (hit,d)=nearest_extension_crossing(&src,&cubic,false,25.0).unwrap();
+        assert!((hit.x-35.0).abs()<1e-7);
+        assert!((hit.y-25.0).abs()<1e-7);
+        assert!((d-15.0).abs()<1e-7);
+    }
+    #[test]
+    fn extend_chooses_nearest_true_circular_arc_crossing(){
+        let source=segment(1,Point::new(10.0,15.0),Point::new(20.0,15.0));
+        let mut arc=segment(2,Point::new(30.0,10.0),Point::new(50.0,10.0));
+        arc.segments[0].curve=Curve::Arc{
+            center:Point::new(40.0,10.0),clockwise:true
+        };
+        let (hit,d)=nearest_extension_crossing(&source,&arc,false,40.0).unwrap();
+        let nearest_x=40.0-(100.0_f64-25.0).sqrt();
+        assert!((hit.x-nearest_x).abs()<1e-8);
+        assert!((hit.y-15.0).abs()<1e-8);
+        assert!((d-(nearest_x-20.0)).abs()<1e-8);
+    }
+    #[test]
+    fn extension_collinear_overlap_fails_closed(){
+        let src=segment(1,Point::new(10.0,0.0),Point::new(20.0,0.0));
+        let overlap=segment(2,Point::new(25.0,0.0),Point::new(35.0,0.0));
+        assert!(nearest_extension_crossing(&src,&overlap,false,20.0)
+            .unwrap_err().contains("overlaps"));
+        let behind=segment(3,Point::new(-15.0,0.0),Point::new(-5.0,0.0));
+        assert!(nearest_extension_crossing(&src,&behind,false,20.0).is_err());
     }
     #[test]
     fn on_demand_scan_ignores_hidden_and_revalidates_edit(){

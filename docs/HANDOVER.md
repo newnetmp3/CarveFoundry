@@ -1004,3 +1004,31 @@ and independent KDE Wayland/third-party file QA. All CAM/NC machine
 output remains disabled pending R6.
 
 | 2026-10-10 | PR #118 Bézier crossing regression repaired | [CI #38013659809](https://github.com/newnetmp3/CarveFoundry/actions/runs/38013659809): 94 core + 17 studio, strict Clippy, Linux release; merged c3f1afc3 | Owner's original 5-edge design desktop QA; R1h offset/extend |
+
+## Active R1h source-accurate Extend-to-Boundary (with marker contrast)
+
+User asked to apply dark number backgrounds to R1g intersection markers,
+then continue development. PR #119 fixes UI contrast on native canvas:
+opaque dark rounded-number badges, contrasting cyan/amber rings, adaptive
+position near canvas viewport edges, and positioning regression tests.
+KDE visual acceptance still pending.
+
+Following branch `feature/rust-r1h-extend-to-boundary` builds upon
+that UX fix, with an independent substantial R1h geometry tranche:
+- `nearest_extension_crossing` casts a bounded forward terminal-line
+  ray through the exact analytic line/arc/cubic intersection engine.
+  Chooses nearest forward crossing, rejects collinear overlap or
+  unresolved degeneracies and enforces max reach 0.001–10000 mm.
+- `Action::ExtendToBoundary` checks visible reference/ editable
+  source, requires distinct paths and an open straight source terminal,
+  and calls the validated existing `extend_line` function. One Undo
+  transaction; source geometry stays analytic, reference unchanged.
+- Native Drawing topology tools offer two selected vectors, choose
+  source vs reference, start/end and maximum reach. No CAM/NC export.
+- Tests: line/reference nearest intersection, start vs end, maximum
+  reach failure, cubic reference, true arc with two possible hits,
+  collinear-overlap refusal, atomic undo, locked/hidden paths.
+
+CI and PR merge still pending. Final handover must report exact
+feature head/CI/tests and merge. Next: source-preserving advanced curved
+offsets, arc/cubic corner tools, and full KDE/Wayland/CAD interchange QA.

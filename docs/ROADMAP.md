@@ -565,3 +565,15 @@ R1h now prioritizes mathematically robust general curved offsets,
 targeted extend-to-boundary, complex corners and desktop/interchange
 QA. Full roadmap: [ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md).
 CNC NC output remains disabled.
+
+## R1h — Targeted extend-to-boundary and marker contrast (active)
+
+Native intersection markers gain dark high-contrast badge backgrounds
+and edge-safe placement (PR #119). Extend-to-Boundary uses a straight
+terminal ray and current analytic line/circle/Bézier reference segments
+to reach the nearest bounded intersection, as one Undo operation.
+Native two-vector UI permits source selection, Start/End and max
+extension distance. Unsupported collinear overlap/closed source/missing
+reference and locked vectors reject without mutation. Distinct from
+arbitrary tangent/cubic extrapolation, curved offset solving and CAM.
+Strict CI, real KDE Wayland UX and external file QA are separate gates.

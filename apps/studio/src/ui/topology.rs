@@ -34,6 +34,51 @@ impl Studio {
                     }
                 }
             });
+            ui.separator();
+            ui.label("EXTEND ONE OPEN STRAIGHT END TO REFERENCE");
+            let ids=self.selected_ids.iter().copied().collect::<Vec<_>>();
+            if !ids.contains(&self.topology_extend_source){
+                self.topology_extend_source=ids[0];
+            }
+            ui.horizontal_wrapped(|ui|{
+                ui.label("Source");
+                egui::ComboBox::from_id_salt("extend-source-vector")
+                    .selected_text(format!("Vector #{}",self.topology_extend_source))
+                    .show_ui(ui,|ui|{
+                        for id in &ids{
+                            ui.selectable_value(&mut self.topology_extend_source,
+                                *id,format!("Vector #{id}"));
+                        }
+                    });
+                ui.selectable_value(&mut self.topology_at_start,true,"Start");
+                ui.selectable_value(&mut self.topology_at_start,false,"End");
+            });
+            ui.horizontal_wrapped(|ui|{
+                ui.label("Max reach");
+                ui.add(egui::DragValue::new(&mut self.topology_extension_limit_mm)
+                    .range(0.001..=10000.0).speed(1.0).suffix(" mm"));
+            });
+            let source=self.topology_extend_source;
+            let target=if source==ids[0]{ids[1]}else{ids[0]};
+            let source_ok=self.editor.project.paths.iter().any(|p|
+                p.id==source && !p.closed
+                    && matches!(p.segments[
+                        if self.topology_at_start{0}else{p.segments.len()-1}
+                    ].curve,Curve::Line))
+                && self.editor.project.editable_vector(source);
+            let target_ok=self.editor.project.paths.iter().any(|p|p.id==target)
+                && self.editor.project.effective_visible(target);
+            if ui.add_enabled(source_ok&&target_ok,
+                egui::Button::new("Extend end to reference"))
+                .on_hover_text("Extend this OPEN straight endpoint to the nearest forward crossing on the OTHER selected vector (line, true arc or Bézier). Both vectors remain exact; reference untouched. Collinear overlap rejects.")
+                .clicked(){
+                self.apply(Action::ExtendToBoundary{
+                    source_path_id:source,target_path_id:target,
+                    at_start:self.topology_at_start,
+                    max_distance_mm:self.topology_extension_limit_mm,
+                });
+            }
+            ui.small("Refers to the other selected vector. Reaches only forward in a straight line; chooses closest true crossing. Undo restores endpoint.");
         }
         ui.separator();
         ui.strong("INTERSECTIONS · LINES / ARCS / BÉZIERS");
