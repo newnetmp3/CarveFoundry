@@ -12,6 +12,8 @@ pub enum Action {
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
     /// Atomic SVG vector import: assign fresh project-wide identities.
     ImportPaths {paths:Vec<AnalyticPath>},
+    /// Insert or replace an editable text source and its vector contours atomically.
+    SetText {id:Option<u64>,spec:crate::text::TextSpec,paths:Vec<AnalyticPath>},
     ConvertContour {id:u64},
     Duplicate {id:u64},
     DuplicateMany {ids:Vec<u64>},
@@ -115,6 +117,40 @@ impl Editor {
                         .ok_or("SVG imported vector identities exhausted")?;
                     next.paths.push(path);
                 }
+            }
+            Action::SetText{id,spec,paths}=>{
+                spec.validate()?;
+                if paths.is_empty()||paths.len()>512{
+                    return Err("Text requires 1–512 retained outline contours".into());
+                }
+                for p in &paths{p.validate()?;}
+                let label_id=if let Some(id)=id {
+                    let label=next.text_runs.iter().find(|run|run.id==id)
+                        .ok_or("Editable text source not found")?;
+                    if label.outline_ids.iter().any(|old|
+                        next.paths.iter().find(|p|p.id==*old).is_none_or(|p|p.locked)){
+                        return Err("Text contains missing/locked outline; unlock before editing".into());
+                    }
+                    let obsolete:HashSet<_>=label.outline_ids.iter().copied().collect();
+                    next.paths.retain(|p|!obsolete.contains(&p.id));
+                    next.text_runs.retain(|run|run.id!=id);
+                    id
+                }else{
+                    let id=next.next_id;
+                    next.next_id=id.checked_add(1).ok_or("Text ID exhausted")?;
+                    id
+                };
+                let mut outline_ids=Vec::new();
+                for mut p in paths{
+                    p.id=next.next_id;
+                    next.next_id=next.next_id.checked_add(1)
+                        .ok_or("Text outline IDs exhausted")?;
+                    outline_ids.push(p.id);
+                    next.paths.push(p);
+                }
+                next.text_runs.push(crate::text::TextRun{
+                    id:label_id,spec,outline_ids,
+                });
             }
             Action::ConvertContour{id}=>{
                 let contour=next.contours.iter().find(|p|p.id==id)
@@ -404,6 +440,11 @@ impl Editor {
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
         }
+        // If an outline was individually removed, retain the remaining
+        // manually editable curves but detach the now incomplete text source.
+        let existing:HashSet<u64>=next.paths.iter().map(|p|p.id).collect();
+        next.text_runs.retain(|run|
+            run.outline_ids.iter().all(|id|existing.contains(id)));
         next.validate()?;
         if next!=self.project {
             let before=std::mem::replace(&mut self.project,next);
