@@ -11,7 +11,7 @@ enum EditMode { Objects, Nodes, Draw }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Workspace { Drawing, Toolpaths }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
-enum InspectorTab { Objects, Properties, Job }
+enum InspectorTab { Objects, Layers, Properties, Job }
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum PendingDocument { New, Open }
 #[derive(Clone)]
@@ -30,6 +30,10 @@ struct Studio {
     project_path: String,
     rename_target: Option<u64>,
     rename_draft: String,
+    group_name_draft:String,
+    layer_name_draft:String,
+    active_group_id:Option<u64>,
+    active_layer_id:Option<u64>,
     project_name_draft: String,
     workspace: Workspace,
     inspector_tab: InspectorTab,
@@ -84,6 +88,9 @@ impl Default for Studio {
             project_path: "untitled.cfd".into(),
             rename_target: None,
             rename_draft: String::new(),
+            group_name_draft:"New group".into(),
+            layer_name_draft:"New layer".into(),
+            active_group_id:None,active_layer_id:None,
             project_name_draft: Project::default().name,
             workspace: Workspace::Drawing,
             inspector_tab: InspectorTab::Objects,
@@ -137,6 +144,8 @@ impl Studio {
         self.project_name_draft=self.editor.project.name.clone();
         self.rename_target=None;
         self.rename_draft.clear();
+        self.active_group_id=None;
+        self.active_layer_id=None;
         self.workspace=Workspace::Drawing;
         self.inspector_tab=InspectorTab::Objects;
         self.pending_document=None;
