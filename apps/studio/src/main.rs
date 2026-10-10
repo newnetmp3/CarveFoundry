@@ -824,6 +824,35 @@ mod tests {
     }
 
     #[test]
+    fn installed_font_can_produce_real_native_analytic_glyphs(){
+        let mut studio=Studio::default();
+        studio.start_text();
+        if studio.font_choices.is_empty(){
+            // Headless minimal installations may contain no host fonts.
+            return;
+        }
+        let mut any=false;
+        for face in studio.font_database.faces(){
+            let Some((family,_))=face.families.first() else{continue;};
+            let spec=TextSpec{
+                text:"O".into(),family:family.clone(),
+                postscript:face.post_script_name.clone(),
+                height_mm:20.0,tracking_mm:0.0,
+                origin:Point::new(20.0,25.0),
+            };
+            if let Some(Ok(paths))=studio.font_database.with_face_data(face.id,
+                |bytes,index|carvefoundry_core::outline_text(bytes,index,&spec)){
+                if paths.iter().any(|p|p.segments.iter().any(
+                    |s|matches!(s.curve,carvefoundry_core::Curve::Cubic{..}))){
+                    assert!(paths.iter().all(|p|p.validate().is_ok()));
+                    any=true;
+                    break;
+                }
+            }
+        }
+        assert!(any,"No installed font could outline a basic rounded glyph");
+    }
+    #[test]
     fn svg_import_is_one_undo_and_failed_import_is_non_mutating(){
         let mut studio=Studio::default();
         let empty=studio.editor.project.clone();
