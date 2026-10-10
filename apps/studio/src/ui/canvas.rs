@@ -118,7 +118,7 @@ impl Studio {
             );
         }
         for part in &self.editor.project.contours {
-            if !part.visible{continue;}
+            if !self.editor.project.effective_visible(part.id){continue;}
             let points=part.world_points().into_iter().map(&screen).collect();
             let chosen=self.selected_ids.contains(&part.id);
             painter.add(egui::Shape::closed_line(points,
@@ -127,7 +127,7 @@ impl Studio {
                     else{super::theme::VECTOR})));
         }
         for path in &self.editor.project.paths {
-            if !path.visible {continue;}
+            if !self.editor.project.effective_visible(path.id){continue;}
             let Ok(polyline)=path.preview_points(0.3) else {continue;};
             let chosen=self.selected_ids.contains(&path.id);
             let style=Stroke::new(if chosen{2.6}else{1.6},
@@ -357,6 +357,14 @@ impl Studio {
                 };
                 let result=if let Some(id)=hit_id
                     && !selection_extend
+                    && self.edit_mode==EditMode::Objects
+                    && self.editor.project.group_for(id).is_some(){
+                    self.select_vector(Some(id),false);
+                    let ids:Vec<u64>=self.selected_ids.iter().copied().collect();
+                    self.editor.start_group_drag(&ids)
+                        .map(|()|ActiveDrag::Group(ids))
+                }else if let Some(id)=hit_id
+                    && !selection_extend
                     && self.selected_ids.len()>1
                     && self.selected_ids.contains(&id)
                     && self.edit_mode==EditMode::Objects{
@@ -459,7 +467,8 @@ impl Studio {
                     && let Some(end)=pointer_world{
                     let found=marquee_ids(&self.editor.project,start,end);
                     if !self.marquee_extend{self.select_vector(None,false);}
-                    for id in found{self.selected_ids.insert(id);}
+                    let expanded=self.editor.project.expand_groups(found);
+                    for id in expanded{self.selected_ids.insert(id);}
                     self.reconcile_selection();
                     self.status=format!("{} vectors selected",self.selected_ids.len());
                 }
