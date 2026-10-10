@@ -1029,6 +1029,53 @@ that UX fix, with an independent substantial R1h geometry tranche:
   reach failure, cubic reference, true arc with two possible hits,
   collinear-overlap refusal, atomic undo, locked/hidden paths.
 
-CI and PR merge still pending. Final handover must report exact
-feature head/CI/tests and merge. Next: source-preserving advanced curved
-offsets, arc/cubic corner tools, and full KDE/Wayland/CAD interchange QA.
+CI/merge results and current acceptance are recorded in the verified
+section below. Next: source-preserving advanced curved offsets,
+arc/cubic corner tools, and full KDE/Wayland/CAD interchange QA.
+
+## Verified R1h marker contrast + Extend-to-Boundary — PRs #119 and #120
+
+**Marker readability** [PR #119](https://github.com/newnetmp3/CarveFoundry/pull/119):
+merged `398b5e75e262852685bb9c6ad973ee5c0009c580`; exact head
+`9d21652a1ee0b1600b3879ab7a756bdc2f4a04d8` passed
+[CI 38014413520](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014413520):
+**94 core + 18 studio tests (112), strict Clippy, Linux release**.
+Native canvas draws high-contrast dark rounded badges with white marker
+numbers, amber selected/cyan normal borders, and label positioning
+within the viewport. Automated badge placement tests cover corners
+and viewport boundaries; actual KDE visual acceptance still pending.
+
+**Targeted straight-end extension** [PR #120](https://github.com/newnetmp3/CarveFoundry/pull/120):
+merged `51ab853abb19922f9e589fad0766613a4f5dc863`; exact head
+`809f716595cda32a5ce565672fabe602941c8c8f` passed
+[CI 38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760):
+**99 core + 18 studio tests (117), strict Clippy, Linux release**.
+
+Implementation: `intersections::nearest_extension_crossing` shoots a
+bounded straight terminal ray from an OPEN path against every exact
+line/true-circle/cubic Bézier segment of a separate reference path.
+It chooses the nearest forward hit within explicit maximum reach,
+rejects collinear overlaps and numerically unresolved crossings,
+and never derives a source point from preview samples. The
+`Action::ExtendToBoundary` checks source editability, reference
+visibility and distinct source/target identities. Only the source
+straight terminal node changes, atomically in ONE Undo operation;
+the reference path remains untouched. Two-vector UI lets users
+choose source vs target, Start/End and maximum reach.
+Regression tests cover first/last, reach bounds, true circular arcs
+with two crossings, cubic references and differing origins,
+ambiguous collinearity and locked/hidden no-mutation paths.
+
+**Manual KDE Plasma/Wayland acceptance is outstanding** for the user
+screenshot marker contrast, actual pointer selection, two-vector
+extension controls and save/reopen SVG/DXF. Source edits are validated
+by CI but not certified for external CAD or physical CNC.
+
+[Full updated roadmap](ROADMAP_DIAGRAM.md) marks R1h contrast/extension
+done in code; **R1 not complete**. Next **R1i**: mathematically sound
+general curved offsets and complex line/arc/cubic junction tools,
+CAD picker/selection usability QA and independent golden interchange
+files. R2-R7 remain planned, and G-code/NC remains gated in R6.
+
+| 2026-10-10 | PR #119 marker badges merged | [CI 38014413520](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014413520): 112 tests, Clippy, Linux release | Manual KDE contrast |
+| 2026-10-10 | PR #120 Extend-to-Boundary merged | [CI 38014783760](https://github.com/newnetmp3/CarveFoundry/actions/runs/38014783760): 117 tests, Clippy, Linux release | R1i advanced curve offsets and desktop QA |
