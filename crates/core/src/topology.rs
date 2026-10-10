@@ -312,6 +312,8 @@ mod tests{
     }
     fn point_on(curve:&AnalyticPath,i:usize,t:f64)->Point{
         let a=curve.nodes[i].position;let b=curve.nodes[(i+1)%curve.nodes.len()].position;
+        if t<=0.0{return a;}
+        if t>=1.0{return b;}
         match curve.segments[i].curve{
             Curve::Line=>mix(a,b,t),
             Curve::Arc{center,clockwise}=>{
