@@ -1,6 +1,6 @@
-//! Exact 2D line / true-circle intersection discovery for editable CAD.
-//! All results derive from retained analytic segments, never preview samples.
-//! Cubic intersections and coincident arc overlaps are explicitly skipped.
+//! Source-faithful line, circular arc, and cubic Bézier intersections.
+//! All crossing candidates derive from retained analytic geometry.
+//! Overlapping coincident curves and unresolvable pairs fail closed.
 use crate::{AnalyticPath,Curve,Point,Project};
 use std::f64::consts::TAU;
 
@@ -28,7 +28,7 @@ pub struct IntersectionHit{
 #[derive(Clone,Debug,Default)]
 pub struct IntersectionScan{
     pub hits:Vec<IntersectionHit>,
-    /// Cubic intersections / coincident arc overlaps are not silently accepted.
+    /// Coincident / unresolved overlapping edge pairs are never silently accepted.
     pub unsupported_pairs:usize,
 }
 #[derive(Clone,Copy)]
@@ -144,7 +144,31 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
             if dist(c1,c2)<EPS{return (vec![],true);}
             (arc_arc(a,b),false)
         },
-        _=>(vec![],true),
+        (Curve::Cubic{control1,control2},Curve::Line)=>{
+            crate::bezier_intersections::cubic_line(
+                [a.a,control1,control2,a.b],b.a,b.b)
+        },
+        (Curve::Line,Curve::Cubic{control1,control2})=>{
+            let (hits,unsupported)=crate::bezier_intersections::cubic_line(
+                [b.a,control1,control2,b.b],a.a,a.b);
+            (hits.into_iter().map(|(p,t,u)|(p,u,t)).collect(),unsupported)
+        },
+        (Curve::Cubic{control1,control2},
+            Curve::Arc{center,clockwise})=>{
+            crate::bezier_intersections::cubic_arc(
+                [a.a,control1,control2,a.b],b.a,b.b,center,clockwise)
+        },
+        (Curve::Arc{center,clockwise},
+            Curve::Cubic{control1,control2})=>{
+            let (hits,unsupported)=crate::bezier_intersections::cubic_arc(
+                [b.a,control1,control2,b.b],a.a,a.b,center,clockwise);
+            (hits.into_iter().map(|(p,t,u)|(p,u,t)).collect(),unsupported)
+        },
+        (Curve::Cubic{control1:a1,control2:a2},
+            Curve::Cubic{control1:b1,control2:b2})=>{
+            crate::bezier_intersections::cubic_cubic(
+                [a.a,a1,a2,a.b],[b.a,b1,b2,b.b])
+        },
     }
 }
 pub fn segment_crossings(source:&AnalyticPath,source_segment_id:u64,
@@ -258,7 +282,7 @@ mod tests{
         assert_eq!(reversed.len(),1);
     }
     #[test]
-    fn arc_arc_circle_geometry_and_unsupported_cubic(){
+    fn arc_arc_circle_geometry_and_cubic_intersections(){
         let mut a=crate::AnalyticPath::preset(1,"Arc A".into(),
             Point::new(0.0,0.0),Primitive::Arc,10.0,6.0).unwrap();
         let mut b=a.clone();b.id=2;
@@ -270,8 +294,62 @@ mod tests{
         a.segments[0].curve=Curve::Cubic{
             control1:Point::new(2.0,5.0),
             control2:Point::new(8.0,5.0)};
-        let (unsupported,flag)=segment_crossings(&a,3,&b,3).unwrap();
-        assert!(flag&&unsupported.is_empty());
+        let (crossings,flag)=segment_crossings(&a,3,&b,3).unwrap();
+        assert!(!flag,"cubic-to-true-circle must be supported");
+        assert!(crossings.iter().all(|h|h.position.finite()));
+    }
+    #[test]
+    fn screenshot_regression_closed_polygon_crosses_curved_blue_bezier(){
+        let mut p=crate::shapes::polyline(1,"Five edges".into(),
+            Point::new(0.0,0.0),
+            vec![Point::new(70.0,70.0),Point::new(110.0,45.0),
+                Point::new(150.0,70.0),Point::new(140.0,115.0),
+                Point::new(80.0,115.0)],true).unwrap();
+        let mut curve=crate::AnalyticPath::preset(2,"Blue curve".into(),
+            Point::new(0.0,0.0),Primitive::Cubic,90.0,140.0).unwrap();
+        curve.nodes[0].position=Point::new(65.0,35.0);
+        curve.nodes[1].position=Point::new(160.0,145.0);
+        curve.segments[0].curve=Curve::Cubic{
+            control1:Point::new(90.0,110.0),
+            control2:Point::new(150.0,165.0),
+        };
+        p.validate().unwrap();curve.validate().unwrap();
+        let mut project=Project::default();
+        project.paths.extend([p,curve]);
+        project.next_id=3;
+        project.validate().unwrap();
+        let scan=find_intersections(&project,1).unwrap();
+        assert_eq!(scan.unsupported_pairs,0,"cubic crossings should be supported");
+        assert!(scan.hits.len()>=2,"expected multiple curve/polygon crossings: {:?}",scan.hits);
+        for hit in scan.hits {
+            let verified=select_verified(&project,&hit).unwrap();
+            assert!((verified.source_t-hit.source_t).abs()<1e-7);
+        }
+    }
+    #[test]
+    fn asymmetric_cubic_line_and_cubic_cubic_preserve_parameter_order(){
+        let mut curve=crate::AnalyticPath::preset(1,"Cubic".into(),
+            Point::new(20.0,15.0),Primitive::Cubic,10.0,10.0).unwrap();
+        curve.segments[0].curve=Curve::Cubic{
+            control1:Point::new(0.0,10.0),control2:Point::new(10.0,10.0)
+        };
+        let straight=segment(2,Point::new(15.0,20.0),Point::new(35.0,20.0));
+        let (a,failed)=segment_crossings(&curve,3,&straight,3).unwrap();
+        assert!(!failed);assert_eq!(a.len(),2);
+        let (b,failed)=segment_crossings(&straight,3,&curve,3).unwrap();
+        assert!(!failed);assert_eq!(b.len(),2);
+        for h in &a{
+            assert!(b.iter().any(|v|dist(h.position,v.position)<1e-7
+                &&(v.target_t-h.source_t).abs()<1e-7
+                &&(v.source_t-h.target_t).abs()<1e-7));
+        }
+        let mut other=straight;
+        other.segments[0].curve=Curve::Cubic{
+            control1:Point::new(20.0,20.0),
+            control2:Point::new(30.0,20.0),
+        };
+        let (hits,failed)=segment_crossings(&curve,3,&other,3).unwrap();
+        assert!(!failed);assert_eq!(hits.len(),2);
     }
     #[test]
     fn on_demand_scan_ignores_hidden_and_revalidates_edit(){
