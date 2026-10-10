@@ -702,3 +702,39 @@ fixture-aware CAM modules with machine safety gates. CNC/NC export is
 still disabled and must not be enabled without dedicated validation.
 
 | 2026-10-09 | PR #114 system-font vector text merged | [CI 38008575719](https://github.com/newnetmp3/CarveFoundry/actions/runs/38008575719): 65 core + 17 studio, strict Clippy and native Linux release; merged fe3cf4c4 | KDE font picker and vector-text QA; grouping/layers next |
+
+## Active R1e native layers and vector groups — 2026-10-09
+
+The user replied "1" to continue. Baseline verified main
+0d78759cfbf1057d8daa10aad14a513d3c8e7150; all follow-up docs CI
+for PR #114 was green, and there were no open PRs. The next substantial
+Rust slice is feature/rust-r1e-layers-groups.
+
+Pure Rust CAD project organization is kept **separate from analytic path
+geometry**:
+- Optional serde-default `layers`, `layer_members`, `groups` in native
+  .cfd; old files remain loadable at the same schema version.
+- A non-serialized virtual Base layer (ID=0) holds unassigned vectors.
+  Editable custom layer records support visible, locked and rename.
+- Persistent vector groups have stable globally unique group IDs and
+  names; flat membership only, no recursive groups or duplicate ownership.
+- Object-mode clicks on grouped shapes select the whole group, direct drag
+  of one member drags every member in one Undo; Node mode retains access
+  to individual anchors and control handles. Marquee expands full groups.
+- Layer/group visibility propagates into CAD render, hit test and snap;
+  effective editing locks are applied to batch movements and individual
+  direct geometry commands. The Inspector has separate Objects/Groups
+  and Layers controls; layer assignment and group/ungroup are Undo actions.
+- Missing/stale object references and invalid membership are validated,
+  and deleting member vectors cleans up orphaned layer/group records.
+- Text glyph contour geometry and SVG/DXF authoring data are unchanged.
+
+**CI and desktop verification pending.** Manual KDE Wayland GUI checks:
+create three vectors, group two, click one and drag group, switch Node mode
+to move a single anchor, hide/lock group, assign a layer and toggle its
+visibility, save/reopen .cfd, Undo/Redo all steps, delete a grouped vector.
+CNC output is still disabled. Next R1f: source-accurate CAD curve
+join/trim/offset topology.
+
+Update this handover with final PR, verified head/run, merge SHA, and exact
+test count once all gates pass.
