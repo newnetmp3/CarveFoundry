@@ -469,3 +469,27 @@ curve offsets, arbitrary intersection trimming/extension and closed
 contour corner fillets remain future work, not falsely declared complete.
 Rust CI and physical KDE/Wayland interaction still need acceptance.
 No CAM/NC output is enabled.
+
+## Verified R1f exact-source vector topology — PR #116
+
+[PR #116](https://github.com/newnetmp3/CarveFoundry/pull/116)
+merged as **5e5747bd6d6f1abd10ffd9d9c5bf9f1233a52a05**.
+Exact source head **2c378a3986ac96458f3a2377d1f344cc7923feed**
+passed [CI #38011306582](https://github.com/newnetmp3/CarveFoundry/actions/runs/38011306582):
+**78 core + 17 studio tests; strict Clippy; native Linux release**.
+
+Source-preserving numeric tools include exact line/arc/cubic split,
+open endpoint trim, straight end extend, orientation-aware open joins,
+straight-only non-destructive parallel offsets, and open interior
+line-line tangent circular fillets/chamfers. Edits are discoverable
+in the Drawing palette and use validated atomic Undo. Unsupported
+general curves and complex topology are refused instead of replacing
+source geometry with preview tessellation.
+
+**R1 remains in progress.** Next R1g: choose actual intersections
+on-canvas, trim/extend against other geometry, robust curved offsets,
+closed-path fillet/chamfer, test the whole CAD flow on KDE Wayland.
+[Full updated roadmap diagram](ROADMAP_DIAGRAM.md) reflects completed
+software slices and remaining R2–R7 phases, including locked CNC NC
+posting/preflight under R6. Manual desktop and physical Onefinity
+acceptance have not been established.
