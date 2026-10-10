@@ -534,3 +534,12 @@ desktop golden fixtures and original file compatibility testing.
 
 [Full R0–R7 updated roadmap diagram](ROADMAP_DIAGRAM.md)
 now marks R1g implemented, R1h current next, R2–R7 planned/gated.
+
+## Active R1g fix — complete ordinary Bézier intersection scanning
+
+A KDE screenshot revealed five Bézier edge pairs skipped during Find
+intersections. Add source-analytic cubic-line/circle polynomial roots,
+source-checked bounded cubic-cubic intersections and tangency handling.
+Retain same hit metadata, canvas markers, stale-hit validation and Undo.
+Reject overlap/indeterminate curves; do not sample displayed polylines
+as editable vector geometry. CI and owner KDE design retest pending.

@@ -36,7 +36,7 @@ impl Studio {
             });
         }
         ui.separator();
-        ui.strong("INTERSECTIONS · EXACT LINE / CIRCLE");
+        ui.strong("INTERSECTIONS · LINES / ARCS / BÉZIERS");
         if self.topology_scan_source!=only{
             self.topology_crossings.clear();
             self.topology_selected_crossing=0;
@@ -46,7 +46,7 @@ impl Studio {
         if let Some(source_id)=only{
             ui.horizontal_wrapped(|ui|{
                 if ui.button("Find intersections").on_hover_text(
-                    "Scan current source vector against other visible analytic paths. Exact line-line, line-arc and arc-arc crossings only; cubic pairs are counted and skipped.").clicked(){
+                    "Scan current source vector against other visible analytic paths. Source-geometry crossings for lines, true arcs and cubic Bézier curves. Coincident/unsolved overlaps are reported rather than approximated.").clicked(){
                     self.topology_pick_crossing=false;
                     match carvefoundry_core::find_intersections(
                         &self.editor.project,source_id){
@@ -73,7 +73,7 @@ impl Studio {
             });
             if self.topology_scan_source==Some(source_id) {
                 if self.topology_crossings.is_empty(){
-                    ui.small(format!("No supported interior crossings ({} unsupported edge pairs).",
+                    ui.small(format!("No supported interior crossings ({} overlapping/indeterminate edge pairs).",
                         self.topology_skipped_pairs));
                 }else{
                     let i=self.topology_selected_crossing.min(self.topology_crossings.len()-1);
@@ -91,7 +91,7 @@ impl Studio {
                     let hit=self.topology_crossings[i].clone();
                     ui.small(format!("Edge {} at t={:.5} · reference vector {}",
                         hit.source_segment_id,hit.source_t,hit.target_path_id));
-                    ui.small(format!("{} unsupported edge pairs not scanned.",
+                    ui.small(format!("{} overlapping/indeterminate edge pairs (not guessed).",
                         self.topology_skipped_pairs));
                     ui.horizontal_wrapped(|ui|{
                         if ui.button("Split at crossing")

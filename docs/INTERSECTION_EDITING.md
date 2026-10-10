@@ -21,14 +21,20 @@ disabled**.
    If either vector has moved, become hidden, or the crossing is invalid,
    the edit rejects without any project mutation or Undo entry.
 
-Supported source/reference segment pairs are **line-line, line-circular
-arc, and circular arc-circular arc**. Tangencies are deduplicated.
-Reference-only endpoint crossings and interior source fractions are
-handled deterministically. Overlapping coincident circles and **any
-pair containing a cubic Bézier** are NOT solved here: they are counted
-as unsupported, not approximated or silently changed. At most 128
-visible crossings and 150,000 edge pairs may be examined per scan;
-hide unrelated vectors to narrow huge designs.
+Supported source/reference segment pairs include **line-line,
+line–circular arc, arc–arc, cubic Bézier–line, cubic–true-circle arc,
+and cubic–cubic**. Polynomial root isolation handles cubic/line and
+cubic/circle tangencies; bounded convex-hull interval subdivision
+and source-curve refinement handle cubic–cubic. This uses the original
+analytic geometry, never the preview polygon. Tangencies and duplicate
+edge hits are deduplicated. Only source interior fractions can be split,
+while reference endpoints may be used.
+
+Overlapping coincident curves and numerically unresolved configurations
+remain explicitly unsupported; a nonzero count reports these exceptions,
+not every Bézier pair. At most 128 visible crossings and 150,000
+source/reference edge pairs may be examined per scan. Hide unrelated
+vectors to narrow huge designs.
 
 Intersections are source-accurate CAD geometry and preserve original
 segment types. A scan is intentionally temporary UI data; it is never
@@ -95,3 +101,27 @@ The **Circle** shape constructed in the UI uses four cubic Bézier
 segments, not actual circular arcs. Exact concentric circle offset
 therefore requires a true circular-arc source, e.g. a DXF CIRCLE.
 General cubic offsets are not yet enabled.
+
+## Bézier crossings — R1g follow-up pending CI
+
+Earlier R1g scans only supported line/true-circle edge pairs. A screenshot
+of a five-edge polygon intersected by a blue cubic showed "2 exact
+crossings; 5 unsupported edge pairs." The missing pairs were cubic.
+
+This follow-up computes cubic-line and cubic-circle roots from their
+source polynomials (including tangencies), and cubic-cubic crossings
+using bounded control-hull subdivision with source-curve refinement.
+No preview sample points are used as design intersections.
+Coincident/overlapping or unresolved configurations remain explicitly
+unsupported, rather than producing false markers.
+
+The scanner retains source IDs, real curve fractions, the numbered
+canvas markers and revalidation before any split/terminal trim.
+Splitting keeps true cubic controls, never approximated polylines.
+
+Desktop acceptance: reopen the original design, scan its orange five-edge
+shape against the curved blue vector, verify previously missing crossing
+markers, click one, split and Undo. Also check tangencies (one marker),
+coincident cubic overlap (unsupported), stale moved references (reject),
+and SVG/DXF roundtrip retaining true cubic segments.
+CI cannot replace actual KDE/Wayland pointer testing.

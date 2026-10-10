@@ -247,3 +247,10 @@ fillets and straight chamfers. Exact offsets also handle individual
 true circular arcs and concentric all-arc circles. No fake sampled
 cubic intersections or machine NC instructions are produced.
 See [R1g geometry acceptance and limitations](docs/INTERSECTION_EDITING.md).
+
+### Bézier crossing detection
+
+The Find intersections scanner includes true cubic Bézier with line,
+circular arc and cubic sources, with a source-validated bounded solver.
+Degenerate/coincident curves remain explicitly unsupported.
+See docs/INTERSECTION_EDITING.md for acceptance and limits.
