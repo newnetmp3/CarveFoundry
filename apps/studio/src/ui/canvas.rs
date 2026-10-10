@@ -19,6 +19,23 @@ fn cumulative_drag_world(total:Vec2,scale:f32,grid:Option<f64>)->Point {
         -total.y as f64/scale as f64,grid)
 }
 
+/// Place a high-contrast crossing-number badge wholly inside the canvas.
+/// Flip away from the right edge and clamp above/below the stock viewport.
+fn crossing_badge_rect(marker:Pos2,viewport:egui::Rect,text_size:Vec2)->egui::Rect{
+    let size=text_size+Vec2::new(12.0,6.0);
+    let desired_x=if marker.x+12.0+size.x <= viewport.right()-3.0{
+        marker.x+12.0
+    }else{
+        marker.x-12.0-size.x
+    };
+    let desired_y=marker.y-size.y-9.0;
+    let x=desired_x.clamp(viewport.left()+2.0,
+        (viewport.right()-size.x-2.0).max(viewport.left()+2.0));
+    let y=desired_y.clamp(viewport.top()+2.0,
+        (viewport.bottom()-size.y-2.0).max(viewport.top()+2.0));
+    egui::Rect::from_min_size(Pos2::new(x,y),size)
+}
+
 impl Studio {
     pub(crate) fn canvas(&mut self,ui:&mut egui::Ui) {
         ui.horizontal(|ui|{
@@ -204,14 +221,24 @@ impl Studio {
                 let at=screen(hit.position);
                 if !rect.expand(15.0).contains(at){continue;}
                 let active=i==self.topology_selected_crossing;
-                let ink=if active{Color32::from_rgb(255,200,80)}
-                    else{Color32::from_rgb(90,225,205)};
-                painter.circle_filled(at,if active{6.0}else{4.4},ink);
-                painter.circle_stroke(at,if active{10.0}else{7.0},
-                    Stroke::new(1.2,ink));
-                painter.text(at+Vec2::new(10.0,-10.0),
-                    egui::Align2::LEFT_BOTTOM,(i+1).to_string(),
-                    egui::FontId::monospace(11.0),Color32::WHITE);
+                // Contrasting rings identify the exact crossing without
+                // hiding the CAD geometry; the number receives an opaque
+                // badge for readability against stock, grid and curves.
+                let ink=if active{Color32::from_rgb(255,171,49)}
+                    else{Color32::from_rgb(0,196,239)};
+                painter.circle_filled(at,if active{6.0}else{4.8},ink);
+                painter.circle_stroke(at,if active{10.0}else{7.5},
+                    Stroke::new(1.5,ink));
+                let galley=painter.layout_no_wrap(
+                    (i+1).to_string(),
+                    egui::FontId::monospace(if active{12.0}else{11.0}),
+                    Color32::WHITE);
+                let badge=crossing_badge_rect(at,rect,galley.size());
+                painter.rect(badge,4.0,Color32::from_rgb(18,25,35),
+                    Stroke::new(if active{1.6}else{1.0},ink),
+                    egui::StrokeKind::Outside);
+                painter.galley(badge.min+Vec2::new(6.0,3.0),
+                    galley,Color32::WHITE);
             }
         }
         painter.text(screen(Point::new(0.,0.))+Vec2::new(6.,6.),
@@ -625,4 +652,24 @@ mod drag_regression_tests {
         assert_eq!(start.offset(motion.x,motion.y),
             Point::new(60.75,80.125));
     }
+    #[test]
+    fn intersection_number_badge_stays_in_canvas_at_edges(){
+        let viewport=egui::Rect::from_min_max(
+            Pos2::new(0.0,0.0),Pos2::new(300.0,180.0));
+        let digits=Vec2::new(22.0,14.0);
+        for marker in [
+            Pos2::new(10.0,10.0),Pos2::new(295.0,10.0),
+            Pos2::new(299.0,179.0),Pos2::new(0.0,179.0),
+            Pos2::new(150.0,90.0),
+        ]{
+            let label=crossing_badge_rect(marker,viewport,digits);
+            assert!(viewport.contains(label.min));
+            assert!(label.max.x<=viewport.right());
+            assert!(label.max.y<=viewport.bottom());
+            assert_eq!(label.size(),digits+Vec2::new(12.0,6.0));
+        }
+        let right=crossing_badge_rect(Pos2::new(295.0,90.0),viewport,digits);
+        assert!(right.max.x<295.0,"near-edge badge should flip left");
+    }
+
 }
