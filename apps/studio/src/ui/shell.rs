@@ -107,6 +107,9 @@ impl Studio {
                     if ui.button("Circular arc").clicked(){
                         self.add_analytic(Primitive::Arc);ui.close();
                     }
+                    if ui.button("Vector text…").on_hover_text("Create editable system-font outlines").clicked(){
+                        self.start_text();ui.close();
+                    }
                     if ui.button("Cubic Bézier").clicked(){
                         self.add_analytic(Primitive::Cubic);ui.close();
                     }
@@ -148,6 +151,10 @@ impl Studio {
                     if ui.selectable_value(&mut self.edit_mode,EditMode::Draw,"Pen [P]")
                         .on_hover_text("Click an open polyline or closed polygon").clicked(){
                         self.active_shape=None;self.exact_shape_placement=false;self.shape_drag_start=None;
+                    }
+                    ui.separator();
+                    if ui.button("Text").on_hover_text("Installed font vector text").clicked(){
+                        self.start_text();
                     }
                     ui.separator();
                     ui.strong("SHAPES");
@@ -246,6 +253,7 @@ impl Studio {
         }
     }
     fn overlays(&mut self,ctx:&egui::Context) {
+        self.text_overlay(ctx);
         egui::Window::new("Controls & shortcuts")
             .open(&mut self.show_help).resizable(false).show(ctx,|ui|{
                 ui.heading("Drawing workspace");
