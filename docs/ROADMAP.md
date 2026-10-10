@@ -493,3 +493,16 @@ closed-path fillet/chamfer, test the whole CAD flow on KDE Wayland.
 software slices and remaining R2–R7 phases, including locked CNC NC
 posting/preflight under R6. Manual desktop and physical Onefinity
 acceptance have not been established.
+
+
+## R1g active — real intersections and closed/circular CAD topology
+
+Branch `feature/rust-r1g-analytic-intersections` extends exact-source
+CAD with selectable on-demand line/true-arc/circle intersections,
+revalidated atomic intersection split and open-end trim, canvas markers
+and dedicated marker-pick mode, closed line-line fillets/chamfers,
+and non-destructive true circular/concentric-circle offsets. Unsupported
+cubic intersections and general curve offsets are counted/rejected,
+never approximated by on-screen preview tessellation. GUI and geometric
+regression tests, strict Rust CI, Linux release and separate KDE/Wayland
+acceptance remain release gates. CNC NC export stays disabled.
