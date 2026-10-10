@@ -452,9 +452,17 @@ impl Studio {
     fn select_vector(&mut self,id:Option<u64>,additive:bool){
         if !additive{self.selected_ids.clear();}
         if let Some(id)=id{
-            if additive && self.selected_ids.contains(&id){
-                self.selected_ids.remove(&id);
-            }else{self.selected_ids.insert(id);}
+            let expanded=if self.edit_mode==EditMode::Objects{
+                self.editor.project.expand_groups([id])
+            }else{vec![id]};
+            let all_present=expanded.iter().all(|id|self.selected_ids.contains(id));
+            for member in expanded{
+                if additive && all_present{
+                    self.selected_ids.remove(&member);
+                }else{
+                    self.selected_ids.insert(member);
+                }
+            }
         }
         self.selected_path=None;self.selected=None;
         self.reconcile_selection();
@@ -548,6 +556,15 @@ impl Studio {
             Some(Hit::Path(id))=>self.select_vector(Some(id),additive),
             Some(Hit::Contour(id))=>self.select_vector(Some(id),additive),
             None=>self.select_vector(None,additive),
+        }
+    }
+    fn select_entire_group(&mut self,id:u64){
+        if let Some(group)=self.editor.project.groups.iter().find(|g|g.id==id){
+            self.selected_ids=group.members.iter().copied().collect();
+            self.selected_path=None;self.selected=None;
+            self.selected_node=None;self.selected_handle=None;
+            self.edit_mode=EditMode::Objects;
+            self.reconcile_selection();
         }
     }
     fn run_selected(&mut self,action:impl FnOnce(u64)->Action){
