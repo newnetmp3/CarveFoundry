@@ -850,3 +850,36 @@ fillet/chamfer, more precise DXF/SVG acceptance and desktop QA before R2.
 the new verified R1f slice. CNC/NC export remains gated under R6.
 
 | 2026-10-09/10 | PR #116 exact Rust topology slice merged | [CI #38011306582](https://github.com/newnetmp3/CarveFoundry/actions/runs/38011306582): 78 core + 17 studio, strict Clippy, Linux release; merge 5e5747bd | KDE topology QA, R1g intersection-aware tools and curved offsets |
+
+
+## R1g active — exact intersections, closed corners and circular offsets
+
+Continuing from verified `main` e49c79883e18478c8c66a0c37b9ae96ca3417cbd;
+no open PRs. Branch `feature/rust-r1g-analytic-intersections` implements:
+
+- Native Rust source-curve intersection engine `crates/core/src/intersections.rs`
+  for bounded line-line, line-circular arc, and circular arc-circular arc
+  segment pairs. Coincident circles and cubic pairs count as unsupported
+  rather than producing approximated intersection points. On-demand scan
+  caps 150k edge pairs/128 intersections, excludes hidden targets and
+  performs no source sampling or frame-by-frame scan.
+- Studio numeric topology panel can scan, select from exact crossings,
+  render numbered canvas markers and enter a dedicated click-marker mode
+  that suspends normal object/node gestures. New atomic editor commands
+  recompute and verify selected crossing before Split or terminal Trim:
+  changed/hidden geometry rejects without mutation.
+- Closed-loop line-line vertices now support native chamfer/true circular
+  fillet, including the wraparound vertex. Offset creates non-destructive
+  true circular arcs from single open arc or validated common-center,
+  consistent-winding closed circle. Arbitrary cubic/elliptical/mixed offsets
+  remain unsupported and cannot be approximated as persisted geometry.
+- `docs/INTERSECTION_EDITING.md` explains pointer workflow, supported
+  geometry, strict refusal behavior and KDE manual acceptance.
+
+CI/PR merge **pending** at this stage: run core/studio tests, strict
+Clippy, native Linux release, then update this handover with exact PR/run/
+head/merge IDs and the complete R0–R7 roadmap diagram.
+Next R1 work after verified merge: general cubic intersections and
+mathematically robust curved offsets, targeted extend-to-boundary,
+complex corner situations, and real KDE Wayland UX QA. CNC postprocessing
+and NC output remain locked.
