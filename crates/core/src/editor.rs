@@ -38,6 +38,17 @@ pub enum Action {
     Rename { id: u64, name: String },
     SetLocked { id: u64, locked: bool },
     Remove { id: u64 },
+    AddLayer{name:String},
+    RenameLayer{id:u64,name:String},
+    SetLayerVisible{id:u64,visible:bool},
+    SetLayerLocked{id:u64,locked:bool},
+    AssignLayer{ids:Vec<u64>,layer_id:u64},
+    RemoveLayer{id:u64},
+    MakeGroup{ids:Vec<u64>,name:String},
+    RenameGroup{id:u64,name:String},
+    SetGroupVisible{id:u64,visible:bool},
+    SetGroupLocked{id:u64,locked:bool},
+    Ungroup{id:u64},
     ChangeStock(Stock),
     AddFixture(Fixture),
 }
@@ -445,6 +456,93 @@ impl Editor {
                 if item.locked {return Err("Contour is locked".into());}
                 next.contours.retain(|p|p.id!=id);
             }
+            Action::AddLayer{name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Layer name must be 1–128 printable characters".into());
+                }
+                let id=next.next_id;
+                next.next_id=id.checked_add(1).ok_or("Layer identifiers exhausted")?;
+                next.layers.push(crate::organization::DesignLayer{
+                    id,name,visible:true,locked:false,
+                });
+            }
+            Action::RenameLayer{id,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Layer needs a short printable name".into());
+                }
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.name=name;
+            }
+            Action::SetLayerVisible{id,visible}=>{
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.visible=visible;
+            }
+            Action::SetLayerLocked{id,locked}=>{
+                next.layers.iter_mut().find(|l|l.id==id)
+                    .ok_or("Unknown layer")?.locked=locked;
+            }
+            Action::AssignLayer{ids,layer_id}=>{
+                Self::check_batch(&next,&ids)?;
+                if layer_id!=0 && !next.layers.iter().any(|l|l.id==layer_id){
+                    return Err("Target layer does not exist".into());
+                }
+                if layer_id!=0 && next.layers.iter().any(|l|
+                    l.id==layer_id && (l.locked || !l.visible)){
+                    return Err("Destination layer is hidden or locked".into());
+                }
+                let targets:HashSet<u64>=ids.iter().copied().collect();
+                next.layer_members.retain(|m|!targets.contains(&m.vector_id));
+                for vector_id in ids {
+                    if layer_id!=0{
+                        next.layer_members.push(crate::organization::LayerMember{
+                            vector_id,layer_id,
+                        });
+                    }
+                }
+            }
+            Action::RemoveLayer{id}=>{
+                if !next.layers.iter().any(|l|l.id==id){
+                    return Err("Layer ID not found".into());
+                }
+                // Move contents back to virtual Base before dropping layer.
+                next.layer_members.retain(|m|m.layer_id!=id);
+                next.layers.retain(|l|l.id!=id);
+            }
+            Action::MakeGroup{ids,name}=>{
+                Self::check_batch(&next,&ids)?;
+                if ids.len()<2 || !crate::organization::valid_name(&name){
+                    return Err("Select 2+ editable vectors and a valid group name".into());
+                }
+                if ids.iter().any(|id|next.group_for(*id).is_some()){
+                    return Err("Ungroup existing objects before regrouping".into());
+                }
+                let id=next.next_id;
+                next.next_id=id.checked_add(1).ok_or("Group IDs exhausted")?;
+                next.groups.push(crate::organization::VectorGroup{
+                    id,name,members:ids,visible:true,locked:false,
+                });
+            }
+            Action::RenameGroup{id,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Group needs a printable name".into());
+                }
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.name=name;
+            }
+            Action::SetGroupVisible{id,visible}=>{
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.visible=visible;
+            }
+            Action::SetGroupLocked{id,locked}=>{
+                next.groups.iter_mut().find(|g|g.id==id)
+                    .ok_or("Unknown group")?.locked=locked;
+            }
+            Action::Ungroup{id}=>{
+                if !next.groups.iter().any(|g|g.id==id){
+                    return Err("Unknown group ID".into());
+                }
+                next.groups.retain(|g|g.id!=id);
+            }
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
         }
@@ -453,6 +551,13 @@ impl Editor {
         let existing:HashSet<u64>=next.paths.iter().map(|p|p.id).collect();
         next.text_runs.retain(|run|
             run.outline_ids.iter().all(|id|existing.contains(id)));
+        let all_vectors:HashSet<u64>=next.paths.iter().map(|p|p.id)
+            .chain(next.contours.iter().map(|p|p.id)).collect();
+        next.layer_members.retain(|m|all_vectors.contains(&m.vector_id));
+        for group in &mut next.groups{
+            group.members.retain(|id|all_vectors.contains(id));
+        }
+        next.groups.retain(|g|g.members.len()>=2);
         next.validate()?;
         if next!=self.project {
             let before=std::mem::replace(&mut self.project,next);
@@ -472,8 +577,8 @@ impl Editor {
             let path=project.paths.iter().find(|p|p.id==id);
             let contour=project.contours.iter().find(|p|p.id==id);
             match (path,contour) {
-                (Some(p),None) if p.visible&&!p.locked=>{},
-                (None,Some(p)) if p.visible&&!p.locked=>{},
+                (Some(_),None)|(None,Some(_))
+                    if project.editable_vector(*id)=>{},
                 (Some(_),None)|(None,Some(_))=>
                     return Err("Group includes a hidden or locked vector".into()),
                 _=>return Err("Group contains an unknown vector ID".into()),
@@ -513,6 +618,9 @@ impl Editor {
 
     pub fn start_drag(&mut self, id: u64) -> Result<Point,String> {
         if self.drag_before.is_some() {return Err("Drag already active".into());}
+        if !self.project.editable_vector(id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let contour=self.project.contours.iter().find(|p|p.id==id)
             .ok_or("Contour ID not found")?;
         if contour.locked || !contour.visible {
@@ -557,6 +665,9 @@ impl Editor {
     }
     pub fn start_node_drag(&mut self,path_id:u64,node_id:u64)->Result<Point,String>{
         if self.drag_before.is_some(){return Err("Drag already active".into());}
+        if !self.project.editable_vector(path_id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let path=self.project.paths.iter().find(|p|p.id==path_id)
             .ok_or("Analytic path ID not found")?;
         if path.locked || !path.visible {return Err("Cannot edit hidden or locked path".into());}
@@ -581,6 +692,9 @@ impl Editor {
     pub fn start_control_drag(&mut self,path_id:u64,segment_id:u64,handle:u8)
         ->Result<Point,String>{
         if self.drag_before.is_some(){return Err("Drag already active".into());}
+        if !self.project.editable_vector(path_id){
+            return Err("Layer, group or vector is locked/hidden".into());
+        }
         let path=self.project.paths.iter().find(|p|p.id==path_id)
             .ok_or("Analytic path ID not found")?;
         if path.locked || !path.visible {return Err("Cannot edit hidden or locked path".into());}
