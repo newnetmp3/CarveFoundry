@@ -1096,8 +1096,7 @@ true circular arcs and cubic Béziers. Straight terminals still dispatch
 to the preexisting line extension. Original source geometry retained
 as-is; a new analytic segment and node are added, reversible in one Undo
 transaction. Cubic continuation algebraically reparameterizes the
-existing degree-three polynomial outside [0,1], preserving position,
-tangent and second derivative at the seam, not approximated by a straight
+existing degree-three polynomial outside [0,1], preserving position, tangent direction and geometric curvature at the seam, not approximated by a straight
 tangent line. Curved reach measured by bounded numerical arc-length,
 not sampled design geometry. Restrict cubic polynomial extrapolation to
 two parameter lengths and arcs to less than one revolution; reject
