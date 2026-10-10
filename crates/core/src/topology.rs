@@ -411,7 +411,9 @@ mod tests{
         assert!(split_segment(&p,3,0.0).is_err());
         assert!(extend_line(&p,true,5.0).is_err());
         assert!(offset_lines(&p,3.0).is_err());
-        assert!(join_open(&p,&demo(Primitive::Cubic),0.05).is_err());
+        let mut distant=demo(Primitive::Cubic);
+        distant.origin=Point::new(200.0,100.0);
+        assert!(join_open(&p,&distant,0.05).is_err());
         assert_eq!(p,original);
     }
 }
