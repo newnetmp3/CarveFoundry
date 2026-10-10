@@ -87,7 +87,7 @@ impl Studio {
                     let mode=match curve{
                         Curve::Line=>"Straight endpoint: extends on its existing line",
                         Curve::Arc{..}=>"Circular endpoint: continues exact circle and winding",
-                        Curve::Cubic{..}=>"Bézier endpoint: continues exact polynomial with C² smoothness",
+                        Curve::Cubic{..}=>"Bézier endpoint: continues exact polynomial with G² geometric smoothness",
                     };
                     ui.small(mode);
                 }
