@@ -506,3 +506,31 @@ cubic intersections and general curve offsets are counted/rejected,
 never approximated by on-screen preview tessellation. GUI and geometric
 regression tests, strict Rust CI, Linux release and separate KDE/Wayland
 acceptance remain release gates. CNC NC export stays disabled.
+
+## Verified R1g exact analytic intersections — PR #117
+
+[PR #117](https://github.com/newnetmp3/CarveFoundry/pull/117)
+merged to main at `5663414c7f55db12dfe15734d51fa6790d7fd6dd`.
+Exact feature head `c583cf3cd585d82eb729efbecaf5bc2367ba9f2a`
+passed [CI 38012411651](https://github.com/newnetmp3/CarveFoundry/actions/runs/38012411651):
+**86 core + 17 studio = 103 tests**, strict Clippy and native Linux
+release build.
+
+Delivered: precise line-line, line/true arc and arc-arc intersections,
+numbered canvas markers and explicit marker-pick mode; edit actions
+revalidate geometry and trim only terminal source segments as needed.
+Closed straight-contour fillets/chamfers preserve exact circular geometry.
+Single true open circular arcs and concentric all-arc closed circles
+support exact new offset vectors. Cubic intersection solving, arbitrary
+curve offsets and line/arc/cubic compound corner modifications remain
+future source-accurate work; unsupported cases are explicitly rejected
+rather than sampled. Full real KDE Wayland and SVG/DXF independent QA
+is still outstanding. No machining/NC code is enabled.
+
+**NEXT R1h**: bounded analytic cubic intersections and curve-specific
+topology, more targeted extend/trim workflows, closed/mixed corners
+where mathematically representable, improved on-canvas editing QA,
+desktop golden fixtures and original file compatibility testing.
+
+[Full R0–R7 updated roadmap diagram](ROADMAP_DIAGRAM.md)
+now marks R1g implemented, R1h current next, R2–R7 planned/gated.
