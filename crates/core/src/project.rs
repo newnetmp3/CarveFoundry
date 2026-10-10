@@ -92,12 +92,19 @@ pub struct Project {
     /// Editable text source descriptors; glyph outlines are ordinary native paths.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub text_runs: Vec<crate::text::TextRun>,
+    /// Optional organization metadata; absent in pre-R1e native designs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers:Vec<crate::organization::DesignLayer>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layer_members:Vec<crate::organization::LayerMember>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups:Vec<crate::organization::VectorGroup>,
     pub next_id: u64,
 }
 impl Default for Project {
     fn default() -> Self {
         Self { schema_version:PROJECT_VERSION, name:"Untitled CNC design".into(),
-            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], text_runs:vec![], next_id:1 }
+            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], text_runs:vec![], layers:vec![],layer_members:vec![],groups:vec![],next_id:1 }
     }
 }
 impl Project {
@@ -136,6 +143,7 @@ impl Project {
                 }
             }
         }
+        self.validate_organization()?;
         for fixture in &self.fixtures { fixture.validate()?; }
         Ok(())
     }
