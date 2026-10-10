@@ -433,3 +433,25 @@ snapping and guarded against editing; source Bézier curves, font outlines
 and SVG/DXF interchange remain unchanged. Strict Rust CI, desktop scaling
 and KDE/Wayland pointer QA required before marking verified. Machine NC
 output remains closed. Next R1f: analytic trim/join/offset editing.
+
+## Verified R1e layer/group CAD organization — PR #115
+
+[PR #115](https://github.com/newnetmp3/CarveFoundry/pull/115)
+merged as **1034c32628bcc12b0e2322f209d9b1ccf366db08**;
+final exact head **7ec60f4c2124b65c901092549de8a4c87afd2ea8**
+passed [Rust CI #38010068138](https://github.com/newnetmp3/CarveFoundry/actions/runs/38010068138):
+**69 core + 17 studio tests, strict Clippy, native Linux release**.
+Persistent named vector groups, editable design layers, Base layer,
+visibility, locks, group selection and dragging, undoable membership
+edits, compatibility with old .cfd, and text reflow associations are
+merged. Automated tests validate project/Undo semantics; direct
+KDE/Wayland UX and third-party interchange tests remain incomplete.
+
+**R1 is still in progress**: source-accurate native join/trim/extend,
+offsets and fillet/chamfer, plus desktop QA, follow next. The mesh
+(R2), job/tool (R3), 2D CAM (R4), 3D CAM (R5), safety/postprocessor (R6)
+and production/machine QA (R7) phases remain future work.
+
+**Full visual phase diagram:**
+[docs/ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md) — R0 through R7, explicit
+finished R1 subfeatures, next tasks, and machine-output safety gate.
