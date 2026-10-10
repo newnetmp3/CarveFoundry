@@ -841,13 +841,12 @@ mod tests {
                 origin:Point::new(20.0,25.0),
             };
             if let Some(Ok(paths))=studio.font_database.with_face_data(face.id,
-                |bytes,index|carvefoundry_core::outline_text(bytes,index,&spec)){
-                if paths.iter().any(|p|p.segments.iter().any(
+                |bytes,index|carvefoundry_core::outline_text(bytes,index,&spec))
+                && paths.iter().any(|p|p.segments.iter().any(
                     |s|matches!(s.curve,carvefoundry_core::Curve::Cubic{..}))){
-                    assert!(paths.iter().all(|p|p.validate().is_ok()));
-                    any=true;
-                    break;
-                }
+                assert!(paths.iter().all(|p|p.validate().is_ok()));
+                any=true;
+                break;
             }
         }
         assert!(any,"No installed font could outline a basic rounded glyph");
