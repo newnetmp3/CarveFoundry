@@ -250,27 +250,73 @@ pub fn offset_lines(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
     output.validate()?;
     Ok(output)
 }
-/// Exact chamfer/fillet of a selected *interior* line-line corner on an
-/// open vector. Preserves adjacent straight source edges; the new arc is a
-/// true radius/center entity. Closed-corner and curve fillets stay gated.
+/// Source-exact parallel offset of one OPEN circular arc, or a CLOSED
+/// concentric all-arc circle. Does not approximate arbitrary curved offsets.
+/// Open arcs: + means left of travel; closed circles: + means outward.
+pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
+    if !mm.is_finite() || mm.abs()<0.001 || mm.abs()>10000.0 {
+        return Err("Circular offset must be 0.001–10000 mm (signed)".into());
+    }
+    if !source.closed && source.segments.len()!=1{
+        return Err("Circular offsets require one open arc or a complete concentric circle".into());
+    }
+    let Curve::Arc{center,clockwise}=source.segments[0].curve else {
+        return Err("A true circular arc is required for exact circular offset".into());
+    };
+    if source.segments.iter().any(|s|s.curve!=Curve::Arc{center,clockwise}){
+        return Err("Circle offset requires one common center and sweep direction".into());
+    }
+    let radius=dist(point(source,0),center);
+    if source.nodes.iter().any(|n|(dist(n.position,center)-radius).abs()>1e-7*radius.max(1.0)){
+        return Err("Circular arc radii are inconsistent".into());
+    }
+    let new_radius=radius+if source.closed{mm}else if clockwise{mm}else{-mm};
+    if new_radius<0.001 {
+        return Err("Offset radius collapses or reverses direction".into());
+    }
+    let ratio=new_radius/radius;
+    let mut draft=source.clone();
+    for node in &mut draft.nodes{
+        node.position=add(center,mul(sub(node.position,center),ratio));
+    }
+    draft.name=format!("{} arc offset {mm:.2} mm",source.name);
+    draft.validate()?;
+    Ok(draft)
+}
+/// Dispatch to a mathematically representable exact parallel.
+/// Cubics, multi-center arc chains and mixed edges fail closed.
+pub fn offset_exact(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
+    if source.segments.iter().all(|s|matches!(s.curve,Curve::Line)){
+        offset_lines(source,mm)
+    }else if source.segments.iter().all(|s|matches!(s.curve,Curve::Arc{..})){
+        offset_circular(source,mm)
+    }else{
+        Err("Exact mixed-curve/cubic offset unavailable; source remains unchanged".into())
+    }
+}
+/// Exact chamfer/fillet of a selected line-line corner (interior for open,
+/// any corner for closed). Adjacent straight source edges are preserved,
+/// and a fillet is an exact circular arc with a tangent radius.
 pub fn corner(path:&AnalyticPath,node_id:u64,distance_mm:f64,radius:bool)
     ->Result<AnalyticPath,String>{
-    if path.closed{return Err("Corner editing currently requires an open path".into());}
     if !distance_mm.is_finite() || !(0.001..=10000.0).contains(&distance_mm){
         return Err("Corner size must be 0.001–10000 mm".into());
     }
     let mut out=path.clone();
     let i=out.nodes.iter().position(|n|n.id==node_id)
         .ok_or("Corner node not found")?;
-    if i==0||i+1>=out.nodes.len(){
-        return Err("Choose an interior corner between two straight segments".into());
+    if !out.closed && (i==0||i+1>=out.nodes.len()){
+        return Err("Open path corners must be interior nodes".into());
     }
-    if !matches!(out.segments[i-1].curve,Curve::Line) ||
+    let incoming_edge=if i==0{out.segments.len()-1}else{i-1};
+    if !matches!(out.segments[incoming_edge].curve,Curve::Line) ||
         !matches!(out.segments[i].curve,Curve::Line){
         return Err("Corner editing currently supports line-line junctions only".into());
     }
     if out.nodes.len()>=256{return Err("Maximum editable node count reached".into());}
-    let prev=point(&out,i-1);let mid=point(&out,i);let next=point(&out,i+1);
+    let prev=point(&out,if i==0{out.nodes.len()-1}else{i-1});
+    let mid=point(&out,i);
+    let next=point(&out,(i+1)%out.nodes.len());
     let incoming=unit(sub(mid,prev))?;let outgoing=unit(sub(next,mid))?;
     let turn=cross(incoming,outgoing);
     if turn.abs()<1e-8{return Err("A fillet/chamfer needs a non-collinear corner".into());}
@@ -403,6 +449,50 @@ mod tests{
         assert!(corner(&p,1,5.0,true).is_err());
         assert!(corner(&p,2,100.0,true).is_err());
         fillet.validate().unwrap();
+    }
+    #[test]
+    fn closed_rectangle_corner_operations_validate_and_keep_loop(){
+        let rectangle=create_shape(1,"Rect".into(),Point::new(10.0,10.0),
+            ShapeKind::Rectangle,50.0,30.0).unwrap();
+        for node_id in [1_u64,3_u64,4_u64]{
+            for fillet in [false,true]{
+                let edited=corner(&rectangle,node_id,3.0,fillet).unwrap();
+                assert!(edited.closed);
+                assert_eq!(edited.nodes.len(),5);
+                assert_eq!(edited.segments.len(),5);
+                assert!(edited.segments.iter().any(|s|
+                    matches!(s.curve,Curve::Arc{..}))==fillet);
+                edited.validate().unwrap();
+            }
+        }
+        assert!(corner(&rectangle,1,50.0,true).is_err());
+        assert_eq!(rectangle.nodes.len(),4);
+    }
+    #[test]
+    fn circular_arc_and_concentric_circle_offsets_retain_true_radius(){
+        let mut arc=demo(Primitive::Arc);
+        let Curve::Arc{center,clockwise}=arc.segments[0].curve else{panic!("Arc");};
+        let radius=dist(arc.nodes[0].position,center);
+        let offset=offset_exact(&arc,4.0).unwrap();
+        assert!(matches!(offset.segments[0].curve,Curve::Arc{..}));
+        assert!((dist(offset.nodes[0].position,center)-radius
+            -if clockwise{4.0}else{-4.0}).abs()<1e-8);
+        assert_eq!(arc.nodes[0].position,Point::new(0.0,0.0));
+        assert!(offset_exact(&arc,-100.0).is_err());
+        let r=12.0;let c=Point::new(10.0,12.0);
+        arc.nodes=vec![
+            Point::new(c.x+r,c.y),Point::new(c.x,c.y+r),
+            Point::new(c.x-r,c.y),Point::new(c.x,c.y-r)
+        ].into_iter().enumerate().map(|(i,position)|
+            PathNode{id:i as u64+1,position}).collect();
+        arc.segments=(0..4).map(|i|PathSegment{id:i+5,
+            curve:Curve::Arc{center:c,clockwise:false}}).collect();
+        arc.closed=true;arc.next_element_id=9;
+        arc.validate().unwrap();
+        let outer=offset_exact(&arc,3.0).unwrap();
+        assert!(outer.closed);
+        assert!((dist(outer.nodes[0].position,c)-15.0).abs()<1e-8);
+        assert!(outer.segments.iter().all(|s|matches!(s.curve,Curve::Arc{..})));
     }
     #[test]
     fn rejects_invalid_or_unsafe_geometry_without_mutating_sources(){
