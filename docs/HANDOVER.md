@@ -622,3 +622,33 @@ vector outlines, then first-class layers/groups and native CAD trim/join.
 Keep all native CNC CAM/post/export gates closed until independently safe.
 
 | 2026-10-09 | PR #113 DXF native vector interchange merged | [CI 37972805832](https://github.com/newnetmp3/CarveFoundry/actions/runs/37972805832) green: 61 core + 16 studio, strict Clippy, native Linux release; merged 08bf1684 | KDE DXF picker + third-party CAD roundtrip; system fonts/text and grouping |
+
+## Active R1d editable system-font text — October 9, 2026
+
+Continuing user-requested development (user replied "1"). Verified main
+72702f17e64e41c49e210ca196680727a0a9bca2, no open PRs,
+main Rust CI 37973399567 passed. Confirmed prior native DXF PR #113.
+
+Feature branch feature/rust-system-font-text introduces pure Rust system font
+outlining via fontdb + ttf-parser, installed font family/variant picker,
+text, em size, tracking and baseline position editing, and exact quadratic
+degree elevation to cubic retained editable CAD geometry (never sampling).
+No font files are distributed or embedded. Native .cfd uses optional
+backward-compatible text_runs metadata referencing ordinary analytic path
+IDs; vector outlines render and export through existing SVG/DXF even when
+original fonts are not installed. Editing typography regenerates all
+associated outlines in one Undo action. If an individual outline is deleted,
+its text-source link detaches safely; remaining outlines persist.
+
+UI: top Drawing and left palette Text buttons, composer dialog,
+font family/variant dropdown, accurate CAD positioning controls, and
+selected text outline -> Properties -> Edit text source. Missing installed
+font on another system prevents re-generation but *not* design loading or
+outlines. Manual node edits are allowed, but changing text settings rebuilds
+glyphs; this limitation must be visible.
+
+**CI pending:** Rust tests, strict Clippy and release build. Do not call this
+merged or hardware-tested until final run green. Manual Arch KDE/Wayland
+font list, portal scaling and multiline/non-Latin font limitations require
+desktop QA. Next R1e: grouping/layers and outline editing/trim.
+CNC posting/machine output is still intentionally disabled.
