@@ -865,6 +865,39 @@ mod tests {
         assert!(editor.start_group_drag(&[1,2]).is_err());
     }
     #[test]
+    fn reflow_text_preserves_layer_and_flat_group_membership(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{text:"AB".into(),
+            family:"Example".into(),postscript:"Example".into(),
+            height_mm:15.0,tracking_mm:0.0,origin:Point::new(12.0,25.0)};
+        let glyph=crate::shapes::create_shape(1,"Letter".into(),spec.origin,
+            ShapeKind::Rectangle,8.0,12.0).unwrap();
+        e.apply(Action::SetText{id:None,spec:spec.clone(),
+            paths:vec![glyph.clone(),glyph.clone()]}).unwrap();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,
+            name:"Badge".into(),origin:Point::new(50.0,35.0),
+            width_mm:10.0,height_mm:10.0}).unwrap();
+        e.apply(Action::AddLayer{name:"Letters".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![2,3],layer_id:layer}).unwrap();
+        e.apply(Action::MakeGroup{ids:vec![2,3,4],name:"Logo".into()}).unwrap();
+        let before=e.project.clone();
+        let mut next=spec;
+        next.text="A".into();
+        e.apply(Action::SetText{id:Some(1),spec:next,paths:vec![glyph]})
+            .unwrap();
+        let new_ids=e.project.text_runs[0].outline_ids.clone();
+        assert_eq!(new_ids.len(),1);
+        assert_eq!(e.project.layer_for(new_ids[0]),layer);
+        assert_eq!(e.project.groups.len(),1);
+        assert_eq!(e.project.expand_groups([4]),vec![4,new_ids[0]]);
+        assert_eq!(e.project.groups[0].members.len(),2);
+        let saved=Project::decode(&e.project.encode().unwrap()).unwrap();
+        assert_eq!(saved,e.project);
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+    }
+    #[test]
     fn text_creation_edit_undo_and_native_project_roundtrip(){
         let mut e=Editor::default();
         let spec=crate::text::TextSpec{
