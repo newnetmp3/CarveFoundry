@@ -779,3 +779,25 @@ extend, offset, fillet/chamfer and associated geometry correctness QA.
 CNC CAM/posted NC safeguards remain a later isolated gate.
 
 | 2026-10-09 | PR #115 native layers and groups merged | [CI 38010068138](https://github.com/newnetmp3/CarveFoundry/actions/runs/38010068138): 69 core + 17 studio, strict Clippy, Linux release; merged 1034c326 | Real KDE groups/layers QA; R1f trim/join/offset; CNC export closed |
+
+## Active R1f exact vector topology (first tranche)
+
+User continued with "1" after verified PR #115. Baseline
+8325c4e16dc78d2379a0a269cc1cc1dd30c7cd64, CI main green; no open
+PRs at kickoff. Branch feature/rust-r1f-exact-vector-topology adds:
+exact circular/cubic/line edge subdivision, endpoint trimming of those
+original segments, straight end extension, orientation-aware join of two
+open paths retaining circle/cubic source (optional true LINE bridge),
+non-destructive parallel offset of straight-only paths, and true circular
+fillets/straight chamfers at open line-line interior corners. Unsupported
+general curve offset/closed-corner intersections fail with explicit errors,
+never with raster preview approximation. Includes real UI palette controls
+and validated/undoable Editor commands, layer and text safety checks.
+See docs/TOPOLOGY_EDITING.md.
+
+CI/merge still pending. Follow up with verified PR, exact CI head/test
+counts/merge SHA. Manual desktop and independent SVG/DXF visual checks
+still required. Next R1 continuation: click-targeted intersection trim,
+closed-path corners, analytic curved offsets, fillet construction across
+arc/line and arc/cubic junctions, then complete KDE acceptance before R2.
+No CNC postprocessing/NC emission.

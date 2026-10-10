@@ -12,6 +12,7 @@ pub mod svg;
 pub mod dxf;
 pub mod text;
 pub mod organization;
+pub mod topology;
 pub use editor::{Action, Editor};
 pub use shapes::{create_shape, polyline, ShapeKind};
 pub use placement::{shape_placement, ShapePlacement};

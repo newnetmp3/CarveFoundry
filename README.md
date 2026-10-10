@@ -225,3 +225,12 @@ Node mode still edits individual nodes. Layers and groups have
 visibility/locking controls, with one-step Undo and .cfd persistence.
 A virtual Base layer always exists. SVG/DXF exports are still vector
 art only; groups/layers are design organization metadata in native .cfd.
+
+## Exact native vector topology tools (R1f)
+
+In the Drawing palette, open **Edit Vector Topology** to split analytic
+lines/arcs/Béziers, trim open endpoints, extend straight ends, join two
+open vectors without curve flattening, create new straight-contour
+offsets, and fillet/chamfer an open line-line corner. Unsupported
+complex geometry is explicitly refused rather than polygonized.
+See [topology controls and limitations](docs/TOPOLOGY_EDITING.md).

@@ -29,6 +29,13 @@ pub enum Action {
     MovePath { id: u64, origin: Point },
     MoveNode { path_id: u64, node_id: u64, position: Point },
     MoveControl { path_id: u64, segment_id: u64, handle: u8, position: Point },
+    /// Exact geometry topology operations; all must validate atomically.
+    SplitSegment{path_id:u64,segment_id:u64,t:f64},
+    TrimEndpoint{path_id:u64,at_start:bool,t:f64},
+    ExtendLine{path_id:u64,at_start:bool,distance_mm:f64},
+    Corner{path_id:u64,node_id:u64,size_mm:f64,fillet:bool},
+    JoinOpen{first_id:u64,second_id:u64,tolerance_mm:f64},
+    OffsetLines{path_id:u64,distance_mm:f64},
     InsertNodeAfter { path_id: u64, node_id: u64 },
     RemoveNode { path_id: u64, node_id: u64 },
     SetPathClosed { id: u64, closed: bool },
@@ -94,6 +101,11 @@ impl Editor {
             Action::Center{id,..}|Action::RemovePath{id}|
             Action::Remove{id}|Action::SetPathClosed{id,..}|
             Action::Duplicate{id}|Action::ConvertContour{id}=>Some(*id),
+            Action::SplitSegment{path_id,..}|
+            Action::TrimEndpoint{path_id,..}|
+            Action::ExtendLine{path_id,..}|
+            Action::Corner{path_id,..}|
+            Action::OffsetLines{path_id,..}|
             Action::MoveNode{path_id,..}|Action::MoveControl{path_id,..}|
             Action::InsertNodeAfter{path_id,..}|Action::RemoveNode{path_id,..}
                 =>Some(*path_id),
@@ -428,6 +440,68 @@ impl Editor {
                     .ok_or("Analytic path ID not found")?;
                 if path.locked{return Err("Path is locked".into());}
                 path.move_control(segment_id,handle,position)?;
+            }
+            Action::SplitSegment{path_id,segment_id,t}=>{
+                let path=next.paths.iter_mut().find(|p|p.id==path_id)
+                    .ok_or("Path does not exist")?;
+                *path=crate::topology::split_segment(path,segment_id,t)?.0;
+            }
+            Action::TrimEndpoint{path_id,at_start,t}=>{
+                let path=next.paths.iter_mut().find(|p|p.id==path_id)
+                    .ok_or("Path does not exist")?;
+                *path=crate::topology::trim_endpoint(path,at_start,t)?;
+            }
+            Action::ExtendLine{path_id,at_start,distance_mm}=>{
+                let path=next.paths.iter_mut().find(|p|p.id==path_id)
+                    .ok_or("Path does not exist")?;
+                *path=crate::topology::extend_line(path,at_start,distance_mm)?;
+            }
+            Action::Corner{path_id,node_id,size_mm,fillet}=>{
+                let path=next.paths.iter_mut().find(|p|p.id==path_id)
+                    .ok_or("Path does not exist")?;
+                *path=crate::topology::corner(path,node_id,size_mm,fillet)?;
+            }
+            Action::JoinOpen{first_id,second_id,tolerance_mm}=>{
+                if first_id==second_id {
+                    return Err("Select two different open paths to join".into());
+                }
+                if !next.editable_vector(first_id) || !next.editable_vector(second_id){
+                    return Err("Both joined paths must be visible and unlocked".into());
+                }
+                if next.layer_for(first_id)!=next.layer_for(second_id)
+                    || next.group_for(first_id).map(|g|g.id)!=
+                        next.group_for(second_id).map(|g|g.id){
+                    return Err("Join needs matching layer/group; move both paths to same organization first".into());
+                }
+                if next.text_runs.iter().any(|run|
+                    run.outline_ids.contains(&first_id) ||
+                    run.outline_ids.contains(&second_id)){
+                    return Err("Join cannot merge retained text glyph sources; detach text first".into());
+                }
+                let a=next.paths.iter().find(|p|p.id==first_id)
+                    .ok_or("First selected vector is not an analytic path")?;
+                let b=next.paths.iter().find(|p|p.id==second_id)
+                    .ok_or("Second selected vector is not an analytic path")?;
+                let joined=crate::topology::join_open(a,b,tolerance_mm)?;
+                next.paths.retain(|p|p.id!=second_id);
+                let target=next.paths.iter_mut().find(|p|p.id==first_id)
+                    .ok_or("First path missing during join")?;
+                *target=joined;
+            }
+            Action::OffsetLines{path_id,distance_mm}=>{
+                let original=next.paths.iter().find(|p|p.id==path_id)
+                    .ok_or("Selected vector is not an analytic path")?;
+                let layer=next.layer_for(path_id);
+                let mut parallel=crate::topology::offset_lines(original,distance_mm)?;
+                parallel.id=next.next_id;
+                next.next_id=next.next_id.checked_add(1)
+                    .ok_or("Offset path identity exhausted")?;
+                if layer!=0{
+                    next.layer_members.push(crate::organization::LayerMember{
+                        vector_id:parallel.id,layer_id:layer,
+                    });
+                }
+                next.paths.push(parallel);
             }
             Action::InsertNodeAfter{path_id,node_id} => {
                 let path=next.paths.iter_mut().find(|p|p.id==path_id)
@@ -784,6 +858,65 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_topology_is_atomic_undoable_and_layer_safe(){
+        let mut e=Editor::default();
+        e.apply(Action::AddAnalytic{name:"Arc".into(),origin:Point::new(0.0,0.0),
+            kind:Primitive::Arc,width_mm:30.0,height_mm:15.0}).unwrap();
+        let start=e.project.clone();
+        let seg=e.project.paths[0].segments[0].id;
+        e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:0.4}).unwrap();
+        assert!(matches!(e.project.paths[0].segments[0].curve,Curve::Arc{..}));
+        assert_eq!(e.project.paths[0].segments.len(),2);
+        assert!(e.undo());assert_eq!(e.project,start);
+        assert!(e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:1.5}).is_err());
+        assert_eq!(e.project,start);
+        e.apply(Action::TrimEndpoint{path_id:1,at_start:true,t:0.3}).unwrap();
+        assert!(e.undo());assert_eq!(e.project,start);
+        e.apply(Action::AddLayer{name:"Protected".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1],layer_id:layer}).unwrap();
+        e.apply(Action::SetLayerLocked{id:layer,locked:true}).unwrap();
+        let locked=e.project.clone();
+        assert!(e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:0.3}).is_err());
+        assert!(e.apply(Action::TrimEndpoint{path_id:1,at_start:false,t:0.3}).is_err());
+        assert!(e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).is_err());
+        assert_eq!(e.project,locked);
+    }
+    #[test]
+    fn joining_paths_one_undo_removes_second_and_preserves_organization(){
+        let mut e=Editor::default();
+        for (i,k) in [Primitive::Line,Primitive::Cubic].into_iter().enumerate(){
+            e.apply(Action::AddAnalytic{name:format!("Path {i}"),
+                origin:Point::new(i as f64*20.0,0.0),
+                kind:k,width_mm:20.0,height_mm:10.0}).unwrap();
+        }
+        e.apply(Action::AddLayer{name:"Geometry".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1,2],layer_id:layer}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::JoinOpen{first_id:1,second_id:2,tolerance_mm:0.0}).unwrap();
+        assert_eq!(e.project.paths.len(),1);
+        assert_eq!(e.project.paths[0].segments.len(),2);
+        assert_eq!(e.project.layer_for(1),layer);
+        assert!(e.project.layer_members.iter().all(|l|l.vector_id!=2));
+        assert!(e.undo());assert_eq!(e.project,before);
+        assert!(e.apply(Action::JoinOpen{first_id:1,second_id:2,tolerance_mm:f64::NAN}).is_err());
+        assert_eq!(e.project,before);
+    }
+    #[test]
+    fn offset_creates_new_editable_vector_not_a_mutated_original(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,name:"Box".into(),
+            origin:Point::new(30.0,30.0),width_mm:35.0,height_mm:20.0}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::OffsetLines{path_id:1,distance_mm:3.0}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!(e.project.paths[0],before.paths[0]);
+        assert_ne!(e.project.paths[0].nodes[0].position,
+            e.project.paths[1].nodes[0].position);
+        assert!(e.undo());assert_eq!(e.project,before);
+    }
     #[test]
     fn true_groups_and_layers_roundtrip_selection_visibility_lock_and_undo(){
         let mut editor=Editor::default();

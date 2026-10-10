@@ -6,5 +6,6 @@ mod inspector;
 mod palette;
 mod shell;
 mod organization;
+mod topology;
 pub(crate) mod text;
 mod icons;
