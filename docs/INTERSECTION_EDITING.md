@@ -95,3 +95,27 @@ The **Circle** shape constructed in the UI uses four cubic Bézier
 segments, not actual circular arcs. Exact concentric circle offset
 therefore requires a true circular-arc source, e.g. a DXF CIRCLE.
 General cubic offsets are not yet enabled.
+
+## Bézier crossings — R1g follow-up pending CI
+
+Earlier R1g scans only supported line/true-circle edge pairs. A screenshot
+of a five-edge polygon intersected by a blue cubic showed "2 exact
+crossings; 5 unsupported edge pairs." The missing pairs were cubic.
+
+This follow-up computes cubic-line and cubic-circle roots from their
+source polynomials (including tangencies), and cubic-cubic crossings
+using bounded control-hull subdivision with source-curve refinement.
+No preview sample points are used as design intersections.
+Coincident/overlapping or unresolved configurations remain explicitly
+unsupported, rather than producing false markers.
+
+The scanner retains source IDs, real curve fractions, the numbered
+canvas markers and revalidation before any split/terminal trim.
+Splitting keeps true cubic controls, never approximated polylines.
+
+Desktop acceptance: reopen the original design, scan its orange five-edge
+shape against the curved blue vector, verify previously missing crossing
+markers, click one, split and Undo. Also check tangencies (one marker),
+coincident cubic overlap (unsupported), stale moved references (reject),
+and SVG/DXF roundtrip retaining true cubic segments.
+CI cannot replace actual KDE/Wayland pointer testing.
