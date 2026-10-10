@@ -12,6 +12,8 @@ pub enum Action {
     AddPolyline {name:String,points:Vec<Point>,closed:bool},
     /// Atomic SVG vector import: assign fresh project-wide identities.
     ImportPaths {paths:Vec<AnalyticPath>},
+    /// Insert or replace an editable text source and its vector contours atomically.
+    SetText {id:Option<u64>,spec:crate::text::TextSpec,paths:Vec<AnalyticPath>},
     ConvertContour {id:u64},
     Duplicate {id:u64},
     DuplicateMany {ids:Vec<u64>},
@@ -53,6 +55,13 @@ impl Editor {
     pub fn new(project: Project) -> Result<Self,String> {
         project.validate()?;
         Ok(Self {project,undo:vec![],redo:vec![],drag_before:None})
+    }
+    fn move_complete_text_sources(next:&mut Project,selected:&HashSet<u64>,delta:Point){
+        for run in &mut next.text_runs{
+            if run.outline_ids.iter().all(|id|selected.contains(id)){
+                run.spec.origin=run.spec.origin.offset(delta.x,delta.y);
+            }
+        }
     }
     pub fn can_undo(&self) -> bool { !self.undo.is_empty() }
     pub fn can_redo(&self) -> bool { !self.redo.is_empty() }
@@ -116,6 +125,40 @@ impl Editor {
                     next.paths.push(path);
                 }
             }
+            Action::SetText{id,spec,paths}=>{
+                spec.validate()?;
+                if paths.is_empty()||paths.len()>512{
+                    return Err("Text requires 1–512 retained outline contours".into());
+                }
+                for p in &paths{p.validate()?;}
+                let label_id=if let Some(id)=id {
+                    let label=next.text_runs.iter().find(|run|run.id==id)
+                        .ok_or("Editable text source not found")?;
+                    if label.outline_ids.iter().any(|old|
+                        next.paths.iter().find(|p|p.id==*old).is_none_or(|p|p.locked)){
+                        return Err("Text contains missing/locked outline; unlock before editing".into());
+                    }
+                    let obsolete:HashSet<_>=label.outline_ids.iter().copied().collect();
+                    next.paths.retain(|p|!obsolete.contains(&p.id));
+                    next.text_runs.retain(|run|run.id!=id);
+                    id
+                }else{
+                    let id=next.next_id;
+                    next.next_id=id.checked_add(1).ok_or("Text ID exhausted")?;
+                    id
+                };
+                let mut outline_ids=Vec::new();
+                for mut p in paths{
+                    p.id=next.next_id;
+                    next.next_id=next.next_id.checked_add(1)
+                        .ok_or("Text outline IDs exhausted")?;
+                    outline_ids.push(p.id);
+                    next.paths.push(p);
+                }
+                next.text_runs.push(crate::text::TextRun{
+                    id:label_id,spec,outline_ids,
+                });
+            }
             Action::ConvertContour{id}=>{
                 let contour=next.contours.iter().find(|p|p.id==id)
                     .ok_or("Legacy contour ID not found")?;
@@ -169,6 +212,7 @@ impl Editor {
                         contour.origin=contour.origin.offset(delta.x,delta.y);
                     }
                 }
+                Self::move_complete_text_sources(&mut next,&selected,delta);
             }
             Action::Arrange{ids,mode}=>{
                 Self::check_batch(&next,&ids)?;
@@ -404,6 +448,11 @@ impl Editor {
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
         }
+        // If an outline was individually removed, retain the remaining
+        // manually editable curves but detach the now incomplete text source.
+        let existing:HashSet<u64>=next.paths.iter().map(|p|p.id).collect();
+        next.text_runs.retain(|run|
+            run.outline_ids.iter().all(|id|existing.contains(id)));
         next.validate()?;
         if next!=self.project {
             let before=std::mem::replace(&mut self.project,next);
@@ -456,6 +505,7 @@ impl Editor {
                 contour.origin=contour.origin.offset(delta.x,delta.y);
             }
         }
+        Self::move_complete_text_sources(&mut next,&selected,delta);
         next.validate()?;
         self.project=next;
         Ok(())
@@ -585,6 +635,67 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn text_creation_edit_undo_and_native_project_roundtrip(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{
+            text:"NAVY".into(),family:"Example".into(),
+            postscript:"Example-Regular".into(),height_mm:20.0,
+            tracking_mm:0.5,origin:Point::new(15.0,25.0),
+        };
+        let a=crate::shapes::create_shape(1,"Glyph A".into(),spec.origin,
+            ShapeKind::Rectangle,10.0,15.0).unwrap();
+        let b=crate::shapes::create_shape(1,"Glyph B".into(),
+            Point::new(28.0,25.0),ShapeKind::Rectangle,9.0,15.0).unwrap();
+        let empty=e.project.clone();
+        e.apply(Action::SetText{id:None,spec:spec.clone(),
+            paths:vec![a.clone(),b.clone()]}).unwrap();
+        assert_eq!(e.project.text_runs.len(),1);
+        let run=e.project.text_runs[0].clone();
+        assert_eq!(run.outline_ids.len(),2);
+        assert_eq!(run.id,1);
+        assert_eq!(run.outline_ids,vec![2,3]);
+        let persisted=crate::Project::decode(&e.project.encode().unwrap()).unwrap();
+        assert_eq!(persisted,e.project);
+        let glyph_ids=run.outline_ids.clone();
+        e.start_group_drag(&glyph_ids).unwrap();
+        e.preview_group_drag(&glyph_ids,Point::new(12.0,5.0)).unwrap();
+        assert_eq!(e.project.text_runs[0].spec.origin,Point::new(27.0,30.0));
+        e.finish_drag();
+        assert!(e.undo());
+        assert_eq!(e.project,persisted);
+        let mut changed=spec;
+        changed.text="N".into();
+        e.apply(Action::SetText{id:Some(run.id),spec:changed.clone(),
+            paths:vec![a]}).unwrap();
+        assert_eq!(e.project.paths.len(),1);
+        assert_eq!(e.project.text_runs[0].spec.text,"N");
+        assert!(e.undo());
+        assert_eq!(e.project,persisted);
+        assert!(e.undo());
+        assert_eq!(e.project,empty);
+        assert!(e.apply(Action::SetText{id:Some(run.id),spec:changed,
+            paths:vec![b]}).is_err());
+        assert_eq!(e.project,empty);
+    }
+    #[test]
+    fn deleting_a_single_text_outline_detaches_source_but_preserves_other_geometry(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{
+            text:"A".into(),family:"Example".into(),
+            postscript:"Example".into(),height_mm:12.0,
+            tracking_mm:0.0,origin:Point::new(1.0,1.0),
+        };
+        let a=crate::shapes::create_shape(1,"Glyph".into(),spec.origin,
+            ShapeKind::Rectangle,10.0,10.0).unwrap();
+        e.apply(Action::SetText{id:None,spec,paths:vec![a]}).unwrap();
+        assert_eq!(e.project.text_runs.len(),1);
+        e.apply(Action::RemovePath{id:2}).unwrap();
+        assert!(e.project.text_runs.is_empty());
+        assert!(e.undo());
+        assert_eq!(e.project.text_runs.len(),1);
+        assert_eq!(e.project.paths.len(),1);
+    }
     #[test]
     fn svg_import_is_all_or_nothing_one_history_entry(){
         let mut e=Editor::default();

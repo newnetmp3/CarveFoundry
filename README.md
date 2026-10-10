@@ -204,3 +204,14 @@ Supported types include LINE, ARC/CIRCLE, LWPOLYLINE with exact bulges,
 and simple non-rational cubic SPLINE. Unsupported entity types reject
 the entire import. DXF is artwork, not CNC instructions.
 See [DXF compatibility and verification](docs/DXF_INTERCHANGE.md).
+
+## Native system-font text (R1d)
+
+Drawing -> Vector text… opens the installed font family and variant picker.
+Choose Unicode text, em size, tracking and an XY baseline to create **true
+editable vector outlines**, not raster or font preview geometry. Select a
+glyph outline and choose Properties -> Edit text source… to regenerate all
+outlines from the saved text settings in one undoable transaction. The .cfd
+keeps text metadata and curves; missing system fonts prevent reflow but
+not viewing existing paths. Individual node edits are allowed, but a later
+text reflow replaces those glyph contours. See docs/TEXT_AUTHORING.md.

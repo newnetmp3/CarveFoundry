@@ -140,6 +140,18 @@ impl Studio {
                     self.apply(Action::RenamePath{id:path.id,name:desired});
                 }
             });
+            if let Some(run)=self.editor.project.text_runs.iter()
+                .find(|run|run.outline_ids.contains(&path.id)){
+                ui.strong(format!("Editable text: {}",run.spec.text));
+                ui.small(format!("{} · {} mm em size",
+                    run.spec.family,run.spec.height_mm));
+                if ui.button("Edit text source…")
+                    .on_hover_text("Regenerates all source glyph outlines as one undoable edit").clicked(){
+                    self.edit_text_for_path(path.id);
+                }
+                ui.small("Manual node edits are allowed; changing text settings rebuilds glyph contours.");
+                ui.separator();
+            }
             ui.small(format!("Path #{} · {} nodes · {} segments",
                 path.id,path.nodes.len(),path.segments.len()));
             ui.separator();

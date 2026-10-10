@@ -1,7 +1,7 @@
 //! CarveFoundry reboot: an independent, 100% Rust desktop and project model.
 //! This version cannot generate toolpaths, preflight machine motion or post NC.
 mod ui;
-use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind};
+use carvefoundry_core::{Action,Editor,Hit,Point,Primitive,Project,ShapeKind,TextSpec};
 use eframe::egui;
 use egui::Vec2;
 use std::{path::Path,collections::BTreeSet,fs};
@@ -35,6 +35,13 @@ struct Studio {
     inspector_tab: InspectorTab,
     show_grid: bool,
     show_help: bool,
+    font_database: fontdb::Database,
+    font_choices: Vec<ui::text::FaceChoice>,
+    font_scanned:bool,
+    text_dialog:bool,
+    text_edit_id:Option<u64>,
+    text_error:String,
+    text_spec:TextSpec,
     pending_document: Option<PendingDocument>,
     pending_open_path: Option<String>,
     cursor_world: Option<Point>,
@@ -82,6 +89,12 @@ impl Default for Studio {
             inspector_tab: InspectorTab::Objects,
             show_grid: true,
             show_help: false,
+            font_database:fontdb::Database::new(),
+            font_choices:Vec::new(),font_scanned:false,
+            text_dialog:false,text_edit_id:None,text_error:String::new(),
+            text_spec:TextSpec{text:"US NAVY".into(),family:String::new(),
+                postscript:String::new(),height_mm:24.0,tracking_mm:0.0,
+                origin:Point::new(20.0,80.0)},
             pending_document: None,
             pending_open_path: None,
             cursor_world: None,
@@ -810,6 +823,34 @@ mod tests {
         assert_eq!(studio.editor.project,before);
     }
 
+    #[test]
+    fn installed_font_can_produce_real_native_analytic_glyphs(){
+        let mut studio=Studio::default();
+        studio.start_text();
+        if studio.font_choices.is_empty(){
+            // Headless minimal installations may contain no host fonts.
+            return;
+        }
+        let mut any=false;
+        for face in studio.font_database.faces(){
+            let Some((family,_))=face.families.first() else{continue;};
+            let spec=TextSpec{
+                text:"O".into(),family:family.clone(),
+                postscript:face.post_script_name.clone(),
+                height_mm:20.0,tracking_mm:0.0,
+                origin:Point::new(20.0,25.0),
+            };
+            if let Some(Ok(paths))=studio.font_database.with_face_data(face.id,
+                |bytes,index|carvefoundry_core::outline_text(bytes,index,&spec))
+                && paths.iter().any(|p|p.segments.iter().any(
+                    |s|matches!(s.curve,carvefoundry_core::Curve::Cubic{..}))){
+                assert!(paths.iter().all(|p|p.validate().is_ok()));
+                any=true;
+                break;
+            }
+        }
+        assert!(any,"No installed font could outline a basic rounded glyph");
+    }
     #[test]
     fn svg_import_is_one_undo_and_failed_import_is_non_mutating(){
         let mut studio=Studio::default();

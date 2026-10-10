@@ -387,3 +387,16 @@ interoperability still requires a real desktop test.
 **Next:** system-font typography with adjustable editable text/vector
 outline workflow, followed by first-class grouping and layers, precision
 join/trim/offset, and further safe DXF entity support.
+
+## R1d editable font typography — active branch
+
+Native system-font text is implemented under feature/rust-system-font-text
+pending strict CI. Use installed TrueType/OpenType fonts, family + variants,
+one-line Unicode glyph outlines, height/tracking/baseline and explicit
+source metadata in optional project text_runs (backward compatible .cfd).
+Exact TTF quadratics become cubic Beziers; no text rasterization.
+Atomic regenerate/Undo retains editability, and imported/exported vector
+outlines work with existing SVG/DXF. Missing fonts on another computer
+must not make saved outlines disappear. Font licensing restrictions are
+respected. Later R1e: grouping, layers and outline trimming/joining.
+CNC exporter remains disabled. Separate KDE manual QA pending.

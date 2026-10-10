@@ -89,12 +89,15 @@ pub struct Project {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<AnalyticPath>,
     pub fixtures: Vec<Fixture>,
+    /// Editable text source descriptors; glyph outlines are ordinary native paths.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_runs: Vec<crate::text::TextRun>,
     pub next_id: u64,
 }
 impl Default for Project {
     fn default() -> Self {
         Self { schema_version:PROJECT_VERSION, name:"Untitled CNC design".into(),
-            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], next_id:1 }
+            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], text_runs:vec![], next_id:1 }
     }
 }
 impl Project {
@@ -118,6 +121,19 @@ impl Project {
             path.validate()?;
             if !seen.insert(path.id) || path.id>=self.next_id {
                 return Err("Duplicate or unstable analytic path identity".into());
+            }
+        }
+        if self.text_runs.len()>512{return Err("Too many editable text sources".into());}
+        let mut referenced=HashSet::new();
+        for label in &self.text_runs{
+            label.validate()?;
+            if label.id>=self.next_id||!seen.insert(label.id){
+                return Err("Duplicate text source ID".into());
+            }
+            for id in &label.outline_ids{
+                if !referenced.insert(*id)||!self.paths.iter().any(|p|p.id==*id){
+                    return Err("Text source references missing/duplicate outline".into());
+                }
             }
         }
         for fixture in &self.fixtures { fixture.validate()?; }

@@ -10,6 +10,7 @@ pub mod arrange;
 pub mod interaction;
 pub mod svg;
 pub mod dxf;
+pub mod text;
 pub use editor::{Action, Editor};
 pub use shapes::{create_shape, polyline, ShapeKind};
 pub use placement::{shape_placement, ShapePlacement};
@@ -18,5 +19,6 @@ pub use interaction::{pick, movement_delta, nearest_snap, marquee_ids, SnapTarge
 pub use geometry::{Point, polygon_contains};
 pub use svg::{SvgVectors,import_svg,export_svg};
 pub use dxf::{DxfVectors,import_dxf,export_dxf};
+pub use text::{TextSpec,TextRun,outline_text};
 pub use project::{Contour, Fixture, Project, Stock, MAX_COORD_MM};
 pub use path::{AnalyticPath, Curve, PathNode, PathSegment, Primitive};

@@ -12,3 +12,6 @@ eframe = { version = "=0.36.2", default-features = false, features = ["default_f
 
 # Native KDE/Wayland file chooser via XDG desktop portal (no GTK3 build dependency).
 rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal"] }
+
+# Discover installed system font faces. No fonts are bundled with CarveFoundry.
+fontdb = "0.24"
