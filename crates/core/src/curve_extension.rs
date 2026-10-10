@@ -121,9 +121,6 @@ pub fn extend_to_reference(source:&AnalyticPath,target:&AnalyticPath,
         }
         Curve::Cubic{control1,control2}=>{
             let a=if at_start{0.0}else{1.0};
-            let b=if at_start{
-                source.nodes[1].position
-            }else{source.nodes[source.nodes.len()-2].position};
             let p0=source.nodes[index].position;
             let p3=source.nodes[index+1].position;
             let c=[p0,control1,control2,p3];
@@ -152,7 +149,6 @@ pub fn extend_to_reference(source:&AnalyticPath,target:&AnalyticPath,
             if !new_curve.iter().all(|p|p.finite()){
                 return Err("Cubic extrapolation exceeded coordinate limits".into());
             }
-            let _=b; // Other endpoint remains part of the original segment.
             (candidate(source,new_curve[0],new_curve[3],
                 Curve::Cubic{control1:new_curve[1],control2:new_curve[2]}),
                 cubic_length(c,a,a+sign*span))
@@ -231,6 +227,7 @@ pub fn extend_to_reference(source:&AnalyticPath,target:&AnalyticPath,
 mod tests{
     use super::*;
     use crate::{Primitive,shapes::polyline};
+    fn cross(a:Point,b:Point)->f64{a.x*b.y-a.y*b.x}
     fn line(id:u64,a:Point,b:Point)->AnalyticPath{
         polyline(id,"Reference".into(),Point::new(0.0,0.0),vec![a,b],false)
             .unwrap()
