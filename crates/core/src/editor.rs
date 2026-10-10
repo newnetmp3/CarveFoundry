@@ -859,6 +859,65 @@ impl Editor {
 mod tests {
     use super::*;
     #[test]
+    fn exact_topology_is_atomic_undoable_and_layer_safe(){
+        let mut e=Editor::default();
+        e.apply(Action::AddAnalytic{name:"Arc".into(),origin:Point::new(0.0,0.0),
+            kind:Primitive::Arc,width_mm:30.0,height_mm:15.0}).unwrap();
+        let start=e.project.clone();
+        let seg=e.project.paths[0].segments[0].id;
+        e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:0.4}).unwrap();
+        assert!(matches!(e.project.paths[0].segments[0].curve,Curve::Arc{..}));
+        assert_eq!(e.project.paths[0].segments.len(),2);
+        assert!(e.undo());assert_eq!(e.project,start);
+        assert!(e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:1.5}).is_err());
+        assert_eq!(e.project,start);
+        e.apply(Action::TrimEndpoint{path_id:1,at_start:true,t:0.3}).unwrap();
+        assert!(e.undo());assert_eq!(e.project,start);
+        e.apply(Action::AddLayer{name:"Protected".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1],layer_id:layer}).unwrap();
+        e.apply(Action::SetLayerLocked{id:layer,locked:true}).unwrap();
+        let locked=e.project.clone();
+        assert!(e.apply(Action::SplitSegment{path_id:1,segment_id:seg,t:0.3}).is_err());
+        assert!(e.apply(Action::TrimEndpoint{path_id:1,at_start:false,t:0.3}).is_err());
+        assert!(e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).is_err());
+        assert_eq!(e.project,locked);
+    }
+    #[test]
+    fn joining_paths_one_undo_removes_second_and_preserves_organization(){
+        let mut e=Editor::default();
+        for (i,k) in [Primitive::Line,Primitive::Cubic].into_iter().enumerate(){
+            e.apply(Action::AddAnalytic{name:format!("Path {i}"),
+                origin:Point::new(i as f64*20.0,0.0),
+                kind:k,width_mm:20.0,height_mm:10.0}).unwrap();
+        }
+        e.apply(Action::AddLayer{name:"Geometry".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1,2],layer_id:layer}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::JoinOpen{first_id:1,second_id:2,tolerance_mm:0.0}).unwrap();
+        assert_eq!(e.project.paths.len(),1);
+        assert_eq!(e.project.paths[0].segments.len(),2);
+        assert_eq!(e.project.layer_for(1),layer);
+        assert!(e.project.layer_members.iter().all(|l|l.vector_id!=2));
+        assert!(e.undo());assert_eq!(e.project,before);
+        assert!(e.apply(Action::JoinOpen{first_id:1,second_id:2,tolerance_mm:f64::NAN}).is_err());
+        assert_eq!(e.project,before);
+    }
+    #[test]
+    fn offset_creates_new_editable_vector_not_a_mutated_original(){
+        let mut e=Editor::default();
+        e.apply(Action::AddShape{kind:ShapeKind::Rectangle,name:"Box".into(),
+            origin:Point::new(30.0,30.0),width_mm:35.0,height_mm:20.0}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::OffsetLines{path_id:1,distance_mm:3.0}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!(e.project.paths[0],before.paths[0]);
+        assert_ne!(e.project.paths[0].nodes[0].position,
+            e.project.paths[1].nodes[0].position);
+        assert!(e.undo());assert_eq!(e.project,before);
+    }
+    #[test]
     fn true_groups_and_layers_roundtrip_selection_visibility_lock_and_undo(){
         let mut editor=Editor::default();
         for i in 0..3{
