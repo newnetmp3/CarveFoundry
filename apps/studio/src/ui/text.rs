@@ -151,8 +151,8 @@ impl Studio{
                 });
             });
         if !open{self.text_dialog=false;}
-        if commit {
-            if let Err(e)=self.commit_text(){self.text_error=e; }
+        if commit && let Err(e)=self.commit_text(){
+            self.text_error=e;
         }
     }
 }
