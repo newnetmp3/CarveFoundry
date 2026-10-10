@@ -13,3 +13,6 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # Bounded XML + SVG path syntax parsing; never execute SVG scripts or resolve network resources.
 roxmltree = "0.20"
 svgtypes = "0.16"
+
+# Retain OpenType/TrueType outlines as editable cubic CAD curves.
+ttf-parser = "0.25"
