@@ -627,6 +627,60 @@ impl Editor {
 mod tests {
     use super::*;
     #[test]
+    fn text_creation_edit_undo_and_native_project_roundtrip(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{
+            text:"NAVY".into(),family:"Example".into(),
+            postscript:"Example-Regular".into(),height_mm:20.0,
+            tracking_mm:0.5,origin:Point::new(15.0,25.0),
+        };
+        let a=crate::shapes::create_shape(1,"Glyph A".into(),spec.origin,
+            ShapeKind::Rectangle,10.0,15.0).unwrap();
+        let b=crate::shapes::create_shape(1,"Glyph B".into(),
+            Point::new(28.0,25.0),ShapeKind::Rectangle,9.0,15.0).unwrap();
+        let empty=e.project.clone();
+        e.apply(Action::SetText{id:None,spec:spec.clone(),
+            paths:vec![a.clone(),b.clone()]}).unwrap();
+        assert_eq!(e.project.text_runs.len(),1);
+        let run=e.project.text_runs[0].clone();
+        assert_eq!(run.outline_ids.len(),2);
+        assert_eq!(run.id,1);
+        assert_eq!(run.outline_ids,vec![2,3]);
+        let persisted=crate::Project::decode(&e.project.encode().unwrap()).unwrap();
+        assert_eq!(persisted,e.project);
+        let mut changed=spec;
+        changed.text="N".into();
+        e.apply(Action::SetText{id:Some(run.id),spec:changed.clone(),
+            paths:vec![a]}).unwrap();
+        assert_eq!(e.project.paths.len(),1);
+        assert_eq!(e.project.text_runs[0].spec.text,"N");
+        assert!(e.undo());
+        assert_eq!(e.project,persisted);
+        assert!(e.undo());
+        assert_eq!(e.project,empty);
+        assert!(e.apply(Action::SetText{id:Some(run.id),spec:changed,
+            paths:vec![b]}).is_err());
+        assert_eq!(e.project,empty);
+    }
+    #[test]
+    fn deleting_a_single_text_outline_detaches_source_but_preserves_other_geometry(){
+        let mut e=Editor::default();
+        let spec=crate::text::TextSpec{
+            text:"A".into(),family:"Example".into(),
+            postscript:"Example".into(),height_mm:12.0,
+            tracking_mm:0.0,origin:Point::new(1.0,1.0),
+        };
+        let a=crate::shapes::create_shape(1,"Glyph".into(),spec.origin,
+            ShapeKind::Rectangle,10.0,10.0).unwrap();
+        e.apply(Action::SetText{id:None,spec,paths:vec![a]}).unwrap();
+        assert_eq!(e.project.text_runs.len(),1);
+        e.apply(Action::RemovePath{id:2}).unwrap();
+        assert!(e.project.text_runs.is_empty());
+        assert!(e.undo());
+        assert_eq!(e.project.text_runs.len(),1);
+        assert_eq!(e.project.paths.len(),1);
+    }
+    #[test]
     fn svg_import_is_all_or_nothing_one_history_entry(){
         let mut e=Editor::default();
         let mut source=AnalyticPath::preset(1,"Curve".into(),
