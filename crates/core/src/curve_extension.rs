@@ -236,13 +236,13 @@ mod tests{
     fn cubic_forward_continuation_reaches_boundary_without_flattening(){
         let original=AnalyticPath::preset(1,"Cubic".into(),Point::new(10.0,20.0),
             Primitive::Cubic,20.0,10.0).unwrap();
-        let boundary=line(2,Point::new(35.0,-20.0),Point::new(35.0,70.0));
+        let boundary=line(2,Point::new(31.0,-20.0),Point::new(31.0,70.0));
         let extended=extend_to_reference(&original,&boundary,false,60.0).unwrap();
         assert_eq!(extended.nodes.len(),3);
         assert_eq!(extended.segments.len(),2);
         assert_eq!(extended.segments[0],original.segments[0]);
         assert_eq!(original.nodes[1],extended.nodes[1]);
-        assert!((extended.nodes[2].position.x+original.origin.x-35.0).abs()<1e-6);
+        assert!((extended.nodes[2].position.x+original.origin.x-31.0).abs()<1e-6);
         assert!(matches!(extended.segments[1].curve,Curve::Cubic{..}));
         let Curve::Cubic{control1,control2} = original.segments[0].curve
             else{panic!("expected cubic");};
@@ -260,7 +260,7 @@ mod tests{
     fn reversed_cubic_start_continues_polynomial_in_backward_direction(){
         let source=AnalyticPath::preset(1,"Curve".into(),Point::new(0.0,0.0),
             Primitive::Cubic,20.0,12.0).unwrap();
-        let boundary=line(2,Point::new(-5.0,-50.0),Point::new(-5.0,50.0));
+        let boundary=line(2,Point::new(-2.0,-50.0),Point::new(-2.0,50.0));
         let extended=extend_to_reference(&source,&boundary,true,100.0).unwrap();
         assert_eq!(extended.nodes.len(),3);
         assert!(extended.nodes[0].position.x<0.0);
