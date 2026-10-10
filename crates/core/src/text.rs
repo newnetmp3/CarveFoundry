@@ -41,7 +41,7 @@ impl TextRun{
         self.spec.validate()?;
         if self.id==0 || self.outline_ids.is_empty()
             || self.outline_ids.len()>512
-            || self.outline_ids.iter().any(|x|*x==0)
+            || self.outline_ids.contains(&0)
             || self.outline_ids.iter().copied().collect::<HashSet<_>>().len()!=self.outline_ids.len(){
             return Err("Text source must reference distinct editable outlines".into());
         }
@@ -129,7 +129,7 @@ impl OutlineBuilder for GeometryBuilder {
 }
 fn convert(contour:Contour,name:String)->Result<AnalyticPath,String>{
     let n=contour.points.len();
-    if n<3 || n>256 || !contour.closed || contour.curves.len()!=n{
+    if !(3..=256).contains(&n) || !contour.closed || contour.curves.len()!=n{
         return Err("Font contains an unrepresentable or degenerate outline".into());
     }
     let nodes=contour.points.into_iter().enumerate().map(|(i,p)|
