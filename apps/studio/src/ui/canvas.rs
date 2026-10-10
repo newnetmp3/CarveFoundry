@@ -196,6 +196,24 @@ impl Studio {
             painter.text(label,egui::Align2::LEFT_BOTTOM,caption,
                 egui::FontId::monospace(11.0),super::theme::SELECTION);
         }
+        // Numbered exact-crossing markers are display-only. They are never
+        // derived from sampled preview polylines; edits revalidate sources.
+        if self.topology_scan_source.is_some()
+            && self.topology_scan_source==self.selected_id(){
+            for (i,hit) in self.topology_crossings.iter().enumerate(){
+                let at=screen(hit.position);
+                if !rect.expand(15.0).contains(at){continue;}
+                let active=i==self.topology_selected_crossing;
+                let ink=if active{Color32::from_rgb(255,200,80)}
+                    else{Color32::from_rgb(90,225,205)};
+                painter.circle_filled(at,if active{6.0}else{4.4},ink);
+                painter.circle_stroke(at,if active{10.0}else{7.0},
+                    Stroke::new(1.2,ink));
+                painter.text(at+Vec2::new(10.0,-10.0),
+                    egui::Align2::LEFT_BOTTOM,(i+1).to_string(),
+                    egui::FontId::monospace(11.0),Color32::WHITE);
+            }
+        }
         painter.text(screen(Point::new(0.,0.))+Vec2::new(6.,6.),
             egui::Align2::LEFT_TOP,"XY0",
             egui::FontId::monospace(12.),Color32::from_rgb(40,50,60));
@@ -326,6 +344,21 @@ impl Studio {
                 self.status=format!("{} selected: drag a diagonal on the stock to place it.",
                     kind.title());
             }
+            }
+        }else if self.topology_pick_crossing {
+            // Crossings are picked BEFORE regular selection/drag behavior.
+            if response.clicked() && let Some(at)=pointer{
+                let nearby=self.topology_crossings.iter().enumerate()
+                    .map(|(i,hit)|(i,screen(hit.position).distance(at)))
+                    .filter(|(_,distance)|*distance<=13.0)
+                    .min_by(|a,b|a.1.total_cmp(&b.1));
+                if let Some((index,_))=nearby{
+                    self.topology_selected_crossing=index;
+                    self.topology_pick_crossing=false;
+                    self.status=format!("Selected exact crossing marker #{}",index+1);
+                }else{
+                    self.status="Click one of the numbered intersection markers, or disable Pick marker".into();
+                }
             }
         }else if self.edit_mode==EditMode::Draw {
             if response.double_clicked(){
