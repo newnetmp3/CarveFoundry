@@ -1852,3 +1852,40 @@ proof/manual QA: [EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
 R1 still IN PROGRESS, R2–R7 future/safety gated; R6 NC export off.
 
 | 2026-10-10/11 | PR #131 exact nested/disjoint Boolean closed regions, preserved true arcs and Undo merged | [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): 173 tests/Clippy/Linux release; merge 5c19b6e1 | R1 source-exact crossing boundary splitting and KDE/third-party CAD acceptance |
+
+## Active R1p — exact transverse straight-line CAD Boolean splitting
+
+Branch `feature/rust-r1p-transverse-boolean-splits` from verified
+main 87d3a9d19da2512f92a9c7d24a0628165739fc3d (R1o PR #131).
+New pure-Rust `crates/core/src/crossing_booleans.rs` contains an
+exact analytic line-line determinant splitter and directed graph
+boundary stitcher for strict interior/interior crossings across
+two validated saved compound CAD regions. This is an EXTENSION
+of the existing R1o non-crossing line/true-arc Boolean, NOT a
+replacement; genuine circular arcs remain retained exactly in
+non-crossing cases.
+
+For crossing line-only paths, segment intersection parameters
+are calculated from source geometry, fragment midpoints have
+exact other-region parity, source loop winding plus hole parity
+determine material-left orientation, and the selected segments
+are stitched at unique one-in/one-out graph vertices. Results
+are first-class analytic closed line paths with newly calculated
+intersection nodes and original source lines otherwise unmodified.
+The existing undoable Editor::BooleanRegions action assigns new
+global object IDs and saved result region/parent validation.
+There is NO display tessellation, CAM or G-code.
+
+Contact/T-junction/shared endpoint/collinear overlap, true-arc
+crossing, cubic, near-coincident, ambiguous, non-closed and
+oversized geometry all REFUSE before committing any mutation.
+New integration `transverse_boolean_splits.rs` regression suite
+tests shifted rectangles, holes, reversed winding, A-minus-B,
+atomic invalid cases and project roundtrip. UI text updated
+to accurately explain the safe subset. Full design contract,
+limitations and user desktop checklist:
+[TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
+
+**Status: feature branch committed, CI + PR pending.** R1 still
+in progress. Owner KDE/Wayland pointer QA and independent external
+SVG/DXF CAD viewer acceptance remain unverified. R6 CNC NC locked.

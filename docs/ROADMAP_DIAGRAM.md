@@ -119,3 +119,10 @@ saved regions retains genuine line/arc contours, fresh IDs,
 Undo and persistent hierarchy. Crossing/tangent/coincident
 input geometry still refuses without fabrication.
 [Exact Boolean proof and manual QA](EXACT_REGION_BOOLEANS.md).
+
+**R1p active (pending CI):** exact strictly transverse line-line
+Boolean splitting and closed-loop stitching for shifted overlapping
+straight-edged saved regions. Non-crossing true arcs still retain
+original circles. Endpoint/collinear contact and crossing arc/cubic
+cases are refused. No CNC.
+[Read design proof and manual QA](TRANSVERSE_BOOLEAN_SPLITS.md).

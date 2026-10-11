@@ -17,6 +17,7 @@ pub mod mixed_offsets;
 pub mod intersections;
 pub mod compound;
 pub mod region_booleans;
+mod crossing_booleans;
 pub mod curve_extension;
 mod bezier_intersections;
 pub use editor::{Action, Editor};
