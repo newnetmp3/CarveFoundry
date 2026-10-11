@@ -43,6 +43,10 @@ pub enum Action {
     OffsetLines{path_id:u64,distance_mm:f64},
     /// Explicit true-circular round joins for convex offset corners only.
     OffsetRounded{path_id:u64,distance_mm:f64},
+    /// Persist editable source loops as a parity Boolean CAD region.
+    SaveCompoundRegion{ids:Vec<u64>,name:String},
+    RenameCompoundRegion{id:u64,name:String},
+    RemoveCompoundRegion{id:u64},
     InsertNodeAfter { path_id: u64, node_id: u64 },
     RemoveNode { path_id: u64, node_id: u64 },
     SetPathClosed { id: u64, closed: bool },
@@ -715,6 +719,43 @@ impl Editor {
                     return Err("Unknown group ID".into());
                 }
                 next.groups.retain(|g|g.id!=id);
+            }
+            Action::SaveCompoundRegion{ids,name}=>{
+                if !(2..=32).contains(&ids.len())
+                    || !crate::organization::valid_name(&name){
+                    return Err("Choose 2–32 closed analytic source vectors and a printable region name".into());
+                }
+                Self::check_batch(&next,&ids)?;
+                if ids.iter().any(|id|
+                    next.compound_regions.iter().any(|region|
+                        region.path_ids.contains(id))){
+                    return Err("Selected CAD source already belongs to a saved compound region".into());
+                }
+                let sources=ids.iter().map(|id|
+                    next.paths.iter().find(|p|p.id==*id)
+                        .ok_or("Compound region requires analytic source vectors")
+                        .cloned()
+                ).collect::<Result<Vec<_>,_>>()?;
+                crate::compound::analyze_compound_paths(&sources)?;
+                let id=next.next_id;
+                next.next_id=id.checked_add(1).ok_or("Compound region identity exhausted")?;
+                next.compound_regions.push(crate::compound::CompoundRegion{
+                    id,name,path_ids:ids,
+                });
+            }
+            Action::RenameCompoundRegion{id,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Compound region name must be printable (1–128 characters)".into());
+                }
+                let region=next.compound_regions.iter_mut().find(|r|r.id==id)
+                    .ok_or("Unknown saved compound region")?;
+                region.name=name;
+            }
+            Action::RemoveCompoundRegion{id}=>{
+                if !next.compound_regions.iter().any(|r|r.id==id){
+                    return Err("Unknown saved compound region");
+                }
+                next.compound_regions.retain(|r|r.id!=id);
             }
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
