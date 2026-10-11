@@ -1,14 +1,24 @@
 # CarveFoundry — full Rust roadmap and verified progress
 
-**Verified snapshot:** 2026-10-10/11. Latest R1n: [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130)
-merged as c3c32f3f05f60288bfc5dbb52995fa7cc9f79988.
-Exact tested source 2f4681207447f27d148ebcee13a5b46227041f03
-passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **165 Rust tests**, strict Clippy
-and Linux release. R0 completed, R1 2D source-true CAD in progress;
-R2–R7 planned or safety-locked. This roadmap is a code/CI status
-record, NOT finished KDE, interchange or physical machine acceptance.
+**Verified snapshot:** 2026-10-10/11. Latest R1o [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131)
+merged as 5c19b6e11123e04f8de941e577f4ad7312fa8adb.
+Final tested head ff3906801ccc69c58541ac5110726f4556dbb81e
+passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **173 Rust tests**, strict Clippy,
+Linux native release. R0 native Rust foundation implemented,
+R1 2D CAD progressing, R2–R7 future or machine safety locked.
+CI is not independent KDE Wayland or CNC owner acceptance.
 
-**LATEST R1n VERIFIED:** [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged
+**LATEST R1o VERIFIED:** [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged
+5c19b6e11123e04f8de941e577f4ad7312fa8adb;
+exact tested head ff3906801ccc69c58541ac5110726f4556dbb81e
+passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **173 tests, strict Clippy,
+native Linux release**. Exact Union/Intersection/A-minus-B
+of disjoint/nested saved CAD regions retains original true
+line/circle primitives. Intersecting/tangent contours still
+require future analytic edge-splitting. Real KDE/Wayland and
+independent third-party CAD application validation unfinished.
+
+**PREVIOUS R1n VERIFIED:** [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged
 c3c32f3f05f60288bfc5dbb52995fa7cc9f79988;
 exact tested head 2f4681207447f27d148ebcee13a5b46227041f03
 passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **165 tests, strict Clippy,
@@ -103,10 +113,9 @@ parity queries are CAD-only. CNC NC export is still locked.
 [Persisted compound CAD contract](PERSISTENT_COMPOUND_REGIONS.md).
 
 
-**R1o implementation (CI pending):** source-exact Union/
-Intersection/A minus B of saved, strictly non-crossing native
-compound regions, with true circular arcs preserved. Native
-inspector chooses ordered A and B; outputs are independent
-editable closed loops and optional new saved region. Touching,
-intersecting or coincident source boundaries reject, not sampled.
-[Exact region Boolean proof and QA](EXACT_REGION_BOOLEANS.md).
+**R1o verified:** [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) CI-green merged, **173 tests**.
+Source-exact Union/Intersection/A minus B of nested/disjoint
+saved regions retains genuine line/arc contours, fresh IDs,
+Undo and persistent hierarchy. Crossing/tangent/coincident
+input geometry still refuses without fabrication.
+[Exact Boolean proof and manual QA](EXACT_REGION_BOOLEANS.md).
