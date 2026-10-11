@@ -1734,3 +1734,42 @@ A hole moved completely outside its host is no longer silently
 interpreted as a new independent outline. Changing the Boolean
 relationship requires unlinking/rebuilding the region. This is
 part of the pending R1n CI branch, not a finished merge.
+
+
+## VERIFIED R1n — durable exact compound CAD Boolean membership, PR #130
+
+[PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged as **c3c32f3f05f60288bfc5dbb52995fa7cc9f79988**.
+Exact tested feature head **2f4681207447f27d148ebcee13a5b46227041f03**
+passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **127 core + 9 compound topology + 5 interchange +
+6 persistent-region integration + 18 studio = 165 Rust tests**,
+strict Clippy, Linux native release build. The first CI run
+revealed that moving a hole completely outside its outline
+silently changed it into an unrelated material island. The fix
+retains each member's original proven parent vector ID; current
+geometry must preserve that Boolean nesting relationship even when
+all contours remain individually simple and non-touching.
+The corrected exact feature head passed the complete CI workflow.
+
+Optional native schema-version-1 `compound_regions` stores each
+region ID/name, original independent vector IDs and verified
+parent-path links. Old `.cfd` files load without migration.
+Project validation (also on every editor transaction and drag
+preview) rejects crossing/tangent/overlap, lost source identity,
+duplicate ownership, unsupported cubic/open vectors, boundary
+restructuring and lost original parent relationships.
+Undoable Save/Rename/Remove actions never flatten, group or
+delete source curves. Native Drawing topology inspector can
+save named regions, show saved source roles, test current cursor
+material by exact line/circular-arc even/odd parity and unlink
+a saved region non-destructively. Points ON a retained boundary
+fail with explicit ambiguity; CAD membership does not certify
+cutter clearance or toolpaths.
+
+See [PERSISTENT_COMPOUND_REGIONS.md](PERSISTENT_COMPOUND_REGIONS.md).
+**NEXT R1:** real owner KDE Plasma Wayland interaction checks,
+independent third-party CAD interchange inspection, and carefully
+proved future generated Boolean edge topology where possible.
+Cubic Boolean profiles and CAM/NC remain unsupported; R1 incomplete,
+R2–R7 planned/safety gated, R6 NC export locked.
+
+| 2026-10-10/11 | PR #130 durable compound parity membership and saved-parent invariants merged | [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): 165 Rust tests, strict Clippy, native Linux release; merge c3c32f3f | R1 owner KDE Wayland and third-party CAD QA, safe Boolean edge generation |
