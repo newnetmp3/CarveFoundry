@@ -1580,3 +1580,38 @@ Independent viewer roundtrips and real Arch KDE/Wayland input QA
 remain unverified. CNC NC export is still disabled pending R6
 safety gates. Following work: adversarial multiple-loop/cubic
 interchange semantics, desktop usability acceptance before R2.
+
+
+## VERIFIED R1l — hand-authored SVG/DXF goldens and closed-contour validation
+
+[PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged to main as **c34817881242f13ab55fa415c06fa4e22c4ac3ec**.
+Exact feature head **79a32dde6121585c84de0553fefd56439f74191f**
+passed [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **127 core library + 5 CAD golden integration
++ 18 studio = 150 Rust tests**, strict Clippy and native Linux
+desktop release. GitHub reported complete workflow success.
+
+Two independently hand-authored 200×200 mm external-format source
+fixtures (SVG A segments and ASCII DXF LWPOLYLINE with true bulges)
+encode the same closed capsule. The new integration tests compare
+physical world endpoints, original circle centers, arc winding,
+node/segment counts, closed status, cross-format SVG and DXF
+re-imports and independent fixture agreement. They also check
+exact capsule +3/-2 mm offsets (23/18 mm true circular radii),
+a six-node reentrant closed L profile with five outward convex
+and one inward round join, and failed inward circle collapse.
+The prior straight-only offset solver now runs full-chain analytic
+source/output intersection checks, so remote self-crossing OPEN
+straight profiles reject before editor commit rather than silently
+creating invalid miter geometry. No preview points become sources.
+
+Regression contract and explicit *unverified* external CAD viewer
+and real Arch KDE Plasma Wayland manual acceptance checklist:
+[INTERCHANGE_GOLDENS.md](INTERCHANGE_GOLDENS.md).
+
+**NEXT R1:** real KDE/Wayland pointer UX acceptance, independent CAD
+application interoperability, broader hole/compound/multi-loop
+geometry and editable cubic offset policy. R1 remains unfinished.
+R2–R7 are planned or safety gated. NC/G-code remains disabled;
+CI here does not certify machine-safe cutter compensation.
+
+| 2026-10-10/11 | PR #128 SVG/DXF independent-source golden and whole-chain straight offset safety merged | [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): 150 tests, strict Clippy, native Linux release; merge c3481788 | R1 owner KDE & external CAD viewer acceptance and complex compound contours |
