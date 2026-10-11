@@ -84,3 +84,10 @@ outline/hole/island roles are now visible in the native inspector.
 R1 remains IN PROGRESS pending actual Wayland pointer interaction
 and third-party CAD app QA. No compound machining region or NC.
 [Read compound contour proof](COMPOUND_CONTOURS.md).
+
+
+**R1n active (CI pending):** optional saved compound source-loop
+membership and exact even/odd Boolean material testing in the native
+Drawing inspector. Analytic curves stay editable; unsafe boundary
+movement fails closed. No CAM/NC output.
+[Persisted compound CAD contract](PERSISTENT_COMPOUND_REGIONS.md).
