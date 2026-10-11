@@ -190,7 +190,7 @@ fn coincident_arc_pair(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
             }
         }
     }
-    let mut hits=Vec::new();
+    let mut hits:Vec<(Point,f64,f64)>=Vec::new();
     for p in [a.a,a.b,b.a,b.b]{
         if let (Some(t),Some(u))=(on_arc_parameter(a,p),on_arc_parameter(b,p)){
             if hits.iter().all(|(q,..)|dist(*q,p)>1e-7){
