@@ -485,19 +485,13 @@ mod tests{
     #[test]
     fn split_same_circle_arc_seams_offset_without_false_overlap(){
         let mut source=open_arc_then_line();
-        let old_line=source.segments.pop().unwrap();
-        let last=source.nodes.pop().unwrap();
-        source.nodes.push(PathNode{id:6,position:Point::new(10.0,10.0)});
-        source.nodes.push(PathNode{id:2,position:Point::new(20.0,0.0)});
-        source.nodes.push(last);
-        source.segments.push(PathSegment{id:3,curve:Curve::Arc{
-            center:Point::new(10.0,0.0),clockwise:true}});
-        source.segments.push(PathSegment{id:7,curve:Curve::Arc{
-            center:Point::new(10.0,0.0),clockwise:true}});
-        source.segments.push(old_line);
+        source.nodes.insert(1,PathNode{
+            id:6,position:Point::new(10.0,10.0)});
+        source.segments.insert(1,PathSegment{
+            id:7,curve:Curve::Arc{
+                center:Point::new(10.0,0.0),clockwise:true
+            }});
         source.next_element_id=8;
-        // Original id=2 node was not removed from the vector above;
-        // reconstruct the exact first anchor to avoid duplicate node IDs.
         source.validate().unwrap();
         crate::intersections::validate_simple_analytic_chain(&source).unwrap();
         let offset=offset_exact(&source,2.0).unwrap();
