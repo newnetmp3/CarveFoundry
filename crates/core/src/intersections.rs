@@ -133,6 +133,73 @@ fn arc_arc(a:Edge,b:Edge)->Vec<(Point,f64,f64)>{
     }
     found
 }
+/// Cover the geometry of a true circular sweep using at most two
+/// non-wrapping CCW intervals on [0, 2*pi]. Winding changes traversal
+/// direction, not which points of the source circle are occupied.
+fn arc_angular_intervals(edge:Edge)->Vec<(f64,f64)>{
+    let Curve::Arc{center,clockwise}=edge.curve else {return vec![];};
+    let a=sub(edge.a,center);
+    let b=sub(edge.b,center);
+    let begin=a.y.atan2(a.x).rem_euclid(TAU);
+    let end=b.y.atan2(b.x).rem_euclid(TAU);
+    let start=if clockwise{end}else{begin};
+    let sweep=if clockwise{(begin-end).rem_euclid(TAU)}
+        else{(end-begin).rem_euclid(TAU)};
+    let finish=start+sweep;
+    if finish<=TAU{
+        vec![(start,finish)]
+    }else{
+        vec![(start,TAU),(0.0,finish-TAU)]
+    }
+}
+fn on_arc_parameter(edge:Edge,p:Point)->Option<f64>{
+    let Curve::Arc{center,clockwise}=edge.curve else{return None;};
+    // Preserve exact terminal parameters across the angular wrap seam.
+    if dist(p,edge.a)<1e-7{return Some(0.0);}
+    if dist(p,edge.b)<1e-7{return Some(1.0);}
+    angle_param(edge.a,edge.b,center,clockwise,p)
+}
+/// Distinguish distinct concentric radii from overlapping coincident
+/// circular *sweeps*. Isolated endpoint contacts are retained as real
+/// intersections; nonzero common angular length is never accepted as
+/// a single well-defined intersection.
+fn coincident_arc_pair(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
+    let (Curve::Arc{center:c1,..},Curve::Arc{center:c2,..})=
+        (a.curve,b.curve) else{return (vec![],true);};
+    if dist(c1,c2)>0.0{
+        // Near-coincident but not identical centers demand a separate,
+        // numerically stable two-circle proof; never mistake for overlap.
+        return (vec![],true);
+    }
+    let r1=dist(a.a,c1);
+    let r2=dist(b.a,c2);
+    if (r1-r2).abs()>r1.max(r2).max(1.0)*1e-7{
+        return (vec![],false);
+    }
+    // Tiny concentric-radius disagreement is ambiguous at these CAD
+    // tolerances. Reject rather than silently assuming a perfect circle.
+    if (r1-r2).abs()>r1.max(r2).max(1.0)*1e-10{
+        return (vec![],true);
+    }
+    let first=arc_angular_intervals(a);
+    let second=arc_angular_intervals(b);
+    for &(as_,ae) in &first{
+        for &(bs,be) in &second{
+            if ae.min(be)-as_.max(bs)>1e-9{
+                return (vec![],true);
+            }
+        }
+    }
+    let mut hits:Vec<(Point,f64,f64)>=Vec::new();
+    for p in [a.a,a.b,b.a,b.b]{
+        if let (Some(t),Some(u))=(on_arc_parameter(a,p),on_arc_parameter(b,p))
+            && hits.iter().all(|(q,..)|dist(*q,p)>1e-7){
+            hits.push((p,t,u));
+        }
+    }
+    (hits,false)
+}
+
 fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
     match (a.curve,b.curve){
         (Curve::Line,Curve::Line)=>(line_line(a,b),false),
@@ -141,7 +208,9 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
             (line_arc(b,a).into_iter().map(|(p,u,t)|(p,t,u)).collect(),false)
         },
         (Curve::Arc{center:c1,..},Curve::Arc{center:c2,..})=>{
-            if dist(c1,c2)<EPS{return (vec![],true);}
+            if dist(c1,c2)<EPS{
+                return coincident_arc_pair(a,b);
+            }
             (arc_arc(a,b),false)
         },
         (Curve::Cubic{control1,control2},Curve::Line)=>{
@@ -176,9 +245,10 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
 /// retained line/circle solver as the intersection inspector, never preview
 /// tessellation. Adjacent segments may meet only at their shared endpoint.
 ///
-/// Coincident circular supports currently fail closed: proving that two
-/// overlapping-circle sweeps cover disjoint parameter intervals is a
-/// separate topology feature, not grounds to accept an uncertain offset.
+/// Coincident circles are compared by exact circular sweep intervals,
+/// including seam wraparound. Adjacent single-endpoint joins are allowed;
+/// overlapping angular intervals, unexpected remote contacts and
+/// numerically ambiguous near-coincident supports still reject.
 pub fn validate_simple_analytic_chain(path:&AnalyticPath)->Result<(),String>{
     path.validate()?;
     let count=path.segments.len();
@@ -387,6 +457,141 @@ mod tests{
     use crate::{Primitive,shapes::polyline};
     fn segment(id:u64,a:Point,b:Point)->AnalyticPath{
         polyline(id,"Line".into(),Point::new(0.0,0.0),vec![a,b],false).unwrap()
+    }
+
+    fn arc_edge(center:Point,r:f64,start_degrees:f64,
+        end_degrees:f64,clockwise:bool)->Edge{
+        let on_circle=|degrees:f64|{
+            let angle=degrees.to_radians();
+            add(center,Point::new(r*angle.cos(),r*angle.sin()))
+        };
+        Edge{a:on_circle(start_degrees),b:on_circle(end_degrees),
+            curve:Curve::Arc{center,clockwise}}
+    }
+    fn chained_arcs(id:u64,degrees:&[f64],clockwise:&[bool],
+        closed:bool)->AnalyticPath{
+        let center=Point::new(20.0,30.0);
+        let r=10.0;
+        let nodes=degrees.iter().enumerate().map(|(i,angle)|{
+            let t=angle.to_radians();
+            crate::PathNode{id:i as u64+1,
+                position:add(center,Point::new(r*t.cos(),r*t.sin()))}
+        }).collect::<Vec<_>>();
+        let segs=clockwise.iter().enumerate().map(|(i,clockwise)|{
+            crate::PathSegment{id:100+i as u64,
+                curve:Curve::Arc{center,clockwise:*clockwise}}
+        }).collect::<Vec<_>>();
+        let p=AnalyticPath{id,name:"Circle sweep".into(),
+            origin:Point::new(5.0,7.0),visible:true,locked:false,closed,
+            nodes,segments:segs,next_element_id:200};
+        p.validate().unwrap();
+        p
+    }
+    #[test]
+    fn coincident_sweeps_allow_one_contact_across_zero_degree_seam(){
+        let center=Point::new(10.0,10.0);
+        let before=arc_edge(center,10.0,330.0,30.0,false);
+        let after=arc_edge(center,10.0,30.0,100.0,false);
+        let (hits,ambiguous)=intersect(before,after);
+        assert!(!ambiguous);
+        assert_eq!(hits.len(),1);
+        assert!((hits[0].1-1.0).abs()<1e-9);
+        assert!((hits[0].2).abs()<1e-9);
+        assert!(dist(hits[0].0,before.b)<1e-7);
+        let (swapped,ambiguous)=intersect(after,before);
+        assert!(!ambiguous);
+        assert_eq!(swapped.len(),1);
+        assert!((swapped[0].1).abs()<1e-9);
+        assert!((swapped[0].2-1.0).abs()<1e-9);
+    }
+    #[test]
+    fn concentric_distinct_radii_do_not_create_unsupported_crossings(){
+        let center=Point::new(0.0,0.0);
+        let near=arc_edge(center,10.0,0.0,120.0,false);
+        let far=arc_edge(center,20.0,0.0,120.0,false);
+        let (hits,ambiguous)=intersect(near,far);
+        assert!(hits.is_empty());
+        assert!(!ambiguous);
+        let mut project=Project::default();
+        project.paths.extend([
+            chained_arcs(1,&[0.0,120.0],&[false],false),
+            chained_arcs(2,&[0.0,120.0],&[false],false)
+        ]);
+        let center=Point::new(20.0,30.0);
+        for node in &mut project.paths[1].nodes{
+            node.position=add(center,mul(sub(node.position,center),2.0));
+        }
+        project.next_id=3;
+        project.validate().unwrap();
+        let scan=find_intersections(&project,1).unwrap();
+        assert_eq!(scan.unsupported_pairs,0);
+    }
+    #[test]
+    fn circular_arc_overlap_and_backtrack_reject_even_across_seam(){
+        let center=Point::new(0.0,0.0);
+        let a=arc_edge(center,10.0,330.0,30.0,false);
+        let b=arc_edge(center,10.0,30.0,345.0,true);
+        assert!(intersect(a,b).1,"wraparound arcs overlap in angle");
+        let backtrack=chained_arcs(1,&[0.0,90.0,0.0],
+            &[false,true],false);
+        assert!(validate_simple_analytic_chain(&backtrack)
+            .unwrap_err().contains("overlap"));
+        let repeated=chained_arcs(2,&[0.0,120.0,240.0],
+            &[true,true,true],true);
+        assert!(validate_simple_analytic_chain(&repeated).is_err(),
+            "two circles worth of total sweep must not masquerade as one");
+    }
+    #[test]
+    fn adjacent_and_remote_disjoint_same_circle_arcs_are_not_overlaps(){
+        let simple=chained_arcs(1,&[0.0,90.0,180.0],&[false,false],false);
+        validate_simple_analytic_chain(&simple).unwrap();
+        let wrapped=chained_arcs(2,&[330.0,30.0,110.0],
+            &[false,false],false);
+        validate_simple_analytic_chain(&wrapped).unwrap();
+        let full=chained_arcs(3,&[0.0,90.0,180.0,270.0],
+            &[false,false,false,false],true);
+        validate_simple_analytic_chain(&full).unwrap();
+        let disjoint=crate::AnalyticPath{
+            id:7,name:"Arc, chord, arc".into(),
+            origin:Point::new(0.0,0.0),visible:true,locked:false,closed:false,
+            nodes:vec![
+                crate::PathNode{id:1,position:Point::new(10.0,0.0)},
+                crate::PathNode{id:2,position:Point::new(0.0,10.0)},
+                crate::PathNode{id:3,position:Point::new(-10.0,0.0)},
+                crate::PathNode{id:4,position:Point::new(0.0,-10.0)},
+            ],
+            segments:vec![
+                crate::PathSegment{id:5,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:false}},
+                crate::PathSegment{id:6,curve:Curve::Line},
+                crate::PathSegment{id:7,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:false}},
+            ],next_element_id:8};
+        disjoint.validate().unwrap();
+        validate_simple_analytic_chain(&disjoint).unwrap();
+    }
+    #[test]
+    fn nonadjacent_same_circle_endpoint_touch_is_rejected(){
+        // The first and last edges are NOT neighbors in this open path,
+        // so a remote shared circle point must remain an error.
+        let p=crate::AnalyticPath{
+            id:6,name:"Return".into(),origin:Point::new(0.0,0.0),
+            visible:true,locked:false,closed:false,
+            nodes:vec![
+                crate::PathNode{id:1,position:Point::new(10.0,0.0)},
+                crate::PathNode{id:2,position:Point::new(0.0,10.0)},
+                crate::PathNode{id:3,position:Point::new(-10.0,0.0)},
+                crate::PathNode{id:4,position:Point::new(10.0,0.0)},
+            ],
+            segments:vec![
+                crate::PathSegment{id:5,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:false}},
+                crate::PathSegment{id:6,curve:Curve::Line},
+                crate::PathSegment{id:7,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:false}},
+            ],next_element_id:8};
+        p.validate().unwrap();
+        assert!(validate_simple_analytic_chain(&p).is_err());
     }
     #[test]
     fn perpendicular_lines_have_true_analytic_fraction(){

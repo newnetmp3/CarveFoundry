@@ -79,3 +79,14 @@ passed [native CI #38106382405](https://github.com/newnetmp3/CarveFoundry/action
 **Still pending:** independent external CAD roundtrips, real KDE
 Wayland GUI acceptance, global complex-offset QA and all CNC gates.
 R1 remains in progress; G-code stays disabled.
+
+
+## Active R1k arc overlap follow-on
+
+The exact finite-sweep concave trim solver still refuses a
+coincident-support trim without a unique point. The adjacent
+independent [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md)
+work adds a robust distinction between **a shared endpoint** and
+**nonzero coincident angular overlap** to the global source/result
+geometry validator. It does not turn an overlapping arc into
+a valid concave trim or choose an arbitrary point.

@@ -827,3 +827,22 @@ topology goldens, independent SVG/DXF interoperability and real
 KDE Plasma Wayland user interaction acceptance. These software
 tests are not physical CNC validation. R1 remains incomplete and
 no machine NC/G-code export is enabled (R6 safety gate).
+
+
+## Active R1k — coincident circular sweeps and repeated-turn safety
+
+Branch feature/rust-r1k-coincident-arc-sweeps refines the exact Rust
+source-arc intersection checker. Same-center arcs are classified
+by occupied CCW angular intervals (split around 0°/360°), and only
+isolated endpoint contacts may be allowed for neighboring segments.
+Positive-length common sweeps and multi-revolution paths reject;
+distinct concentric radii are nonintersecting, while numerically
+near-coincident supports remain conservatively ambiguous. Apply
+this to both general mixed analytic offset checks and the dedicated
+all-arc circle offset solver. No tessellation or G-code.
+
+Status: **implementation, tests and CI/merge not yet confirmed**.
+Manual KDE Wayland and third-party SVG/DXF checks also outstanding.
+Detailed examples: [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+Next R1: complex closed contour golden fixtures, external CAD
+interchange, owner UI/interaction validation. R2–R7 remain gated.

@@ -481,6 +481,56 @@ mod tests{
         };
         p.validate().unwrap();p
     }
+
+    #[test]
+    fn split_same_circle_arc_seams_offset_without_false_overlap(){
+        let mut source=open_arc_then_line();
+        source.nodes.insert(1,PathNode{
+            id:6,position:Point::new(10.0,10.0)});
+        source.segments.insert(1,PathSegment{
+            id:7,curve:Curve::Arc{
+                center:Point::new(10.0,0.0),clockwise:true
+            }});
+        source.next_element_id=8;
+        source.validate().unwrap();
+        crate::intersections::validate_simple_analytic_chain(&source).unwrap();
+        let offset=offset_exact(&source,2.0).unwrap();
+        assert_eq!(offset.nodes.len(),4);
+        assert_eq!(offset.segments,source.segments);
+        assert!((dist(offset.nodes[1].position,Point::new(10.0,0.0))-12.0).abs()<1e-9);
+        assert_eq!(offset.nodes[2].position,Point::new(22.0,0.0));
+        assert_eq!(offset.nodes[3].position,Point::new(22.0,-12.0));
+        let rounded=offset_round_chain(&source,2.0).unwrap();
+        assert_eq!(rounded.nodes.len(),4);
+        assert_eq!(rounded.segments,source.segments);
+    }
+    #[test]
+    fn concentric_circle_multiturn_offset_rejects_without_project_mutation(){
+        let mut source=AnalyticPath{
+            id:2,name:"Two revolutions".into(),origin:Point::new(0.0,0.0),
+            visible:true,locked:false,closed:true,
+            nodes:vec![
+                Point::new(10.0,0.0),Point::new(-5.0,8.660254037844386),
+                Point::new(-5.0,-8.660254037844386)
+            ].into_iter().enumerate().map(|(i,position)|PathNode{
+                id:i as u64+1,position}).collect(),
+            segments:(0..3).map(|i|PathSegment{
+                id:i+4,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:true
+                }}).collect(),
+            next_element_id:7,
+        };
+        source.validate().unwrap();
+        let original=source.clone();
+        assert!(offset_exact(&source,1.0).is_err());
+        assert!(offset_round_chain(&source,1.0).is_err());
+        assert_eq!(source,original);
+        source.segments.iter_mut().for_each(|s|{
+            s.curve=Curve::Arc{center:Point::new(0.0,0.0),clockwise:false};
+        });
+        source.validate().unwrap();
+        assert!(offset_exact(&source,2.0).is_ok());
+    }
     #[test]
     fn exact_open_arc_line_offset_retains_radius_center_and_normal(){
         let source=open_arc_then_line();

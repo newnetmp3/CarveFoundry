@@ -185,3 +185,18 @@ exact head ded15b52f95cdededbd2492a63c1a18208553e44 passed
 [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405):
 120 core + 18 studio = 138 tests, strict Clippy, Linux release.
 Real KDE Wayland and independent SVG/DXF QA still outstanding.
+
+
+## Active same-center true-arc interval proof
+
+The R1k [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md)
+follow-on distinguishes disjoint same-center arc portions and
+legitimate shared-node joins from genuinely overlapping circular
+sweeps. It explicitly handles reverse winding and 0°/360° wrap.
+Repeated angular traversals reject, even in the concentric closed
+circle special offset solver. Numerically uncertain near-coincident
+supports continue to fail closed. This is an analytic source CAD
+operation and is **not** collision-safe machine cutter compensation.
+
+**Status:** feature/rust-r1k-coincident-arc-sweeps
+under automated validation; real KDE and external SVG/DXF QA pending.
