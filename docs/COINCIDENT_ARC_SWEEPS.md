@@ -20,8 +20,10 @@ For two true circular arc segments whose centers are exactly equal:
    and is rejected as indeterminate, even if the two paths run in opposite
    directions or wrap the angle seam.
 4. When the angular ranges overlap in **zero length only**, verify their
-   exact endpoint contacts. The scanner may report an isolated shared
-   endpoint, with the proper t=0/t=1 source fractions.
+   exact endpoint contacts. The low-level analytic pairwise solver
+   retains an isolated shared endpoint with proper t=0/t=1 fractions;
+   the on-demand UI scan still filters terminal-only source hits from
+   its numbered marker list, avoiding marker clutter.
 5. On a single editable chain, only adjacent edges may share their
    expected common node. A remote same-circle contact, multiple
    revolutions, overlapping sweeps or backtracking rejects. This is
