@@ -1514,3 +1514,38 @@ circles and split-arc+line exact offsets. See
 KDE Wayland owner tests or independent SVG/DXF visual validation.
 Next after verified CI: adversarial closed offset golden shapes,
 SVG/DXF roundtrips and interaction QA. CAM/NC still intentionally off.
+
+
+## VERIFIED R1k — coincident circular sweep classification, PR #127
+
+[PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127)
+merged as **28d01d35b65a21eba9e2446f1f22d2a04f57a8c4**.
+The exact tested feature head **12b8b275c00ecc9351117ff727b5c0606f6593d1**
+passed [native Rust CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700):
+**127 core + 18 studio = 145 Rust tests**, strict Clippy and
+Linux desktop release build. Two earlier CI revisions failed one
+Rust inference error then a Clippy nested-if diagnostic; final
+exact head completed all gates without failures.
+
+Rust analytic intersections now classify truly same-center circular
+arcs by source-accurate angular sweep intervals, split at
+0°/360°. Reversed traversal and nonadjacent contacts are checked.
+One genuine endpoint contact between neighboring source arcs is
+allowed; positive-length common sweep or repeated circle traversal
+is a hard overlap error. Distinct concentric radii are disjoint.
+Near-coincident but not provably exact supports still fail closed.
+The dedicated concentric circle offset now validates full source
+and output sweeps, preventing a multi-revolution source from
+pretending to be a simple circle. Exact split circular arcs in
+mixed profiles remain editable and offset-capable without sampling.
+No .cfd schema, original IDs, undo history, layer rules or CNC
+output rules changed. Detailed source-level test and owner KDE
+acceptance: [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+
+**NEXT R1:** adversarial closed-offset golden profiles, independent
+third-party SVG/DXF roundtrip QA, and real owner KDE Plasma Wayland
+direct-manipulation acceptance before contemplating R2. R1 remains
+IN PROGRESS. R2–R7 future/planned/safety gated. CNC/NC G-code
+still intentionally disabled pending R6 preflight and machine QA.
+
+| 2026-10-10/11 | PR #127 coincident true-circle sweep classification merged | [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): 145 tests, strict Clippy, Linux release; merge 28d01d35 | R1 goldens and independent KDE/SVG/DXF acceptance |
