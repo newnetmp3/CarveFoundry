@@ -25,7 +25,7 @@ fn lerp(a:Point,b:Point,t:f64)->Point{
     Point::new(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t)
 }
 #[derive(Clone,Copy)]
-struct Edge{a:Point,b:Point,path_id:u64,material_left:bool,side:usize}
+struct Edge{a:Point,b:Point,material_left:bool,side:usize}
 struct Fragment {a:Point,b:Point}
 fn source_edges(paths:&[AnalyticPath],side:usize)
     ->Result<Vec<Edge>,String>{
@@ -45,7 +45,7 @@ fn source_edges(paths:&[AnalyticPath],side:usize)
         for i in 0..n{
             let a=path.nodes[i].position.offset(path.origin.x,path.origin.y);
             let b=path.nodes[(i+1)%n].position.offset(path.origin.x,path.origin.y);
-            edges.push(Edge{a,b,path_id:path.id,material_left,side});
+            edges.push(Edge{a,b,material_left,side});
         }
     }
     Ok(edges)
