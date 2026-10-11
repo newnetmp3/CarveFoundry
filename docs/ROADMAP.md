@@ -653,7 +653,7 @@ Mermaid theme initialization and client-side diagram parsing. The accompanying
 Markdown status table is the text-only accessible fallback. This is a docs
 fix only; project implementation status is unchanged.
 
-## Active R1j — source-exact tangent line/arc chains
+## R1j implementation scope — source-exact tangent line/arc chains
 
 Add exact parallel offsets for open/closed analytic paths mixing
 true circular arcs and straight runs at G1-tangent curved joints.
@@ -665,3 +665,31 @@ polyline. One atomic Undo, original kept, layer membership retained.
 See [TANGENT_OFFSETS.md](TANGENT_OFFSETS.md). Native Rust CI, KDE
 Wayland UI and independent DXF/SVG acceptance remain gates;
 machine NC output remains disabled.
+
+## Verified R1j — source-accurate tangent mixed line/arc offsets
+
+[PR #123](https://github.com/newnetmp3/CarveFoundry/pull/123)
+merged `4f8ee59b5d3cabb45ae0ce5ebe24021336c18d5c`.
+Exact head `0cb5f1e19e3cbc5a88e48f7eaacc1d530e156049`
+passed [CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749):
+**109 core + 18 studio = 127 tests**, strict Clippy, native
+Linux release compilation.
+
+Create Offset Vector now retains exact straight and circular
+analytic edges on OPEN/CLOSED paths with tangent curved seams;
+arcs can have multiple distinct circle centers, and line-line
+corners can use bounded miters. Closed outward/inward sign derives
+from exact Green's theorem straight/circular areas, not a preview
+polygon. Existing direct straight/true-circle offset workflows
+remain intact. Sharp arc corners, arbitrary cubic Bézier offsets,
+collapsed radii and unsafe miters fail closed rather than being
+silently tessellated. These geometry tests are NOT complete global
+self-intersection or KDE/Wayland acceptance certification.
+
+[Full high-contrast R0–R7 roadmap](ROADMAP_DIAGRAM.md) and
+[exact mixed-offset design limits](TANGENT_OFFSETS.md) describe
+the new state. Next **R1k**: mathematically verified junction
+join styles and global offset validation, explicit tolerance model
+for any future cubic approximation, usability and independent
+CAD interchange tests. R2–R7 still planned/gated. NC/G-code
+output remains locked behind R6 safety preflight and machine QA.
