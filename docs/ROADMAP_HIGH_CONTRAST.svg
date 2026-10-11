@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1020" viewBox="0 0 1600 1020" role="img" aria-labelledby="roadmap-title roadmap-desc">
+<title id="roadmap-title">CarveFoundry Rust roadmap R0 through R7</title>
+<desc id="roadmap-desc">R0 Rust foundation implemented. R1 2D vector CAD in progress, six completed feature areas and next CAD QA. R2 3D geometry, R3 CNC job tools, R4 2D CAM, R5 3D CAM, and R7 production QA planned. R6 machine safety and NC export locked.</desc>
+<rect width="1600" height="1020" fill="#0b1220"/>
+<text x="70" y="57" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="800" font-size="33">CARVEFOUNDRY  /  RUST DEVELOPMENT ROADMAP</text>
+<text x="70" y="95" fill="#cbd5e1" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="19">Implementation milestones through PR #121  •  CI-verified code is not desktop or CNC acceptance</text>
+<rect x="70" y="123" width="247" height="46" rx="10" fill="#123c2f" stroke="#86efac" stroke-width="2"/>
+<text x="85" y="154" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="17">IMPLEMENTED</text>
+<rect x="337" y="123" width="247" height="46" rx="10" fill="#774511" stroke="#fcd34d" stroke-width="2"/>
+<text x="352" y="154" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="17">NEXT</text>
+<rect x="604" y="123" width="247" height="46" rx="10" fill="#253244" stroke="#cbd5e1" stroke-width="2"/>
+<text x="619" y="154" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="17">PLANNED</text>
+<rect x="871" y="123" width="247" height="46" rx="10" fill="#6f1825" stroke="#fda4af" stroke-width="2"/>
+<text x="886" y="154" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="17">LOCKED</text>
+<rect x="70" y="191" width="1450" height="75" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="90" y="223" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R0  —  Native Rust foundation</text>
+<text x="90" y="252" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Rust workspace • native editor • project persistence • tests and Undo</text>
+<path d="M795 266 V283" stroke="#e2e8f0" stroke-width="3" fill="none"/>
+<rect x="70" y="285" width="1450" height="63" rx="14" fill="#1e3a8a" stroke="#93c5fd" stroke-width="2.5"/>
+<text x="90" y="317" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R1  —  Professional 2D vector CAD  ·  IN PROGRESS</text>
+<text x="90" y="346" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Major capabilities implemented; advanced topology and KDE acceptance remain</text>
+<rect x="70" y="367" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="90" y="399" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">Analytic geometry</text>
+<text x="90" y="428" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Lines • true arcs • Béziers • node editing</text>
+<rect x="565" y="367" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="585" y="399" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">SVG / DXF and fonts</text>
+<text x="585" y="428" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Editable source paths and vector text</text>
+<rect x="1060" y="367" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="1080" y="399" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">Layers and groups</text>
+<text x="1080" y="428" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Visibility • locking • history</text>
+<rect x="70" y="472" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="90" y="504" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">Exact intersections</text>
+<text x="90" y="533" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Line/arc/Bézier • numbered markers</text>
+<rect x="565" y="472" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="585" y="504" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">CAD topology tools</text>
+<text x="585" y="533" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Split • trim • join • corners</text>
+<rect x="1060" y="472" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
+<text x="1080" y="504" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">Extend to reference</text>
+<text x="1080" y="533" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Straight • arc • Bézier sources</text>
+<rect x="70" y="585" width="1450" height="89" rx="14" fill="#774511" stroke="#fcd34d" stroke-width="2.5"/>
+<text x="90" y="617" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">NEXT  —  Complete remaining R1 CAD and desktop acceptance</text>
+<text x="90" y="646" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Advanced curved offsets • complex corners • KDE/Wayland usability • independent SVG/DXF QA</text>
+<text x="70" y="714" fill="#e2e8f0" font-family="DejaVu Sans, Arial, sans-serif" font-weight="800" font-size="22">FUTURE PHASES  —  NOT YET IMPLEMENTED</text>
+<rect x="70" y="738" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
+<text x="90" y="770" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R2  —  3D geometry</text>
+<text x="90" y="799" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Meshes • reliefs • native 3D viewport</text>
+<rect x="565" y="738" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
+<text x="585" y="770" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R3  —  CNC jobs</text>
+<text x="585" y="799" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Tools • materials • operation definitions</text>
+<rect x="1060" y="738" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
+<text x="1080" y="770" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R4  —  2D / 2.5D CAM</text>
+<text x="1080" y="799" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Profiles • pockets • V-carving</text>
+<rect x="70" y="853" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
+<text x="90" y="885" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R5  —  3D CAM</text>
+<text x="90" y="914" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Roughing • finishing • simulation</text>
+<rect x="1060" y="853" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
+<text x="1080" y="885" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R7  —  Production QA</text>
+<text x="1080" y="914" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Packaging • recovery • machine trials</text>
+<rect x="565" y="853" width="460" height="88" rx="14" fill="#6f1825" stroke="#fda4af" stroke-width="2.5"/>
+<text x="585" y="885" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R6  —  MACHINE SAFETY  [LOCKED]</text>
+<text x="585" y="914" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Fixtures • cutter holders • NC preflight</text>
+<text x="70" y="990" fill="#e2e8f0" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="18">No machine output is enabled.  R6 requires independent safety validation.</text>
+</svg>
