@@ -1045,3 +1045,29 @@ machine-dependent clearances reject. No CAM/G-code.
 See [EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
 **CI/PR merge pending**, real KDE/Wayland and external CAD app
 acceptance remains outstanding; R1 is IN PROGRESS.
+
+
+## VERIFIED R1o — source-exact Boolean CAD boundary operations
+
+[PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged as **5c19b6e11123e04f8de941e577f4ad7312fa8adb**;
+exact tested source **ff3906801ccc69c58541ac5110726f4556dbb81e**
+passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **127 core + 9 compound + 8
+Boolean integration + 5 interchange + 6 persisted-region +
+18 studio = 173 tests**, strict Clippy and native Linux release.
+
+Native Drawing inspector now offers ordered saved-region operands
+A and B and **Union / Intersection / A minus B**. For two CAD
+regions whose complete source boundaries are analytically
+proved mutually disjoint, the exact Boolean boundary loops
+can be selected WITHOUT splitting or flattening original
+line and circular-arc primitives. Fresh independent vectors
+and persistent compound ownership (if multiple result loops)
+are created as one undoable editor action; both operands
+remain intact. Empty results, crossings, tangency, coincident
+circles, cubic sources, ambiguity and huge selections refuse.
+
+See [EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
+R1 remains IN PROGRESS: ordinary partially overlapping rectangles
+need future exact intersection splitting and stitching. Real
+KDE Plasma Wayland gestures and third-party CAD application
+inspection are still unverified. R6 NC output locked.
