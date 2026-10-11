@@ -200,3 +200,16 @@ operation and is **not** collision-safe machine cutter compensation.
 
 **Status:** feature/rust-r1k-coincident-arc-sweeps
 under automated validation; real KDE and external SVG/DXF QA pending.
+
+
+## VERIFIED R1k same-circle interval classifier — PR #127
+
+[PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127)
+merged 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4;
+exact tested head 12b8b275c00ecc9351117ff727b5c0606f6593d1
+passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700):
+145 Rust tests, strict Clippy, Linux release. Neighboring
+same-center arcs with a sole endpoint contact are now supported;
+positive angular overlap and repeated closed turns reject.
+See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+Real KDE/Wayland and external CAD goldens remain unverified.
