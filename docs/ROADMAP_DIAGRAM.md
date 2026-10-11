@@ -9,7 +9,9 @@ passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/
 Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
 remain merged; the high-contrast static roadmap is retained.
 
-**LATEST R1k VERIFIED:** [Same-circle angular sweep classification PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127) merged 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4; exact feature head 12b8b275c00ecc9351117ff727b5c0606f6593d1 passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): **145 tests, strict Clippy, native Linux release**. True adjoining source-circle segments no longer appear as overlaps; repeated angular sweeps fail closed. KDE/Wayland desktop and independent SVG/DXF golden QA remain unfinished.
+**LATEST R1l VERIFIED:** [PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged c34817881242f13ab55fa415c06fa4e22c4ac3ec; exact tested head 79a32dde6121585c84de0553fefd56439f74191f passed [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **150 Rust tests, strict Clippy, Linux release**. Two hand-authored SVG/DXF closed-capsule fixtures and cross-format true-circle geometry tests, plus bounded reentrant profile offsets and whole-chain straight-offset source/output validation. Manual real KDE/Wayland and independent third-party CAD application acceptance remain unfinished.
+
+**PREVIOUS R1k VERIFIED:** [Same-circle angular sweep classification PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127) merged 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4; exact feature head 12b8b275c00ecc9351117ff727b5c0606f6593d1 passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): **145 tests, strict Clippy, native Linux release**. True adjoining source-circle segments no longer appear as overlaps; repeated angular sweeps fail closed. KDE/Wayland desktop and independent SVG/DXF golden QA remain unfinished.
 
 ![Full CarveFoundry R0–R7 roadmap — high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg)
 
@@ -20,7 +22,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins, concave circular trims and coincident arc sweep classification. Remaining: complex contour QA, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins, concave circular trims and coincident arc sweep classification. Remaining: compound/hole topology QA, cubic offset policy, KDE UX and third-party CAD viewer acceptance |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -59,9 +61,8 @@ keeps R1 in progress until real KDE/Wayland and independent SVG/DXF
 acceptance. See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
 
 
-**R1l in development:** independent hand-authored SVG/DXF capsule
-fixtures, a closed L-profile round-offset geometry matrix and
-straight-only self-crossing protection on
-feature/rust-r1l-cad-interchange-goldens. Merge/CI and third-party
-application + KDE Wayland manual validation are separate gates.
+**R1l verified:** PR #128 CI-green merged. Hand-authored SVG/DXF
+source fixtures, exact analytic closed-contour offset goldens and
+straight source/result crossing guards landed. Third-party CAD
+application and KDE Plasma Wayland manual acceptance still pending.
 [Read interchange goldens](INTERCHANGE_GOLDENS.md).
