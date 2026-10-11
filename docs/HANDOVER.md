@@ -1688,3 +1688,41 @@ unfinished; R2–R7 future/safety-gated, CNC G-code export disabled.
 CI release build is not real-desktop input or physical-machine QA.
 
 | 2026-10-10/11 | PR #129 analytic hole/island hierarchy, native inspector and fail-closed crossing acceptance merged | [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980): 159 tests/strict Clippy/Linux release; merge e57620c2 | R1 real KDE/Wayland UX and independent external CAD checks; durable compound Booleans |
+
+
+## Active R1n — persisted compound CAD Boolean parity membership
+
+Branch `feature/rust-r1n-persistent-compound-regions` follows
+verified R1m main c7744978e7d0fb5337a41b9a9b1fb842a9fe0a30.
+
+The core's `compound::CompoundRegion` descriptor saves a name, unique
+region ID and source path ID list in an OPTIONAL native schema-version-1
+`compound_regions` field; old .cfd documents remain loadable and
+source geometry is untouched. Every Project::validate call (including
+atomic Editor::apply and native drag preview) recomputes nested line/
+true-arc topology and rejects missing IDs, duplicate ownership,
+boundary crossings/tangencies or unsupported cubic/open members.
+Undo/Redo covers SaveCompoundRegion, RenameCompoundRegion and
+RemoveCompoundRegion. Still-linked members cannot be destructively
+removed until the region is explicitly unlinked.
+
+`Project::compound_material_at(region_id, world_xy)` provides a
+strict read-only even/odd Boolean design-membership test:
+unrelated outer boundaries UNION, holes SUBTRACT and nested islands
+re-add material. True line/arc boundary hits reject (not cutter
+clearance). The native Drawing inspector now saves named regions,
+shows persistent role membership when any member is selected, checks
+the most recent cursor XY for material/void and removes source
+membership non-destructively. No new CAM, CNC or machine exports.
+
+New integration golden file
+`crates/core/tests/persistent_compound_regions.rs` checks native
+save/reopen, existing file compatibility, valid and invalid edits,
+failed drag atomicity, two-format hand-authored capsule imports,
+Boolean nested island/holes and boundary uncertainty. Test
+contract and owner manual KDE checklist:
+[docs/PERSISTENT_COMPOUND_REGIONS.md](PERSISTENT_COMPOUND_REGIONS.md).
+
+**Status: feature branch, CI and PR merge not yet verified.**
+Owner KDE Wayland input and independent external CAD visual QA
+remain unverified. R1 incomplete, R2–R7 gated, R6 NC off.
