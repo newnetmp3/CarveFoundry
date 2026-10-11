@@ -1187,3 +1187,18 @@ If the diagram needs another status update, edit the **SVG artwork and its phase
 text together** (and the matching Markdown table). Verify text contrast and
 legibility in KDE Firefox with the owner's extension before treating desktop
 accessibility as accepted.
+
+## Verified roadmap readability fix — PR #122
+
+[PR #122](https://github.com/newnetmp3/CarveFoundry/pull/122)
+merged as `3096e98dde72661f2bad70e6a0914299c33b8a8b`.
+Exact tested head `720fd99c71f626f9078ce666f13b5c48e78f4bba`
+passed [CI #38102622267](https://github.com/newnetmp3/CarveFoundry/actions/runs/38102622267):
+Rust tests, strict Clippy, native Linux release.
+The user-visible R0–R7 roadmap now embeds
+[high-contrast standalone SVG](ROADMAP_HIGH_CONTRAST.svg), no client-side
+Mermaid syntax or theme directives; a readable Markdown table remains
+as fallback. Locally rendered SVG passed XML parsing and measured text
+contrast ranging from 7.94:1 to 12.98:1. Owner KDE Firefox dark-mode
+plugin confirmation is not yet recorded. This was a documentation-only
+rendering/accessibility fix, not a change to CAD capabilities or CNC gates.
