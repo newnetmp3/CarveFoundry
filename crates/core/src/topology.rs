@@ -291,14 +291,13 @@ pub fn offset_exact(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
     if source.segments.iter().all(|s|matches!(s.curve,Curve::Line)){
         offset_lines(source,mm)
     }else if source.segments.iter().all(|s|matches!(s.curve,Curve::Arc{..})){
-        // Existing concentric-circle support stays backward-compatible.
-        // Multi-center tangent chains take the new exact junction solver.
-        if source.closed && offset_circular(source,mm).is_ok(){
-            offset_circular(source,mm)
-        }else if !source.closed && source.segments.len()==1 {
-            offset_circular(source,mm)
-        }else{
-            crate::mixed_offsets::offset_tangent_chain(source,mm)
+        // Preserve the direct circular solver, including its specific
+        // rejection reason for an invalid single arc. Multi-arc chains
+        // can use the tangent junction solver when centers differ.
+        match offset_circular(source,mm) {
+            Ok(result)=>Ok(result),
+            Err(problem) if source.segments.len()==1=>Err(problem),
+            Err(_)=>crate::mixed_offsets::offset_tangent_chain(source,mm),
         }
     }else{
         crate::mixed_offsets::offset_tangent_chain(source,mm)
