@@ -203,6 +203,124 @@ fn edge_tangent(edge:Shifted,at_end:bool)->Result<Point,String>{
         Curve::Cubic{..}=>Err("Cubic curves do not have exact circular parallel offsets".into())
     }
 }
+
+/// Parameters are measured along the displaced *finite* analytic edge,
+/// never along an unbounded support or its preview polyline.
+fn support_parameter(edge:Shifted,point:Point)->Option<f64>{
+    let tol=1e-7*len(sub(edge.end,edge.start)).max(1.0);
+    match edge.curve {
+        Curve::Line=>{
+            let delta=sub(edge.end,edge.start);
+            let l2=dot(delta,delta);
+            if l2<EPS*EPS{return None;}
+            let t=dot(sub(point,edge.start),delta)/l2;
+            if !(0.0..=1.0).contains(&t)
+                || dist(add(edge.start,mul(delta,t)),point)>tol {return None;}
+            Some(t)
+        }
+        Curve::Arc{center,clockwise}=>{
+            let radius=dist(edge.start,center);
+            if (dist(edge.end,center)-radius).abs()>tol
+                || (dist(point,center)-radius).abs()>tol
+                || radius<EPS{return None;}
+            let begin=sub(edge.start,center);
+            let finish=sub(edge.end,center);
+            let query=sub(point,center);
+            let a=begin.y.atan2(begin.x);
+            let b=finish.y.atan2(finish.x);
+            let q=query.y.atan2(query.x);
+            let sweep=if clockwise{(a-b).rem_euclid(TAU)}
+                      else{(b-a).rem_euclid(TAU)};
+            if sweep<1e-9{return None;}
+            let mut along=if clockwise{(a-q).rem_euclid(TAU)}
+                          else{(q-a).rem_euclid(TAU)};
+            if along>TAU-1e-9{along=0.0;}
+            if along>sweep+1e-8{return None;}
+            Some((along/sweep).clamp(0.0,1.0))
+        }
+        Curve::Cubic{..}=>None,
+    }
+}
+
+/// Intersect infinite supporting lines/circles, then independently prove
+/// that the candidate lies on both displaced finite edges. A joint is
+/// admissible only if it trims the end of incoming and the start of
+/// outgoing while leaving both portions strictly nonzero.
+fn trim_concave_circular(prev:Shifted,next:Shifted,amount:f64)
+    ->Result<Point,String>{
+    let candidates=match (prev.curve,next.curve){
+        (Curve::Line,Curve::Arc{center,..}) |
+        (Curve::Arc{center,..},Curve::Line)=>{
+            let (line,center,radius)=if matches!(prev.curve,Curve::Line){
+                (prev,center,dist(next.start,center))
+            } else {
+                (next,center,dist(prev.start,center))
+            };
+            let direction=sub(line.end,line.start);
+            let delta=sub(line.start,center);
+            let aa=dot(direction,direction);
+            if aa<EPS*EPS{return Err("Zero-length offset support line".into());}
+            let bb=2.0*dot(delta,direction);
+            let cc=dot(delta,delta)-radius*radius;
+            let discr=bb*bb-4.0*aa*cc;
+            let tolerance=(bb*bb+4.0*aa*cc.abs()).max(1.0)*1e-12;
+            if discr< -tolerance{Vec::new()}else{
+                let root=discr.max(0.0).sqrt();
+                [(-bb-root)/(2.0*aa),(-bb+root)/(2.0*aa)]
+                    .into_iter().map(|t|add(line.start,mul(direction,t)))
+                    .collect::<Vec<_>>()
+            }
+        }
+        (Curve::Arc{center:a,..},Curve::Arc{center:b,..})=>{
+            let radius_a=dist(prev.start,a);
+            let radius_b=dist(next.start,b);
+            let separation=dist(a,b);
+            if separation<EPS{
+                return Err("Coincident circular supports need exact sweep-overlap proof".into());
+            }
+            if separation>radius_a+radius_b+1e-8 ||
+                separation<(radius_a-radius_b).abs()-1e-8 {
+                Vec::new()
+            }else{
+                let direction=mul(sub(b,a),1.0/separation);
+                let advance=(radius_a*radius_a-radius_b*radius_b
+                    +separation*separation)/(2.0*separation);
+                let height2=radius_a*radius_a-advance*advance;
+                if height2< -radius_a.max(1.0)*radius_a.max(1.0)*1e-10{
+                    Vec::new()
+                }else{
+                    let mid=add(a,mul(direction,advance));
+                    let orth=left(direction);
+                    let h=height2.max(0.0).sqrt();
+                    vec![add(mid,mul(orth,h)),sub(mid,mul(orth,h))]
+                }
+            }
+        }
+        _=>return Err("Concave circular trim needs a line/arc or arc/arc seam".into()),
+    };
+    let limit=amount.abs()*12.0+1e-7;
+    let mut accepted=Vec::new();
+    for hit in candidates{
+        let (Some(incoming),Some(outgoing))=(
+            support_parameter(prev,hit),support_parameter(next,hit))
+        else{continue;};
+        // Only REMOVE existing swept material. No extending a circle
+        // outside the original arc and no reversing the traversal.
+        if !(1e-7..1.0-1e-7).contains(&incoming)
+            || !(1e-7..1.0-1e-7).contains(&outgoing)
+            || dist(hit,prev.end)>limit || dist(hit,next.start)>limit{
+            continue;
+        }
+        if accepted.iter().all(|p|dist(*p,hit)>1e-7){
+            accepted.push(hit);
+        }
+    }
+    match accepted.as_slice(){
+        [only]=>Ok(*only),
+        []=>Err("Concave circular supports do not meet on both original finite offset sweeps; no extrapolated trim".into()),
+        _=>Err("Concave circular trim has multiple valid crossings; ambiguous join refused".into()),
+    }
+}
 fn rounded_join(prev:Shifted,next:Shifted,vertex:Point,amount:f64)
     ->Result<RoundedVertex,String>{
     let incoming=edge_tangent(prev,true)?;
@@ -239,7 +357,8 @@ fn rounded_join(prev:Shifted,next:Shifted,vertex:Point,amount:f64)
     }
     if matches!(prev.curve,Curve::Arc{..}) ||
         matches!(next.curve,Curve::Arc{..}) {
-        return Err("Concave sharp circular offset needs an analytic trim; round bridge is unsafe".into());
+        return trim_concave_circular(prev,next,amount)
+            .map(RoundedVertex::Common);
     }
     // The converging straight supports have an exact bounded miter.
     join(prev,next,vertex,amount).map(RoundedVertex::Common)
