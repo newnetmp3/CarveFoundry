@@ -291,6 +291,74 @@ impl Studio {
                 }
             });
         }
+        // Source-faithful closed-region Boolean ops. Only complete
+        // non-touching/non-crossing analytic source boundaries can be
+        // retained as the exact result; all others explicitly refuse.
+        let saved=self.editor.project.compound_regions.clone();
+        if saved.len()>=2{
+            ui.separator();
+            ui.strong("BOOLEAN CAD · EXACT NON-CROSSING REGIONS");
+            ui.small("Choose two saved regions. Union, Intersection and A minus B retain complete original lines/arcs, with fresh editable source IDs and Undo. Crossing/touching/overlapping boundaries cannot yet be reconstructed and will be refused. No machining.");
+            if !saved.iter().any(|r|r.id==self.topology_boolean_left){
+                self.topology_boolean_left=saved[0].id;
+            }
+            if !saved.iter().any(|r|r.id==self.topology_boolean_right)
+                || self.topology_boolean_left==self.topology_boolean_right{
+                self.topology_boolean_right=saved.iter()
+                    .find(|r|r.id!=self.topology_boolean_left)
+                    .map_or(self.topology_boolean_left,|r|r.id);
+            }
+            ui.horizontal_wrapped(|ui|{
+                ui.label("A");
+                egui::ComboBox::from_id_salt("boolean-region-a")
+                    .selected_text(saved.iter()
+                        .find(|r|r.id==self.topology_boolean_left)
+                        .map_or("Choose A".to_string(),|r|r.name.clone()))
+                    .show_ui(ui,|ui|{
+                        for region in &saved{
+                            ui.selectable_value(&mut self.topology_boolean_left,
+                                region.id,&region.name);
+                        }
+                    });
+                ui.label("B");
+                egui::ComboBox::from_id_salt("boolean-region-b")
+                    .selected_text(saved.iter()
+                        .find(|r|r.id==self.topology_boolean_right)
+                        .map_or("Choose B".to_string(),|r|r.name.clone()))
+                    .show_ui(ui,|ui|{
+                        for region in &saved{
+                            ui.selectable_value(&mut self.topology_boolean_right,
+                                region.id,&region.name);
+                        }
+                    });
+            });
+            ui.horizontal_wrapped(|ui|{
+                ui.label("Result");
+                ui.text_edit_singleline(&mut self.topology_boolean_name);
+            });
+            let different=self.topology_boolean_left!=self.topology_boolean_right;
+            ui.horizontal_wrapped(|ui|{
+                for operation in [
+                    carvefoundry_core::RegionBoolean::Union,
+                    carvefoundry_core::RegionBoolean::Intersection,
+                    carvefoundry_core::RegionBoolean::Difference,
+                ]{
+                    if ui.add_enabled(different,
+                        egui::Button::new(operation.title()))
+                        .on_hover_text("Exact, source-preserving result for provably disjoint or strictly nested saved CAD boundaries. Crossing, coincident, tangent, cubic or non-provable geometry rejects atomically. Difference means A minus B; not CNC toolpath generation.").clicked(){
+                        let first_generated=self.editor.project.next_id;
+                        self.apply(Action::BooleanRegions{
+                            left_region_id:self.topology_boolean_left,
+                            right_region_id:self.topology_boolean_right,
+                            operation,name:self.topology_boolean_name.clone(),
+                        });
+                        if self.editor.project.paths.iter().any(|p|p.id==first_generated){
+                            self.select_vector(Some(first_generated),false);
+                        }
+                    }
+                }
+            });
+        }
         let Some(path)=selected else{
             ui.small("Select one editable analytic vector, or two open paths to Join.");
             return;
