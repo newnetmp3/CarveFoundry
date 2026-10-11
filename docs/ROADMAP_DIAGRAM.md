@@ -9,7 +9,7 @@ passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/
 Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
 remain merged; the high-contrast static roadmap is retained.
 
-**LATEST R1k VERIFIED:** [Finite-sweep concave circular offsets PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126) merged 907b1509133d09b55503d5ea75253a81abe13ee7; exact tested source ded15b52f95cdededbd2492a63c1a18208553e44 passed [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405): **138 tests, strict Clippy, native Linux release**. Adds bounded concave line/arc/arc trims alongside the previous exact convex round joins. Coincident-circle overlap, real KDE/file QA and comprehensive topology certification remain unfinished.
+**LATEST R1k VERIFIED:** [Same-circle angular sweep classification PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127) merged 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4; exact feature head 12b8b275c00ecc9351117ff727b5c0606f6593d1 passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): **145 tests, strict Clippy, native Linux release**. True adjoining source-circle segments no longer appear as overlaps; repeated angular sweeps fail closed. KDE/Wayland desktop and independent SVG/DXF golden QA remain unfinished.
 
 ![Full CarveFoundry R0–R7 roadmap — high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg)
 
@@ -20,7 +20,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins and bounded concave circular trims. Remaining: coincident arc overlaps, complex contour QA, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins, concave circular trims and coincident arc sweep classification. Remaining: complex contour QA, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -52,9 +52,8 @@ R1 still in progress, no CNC output. See
 [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
 
 
-**R1k in progress — angular overlap QA:** The feature branch
-feature/rust-r1k-coincident-arc-sweeps distinguishes isolated adjoining
-source-arc endpoints from overlapping same-circle sweeps (including
-wraparound and repeated loops). This is not yet CI/merge verified;
-the high-contrast overview retains R1 "in progress." See
-[COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+**R1k verified — angular sweep proof:** PR #127 passed exact CI and
+merged. Valid adjacent arc endpoints are retained; overlapping sweeps,
+remote contacts and repeated circles remain disallowed. The roadmap
+keeps R1 in progress until real KDE/Wayland and independent SVG/DXF
+acceptance. See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
