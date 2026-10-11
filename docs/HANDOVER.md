@@ -1809,3 +1809,46 @@ Full scope/limitations/manual KDE Wayland acceptance:
 **Status: committed to feature branch, CI/PR merge pending.**
 R1 remains incomplete; crossing geometry needs exact splitting
 later, third-party CAD/KDE QA unverified, R6 machine NC locked.
+
+
+## VERIFIED R1o — exact Boolean boundaries from disjoint/nested CAD sources
+
+[PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged as **5c19b6e11123e04f8de941e577f4ad7312fa8adb**.
+Exact final tested feature head **ff3906801ccc69c58541ac5110726f4556dbb81e**
+passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **127 core + 9 compound + 8 Boolean
+goldens + 5 SVG/DXF interchange + 6 persistent-region + 18 studio
+= 173 Rust tests**, strict Clippy and native Linux release.
+The first PR head failed Rust formatting because of a comma
+after a struct base in a new test; corrected exact head passed
+the entire workflow.
+
+Native Rust `region_booleans::boolean_region_boundaries` implements
+Union, Intersection and ordered A-minus-B for two already-saved,
+source-exact compound CAD regions, only where ALL source loop
+boundaries are provably simple and pairwise non-crossing/
+non-touching/non-coincident. Both material states are evaluated
+at a point on each SOURCE loop proved not to lie on the OTHER
+operand's boundary. A complete exact original loop is copied
+iff the truth value toggles on its two sides. Thus output retains
+original true line/arc centers and sweeps, without splitting
+unsupported crossing edges or flattening any curve.
+
+Undoable `Editor::BooleanRegions` produces new editable analytic
+paths with fresh stable IDs, leaves operand paths/regions
+untouched, and creates a new source-hierarchy-validated
+persistent compound region when output has multiple loops.
+Native Drawing topology inspector now has saved operand A/B
+selectors and Union/Intersection/A-minus-B buttons. Empty
+result explicitly rejects. Tests cover nested rectangles,
+true concentric circle arcs, external SVG/DXF capsule, reversed
+Difference, separated regions and overlap/tangent atomic
+rejections. No G-code/NC.
+
+**NEXT R1:** exact intersections and edge-splitting for overlapping
+closed regions (including ordinary overlapping rectangles);
+owner Arch KDE Plasma Wayland pointer usability checks and
+external third-party CAD viewer roundtrip. Exact boundary
+proof/manual QA: [EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
+R1 still IN PROGRESS, R2–R7 future/safety gated; R6 NC export off.
+
+| 2026-10-10/11 | PR #131 exact nested/disjoint Boolean closed regions, preserved true arcs and Undo merged | [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): 173 tests/Clippy/Linux release; merge 5c19b6e1 | R1 source-exact crossing boundary splitting and KDE/third-party CAD acceptance |
