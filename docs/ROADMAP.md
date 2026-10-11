@@ -996,3 +996,28 @@ A hole moved completely outside its host is no longer silently
 interpreted as a new independent outline. Changing the Boolean
 relationship requires unlinking/rebuilding the region. This is
 part of the pending R1n CI branch, not a finished merge.
+
+
+## VERIFIED R1n — persistent compound regions and exact CAD Boolean material test
+
+[PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged as **c3c32f3f05f60288bfc5dbb52995fa7cc9f79988**;
+exact tested feature head **2f4681207447f27d148ebcee13a5b46227041f03**
+passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **127 core + 9 compound + 5 interchange + 6
+persistent golden + 18 studio = 165 tests**, strict Clippy
+and native Linux release build.
+
+Native `.cfd` schema-version-1 files now optionally retain
+named source-analytic compound region membership. Each member's
+proven parent at creation is retained so a hole moved entirely
+outside its parent cannot silently become an independent material
+island. Every edit/drag/save/reopen revalidates geometric boundaries
+and nesting identity; failure is atomic. Native topology inspector
+allows creating and unlinking saved regions, and tests exact
+line/circular-arc even/odd material inclusion at cursor XY.
+True boundary queries reject rather than guessing, with no
+generated Boolean edges, CAM regions, cutter-safe offsets or NC.
+
+Details: [PERSISTENT_COMPOUND_REGIONS.md](PERSISTENT_COMPOUND_REGIONS.md).
+R1 remains IN PROGRESS pending real KDE Plasma Wayland pointer
+acceptance, third-party SVG/DXF CAD app checks and broader precise
+Boolean geometry. R2–R7 remain future/safety gated.
