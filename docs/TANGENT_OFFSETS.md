@@ -73,3 +73,44 @@ passed [Rust CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/
 **127 Rust tests, strict Clippy and Linux native release build**.
 Real KDE visual/interaction acceptance and independent source
 SVG/DXF validation in the checklist above remain pending.
+
+
+## R1k engineering slice — complete-chain intersection validation
+
+The source-accurate R1j offset solver checks local joint tangency, radius
+collapse, excessive miters and closed winding, but these **do not imply a
+simple contour**. R1k adds a separate bounded, source-faithful global check
+for mixed line/circle chains **before** creating an offset and **after**
+its exact offset coordinates are calculated:
+
+- Compare every distinct source edge pair with retained line/true-circle
+  intersection mathematics (maximum 256 edges, 32,640 candidate pairs).
+- Ignore only the one shared endpoint of neighboring edges; reject remote
+  crossings, tangencies, unexpected endpoint contact, collinear overlaps
+  and backtracking, including on open shapes.
+- Coincident circular supports have no unique isolated crossing in the
+  existing solver. They are **conservatively rejected**, including adjacent
+  same-center arcs in mixed chains, until interval-overlap proof is added.
+  The dedicated concentric full-circle offset operation is unchanged.
+- Source and result are checked; an error leaves source geometry intact
+  and no derived offset is committed. The source layer/Undo semantics remain
+  as before. This is **not** global CNC toolpath clearance or external
+  file validation and does not support non-tangent curved joins.
+
+### Additional KDE/Wayland acceptance
+
+- [ ] On a mixed line/arc profile with a distant crossing, use Create
+      offset vector. Confirm a self-crossing error and no extra vector.
+- [ ] On adjacent collinear backtracking lines in a mixed path, confirm
+      overlap is rejected. A clean tangent capsule should still offset.
+- [ ] On a mixed chain with same-center neighboring arcs, confirm an
+      explicit unresolved/overlap error rather than an incorrect contour.
+- [ ] Verify Undo, save/reopen and third-party SVG/DXF behavior separately
+      from automated checks; the UI tool remains CAD-only.
+
+**Validation status:** implementation branch
+feature/rust-r1k-global-offset-validation; native CI and real owner
+KDE/Wayland acceptance need verification before this slice is marked
+complete. Later R1k tasks remain: sharp round/bevel circular junctions,
+proven closed contour offset topology, cubic approximation with a
+stated tolerance if added, and golden file interoperability tests.
