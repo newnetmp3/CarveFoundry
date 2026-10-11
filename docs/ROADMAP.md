@@ -1093,3 +1093,32 @@ require separate safe analytical algorithms. No CAM or NC.
 See [TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
 **Branch status: CI/PR pending**, real KDE Wayland and
 external CAD application QA still outstanding.
+
+
+## VERIFIED R1p — exact line-line transverse Boolean contour reconstruction
+
+[PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132) merged as **dcfa2f32b88d523de700551af02d8cad3353179f**;
+final tested head **8f6c92fad0dcd56907271404ad34d8ed4d4c966c**
+passed [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): **127 core + 9 compound +
+8 prior Boolean + 5 SVG/DXF interchange + 6 persisted CAD
+region + 5 transverse split + 18 studio = 178 Rust tests**,
+strict Clippy and native Linux desktop release.
+
+Union / Intersection / A minus B now accept **strictly transverse
+straight-line boundary crossings**, e.g. rectangles offset in
+both X and Y. Exactly calculated source line-line intersections
+become editable new nodes; proven material sidedness and
+graph stitching form new closed native CAD loops. Both saved
+operand region sources stay intact and Undo is atomic.
+Original true circular arcs are still used unmodified by the
+previously certified non-crossing Boolean solver.
+
+**Limitations / next:** shared collinear edges, T-junctions,
+endpoint contacts, near-coincident slivers and crossing arcs
+or cubic curves continue to fail closed, awaiting separate
+source-accurate topology algorithms; no Boolean display
+tessellation is promoted to source geometry and NO CNC
+G-code output exists. Owner real KDE Plasma/Wayland
+interaction and external CAD application SVG/DXF viewing
+remain unverified. See [TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
+R1 in progress, R2–R7 planned/safety gated.
