@@ -1071,3 +1071,25 @@ R1 remains IN PROGRESS: ordinary partially overlapping rectangles
 need future exact intersection splitting and stitching. Real
 KDE Plasma Wayland gestures and third-party CAD application
 inspection are still unverified. R6 NC output locked.
+
+## Active R1p — exact transverse line/line Boolean intersection reconstruction
+
+Building on [verified R1o](EXACT_REGION_BOOLEANS.md), the
+`feature/rust-r1p-transverse-boolean-splits` branch adds
+source-accurate line-line intersection parameters and directed
+graph closed-boundary stitching for validated saved Boolean
+region operands. Shifted partial overlaps of straight-line
+profiles are now supported **only when all cross-operand
+intersections are strict transverse segment-interior hits**.
+Region inside/outside classification is exact even/odd
+parity; each oriented output fragment has material on its
+left. Generated paths are new editable native lines; parent
+hierarchy is checked by the same compound proof, Undo is
+atomic, and both saved operands remain unchanged.
+
+Shared straight edges, endpoint touch, T-junctions, near
+coincidence and crossing arcs/cubics are NOT accepted; those
+require separate safe analytical algorithms. No CAM or NC.
+See [TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
+**Branch status: CI/PR pending**, real KDE Wayland and
+external CAD application QA still outstanding.
