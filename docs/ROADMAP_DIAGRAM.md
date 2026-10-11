@@ -101,3 +101,12 @@ parent links to prohibit silent Boolean reinterpretation.
 Analytic source curves remain editable; safe inside/outside
 parity queries are CAD-only. CNC NC export is still locked.
 [Persisted compound CAD contract](PERSISTENT_COMPOUND_REGIONS.md).
+
+
+**R1o implementation (CI pending):** source-exact Union/
+Intersection/A minus B of saved, strictly non-crossing native
+compound regions, with true circular arcs preserved. Native
+inspector chooses ordered A and B; outputs are independent
+editable closed loops and optional new saved region. Touching,
+intersecting or coincident source boundaries reject, not sampled.
+[Exact region Boolean proof and QA](EXACT_REGION_BOOLEANS.md).
