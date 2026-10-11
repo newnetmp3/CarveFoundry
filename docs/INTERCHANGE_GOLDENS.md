@@ -63,7 +63,10 @@ all unsupported DXF entities or all compound/hole design semantics.
 - [ ] Verify source geometry is not mistaken for an NC toolpath, and
       no machine-code export is offered before the R6 safety gate.
 
-**Verification at branch creation:** implemented on
-`feature/rust-r1l-cad-interchange-goldens`; new CI and PR merge
-pending. Physical KDE interactions and external CAD viewer tests
-remain unverified. Machine NC output remains deliberately disabled.
+**Verified automated implementation:** [PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged as
+c34817881242f13ab55fa415c06fa4e22c4ac3ec; exact tested
+head 79a32dde6121585c84de0553fefd56439f74191f passed
+[CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **127 core + 5 integration + 18 studio = 150
+Rust tests**, strict Clippy and native Linux desktop release.
+Physical KDE interactions and external third-party CAD viewer tests
+remain **unverified**. Machine NC output remains disabled.
