@@ -196,7 +196,7 @@ fn exact_concentric_true_arc_booleans_preserve_full_original_circles(){
     let mut e=Editor::new(Project{
         paths:vec![true_circle(1,45.0),true_circle(2,30.0),
             true_circle(3,40.0),true_circle(4,15.0)],
-        next_id:5,..Project::default(),
+        next_id:5,..Project::default()
     }).unwrap();
     e.apply(Action::SaveCompoundRegion{ids:vec![1,2],name:"A".into()}).unwrap();
     e.apply(Action::SaveCompoundRegion{ids:vec![3,4],name:"B".into()}).unwrap();
