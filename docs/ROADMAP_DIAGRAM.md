@@ -9,7 +9,17 @@ passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/
 Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
 remain merged; the high-contrast static roadmap is retained.
 
-**LATEST R1l VERIFIED:** [PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged c34817881242f13ab55fa415c06fa4e22c4ac3ec; exact tested head 79a32dde6121585c84de0553fefd56439f74191f passed [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **150 Rust tests, strict Clippy, Linux release**. Two hand-authored SVG/DXF closed-capsule fixtures and cross-format true-circle geometry tests, plus bounded reentrant profile offsets and whole-chain straight-offset source/output validation. Manual real KDE/Wayland and independent third-party CAD application acceptance remain unfinished.
+**LATEST R1m VERIFIED:** [Compound closed-loop hierarchy PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+merged e57620c289eb06c60dd33c5d243ab1a1ff0aff3a;
+exact tested source 16e3e20a904717c9be60f0a0bdbf3a526dd9656f
+passed [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980):
+**159 tests, strict Clippy, native Linux release**. Native inspector
+classifies separately editable line/circle closed paths by exact
+outer/hole/island depth with source-accurate crossing refusal.
+Cubic contours, persistent compound regions, and real KDE/Wayland
+and third-party CAD acceptance remain outstanding.
+
+**PREVIOUS R1l VERIFIED:** [PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged c34817881242f13ab55fa415c06fa4e22c4ac3ec; exact tested head 79a32dde6121585c84de0553fefd56439f74191f passed [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **150 Rust tests, strict Clippy, Linux release**. Two hand-authored SVG/DXF closed-capsule fixtures and cross-format true-circle geometry tests, plus bounded reentrant profile offsets and whole-chain straight-offset source/output validation. Manual real KDE/Wayland and independent third-party CAD application acceptance remain unfinished.
 
 **PREVIOUS R1k VERIFIED:** [Same-circle angular sweep classification PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127) merged 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4; exact feature head 12b8b275c00ecc9351117ff727b5c0606f6593d1 passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): **145 tests, strict Clippy, native Linux release**. True adjoining source-circle segments no longer appear as overlaps; repeated angular sweeps fail closed. KDE/Wayland desktop and independent SVG/DXF golden QA remain unfinished.
 
@@ -22,7 +32,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins, concave circular trims and coincident arc sweep classification. Remaining: compound/hole topology QA, cubic offset policy, KDE UX and third-party CAD viewer acceptance |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins, concave circular trims and coincident arc sweep classification. Remaining: durable compound region/Booleans, cubic offset policy, KDE UX and third-party CAD viewer acceptance |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -68,8 +78,9 @@ application and KDE Plasma Wayland manual acceptance still pending.
 [Read interchange goldens](INTERCHANGE_GOLDENS.md).
 
 
-**R1m active (pending CI):** read-only, analytic outline/hole/island
-hierarchy for separate non-touching closed line/true-circle loops.
-Native Drawing inspector shows depth and parent; all original CAD
-source identities remain. No compound machining region or NC output.
-[See compound contour proof and manual acceptance](COMPOUND_CONTOURS.md).
+**R1m verified:** [PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+CI-green merged, 159 tests. Read-only, source-exact nested
+outline/hole/island roles are now visible in the native inspector.
+R1 remains IN PROGRESS pending actual Wayland pointer interaction
+and third-party CAD app QA. No compound machining region or NC.
+[Read compound contour proof](COMPOUND_CONTOURS.md).
