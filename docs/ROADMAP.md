@@ -872,3 +872,24 @@ See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
 complex closed offset fixtures; real KDE Plasma Wayland desktop
 acceptance remains required. R1 still unfinished, R2–R7
 future/planned or safety-gated, CNC/NC G-code output disabled.
+
+
+## Active R1l — external-source SVG/DXF CAD goldens and closed contour QA
+
+Branch feature/rust-r1l-cad-interchange-goldens adds two
+**hand-authored**, never self-exported input fixtures for a
+closed exact circular capsule: 200 mm SVG and millimetre
+ASCII DXF with bulge semicircles. Native Rust integration tests
+compare true source coordinates/centers/directions and verify
+native SVG and DXF import-export, cross-format re-import,
++3/-2 mm exact closed capsule offsets, and convex/reentrant
+L-shaped rounded closed offsets. Full-chain source/result
+analytic intersection validation now applies also to the
+previous straight-only offset operation (open or closed):
+remote self-crossings fail closed rather than being silently
+mitered into unsafe geometry.
+
+**Branch implementation only: CI/merge pending.** External CAD
+application and real KDE Wayland GUI acceptance are still NOT
+automatically certified. See [INTERCHANGE_GOLDENS.md](INTERCHANGE_GOLDENS.md).
+R1 remains incomplete; R2–R7 future/safety gated, NC export disabled.

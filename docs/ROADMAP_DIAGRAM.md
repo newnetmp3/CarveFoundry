@@ -57,3 +57,11 @@ merged. Valid adjacent arc endpoints are retained; overlapping sweeps,
 remote contacts and repeated circles remain disallowed. The roadmap
 keeps R1 in progress until real KDE/Wayland and independent SVG/DXF
 acceptance. See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+
+
+**R1l in development:** independent hand-authored SVG/DXF capsule
+fixtures, a closed L-profile round-offset geometry matrix and
+straight-only self-crossing protection on
+feature/rust-r1l-cad-interchange-goldens. Merge/CI and third-party
+application + KDE Wayland manual validation are separate gates.
+[Read interchange goldens](INTERCHANGE_GOLDENS.md).
