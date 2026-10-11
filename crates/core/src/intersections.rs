@@ -518,7 +518,10 @@ mod tests{
             chained_arcs(1,&[0.0,120.0],&[false],false),
             chained_arcs(2,&[0.0,120.0],&[false],false)
         ]);
-        project.paths[1].origin.x+=15.0;
+        let center=Point::new(20.0,30.0);
+        for node in &mut project.paths[1].nodes{
+            node.position=add(center,mul(sub(node.position,center),2.0));
+        }
         project.next_id=3;
         project.validate().unwrap();
         let scan=find_intersections(&project,1).unwrap();
