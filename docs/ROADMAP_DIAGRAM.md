@@ -9,34 +9,9 @@ passed [Rust CI #38016223523](https://github.com/newnetmp3/CarveFoundry/actions/
 release. Older numbered marker contrast PR #119 and straight extension
 PR #120 are also merged.
 
-```mermaid
-flowchart TD
-    R0["R0 · Native Rust foundation<br/>IMPLEMENTED · KDE manual acceptance partial"]
-    subgraph R1["R1 · PROFESSIONAL 2D VECTOR CAD — IN PROGRESS"]
-        direction TB
-        A["DONE · Exact source line/arc/Bézier editing<br/>Shapes, snapping, node drag, Undo, transforms"]
-        B["DONE · Native SVG and DXF interchange"]
-        C["DONE · Installed-font text → retained editable outlines"]
-        D["DONE · Named layers + flat vector groups · PR #115"]
-        E["DONE · Source-exact numeric split/trim/join,<br/>straight offsets and open corners · PR #116"]
-        F["DONE · Real line/arc crossings + markers,<br/>closed line corners and circular offsets · PR #117"]
-        F2["DONE · Cubic–line/arc/cubic crossing fix · PR #118<br/>Tangent roots and original-source validation"]
-        G1["DONE · High-contrast numbered crossing badges · PR #119"]
-        G2["DONE · Extend straight endpoint to line/arc/Bézier<br/>nearest bounded crossing · PR #120"]
-        G3["DONE · Open cubic and circular-arc source extension · PR #121<br/>Retained original curves and bounded smooth continuation"]
-        G["NEXT · Robust mixed/cubic curved offsets,<br/>complex junctions, KDE and interoperability QA"]
-        A --> B --> C --> D --> E --> F --> F2 --> G1 --> G2 --> G3 --> G
-    end
-    QA["R1 desktop acceptance gate<br/>KDE/Wayland pointer UX · SVG/DXF roundtrip · golden geometry"]
-    R2["R2 · Native 3D geometry workspace<br/>PLANNED · meshes/reliefs/viewport"]
-    R3["R3 · CNC jobs + tools/material libraries<br/>PLANNED · operation dependencies/fixture data"]
-    R4["R4 · Rust 2D / 2.5D CAM<br/>PLANNED · profile, pocket, V-carving, engraving"]
-    R5["R5 · Rust 3D CAM + simulation<br/>PLANNED · rough, finish, rest, stock removal"]
-    R6["R6 · MACHINE SAFETY + POSTPROCESSORS<br/>LOCKED · workholding/holder/Z clearance/posted NC validation"]
-    R7["R7 · Production QA, recovery, packaging<br/>PLANNED · supervised physical Onefinity trials"]
-    R0 --> A
-    G --> QA --> R2 --> R3 --> R4 --> R5 --> R6 --> R7
-```
+![Full CarveFoundry R0–R7 roadmap — high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg)
+
+[Open the full-size high-contrast SVG](ROADMAP_HIGH_CONTRAST.svg). This graphic has explicit foreground/background colors and requires **no Mermaid parser or theme initialization**. If an extension blocks images, the phase/status table below contains the same information.
 
 ## What these statuses mean
 

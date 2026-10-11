@@ -644,3 +644,11 @@ See [CURVE_EXTENSION.md](CURVE_EXTENSION.md) and
 fillets/chamfers, full KDE real-pointer acceptance and third-party
 SVG/DXF golden file roundtrips. R2–R7 are future phases; NC machine
 output remains locked by the R6 safety gates.
+
+## Readability of the roadmap diagram
+
+The [full R0–R7 roadmap](ROADMAP_DIAGRAM.md) now embeds a
+[high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg) instead of relying on
+Mermaid theme initialization and client-side diagram parsing. The accompanying
+Markdown status table is the text-only accessible fallback. This is a docs
+fix only; project implementation status is unchanged.

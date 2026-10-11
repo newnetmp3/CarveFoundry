@@ -1169,3 +1169,21 @@ corners and deep KDE/Wayland UX + file-interchange QA remain.
 R2–R7 are future work and CNC/G-code/NC output remains disabled.
 
 | 2026-10-10 | PR #121 open cubic/arc extension merged | [CI 38016223523](https://github.com/newnetmp3/CarveFoundry/actions/runs/38016223523): 122 tests, Clippy and Linux release; merge 7f584244 | KDE user's exact Bézier screenshot, advanced offsets/corner QA |
+
+## Dark-mode-safe roadmap visualization (docs/UI-only)
+
+A user screenshot showed the assistant's attempted Mermaid theme initialization rendered
+`Invalid or unsupported diagram` under an aggressive browser dark-mode extension.
+The original repository Mermaid source was valid, but its default theme/stylesheet
+was also susceptible to inverted low-contrast text. The roadmap now uses
+`docs/ROADMAP_HIGH_CONTRAST.svg`: a self-contained static SVG with explicit
+dark backgrounds, near-white text, green implemented, blue active, amber next,
+gray future and red locked statuses. `docs/ROADMAP_DIAGRAM.md` embeds the SVG
+instead of a Mermaid fenced block, retaining its plain Markdown phase table
+as the accessible fallback. This changes **documentation presentation only**:
+no Rust CAD behavior, acceptance or CNC/NC safety gate has changed.
+
+If the diagram needs another status update, edit the **SVG artwork and its phase
+text together** (and the matching Markdown table). Verify text contrast and
+legibility in KDE Firefox with the owner's extension before treating desktop
+accessibility as accepted.
