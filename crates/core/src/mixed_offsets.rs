@@ -587,7 +587,15 @@ mod tests{
         assert!(matches!(rounded.segments[2].curve,
             Curve::Arc{center,clockwise:false} if center==Point::new(20.0,0.0)));
         rounded.validate().unwrap();
-        assert!(offset_round_chain(&p,-2.0).unwrap_err().contains("Concave sharp"));
+        let trimmed=offset_round_chain(&p,-2.0).unwrap();
+        let corner=trimmed.nodes[1].position;
+        assert!((corner.x-(20.0-(144.0_f64-4.0).sqrt())).abs()<1e-7);
+        assert!((corner.y+2.0).abs()<1e-7);
+        assert_eq!(trimmed.nodes.len(),3);
+        assert_eq!(trimmed.segments,p.segments);
+        assert_eq!(trimmed.nodes[1].id,p.nodes[1].id);
+        assert!((dist(corner,Point::new(20.0,0.0))-12.0).abs()<1e-7);
+        crate::intersections::validate_simple_analytic_chain(&trimmed).unwrap();
     }
     #[test]
     fn sharp_arc_to_arc_round_join_keeps_both_original_circle_centers(){
@@ -618,6 +626,14 @@ mod tests{
         assert!(matches!(result.segments[2].curve,Curve::Arc{
             center,clockwise:false} if center==Point::new(10.0,-10.0)));
         crate::intersections::validate_simple_analytic_chain(&result).unwrap();
+        let inward=offset_round_chain(&p,-2.0).unwrap();
+        assert_eq!(inward.nodes.len(),3);
+        assert_eq!(inward.segments,p.segments);
+        let join=inward.nodes[1].position;
+        assert!((dist(join,Point::new(0.0,0.0))-12.0).abs()<1e-7);
+        assert!((dist(join,Point::new(10.0,-10.0))-12.0).abs()<1e-7);
+        assert!(join.x<0.0 && join.y< -10.0);
+        crate::intersections::validate_simple_analytic_chain(&inward).unwrap();
     }
     #[test]
     fn closed_ccw_triangle_rounds_outside_without_changing_winding(){
@@ -635,6 +651,53 @@ mod tests{
         assert!(result.closed);
         crate::intersections::validate_simple_analytic_chain(&result).unwrap();
     }
+
+    #[test]
+    fn curved_to_straight_concave_trim_preserves_arc_center_and_ids(){
+        let p=AnalyticPath{
+            id:10,name:"Arc then line".into(),origin:Point::new(3.0,5.0),
+            visible:true,locked:false,closed:false,
+            nodes:vec![
+                Point::new(20.0,-10.0),Point::new(10.0,0.0),
+                Point::new(0.0,0.0)
+            ].into_iter().enumerate().map(|(i,position)|PathNode{
+                id:i as u64+1,position}).collect(),
+            segments:vec![
+                PathSegment{id:4,curve:Curve::Arc{
+                    center:Point::new(20.0,0.0),clockwise:true}},
+                PathSegment{id:5,curve:Curve::Line},
+            ],next_element_id:6,
+        };
+        p.validate().unwrap();
+        let original=p.clone();
+        let result=offset_round_chain(&p,2.0).unwrap();
+        assert_eq!(p,original);
+        assert_eq!(result.segments,p.segments);
+        assert_eq!(result.nodes.len(),3);
+        let corner=result.nodes[1].position;
+        assert!((corner.x-(20.0-(144.0_f64-4.0).sqrt())).abs()<1e-7);
+        assert!((corner.y+2.0).abs()<1e-7);
+        crate::intersections::validate_simple_analytic_chain(&result).unwrap();
+    }
+
+    #[test]
+    fn invalid_trim_outside_original_short_circle_sweep_is_rejected(){
+        let mut p=AnalyticPath::preset(11,"Short arc".into(),
+            Point::new(0.0,0.0),Primitive::Line,10.0,10.0).unwrap();
+        let angle=0.05_f64;
+        p.nodes.push(PathNode{id:4,position:Point::new(
+            20.0-10.0*angle.cos(),-10.0*angle.sin())});
+        p.segments.push(PathSegment{id:5,curve:Curve::Arc{
+            center:Point::new(20.0,0.0),clockwise:false,
+        }});
+        p.next_element_id=6;
+        p.validate().unwrap();
+        let before=p.clone();
+        let err=offset_round_chain(&p,-2.0).unwrap_err();
+        assert!(err.contains("finite offset sweeps"),"Unexpected: {err}");
+        assert_eq!(p,before);
+    }
+
     #[test]
     fn rounded_solver_rejects_reversals_cubics_and_nonfinite_offsets(){
         let p=crate::shapes::polyline(7,"Backtrack".into(),Point::new(0.0,0.0),
