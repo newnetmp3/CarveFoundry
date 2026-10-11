@@ -75,7 +75,11 @@ their support and error contracts.
 - [ ] Independent SVG/DXF import/export in a third-party CAD editor
 - [ ] Arch KDE Plasma Wayland tests at 100%, 125%, 150% scaling
 
-**Current source:** feature/rust-r1k-coincident-arc-sweeps. Automated
-CI and PR merge are not yet verified; do not claim a green build or
-physical testing until independently confirmed. NC/G-code output
-remains disabled until the R6 machine safety preflight gate.
+**Verified automated checkpoint:** [PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127)
+merged as 28d01d35b65a21eba9e2446f1f22d2a04f57a8c4.
+Exact tested source 12b8b275c00ecc9351117ff727b5c0606f6593d1
+passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700):
+127 core + 18 studio = 145 Rust tests, strict Clippy and native
+Linux release build. Real KDE Plasma Wayland and independent
+third-party SVG/DXF manual acceptance have **not** been completed.
+NC/G-code output remains disabled until the R6 machine safety gate.
