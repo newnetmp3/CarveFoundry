@@ -101,6 +101,11 @@ Wayland**:
 - [ ] Independently check actual SVG/DXF imports and viewing in a
       third-party CAD application; CI does not certify its rendering.
 
-**Development status:** branch
-`feature/rust-r1m-compound-loop-analysis`. Exact CI and PR merge
-verification pending. R1 remains incomplete and R6 NC safety is locked.
+**Verified automated status:** [PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+merged e57620c289eb06c60dd33c5d243ab1a1ff0aff3a.
+Exact tested head 16e3e20a904717c9be60f0a0bdbf3a526dd9656f
+passed [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980):
+127 core + 9 compound + 5 CAD interchange + 18 studio =
+**159 Rust tests**, strict Clippy and Linux release compilation.
+Real KDE Plasma Wayland input and third-party CAD acceptance
+remain unverified; R1 incomplete and R6 NC safety locked.
