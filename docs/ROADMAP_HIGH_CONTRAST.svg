@@ -16,7 +16,7 @@
 <text x="90" y="223" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R0  —  Native Rust foundation</text>
 <text x="90" y="252" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Rust workspace • native editor • project persistence • tests and Undo</text>
 <path d="M795 266 V283" stroke="#e2e8f0" stroke-width="3" fill="none"/>
-<rect x="70" y="285" width="1450" height="63" rx="14" fill="#1e3a8a" stroke="#93c5fd" stroke-width="2.5"/>
+<rect x="70" y="285" width="1450" height="75" rx="14" fill="#1e3a8a" stroke="#93c5fd" stroke-width="2.5"/>
 <text x="90" y="317" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R1  —  Professional 2D vector CAD  ·  IN PROGRESS</text>
 <text x="90" y="346" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Major capabilities implemented; advanced topology and KDE acceptance remain</text>
 <rect x="70" y="367" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
