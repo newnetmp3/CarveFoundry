@@ -135,7 +135,7 @@ fn disjoint_donuts_union_keeps_all_source_loops_while_intersection_refuses_empty
     assert!(result.unwrap_err().contains("empty"));
 }
 #[test]
-fn crossing_and_tangent_sources_reject_atomically_without_approximating(){
+fn strictly_transverse_crossings_now_succeed_while_tangent_sources_still_refuse(){
     let mut e=Editor::default();
     box_path(&mut e,0.0,100.0);box_path(&mut e,20.0,30.0);
     box_path(&mut e,50.0,150.0);box_path(&mut e,70.0,80.0);
@@ -144,12 +144,15 @@ fn crossing_and_tangent_sources_reject_atomically_without_approximating(){
     let saved=e.project.clone();
     for operation in [RegionBoolean::Union,RegionBoolean::Intersection,
         RegionBoolean::Difference]{
-        let error=e.apply(Action::BooleanRegions{
-            left_region_id:5,right_region_id:6,operation,name:"Unsafe".into(),
-        }).unwrap_err();
-        assert!(error.contains("cross/touch")||error.contains("cross")
-            ||error.contains("touch"),"{error}");
-        assert_eq!(e.project,saved);
+        let mut candidate=e.clone();
+        candidate.apply(Action::BooleanRegions{
+            left_region_id:5,right_region_id:6,operation,
+            name:"Verified transverse".into(),
+        }).unwrap();
+        assert!(candidate.project.paths.len()>saved.paths.len());
+        assert_eq!(candidate.project.paths[..saved.paths.len()],saved.paths);
+        assert!(candidate.undo());
+        assert_eq!(candidate.project,saved);
     }
     // Exact tangent contact remains unsafe even if no areas overlap.
     let mut e=Editor::default();
