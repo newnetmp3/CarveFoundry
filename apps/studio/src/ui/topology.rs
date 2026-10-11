@@ -220,6 +220,17 @@ impl Studio {
                     }
                 }
             }
+            ui.horizontal_wrapped(|ui|{
+                ui.label("Region name");
+                ui.text_edit_singleline(&mut self.topology_region_name_draft);
+            });
+            if ui.button("Save as editable compound region")
+                .on_hover_text("Save selected independent closed source vectors as a persistent even/odd CAD region. Requires proven disjoint boundaries; no flattened curves, no toolpaths. Undo restores the design.").clicked(){
+                self.apply(Action::SaveCompoundRegion{
+                    ids:picked.iter().map(|p|p.id).collect(),
+                    name:self.topology_region_name_draft.clone(),
+                });
+            }
             if !self.topology_compound_roles.is_empty(){
                 ui.weak("Verified nested boundary roles (not toolpaths):");
                 for role in &self.topology_compound_roles{
@@ -235,6 +246,50 @@ impl Studio {
                     ));
                 }
             }
+        }
+        // Durable CAD region display uses saved source IDs, even if
+        // only one member is currently selected. No stale cache.
+        let selected_region=self.editor.project.compound_regions.iter()
+            .find(|r|r.path_ids.iter().any(|id|self.selected_ids.contains(id)))
+            .cloned();
+        if let Some(region)=selected_region{
+            ui.separator();
+            ui.strong(format!("SAVED COMPOUND · {}",region.name));
+            ui.small(format!("CAD region #{} · {} independent source loops",
+                region.id,region.path_ids.len()));
+            let sources=region.path_ids.iter().filter_map(|id|
+                self.editor.project.paths.iter().find(|p|p.id==*id).cloned()
+            ).collect::<Vec<_>>();
+            if let Ok(roles)=carvefoundry_core::analyze_compound_paths(&sources){
+                for role in roles{
+                    let title=match role.role{
+                        carvefoundry_core::CompoundRole::Outline=>"Outline / island",
+                        carvefoundry_core::CompoundRole::Hole=>"Hole / empty",
+                    };
+                    ui.small(format!("#{}: {} · depth {}",role.path_id,title,role.depth));
+                }
+            }
+            ui.horizontal_wrapped(|ui|{
+                if ui.button("Check cursor material")
+                    .on_hover_text("Compute exact inside/outside Boolean parity for the last design cursor XY position. A point ON any boundary rejects; never a cutter clearance measurement.").clicked(){
+                    match self.cursor_world {
+                        Some(point)=>match self.editor.project.compound_material_at(region.id,point){
+                            Ok(true)=>self.status=format!(
+                                "Compound #{}: XY {:.3},{:.3} is material (even/odd CAD only)",
+                                region.id,point.x,point.y),
+                            Ok(false)=>self.status=format!(
+                                "Compound #{}: XY {:.3},{:.3} is outside/void (CAD only)",
+                                region.id,point.x,point.y),
+                            Err(error)=>self.status=format!("Compound material check: {error}"),
+                        },
+                        None=>self.status="Move your pointer over the design canvas to establish an XY query".into(),
+                    }
+                }
+                if ui.button("Remove saved region")
+                    .on_hover_text("Forget compound source membership only; all editable source CAD vectors remain. One Undo restores membership.").clicked(){
+                    self.apply(Action::RemoveCompoundRegion{id:region.id});
+                }
+            });
         }
         let Some(path)=selected else{
             ui.small("Select one editable analytic vector, or two open paths to Join.");

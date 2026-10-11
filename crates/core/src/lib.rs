@@ -29,6 +29,6 @@ pub use dxf::{DxfVectors,import_dxf,export_dxf};
 pub use text::{TextSpec,TextRun,outline_text};
 pub use organization::{DesignLayer,LayerMember,VectorGroup};
 pub use intersections::{IntersectionHit,IntersectionScan,find_intersections};
-pub use compound::{analyze_compound_paths,CompoundLoop,CompoundRole};
+pub use compound::{analyze_compound_paths,CompoundLoop,CompoundRole,CompoundRegion};
 pub use project::{Contour, Fixture, Project, Stock, MAX_COORD_MM};
 pub use path::{AnalyticPath, Curve, PathNode, PathSegment, Primitive};

@@ -99,12 +99,15 @@ pub struct Project {
     pub layer_members:Vec<crate::organization::LayerMember>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups:Vec<crate::organization::VectorGroup>,
+    /// Durable CAD parity membership only; never a machine operation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compound_regions:Vec<crate::compound::CompoundRegion>,
     pub next_id: u64,
 }
 impl Default for Project {
     fn default() -> Self {
         Self { schema_version:PROJECT_VERSION, name:"Untitled CNC design".into(),
-            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], text_runs:vec![], layers:vec![],layer_members:vec![],groups:vec![],next_id:1 }
+            stock:Stock::default(), contours:vec![], paths:vec![], fixtures:vec![], text_runs:vec![], layers:vec![],layer_members:vec![],groups:vec![],compound_regions:vec![],next_id:1 }
     }
 }
 impl Project {
@@ -144,6 +147,7 @@ impl Project {
             }
         }
         self.validate_organization()?;
+        self.validate_compound_regions()?;
         for fixture in &self.fixtures { fixture.validate()?; }
         Ok(())
     }
