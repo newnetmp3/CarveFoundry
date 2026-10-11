@@ -250,9 +250,9 @@ impl Studio {
         });
         ui.separator();
         ui.label("PARALLEL OFFSETS AND CORNERS");
-        ui.small("Offset: straight contours or exact circular arcs / concentric circle chains.");
+        ui.small("Exact offsets: straight contours, true circular arcs, and tangent line/arc chains. Sharp curved junctions and cubic offsets are rejected.");
         if ui.add_enabled(eligible,egui::Button::new("Create offset vector"))
-            .on_hover_text("New editable offset; open: + left / - right, closed: + outward / - inward. Exact straight paths or single circular arcs and concentric circular rings; general Béziers rejected.").clicked(){
+            .on_hover_text("Create a new independent analytic offset. Supports lines with bounded miters, true circular arcs, and tangent line/arc chains; all retained as original primitives. Open: + left / - right. Closed: + outward / - inward. Non-tangent curved corners and cubic Béziers require a different solver.").clicked(){
             let newid=self.editor.project.next_id;
             self.apply(Action::OffsetLines{path_id,
                 distance_mm:self.topology_distance_mm});
@@ -277,7 +277,7 @@ impl Studio {
                     size_mm:self.topology_distance_mm,fillet:false});
             }
         });
-        ui.small("Corners: line-line only, including closed loops. Cubic/mixed curve offset and intersections remain unsupported.");
+        ui.small("Corners: line-line (open/closed). Exact offsets require straight edges or tangent circular joins; cubic and sharp curved offsets remain gated.");
     }
 }
 fn curve_name(c:Curve)->&'static str{
