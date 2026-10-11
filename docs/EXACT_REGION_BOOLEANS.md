@@ -99,3 +99,16 @@ Manual owner Arch Linux / KDE Plasma / Wayland acceptance:
 
 **Initial implementation branch:** `feature/rust-r1o-exact-region-booleans`.
 CI, merging and external desktop acceptance are separate gates.
+
+
+## Verified implementation and remaining acceptance
+
+[PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged 5c19b6e11123e04f8de941e577f4ad7312fa8adb;
+exact tested commit ff3906801ccc69c58541ac5110726f4556dbb81e
+passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **173 Rust tests** (127 core,
+9 compound, 8 Boolean, 5 interchange, 6 persistence, 18 studio),
+strict Clippy and native Linux release compilation. An earlier
+revision failed test-fixture syntax/formatting; the final exact
+head passed all gates. Owner real KDE/Wayland interaction and
+external independent CAD application roundtrips remain unverified.
+Machine G-code/NC export remains intentionally disabled.
