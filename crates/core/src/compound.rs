@@ -2,12 +2,84 @@
 //! No machine region, fill, cutter compensation, or G-code is generated.
 //! Only proven-simple, mutually disjoint closed lines / circular arcs.
 use std::collections::HashSet;
-use crate::{AnalyticPath,Curve};
+use crate::{AnalyticPath,Curve,Point,Project};
+use serde::{Deserialize,Serialize};
 use crate::intersections::{
     validate_simple_analytic_chain,
     require_disjoint_closed_boundaries,
     closed_line_arc_contains,
 };
+
+/// Durable, independent source-loop membership. This is a CAD Boolean
+/// expression over non-touching closed paths, never a flattened replacement.
+#[derive(Clone,Debug,PartialEq,Serialize,Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompoundRegion{
+    pub id:u64,
+    pub name:String,
+    pub path_ids:Vec<u64>,
+}
+impl Project {
+    /// Validate persisted Boolean parity membership against CURRENT sources.
+    /// Called by every atomic edit and drag-preview commit via Project::validate.
+    pub(crate) fn validate_compound_regions(&self)->Result<(),String>{
+        if self.compound_regions.len()>64{
+            return Err("Compound CAD exceeds 64 saved regions".into());
+        }
+        let mut identities=self.paths.iter().map(|p|p.id)
+            .chain(self.contours.iter().map(|p|p.id))
+            .chain(self.text_runs.iter().map(|x|x.id))
+            .chain(self.layers.iter().map(|x|x.id))
+            .chain(self.groups.iter().map(|x|x.id))
+            .collect::<HashSet<_>>();
+        let mut used_sources=HashSet::new();
+        for region in &self.compound_regions{
+            if region.id==0||region.id>=self.next_id
+                || !identities.insert(region.id)
+                || !crate::organization::valid_name(&region.name)
+                || !(2..=32).contains(&region.path_ids.len()){
+                return Err("Invalid compound region identity, name or member count".into());
+            }
+            let mut sources=Vec::with_capacity(region.path_ids.len());
+            for id in &region.path_ids{
+                if !used_sources.insert(*id){
+                    return Err("Compound source vector belongs to multiple saved regions or is repeated".into());
+                }
+                let source=self.paths.iter().find(|p|p.id==*id)
+                    .ok_or("Compound region references a missing analytic source vector")?;
+                sources.push(source.clone());
+            }
+            analyze_compound_paths(&sources).map_err(|problem|
+                format!("Compound region #{} would become invalid: {problem}",region.id))?;
+        }
+        Ok(())
+    }
+    /// Exact point-membership for a saved even/odd Boolean region.
+    /// Returns an error on the boundary: its meaning is not an interior
+    /// clearance claim. Independent outer paths UNION, nested hole
+    /// paths SUBTRACT, and nested islands UNION by parity.
+    pub fn compound_material_at(&self,region_id:u64,point:Point)
+        ->Result<bool,String>{
+        self.validate()?;
+        if !point.finite(){
+            return Err("Compound CAD query must be a finite XY design point".into());
+        }
+        let region=self.compound_regions.iter().find(|r|r.id==region_id)
+            .ok_or("Unknown saved compound region")?;
+        let mut inside=false;
+        for id in &region.path_ids{
+            let path=self.paths.iter().find(|p|p.id==*id)
+                .ok_or("Compound source path missing")?;
+            if crate::intersections::closed_line_arc_on_boundary(path,point)?{
+                return Err("Compound CAD point lies on a boundary; interior/exterior is ambiguous".into());
+            }
+            if closed_line_arc_contains(path,point)?{
+                inside=!inside;
+            }
+        }
+        Ok(inside)
+    }
+}
 
 /// Even/odd region role, independent of source path winding.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
