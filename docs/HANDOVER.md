@@ -1615,3 +1615,39 @@ R2–R7 are planned or safety gated. NC/G-code remains disabled;
 CI here does not certify machine-safe cutter compensation.
 
 | 2026-10-10/11 | PR #128 SVG/DXF independent-source golden and whole-chain straight offset safety merged | [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): 150 tests, strict Clippy, native Linux release; merge c3481788 | R1 owner KDE & external CAD viewer acceptance and complex compound contours |
+
+
+## Active R1m — native compound contours and analytical hole hierarchy
+
+Branch **feature/rust-r1m-compound-loop-analysis**, from verified
+main c0b6f62a854d58fe8fb346afb613d67ed360a865 (PR #128
+R1l golden interchange baseline). Rust adds:
+- crates/core/src/compound.rs with analyze_compound_paths plus
+  CompoundLoop, CompoundRole. It determines outline vs hole vs
+  island via proven even/odd nesting depth and immediate parent
+  ID; ordering and source winding do not change the hierarchy.
+- intersections.rs boundary pair proof detects any crossing,
+  tangency, isolated endpoint touch, collinear line overlap,
+  unresolved same-circle coincidence and near-coincident
+  supports across loops; the containment ray uses exact
+  line equations and true circle arc sweeps, not preview samples.
+- Only 1–32 source-true closed line/circular-arc loops and
+  up to 150,000 exact inter-loop edge pairs. Non-simple loops,
+  open vectors, cubic Bézier profiles, overlap/touch and
+  unresolved containment fail without mutating CAD sources.
+- Native Drawing topology inspector adds **Analyze selected
+  closed contours** with per-vector role/depth/parent display.
+  The results are read-only, invalidated after edits, and
+  rechecked against selected source snapshots for drag/open
+  and selection changes.
+- Regression tests in crates/core/tests/compound_topology.rs:
+  four-level alternating nesting, order/winding reversals,
+  separate islands, concentric circle true arcs, mixed
+  circle/rectangle, hand-authored SVG/DXF capsule with a hole,
+  crossing/tangent/coincidence failures and no project mutation.
+
+**Branch delivered, CI and merge NOT yet verified.** Full operation
+and real Wayland pointer QA checklists in
+[COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md). No durable compound
+group metadata, native fill/Booleans or cutter-safe hole machining.
+R1 remains in progress and G-code export stays disabled until R6.
