@@ -802,3 +802,28 @@ not yet merged**. See docs/CONCAVE_OFFSET_TRIMS.md.
 Next R1: coincident-circle sweep analysis, adversarial golden
 contours, real KDE Plasma Wayland input and external SVG/DXF QA.
 R2–R7 remain future/planned or safety-locked. No G-code export.
+
+
+## VERIFIED R1k — bounded concave circular trimming, PR #126
+
+[PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126)
+merged as **907b1509133d09b55503d5ea75253a81abe13ee7**.
+Exact tested feature head **ded15b52f95cdededbd2492a63c1a18208553e44**
+passed [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405):
+**120 core + 18 studio = 138 tests**, strict Clippy and
+native Linux release build.
+
+Opt-in Create rounded offset now combines retained tangent seams,
+true convex round joins and unique concave line/circle/circle support
+intersection trims, restricted to the *interiors of both displaced
+finite original edge sweeps*. True arc source centers, segment IDs
+and direction remain. Zero/ambiguous matches, unwanted edge extension,
+coincident unsupported circles, radius collapse and global contour
+crossings fail closed. The legacy tangent/miter offset mode is not
+replaced. See [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
+
+**NEXT:** coincident-circle parameter interval proof, more closed
+topology goldens, independent SVG/DXF interoperability and real
+KDE Plasma Wayland user interaction acceptance. These software
+tests are not physical CNC validation. R1 remains incomplete and
+no machine NC/G-code export is enabled (R6 safety gate).
