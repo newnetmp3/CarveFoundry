@@ -966,3 +966,25 @@ Details: [COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md).
 CAD visual checks, and design-only compound region persistence/
 Boolean strategy where mathematically safe. Cubic offset and
 toolpath/NC safety gates remain unfinished. R2–R7 future/planned.
+
+
+## Active R1n — durable source-true compound CAD regions and Boolean membership
+
+Pure Rust branch `feature/rust-r1n-persistent-compound-regions`
+stores optional backward-compatible compound-region identity,
+name and source membership (no primitive conversion). Current
+source loops are revalidated on every atomic edit, drag-preview,
+save and reopen. The native topology inspector can name/save and
+unlink compound regions; selected members display persistent
+roles and cursor material/void parity. The CAD Boolean evaluator
+uses exact line/circular-arc containment; material = union of
+disconnected outlines minus holes plus nested islands. Query points
+on any true boundary refuse ambiguity. No Boolean generated edges,
+cubic source approximation or machining toolpath is created.
+
+**CI/merge pending:** golden tests include 4-level parity,
+SVG/DXF capsule with a hole, undo/reload, atomic invalid move,
+malformed references and boundary-safe refusal. See
+[PERSISTENT_COMPOUND_REGIONS.md](PERSISTENT_COMPOUND_REGIONS.md).
+R1 still in progress; external GUI/third-party CAD and R6 NC
+safety checks outstanding.
