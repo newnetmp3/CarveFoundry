@@ -108,9 +108,12 @@ its exact offset coordinates are calculated:
 - [ ] Verify Undo, save/reopen and third-party SVG/DXF behavior separately
       from automated checks; the UI tool remains CAD-only.
 
-**Validation status:** implementation branch
-feature/rust-r1k-global-offset-validation; native CI and real owner
-KDE/Wayland acceptance need verification before this slice is marked
-complete. Later R1k tasks remain: sharp round/bevel circular junctions,
+**Verified automated status:** [PR #124](https://github.com/newnetmp3/CarveFoundry/pull/124)
+merged to main as 108a93a21bfca8a2a519e740d60991dc6a9f84ed;
+exact tested feature 9560aa89ef74098f7e0151f4685a30e3b2d22e8f
+passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834):
+113 core + 18 studio = 131 tests, strict Clippy and Linux native
+release. Real owner KDE/Wayland and independent file QA are **not**
+verified. Later R1k tasks remain: sharp round/bevel circular junctions,
 proven closed contour offset topology, cubic approximation with a
 stated tolerance if added, and golden file interoperability tests.
