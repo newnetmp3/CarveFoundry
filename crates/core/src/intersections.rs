@@ -171,6 +171,78 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
         },
     }
 }
+/// Verify that one bounded analytic chain has no remote self-crossings,
+/// unexpected tangencies, or overlapping source edges. This uses the same
+/// retained line/circle solver as the intersection inspector, never preview
+/// tessellation. Adjacent segments may meet only at their shared endpoint.
+///
+/// Coincident circular supports currently fail closed: proving that two
+/// overlapping-circle sweeps cover disjoint parameter intervals is a
+/// separate topology feature, not grounds to accept an uncertain offset.
+pub fn validate_simple_analytic_chain(path:&AnalyticPath)->Result<(),String>{
+    path.validate()?;
+    let count=path.segments.len();
+    // AnalyticPath::validate bounds this to at most 256 segments (32640 pairs).
+    let edges=(0..count).map(|i|Edge::in_world(path,i)).collect::<Vec<_>>();
+    for i in 0..count {
+        for j in i+1..count {
+            let a=edges[i];
+            let b=edges[j];
+            let expected=if j==i+1 {
+                Some(a.b)
+            } else if path.closed && i==0 && j+1==count {
+                Some(a.a)
+            } else {
+                None
+            };
+            let (hits,unresolved)=intersect(a,b);
+            if unresolved {
+                return Err(format!(
+                    "Analytic contour edges {} and {} overlap or have unresolved coincident circles",
+                    i+1,j+1
+                ));
+            }
+            if hits.into_iter().any(|(p,..)|
+                expected.is_none_or(|shared|dist(p,shared)>1e-7)) {
+                return Err(format!(
+                    "Analytic contour edges {} and {} cross/touch away from their shared endpoint",
+                    i+1,j+1
+                ));
+            }
+            // Parallel coincident LINES are reported as no isolated roots by
+            // the general solver. Explicitly detect overlapping intervals and
+            // nonadjacent end-to-end contact, including exact backtracking.
+            if matches!(a.curve,Curve::Line) && matches!(b.curve,Curve::Line) {
+                let u=sub(a.b,a.a);
+                let v=sub(b.b,b.a);
+                let length=norm(u);
+                let other_length=norm(v);
+                if length<1e-8 || other_length<1e-8 {
+                    return Err("Degenerate straight contour edge".into());
+                }
+                if cross(u,v).abs()<=1e-12*length*other_length
+                    && cross(u,sub(b.a,a.a)).abs()<=1e-7*length {
+                    let t0=dot(sub(b.a,a.a),u)/(length*length);
+                    let t1=dot(sub(b.b,a.a),u)/(length*length);
+                    let lo=t0.min(t1).max(0.0);
+                    let hi=t0.max(t1).min(1.0);
+                    if hi>=lo-1e-7/length {
+                        let contact=add(a.a,mul(u,(hi+lo)/2.0));
+                        if (hi-lo)*length>1e-7 ||
+                            expected.is_none_or(|shared|dist(contact,shared)>1e-7) {
+                            return Err(format!(
+                                "Analytic contour edges {} and {} overlap or touch unexpectedly",
+                                i+1,j+1
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Extend a terminal straight-edge ray to the NEAREST source-accurate
 /// crossing with another path. The reference stays unchanged. An overlap
 /// (non-unique boundary) is a hard error, not an arbitrary guessed result.
@@ -476,4 +548,34 @@ mod tests{
         project.paths[1].visible=false;
         assert!(find_intersections(&project,1).unwrap().hits.is_empty());
     }
+    #[test]
+    fn whole_chain_guard_accepts_simple_open_and_closed_vectors(){
+        let open=crate::shapes::polyline(1,"Open".into(),Point::new(4.0,7.0),
+            vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                 Point::new(10.0,10.0)],false).unwrap();
+        validate_simple_analytic_chain(&open).unwrap();
+        let closed=crate::shapes::polyline(2,"Square".into(),Point::new(0.0,0.0),
+            vec![Point::new(0.0,0.0),Point::new(20.0,0.0),
+                 Point::new(20.0,20.0),Point::new(0.0,20.0)],true).unwrap();
+        validate_simple_analytic_chain(&closed).unwrap();
+    }
+    #[test]
+    fn whole_chain_guard_rejects_remote_crossings_and_nonadjacent_touches(){
+        let cross=crate::shapes::polyline(1,"X".into(),Point::new(0.0,0.0),
+            vec![Point::new(0.0,0.0),Point::new(10.0,10.0),
+                 Point::new(0.0,10.0),Point::new(10.0,0.0)],false).unwrap();
+        assert!(validate_simple_analytic_chain(&cross).unwrap_err().contains("cross/touch"));
+        let touch=crate::shapes::polyline(2,"T".into(),Point::new(0.0,0.0),
+            vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                 Point::new(10.0,10.0),Point::new(5.0,0.0)],false).unwrap();
+        assert!(validate_simple_analytic_chain(&touch).is_err());
+    }
+    #[test]
+    fn whole_chain_guard_rejects_collinear_backtrack(){
+        let p=crate::shapes::polyline(1,"Backtrack".into(),Point::new(0.0,0.0),
+            vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                 Point::new(5.0,0.0)],false).unwrap();
+        assert!(validate_simple_analytic_chain(&p).unwrap_err().contains("overlap"));
+    }
+
 }

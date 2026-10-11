@@ -693,3 +693,23 @@ join styles and global offset validation, explicit tolerance model
 for any future cubic approximation, usability and independent
 CAD interchange tests. R2–R7 still planned/gated. NC/G-code
 output remains locked behind R6 safety preflight and machine QA.
+
+
+## Active R1k — analytic whole-chain validation for mixed offsets
+
+The existing exact tangent mixed line/circular offset method is **not
+globally topology-certified** by local tangency and winding alone.
+Branch feature/rust-r1k-global-offset-validation adds a finite all-edge-pair
+analytic intersection check before and after the new mixed offset.
+It rejects remote self-intersections, unexpected contacts, collinear
+overlap/backtracking and unresolved same-center circle supports, without
+sampling visual preview geometry or changing the original. Existing
+standalone true-circle and straight-vector offset solvers retain their
+own independent checks. Strict Rust CI and KDE Wayland interaction
+acceptance remain separate verification gates; do not mark as merged
+until final successful CI and PR merge are recorded.
+
+After this sub-milestone: sharp curve-to-curve joins, genuinely complete
+topology certification (including coincident-arc sweep reasoning), explicit
+accuracy contracts for any cubic parallel approximation, and independent
+SVG/DXF goldens. **All machine NC/CNC export remains disabled.**

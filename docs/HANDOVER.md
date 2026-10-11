@@ -1282,3 +1282,29 @@ CAD pointer QA, and SVG/DXF golden file checks. R2–R7 remain future
 phases; CNC NC output is intentionally disabled pending R6.
 
 | 2026-10-10/11 | PR #123 exact tangent mixed line/arc offsets merged | [CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749): 127 tests, strict Clippy, Linux release; 4f8ee59b | R1k sharp curved joins + global offset QA; KDE acceptance |
+
+
+## Active R1k — offset contour integrity (work in progress)
+
+Verified baseline remains main cd8b4d7250dc1c463dfed5587e194304f618420d
+with R1j [PR #123](https://github.com/newnetmp3/CarveFoundry/pull/123)
+merged and exact tested head 0cb5f1e19e3cbc5a88e48f7eaacc1d530e156049
+passing [CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749).
+Development branch: feature/rust-r1k-global-offset-validation.
+
+Scope: retained analytic line/circle **whole-chain simple-contour guard** for
+mixed parallel offsets; run on both existing source and resulting offset,
+reject nonadjacent contacts/crossings, improper adjacent contacts, straight
+overlap/backtracking and ambiguous concentric arc pairs without mutation.
+Bounded at 256 segments and 32,640 unordered pairs, no preview samples
+stored or used. Native inspector reports rejected contours; exact arc
+centers, radii, Undo, layers and G-code export gating are preserved.
+docs/TANGENT_OFFSETS.md specifies manual acceptance and limitation.
+
+This is a **subset**, not closure, of R1k. Next: sharp line/arc and
+arc/arc join styles with proof, coincident-circle sweep classification,
+robust global offset validity and desktop CAD golden QA. Real KDE
+Plasma Wayland and independent SVG/DXF acceptance have NOT run. CI
+is pending for this new branch. No NC export/preflight/CNC claims.
+
+| 2026-10-10 | R1k whole-chain analytic offset validation implementation branch | Tests/strict Clippy/native Linux release pending; no merge claimed | Verify CI, merge and update verified checkpoint; then sharp circular joins |
