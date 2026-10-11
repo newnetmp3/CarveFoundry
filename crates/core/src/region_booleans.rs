@@ -8,7 +8,7 @@ use crate::intersections::closed_line_arc_contains;
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 pub enum RegionBoolean { Union, Intersection, Difference }
 impl RegionBoolean {
-    fn material(self,a:bool,b:bool)->bool{
+    pub(crate) fn material(self,a:bool,b:bool)->bool{
         match self{
             Self::Union=>a||b,
             Self::Intersection=>a&&b,
@@ -66,8 +66,21 @@ pub fn boolean_region_boundaries(
     // must be simple and every pair of INPUT boundaries disjoint.
     // The source-analytic classifier refuses ANY crossing, shared
     // point or coincident edge; it does not use display sampling.
-    analyze_compound_paths(&all).map_err(|problem|
-        format!("Boolean source boundaries cross/touch or cannot be proved disjoint: {problem}"))?;
+    if let Err(problem)=analyze_compound_paths(&all){
+        // R1p provides a SECOND, strictly bounded exact proof for
+        // crossing straight-line paths. Genuine arcs are not sampled
+        // or substituted with polygons to enter this reconstruction.
+        if all.iter().any(|p|p.segments.iter().any(|s|
+            !matches!(s.curve,crate::Curve::Line))){
+            return Err(format!(
+                "Boolean source boundaries cross/touch or cannot be proved disjoint: {problem}"
+            ));
+        }
+        return crate::crossing_booleans::split_transverse_boolean(
+            project,&all[..left.path_ids.len()],&all[left.path_ids.len()..],
+            operation,
+        ).map_err(|reason|format!("Exact crossing Boolean refused: {reason}"));
+    }
     let mut selected=Vec::new();
     for source in &all[..left.path_ids.len()]{
         let point=source.nodes[0].position
