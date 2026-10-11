@@ -47,6 +47,11 @@ pub enum Action {
     SaveCompoundRegion{ids:Vec<u64>,name:String},
     RenameCompoundRegion{id:u64,name:String},
     RemoveCompoundRegion{id:u64},
+    /// Source-faithful Boolean results for provably nested/disjoint regions.
+    BooleanRegions{
+        left_region_id:u64,right_region_id:u64,
+        operation:crate::region_booleans::RegionBoolean,name:String,
+    },
     InsertNodeAfter { path_id: u64, node_id: u64 },
     RemoveNode { path_id: u64, node_id: u64 },
     SetPathClosed { id: u64, closed: bool },
@@ -758,6 +763,36 @@ impl Editor {
                     return Err("Unknown saved compound region".into());
                 }
                 next.compound_regions.retain(|r|r.id!=id);
+            }
+            Action::BooleanRegions{left_region_id,right_region_id,
+                operation,name}=>{
+                if !crate::organization::valid_name(&name){
+                    return Err("Boolean result name must be 1–128 printable characters".into());
+                }
+                let sources=crate::region_booleans::boolean_region_boundaries(
+                    &next,left_region_id,right_region_id,operation)?;
+                let mut generated=Vec::with_capacity(sources.len());
+                for (i,source) in sources.into_iter().enumerate(){
+                    let mut copy=source;
+                    copy.id=next.next_id;
+                    next.next_id=next.next_id.checked_add(1)
+                        .ok_or("Boolean result path ID exhausted")?;
+                    copy.name=format!("{} boundary {}",name,i+1);
+                    copy.visible=true;copy.locked=false;
+                    generated.push(copy);
+                }
+                if generated.len()>1{
+                    let roles=crate::compound::analyze_compound_paths(&generated)?;
+                    let region_id=next.next_id;
+                    next.next_id=next.next_id.checked_add(1)
+                        .ok_or("Boolean region ID exhausted")?;
+                    next.compound_regions.push(crate::compound::CompoundRegion{
+                        id:region_id,name,
+                        path_ids:generated.iter().map(|p|p.id).collect(),
+                        parent_path_ids:roles.iter().map(|r|r.parent_path_id).collect(),
+                    });
+                }
+                next.paths.extend(generated);
             }
             Action::ChangeStock(stock) => next.stock=stock,
             Action::AddFixture(fixture) => next.fixtures.push(fixture),
