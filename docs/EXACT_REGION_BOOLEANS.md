@@ -112,3 +112,17 @@ revision failed test-fixture syntax/formatting; the final exact
 head passed all gates. Owner real KDE/Wayland interaction and
 external independent CAD application roundtrips remain unverified.
 Machine G-code/NC export remains intentionally disabled.
+
+
+## R1p source-accurate crossing extension (verified)
+
+The R1o restriction to mutually disjoint boundaries still
+applies to circular arcs and mixed curve crossings. Straight-
+line operands now have a separate, strictly transverse
+source-exact edge-splitting and graph reconstruction proof:
+[PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132), exact tested head
+8f6c92fad0dcd56907271404ad34d8ed4d4c966c,
+[CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449), **178 Rust tests**, strict Clippy
+and Linux release. Shared collinear edges, endpoint contacts,
+T-junctions and arc/cubic crossings are **not** implemented.
+See [TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
