@@ -759,3 +759,25 @@ Tests plus native Clippy/release CI and separate KDE/Wayland interaction
 checks are acceptance gates; do not mark this branch merged until
 CI and PR merge are independently verified. See TANGENT_OFFSETS.md.
 R2–R7 remain future/locked, CNC G-code export disabled.
+
+
+## VERIFIED R1k — source-accurate convex circular round offset joins
+
+[PR #125](https://github.com/newnetmp3/CarveFoundry/pull/125)
+merged as 3a2e107dd6d07f598788a3493e0e320eafccb5c2;
+exact tested head ca543417bd2deefbbebf6401c1f06f8b9ef3d82e
+passed [CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548):
+**118 core + 18 studio = 136 tests**, strict Clippy,
+native Linux release. A second opt-in rounded-offset tool
+creates true vertex-centered radius-distance arcs at convex
+sharp line/line, line/circular and circular/circular seams,
+preserving original analytic segments, independent IDs,
+transactional Undo and layer protection. The prior exact
+tangent/miter offset mode is retained unchanged.
+Global analytic source/result crossing validation applies.
+
+**NEXT R1k:** safe exact concave circular trimming, coincident
+arc interval classification and golden contour cases. Real KDE
+Plasma Wayland interaction and third-party SVG/DXF still need
+manual acceptance. R1 is not fully complete. R2–R7 remain
+future/locked and CNC NC output remains disabled.
