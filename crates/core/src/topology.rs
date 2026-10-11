@@ -204,6 +204,10 @@ pub fn offset_lines(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
     if source.segments.iter().any(|s|!matches!(s.curve,Curve::Line)){
         return Err("Exact offset currently requires all-straight vector edges; arc/cubic offset is not approximated".into());
     }
+    // A locally valid set of lines can still cross far from a corner.
+    // Check BOTH the original source and the generated outline instead
+    // of trusting the miter solver or a rendered polygon preview.
+    crate::intersections::validate_simple_analytic_chain(source)?;
     let n=source.nodes.len();
     let points=source.nodes.iter().map(|v|v.position).collect::<Vec<_>>();
     let amount=if source.closed {
@@ -248,6 +252,7 @@ pub fn offset_lines(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
     output.name=format!("{} offset {mm:.2} mm",source.name);
     output.nodes.iter_mut().zip(shifted).for_each(|(node,p)|node.position=p);
     output.validate()?;
+    crate::intersections::validate_simple_analytic_chain(&output)?;
     Ok(output)
 }
 /// Source-exact parallel offset of one OPEN circular arc, or a CLOSED
