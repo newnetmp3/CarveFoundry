@@ -940,3 +940,29 @@ schema or machining data are altered. No CNC toolpaths.
 real KDE/Wayland pointer checks, durable compound grouping/region
 Booleans only after topology proof, external CAD application QA;
 R2–R7 remain future/safety gated.
+
+
+## VERIFIED R1m — exact compound outer boundaries, holes and islands
+
+[PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+merged as **e57620c289eb06c60dd33c5d243ab1a1ff0aff3a**.
+Exact tested head **16e3e20a904717c9be60f0a0bdbf3a526dd9656f**
+passed [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980):
+**127 core + 9 compound goldens + 5 interchange tests + 18 studio
+= 159 Rust tests**, strict Clippy, Linux native release.
+
+Read-only native Drawing topology inspector offers **Analyze selected
+closed contours**, identifying parent and even/odd nesting depth for
+up to 32 independent closed line/circle paths. Pairwise analytic
+boundary checks reject any crossing/touch/overlap; exact circular ray
+tests determine which source paths are true holes and nested islands
+without changing source curves, IDs, project organization or saved
+schema. Result display invalidates whenever edited or selected
+source snapshots change. Open/cubic and ambiguous geometry fail
+closed; no machining operation or output is generated.
+Details: [COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md).
+
+**NEXT R1:** real KDE Plasma Wayland pointer acceptance, third-party
+CAD visual checks, and design-only compound region persistence/
+Boolean strategy where mathematically safe. Cubic offset and
+toolpath/NC safety gates remain unfinished. R2–R7 future/planned.
