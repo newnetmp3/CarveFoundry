@@ -1773,3 +1773,39 @@ Cubic Boolean profiles and CAM/NC remain unsupported; R1 incomplete,
 R2–R7 planned/safety gated, R6 NC export locked.
 
 | 2026-10-10/11 | PR #130 durable compound parity membership and saved-parent invariants merged | [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): 165 Rust tests, strict Clippy, native Linux release; merge c3c32f3f | R1 owner KDE Wayland and third-party CAD QA, safe Boolean edge generation |
+
+
+## Active R1o — source-exact Boolean region boundaries
+
+Native feature branch **feature/rust-r1o-exact-region-booleans**
+continues verified PR #130/main c71e68d8b76af9cba6ba187b1322ce179ac0d0d3.
+The new pure Rust `region_booleans` solver implements
+Union, Intersection and ordered A-minus-B for TWO saved,
+source-exact compound CAD regions when their combined original
+boundaries are provably disjoint/non-touching. Full-chain line/
+true-circle analytic collision checking happens BEFORE boolean
+classification; crossing, tangent, same-curve coincidence,
+unsupported cubic, oversized and empty results fail closed.
+For each original source loop, it evaluates the opposing
+material at one proved-off-boundary node and applies the Boolean
+truth-table on either side to decide whether the WHOLE source
+loop survives. No polygonization, splitting of unproven edges,
+arc resampling, or guessed intersection output.
+
+Undoable Editor::BooleanRegions copies resulting entire analytic
+source paths with fresh IDs, visible and unlocked; no operand
+is changed. Multi-loop output creates a separate named,
+durable compound region with parent IDs; one-loop outputs
+are independent editable paths. The native Drawing topology
+inspector exposes ordered A/B dropdowns and Union/Intersection/
+A minus B buttons. New source regression tests:
+crates/core/tests/exact_region_booleans.rs (nested rectangular
+donuts, swapped Difference, separated material, empty output,
+crossing/tangent refusal, genuine same-center true-arc
+circles, hand-authored SVG/DXF capsule).
+
+Full scope/limitations/manual KDE Wayland acceptance:
+[EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
+**Status: committed to feature branch, CI/PR merge pending.**
+R1 remains incomplete; crossing geometry needs exact splitting
+later, third-party CAD/KDE QA unverified, R6 machine NC locked.
