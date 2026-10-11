@@ -1,14 +1,25 @@
 # CarveFoundry — full Rust roadmap and verified progress
 
-**Verified snapshot:** 2026-10-10/11. Latest R1o [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131)
-merged as 5c19b6e11123e04f8de941e577f4ad7312fa8adb.
-Final tested head ff3906801ccc69c58541ac5110726f4556dbb81e
-passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **173 Rust tests**, strict Clippy,
-Linux native release. R0 native Rust foundation implemented,
-R1 2D CAD progressing, R2–R7 future or machine safety locked.
-CI is not independent KDE Wayland or CNC owner acceptance.
+**Verified snapshot:** 2026-10-11. Latest R1p [PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132)
+merged dcfa2f32b88d523de700551af02d8cad3353179f.
+Final tested head 8f6c92fad0dcd56907271404ad34d8ed4d4c966c
+passed [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): **178 Rust tests**, strict
+Clippy, Linux native release. R0 native Rust foundation complete,
+R1 2D CAD progressing, R2–R7 planned or NC safety locked.
+CI is not owner KDE Wayland usability or physical CNC acceptance.
 
-**LATEST R1o VERIFIED:** [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged
+**LATEST R1p VERIFIED:** [PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132) merged
+dcfa2f32b88d523de700551af02d8cad3353179f.
+Exact tested source 8f6c92fad0dcd56907271404ad34d8ed4d4c966c
+passed [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): **178 Rust tests, strict Clippy,
+Linux native release**. Exact transverse bounded straight-line
+Boolean intersections can be split and stitched into first-class
+native editable closed paths. Existing disjoint/nested true-arc
+preservation remains. Coincident line edges, T-junctions,
+crossing arcs/cubics and third-party KDE/CAD viewer acceptance
+are still outstanding. R6 NC stays locked.
+
+**PREVIOUS R1o VERIFIED:** [PR #131](https://github.com/newnetmp3/CarveFoundry/pull/131) merged
 5c19b6e11123e04f8de941e577f4ad7312fa8adb;
 exact tested head ff3906801ccc69c58541ac5110726f4556dbb81e
 passed [CI #38111276249](https://github.com/newnetmp3/CarveFoundry/actions/runs/38111276249): **173 tests, strict Clippy,
@@ -120,9 +131,9 @@ Undo and persistent hierarchy. Crossing/tangent/coincident
 input geometry still refuses without fabrication.
 [Exact Boolean proof and manual QA](EXACT_REGION_BOOLEANS.md).
 
-**R1p active (pending CI):** exact strictly transverse line-line
-Boolean splitting and closed-loop stitching for shifted overlapping
-straight-edged saved regions. Non-crossing true arcs still retain
-original circles. Endpoint/collinear contact and crossing arc/cubic
-cases are refused. No CNC.
-[Read design proof and manual QA](TRANSVERSE_BOOLEAN_SPLITS.md).
+**R1p verified:** [PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132) CI-green merged with
+**178 Rust tests**, exact straight-line transverse Boolean
+splitting and validated closed-loop stitch. Real KDE/Wayland
+input, third-party CAD rendering and contact/arc crossing
+Boolean support remain pending. No CNC NC export.
+[Read source geometry proof](TRANSVERSE_BOOLEAN_SPLITS.md).
