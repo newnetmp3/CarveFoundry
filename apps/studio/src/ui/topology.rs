@@ -298,7 +298,7 @@ impl Studio {
         if saved.len()>=2{
             ui.separator();
             ui.strong("BOOLEAN CAD · EXACT NON-CROSSING REGIONS");
-            ui.small("Choose two saved regions. Union, Intersection and A minus B retain complete original lines/arcs, with fresh editable source IDs and Undo. Crossing/touching/overlapping boundaries cannot yet be reconstructed and will be refused. No machining.");
+            ui.small("Choose two saved CAD regions. Union, Intersection and A minus B retain exact lines/true arcs for disjoint boundaries, or split and stitch strictly transverse crossing straight lines. Touching endpoints, collinear overlap, crossing true arcs and ambiguous geometry refuse. One-step Undo, no machining.");
             if !saved.iter().any(|r|r.id==self.topology_boolean_left){
                 self.topology_boolean_left=saved[0].id;
             }
@@ -345,7 +345,7 @@ impl Studio {
                 ]{
                     if ui.add_enabled(different,
                         egui::Button::new(operation.title()))
-                        .on_hover_text("Exact, source-preserving result for provably disjoint or strictly nested saved CAD boundaries. Crossing, coincident, tangent, cubic or non-provable geometry rejects atomically. Difference means A minus B; not CNC toolpath generation.").clicked(){
+                        .on_hover_text("Exact result for nested/disjoint lines/arcs, plus bounded strictly transverse straight-edge crossings. New split nodes are analytic line-line intersections, never sampled. Collinear/endpoint touch, crossing arcs and non-provable geometry refuse atomically. Difference means A minus B; no CNC output.").clicked(){
                         let first_generated=self.editor.project.next_id;
                         self.apply(Action::BooleanRegions{
                             left_region_id:self.topology_boolean_left,
