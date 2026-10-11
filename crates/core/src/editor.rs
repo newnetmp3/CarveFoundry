@@ -1140,7 +1140,7 @@ mod tests {
         e.apply(Action::OffsetRounded{path_id:1,distance_mm:2.0}).unwrap();
         assert_eq!(e.project.paths.len(),2);
         assert_eq!(e.project.paths[0],before.paths[0]);
-        assert_eq!(e.project.layer_for(2),layer);
+        assert_eq!(e.project.layer_for(e.project.paths[1].id),layer);
         assert_eq!(e.project.paths[1].segments.len(),3);
         assert!(e.undo());
         assert_eq!(e.project,before);
