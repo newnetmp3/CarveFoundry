@@ -18,6 +18,9 @@ pub struct CompoundRegion{
     pub id:u64,
     pub name:String,
     pub path_ids:Vec<u64>,
+    /// Parent assigned by exact geometry at save time, one entry per
+    /// path_id. Prevents a moved hole silently becoming a new outline.
+    pub parent_path_ids:Vec<Option<u64>>,
 }
 impl Project {
     /// Validate persisted Boolean parity membership against CURRENT sources.
@@ -37,8 +40,9 @@ impl Project {
             if region.id==0||region.id>=self.next_id
                 || !identities.insert(region.id)
                 || !crate::organization::valid_name(&region.name)
-                || !(2..=32).contains(&region.path_ids.len()){
-                return Err("Invalid compound region identity, name or member count".into());
+                || !(2..=32).contains(&region.path_ids.len())
+                || region.parent_path_ids.len()!=region.path_ids.len(){
+                return Err("Invalid compound region identity, name or member/parent count".into());
             }
             let mut sources=Vec::with_capacity(region.path_ids.len());
             for id in &region.path_ids{
@@ -49,8 +53,16 @@ impl Project {
                     .ok_or("Compound region references a missing analytic source vector")?;
                 sources.push(source.clone());
             }
-            analyze_compound_paths(&sources).map_err(|problem|
+            let analyzed=analyze_compound_paths(&sources).map_err(|problem|
                 format!("Compound region #{} would become invalid: {problem}",region.id))?;
+            for (item,saved_parent) in analyzed.iter().zip(&region.parent_path_ids){
+                if item.parent_path_id!=*saved_parent{
+                    return Err(format!(
+                        "Compound region #{} changed hole/island nesting for vector #{}; unlink and rebuild the region to change membership",
+                        region.id,item.path_id
+                    ));
+                }
+            }
         }
         Ok(())
     }
