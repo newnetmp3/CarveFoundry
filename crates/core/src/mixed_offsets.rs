@@ -138,6 +138,9 @@ pub fn offset_tangent_chain(source:&AnalyticPath,mm:f64)
     if source.segments.iter().any(|s|matches!(s.curve,Curve::Cubic{..})){
         return Err("Mixed/Cubic Bézier offsets are not exact cubic curves and remain unsupported".into());
     }
+    // Refuse preexisting remote crossings: preserving every local tangent
+    // alone cannot make a self-overlapping source into a safe offset.
+    crate::intersections::validate_simple_analytic_chain(source)?;
     let amount=if source.closed{
         if exact_area(source)? > 0.0{-mm}else{mm}
     }else{mm};
@@ -173,6 +176,9 @@ pub fn offset_tangent_chain(source:&AnalyticPath,mm:f64)
         }
     }
     result.validate()?;
+    // A valid local offset may still intersect a distant edge. Check the
+    // finished exact line/arc chain before the editor can commit it.
+    crate::intersections::validate_simple_analytic_chain(&result)?;
     Ok(result)
 }
 
@@ -280,4 +286,17 @@ mod tests{
         assert!((shifted.nodes[2].position.y+8.0).abs()<1e-9);
         assert!(matches!(shifted.segments[2].curve,Curve::Arc{..}));
     }
+    #[test]
+    fn offset_refuses_remote_arc_line_self_intersection_without_editing_original(){
+        let mut source=open_arc_then_line();
+        source.nodes.push(PathNode{id:6,position:Point::new(0.0,12.0)});
+        source.segments.push(PathSegment{id:7,curve:Curve::Line});
+        source.next_element_id=8;
+        source.validate().unwrap();
+        let before=source.clone();
+        let error=offset_exact(&source,2.0).unwrap_err();
+        assert!(error.contains("cross/touch"),"Unexpected error: {error}");
+        assert_eq!(source,before);
+    }
+
 }
