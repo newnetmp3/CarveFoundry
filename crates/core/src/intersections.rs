@@ -133,6 +133,74 @@ fn arc_arc(a:Edge,b:Edge)->Vec<(Point,f64,f64)>{
     }
     found
 }
+/// Cover the geometry of a true circular sweep using at most two
+/// non-wrapping CCW intervals on [0, 2*pi]. Winding changes traversal
+/// direction, not which points of the source circle are occupied.
+fn arc_angular_intervals(edge:Edge)->Vec<(f64,f64)>{
+    let Curve::Arc{center,clockwise}=edge.curve else {return vec![];};
+    let a=sub(edge.a,center);
+    let b=sub(edge.b,center);
+    let begin=a.y.atan2(a.x).rem_euclid(TAU);
+    let end=b.y.atan2(b.x).rem_euclid(TAU);
+    let start=if clockwise{end}else{begin};
+    let sweep=if clockwise{(begin-end).rem_euclid(TAU)}
+        else{(end-begin).rem_euclid(TAU)};
+    let finish=start+sweep;
+    if finish<=TAU{
+        vec![(start,finish)]
+    }else{
+        vec![(start,TAU),(0.0,finish-TAU)]
+    }
+}
+fn on_arc_parameter(edge:Edge,p:Point)->Option<f64>{
+    let Curve::Arc{center,clockwise}=edge.curve else{return None;};
+    // Preserve exact terminal parameters across the angular wrap seam.
+    if dist(p,edge.a)<1e-7{return Some(0.0);}
+    if dist(p,edge.b)<1e-7{return Some(1.0);}
+    angle_param(edge.a,edge.b,center,clockwise,p)
+}
+/// Distinguish distinct concentric radii from overlapping coincident
+/// circular *sweeps*. Isolated endpoint contacts are retained as real
+/// intersections; nonzero common angular length is never accepted as
+/// a single well-defined intersection.
+fn coincident_arc_pair(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
+    let (Curve::Arc{center:c1,..},Curve::Arc{center:c2,..})=
+        (a.curve,b.curve) else{return (vec![],true);};
+    if dist(c1,c2)>0.0{
+        // Near-coincident but not identical centers demand a separate,
+        // numerically stable two-circle proof; never mistake for overlap.
+        return (vec![],true);
+    }
+    let r1=dist(a.a,c1);
+    let r2=dist(b.a,c2);
+    if (r1-r2).abs()>r1.max(r2).max(1.0)*1e-7{
+        return (vec![],false);
+    }
+    // Tiny concentric-radius disagreement is ambiguous at these CAD
+    // tolerances. Reject rather than silently assuming a perfect circle.
+    if (r1-r2).abs()>r1.max(r2).max(1.0)*1e-10{
+        return (vec![],true);
+    }
+    let first=arc_angular_intervals(a);
+    let second=arc_angular_intervals(b);
+    for &(as_,ae) in &first{
+        for &(bs,be) in &second{
+            if ae.min(be)-as_.max(bs)>1e-9{
+                return (vec![],true);
+            }
+        }
+    }
+    let mut hits=Vec::new();
+    for p in [a.a,a.b,b.a,b.b]{
+        if let (Some(t),Some(u))=(on_arc_parameter(a,p),on_arc_parameter(b,p)){
+            if hits.iter().all(|(q,..)|dist(*q,p)>1e-7){
+                hits.push((p,t,u));
+            }
+        }
+    }
+    (hits,false)
+}
+
 fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
     match (a.curve,b.curve){
         (Curve::Line,Curve::Line)=>(line_line(a,b),false),
@@ -141,7 +209,9 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
             (line_arc(b,a).into_iter().map(|(p,u,t)|(p,t,u)).collect(),false)
         },
         (Curve::Arc{center:c1,..},Curve::Arc{center:c2,..})=>{
-            if dist(c1,c2)<EPS{return (vec![],true);}
+            if dist(c1,c2)<EPS{
+                return coincident_arc_pair(a,b);
+            }
             (arc_arc(a,b),false)
         },
         (Curve::Cubic{control1,control2},Curve::Line)=>{
@@ -176,9 +246,10 @@ fn intersect(a:Edge,b:Edge)->(Vec<(Point,f64,f64)>,bool){
 /// retained line/circle solver as the intersection inspector, never preview
 /// tessellation. Adjacent segments may meet only at their shared endpoint.
 ///
-/// Coincident circular supports currently fail closed: proving that two
-/// overlapping-circle sweeps cover disjoint parameter intervals is a
-/// separate topology feature, not grounds to accept an uncertain offset.
+/// Coincident circles are compared by exact circular sweep intervals,
+/// including seam wraparound. Adjacent single-endpoint joins are allowed;
+/// overlapping angular intervals, unexpected remote contacts and
+/// numerically ambiguous near-coincident supports still reject.
 pub fn validate_simple_analytic_chain(path:&AnalyticPath)->Result<(),String>{
     path.validate()?;
     let count=path.segments.len();
