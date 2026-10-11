@@ -1230,9 +1230,55 @@ See `docs/TANGENT_OFFSETS.md` for actual KDE Wayland acceptance
 and important limitations. Global pathological offset topology
 certification remains future work. CAM/G-code/NC output still locked.
 
-**CI and merge pending**. Verify final exact Rust tests, strict Clippy
-and native Linux release, merge PR, then update HANDOVER, ROADMAP,
-high-contrast SVG milestone and Markdown fallback with verified refs.
+**Final verification:** PR #123 and CI checks merged and documented
+in the verified section below. Retain separate manual KDE/Wayland,
+external CAD interoperability and global offset correctness gates.
 Next R1: sharp curved round/bevel join, cubic polynomial controlled
 approximation with explicit tolerance/type, global intersections,
 desktop usability and golden SVG/DXF QA before R2.
+
+## VERIFIED R1j — exact tangent line/arc offsets merged PR #123
+
+[PR #123](https://github.com/newnetmp3/CarveFoundry/pull/123)
+merged as `4f8ee59b5d3cabb45ae0ce5ebe24021336c18d5c`.
+Final exact feature head `0cb5f1e19e3cbc5a88e48f7eaacc1d530e156049`
+passed [CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749):
+**109 core + 18 studio = 127 Rust tests**, strict Clippy,
+native Linux release. Initial CI passed all tests but encountered
+a strict Clippy duplicate if-branch diagnostic in the offset
+dispatcher; simplified then final exact head passed all gates.
+
+Native pure Rust `crates/core/src/mixed_offsets.rs` implements
+source-exact parallel offsets on mixed straight and TRUE CIRCULAR
+arcs with tangent G1 curved junctions, including open and closed
+chains with multiple independent circle centers. It uses Green's
+theorem for exact circular-sector/straight-line area and correct
+closed outward/inward winding sign. Circular arcs keep exact
+center/winding/source IDs, lines remain true parallels, line-line
+corners use bounded miters; sharp curved junctions, radius collapse,
+degenerate area, general cubic Bézier offsets and unsafe miters
+fail closed. Editor `OffsetLines` still creates one new editable
+vector preserving source layer and one-step Undo. Owner's original
+geometry is unmodified and kept in project history. Additional
+tests check clockwise arc+line, CCW closed racetrack, inward/outward
+radii and winding, mixed corner miters, non-tangency refusal,
+project Undo, original path identity and layer locks.
+
+**Important limitation:** This is **tangent line/circle geometry**,
+not a general mixed Bézier offset or topologically complete curve
+offset engine. Global pathological self-crossing cannot yet be
+independently certified from these local tangent tests. See
+[docs/TANGENT_OFFSETS.md](TANGENT_OFFSETS.md) for exact scope and
+manual KDE/Wayland tests. Real owner desktop, third-party SVG/DXF
+and machine QA still outstanding.
+
+Roadmap [docs/ROADMAP_DIAGRAM.md](ROADMAP_DIAGRAM.md) and its
+high-contrast SVG have been updated for PR #123, preserving a
+readable dark-mode-independent graphic and text fallback. Next
+**R1k**: robust sharp arc-line/arc-arc joint treatment, explicit
+approximation/error-control model for general cubic offsets if
+justified, whole-contour intersection/overlap correctness, desktop
+CAD pointer QA, and SVG/DXF golden file checks. R2–R7 remain future
+phases; CNC NC output is intentionally disabled pending R6.
+
+| 2026-10-10/11 | PR #123 exact tangent mixed line/arc offsets merged | [CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749): 127 tests, strict Clippy, Linux release; 4f8ee59b | R1k sharp curved joins + global offset QA; KDE acceptance |
