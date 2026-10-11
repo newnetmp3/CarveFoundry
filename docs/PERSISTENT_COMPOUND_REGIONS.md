@@ -98,3 +98,18 @@ Manual **Arch KDE Plasma Wayland** acceptance still required:
 **Branch status at implementation:** `feature/rust-r1n-persistent-compound-regions`.
 Exact PR-head CI/merge are separately verified before promotion.
 R1 remains unfinished; R6 machine-safety preflight stays locked.
+
+
+### Strict saved nesting identity
+
+A saved region additionally stores `parent_path_ids` in source order,
+representing the parent determined at creation by the same exact
+analytic contour proof. Every subsequent Project validation checks
+that each current source loop retains its **original immediate parent**.
+This prevents a subtle but critical semantic change: a hole dragged
+fully OUTSIDE its host outline would leave disjoint simple contours,
+yet turn a subtraction into another material island. Such edits
+**reject atomically** until the user removes/recreates the region.
+The same protects an original disconnected outline from unexpectedly
+becoming a nested hole. The format remains schema version 1 and
+the new field is present only for the newly optional region objects.
