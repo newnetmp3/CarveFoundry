@@ -1021,3 +1021,27 @@ Details: [PERSISTENT_COMPOUND_REGIONS.md](PERSISTENT_COMPOUND_REGIONS.md).
 R1 remains IN PROGRESS pending real KDE Plasma Wayland pointer
 acceptance, third-party SVG/DXF CAD app checks and broader precise
 Boolean geometry. R2–R7 remain future/safety gated.
+
+
+## Active R1o — proven non-crossing source-true Boolean geometry
+
+Feature branch `feature/rust-r1o-exact-region-booleans`
+implements exact Union/Intersection/A-minus-B over *two saved
+compound CAD regions whose ALL source boundaries are distinct,
+simple and non-intersecting*. Only complete original line/true
+circular-arc source edges are copied: a Boolean truth-table
+on either side of each analytic original contour determines
+whether its entire loop is included. The output is independent
+new editable native paths with fresh IDs and (when 2+ loops)
+a saved parent-verified compound region. Native inspector adds
+ordered operand selectors and explicit operation buttons;
+atomic Undo/Redo and current R1n persistence still apply.
+
+**Hard limits:** partial overlaps/crossing rectangles require
+future source-exact edge splitting and cannot be fabricated by
+retaining whole loops; tangent/overlap, unsupported cubics, empty
+results, ambiguous geometry, >32 total source loops and
+machine-dependent clearances reject. No CAM/G-code.
+See [EXACT_REGION_BOOLEANS.md](EXACT_REGION_BOOLEANS.md).
+**CI/PR merge pending**, real KDE/Wayland and external CAD app
+acceptance remains outstanding; R1 is IN PROGRESS.
