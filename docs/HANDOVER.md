@@ -1308,3 +1308,43 @@ Plasma Wayland and independent SVG/DXF acceptance have NOT run. CI
 is pending for this new branch. No NC export/preflight/CNC claims.
 
 | 2026-10-10 | R1k whole-chain analytic offset validation implementation branch | Tests/strict Clippy/native Linux release pending; no merge claimed | Verify CI, merge and update verified checkpoint; then sharp circular joins |
+
+
+## VERIFIED R1k sub-milestone — full-chain analytic offset integrity, PR #124
+
+[PR #124](https://github.com/newnetmp3/CarveFoundry/pull/124)
+merged as main commit **108a93a21bfca8a2a519e740d60991dc6a9f84ed**.
+The exact tested feature head **9560aa89ef74098f7e0151f4685a30e3b2d22e8f**
+passed [native Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834):
+**113 Rust core + 18 studio = 131 tests**, strict Clippy and native
+Linux release compilation. GitHub reported all steps successful.
+
+Pure Rust crates/core/src/intersections.rs now includes bounded
+validate_simple_analytic_chain, checking **all** pairs of retained
+analytic line/circular edges of one mixed chain (up to 256 segments /
+32,640 pairs), not visual samples. Adjacent source edges may contact
+only at their genuine shared endpoint; remote crossings/touches, line
+backtracking/overlap and unresolved coincident circle supports reject.
+crates/core/src/mixed_offsets.rs checks both source and generated
+exact mixed offset before the Editor inserts the new vector, while
+retaining existing circle/line solvers, source layer and atomic Undo.
+UI displays explanatory rejection language. Regression tests cover
+simple open/closed vectors, crossing and touching, backtracking and
+mixed arc-line rejection. Detailed limits and owner KDE checklist:
+[docs/TANGENT_OFFSETS.md](TANGENT_OFFSETS.md).
+
+**Scope boundary:** does NOT add round/bevel sharp circular joins,
+coincident-arc sweep proof, full generalized offset topology, or
+a mathematically controlled cubic parallel-approximation solution.
+Global verification applies to the mixed tangent offset path;
+standalone circular/straight solvers have their own prior checks.
+Physical KDE Plasma/Wayland, DXF/SVG external interoperability and
+any machine tests remain UNVERIFIED. CNC/NC G-code remains disabled.
+
+**NEXT R1k/R1:** evaluate exact sharp circular joins with validated
+corner admissibility, coincident-arc interval classification, closed
+offset topology goldens, source-geometry interchange fixture QA and
+actual Arch KDE Wayland gestures; then proceed to R2 (3D CAD) only after
+priority desktop R1 usability is acceptable.
+
+| 2026-10-10/11 | PR #124 mixed-offset analytic simple-chain validation merged to main 108a93a2 | [CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834): 131 tests, strict Clippy, Linux release | R1k sharp curved joins and KDE/Wayland/third-party file QA |
