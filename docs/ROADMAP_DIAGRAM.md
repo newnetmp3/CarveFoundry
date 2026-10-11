@@ -1,15 +1,24 @@
 # CarveFoundry — full Rust roadmap and verified progress
 
-**Verified snapshot:** 2026-10-10/11. Latest Rust CAD feature:
-[R1k analytic mixed-offset integrity PR #124](https://github.com/newnetmp3/CarveFoundry/pull/124),
-merged as `108a93a21bfca8a2a519e740d60991dc6a9f84ed`.
-Its exact tested feature head `9560aa89ef74098f7e0151f4685a30e3b2d22e8f`
-passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834):
-**113 core + 18 studio = 131 tests**, strict Clippy and Linux release.
-Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
-remain merged; the high-contrast static roadmap is retained.
+**Verified snapshot:** 2026-10-10/11. Latest R1n: [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130)
+merged as c3c32f3f05f60288bfc5dbb52995fa7cc9f79988.
+Exact tested source 2f4681207447f27d148ebcee13a5b46227041f03
+passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **165 Rust tests**, strict Clippy
+and Linux release. R0 completed, R1 2D source-true CAD in progress;
+R2–R7 planned or safety-locked. This roadmap is a code/CI status
+record, NOT finished KDE, interchange or physical machine acceptance.
 
-**LATEST R1m VERIFIED:** [Compound closed-loop hierarchy PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+**LATEST R1n VERIFIED:** [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged
+c3c32f3f05f60288bfc5dbb52995fa7cc9f79988;
+exact tested head 2f4681207447f27d148ebcee13a5b46227041f03
+passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **165 tests, strict Clippy,
+native Linux release**. Saved named compound CAD regions retain
+original source IDs AND their proven parent hierarchy; every edit
+revalidates nesting. Boolean material queries are analytic-only,
+with no generated machining vectors. KDE/Wayland and independent
+third-party CAD QA remain pending.
+
+**PREVIOUS R1m VERIFIED:** [Compound closed-loop hierarchy PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
 merged e57620c289eb06c60dd33c5d243ab1a1ff0aff3a;
 exact tested source 16e3e20a904717c9be60f0a0bdbf3a526dd9656f
 passed [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980):
@@ -86,8 +95,9 @@ and third-party CAD app QA. No compound machining region or NC.
 [Read compound contour proof](COMPOUND_CONTOURS.md).
 
 
-**R1n active (CI pending):** optional saved compound source-loop
-membership and exact even/odd Boolean material testing in the native
-Drawing inspector. Analytic curves stay editable; unsafe boundary
-movement fails closed. No CAM/NC output.
+**R1n verified:** [PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) CI-green merged, **165 tests**.
+Optional saved compound region membership stores immutable
+parent links to prohibit silent Boolean reinterpretation.
+Analytic source curves remain editable; safe inside/outside
+parity queries are CAD-only. CNC NC export is still locked.
 [Persisted compound CAD contract](PERSISTENT_COMPOUND_REGIONS.md).
