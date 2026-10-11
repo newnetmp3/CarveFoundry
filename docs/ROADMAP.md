@@ -713,3 +713,27 @@ After this sub-milestone: sharp curve-to-curve joins, genuinely complete
 topology certification (including coincident-arc sweep reasoning), explicit
 accuracy contracts for any cubic parallel approximation, and independent
 SVG/DXF goldens. **All machine NC/CNC export remains disabled.**
+
+
+## VERIFIED R1k subset — analytic contour-integrity gate
+
+[PR #124](https://github.com/newnetmp3/CarveFoundry/pull/124)
+merged to main as **108a93a21bfca8a2a519e740d60991dc6a9f84ed**.
+Exact source head **9560aa89ef74098f7e0151f4685a30e3b2d22e8f**
+passed [CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834):
+**113 core + 18 studio tests (131 total), strict Clippy and native
+Linux release compilation**.
+
+New mixed line/true-circle tangent offset validation detects source and
+result self-crossings, remote touches, backtracking and parallel
+line-overlap using retained analytic geometry, independently of pixel
+preview and local G1 seam checks. Same-center arc support ambiguities
+fail closed until proven; standalone concentric-circle offsets remain
+independent. Source vector and project remain unchanged on rejection.
+The high-contrast diagram and plain-text phase table are synchronized.
+This closes the first R1k **subset**, not all of R1.
+
+**NEXT:** mathematically safe sharp circular joins and coincident-arc
+interval classification, fuller offset topology guarantees, real KDE
+Wayland pointer testing and independent SVG/DXF golden interoperability.
+R2–R7 remain future/gated; CNC/NC export is still disabled.
