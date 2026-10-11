@@ -1549,3 +1549,34 @@ IN PROGRESS. R2–R7 future/planned/safety gated. CNC/NC G-code
 still intentionally disabled pending R6 preflight and machine QA.
 
 | 2026-10-10/11 | PR #127 coincident true-circle sweep classification merged | [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700): 145 tests, strict Clippy, Linux release; merge 28d01d35 | R1 goldens and independent KDE/SVG/DXF acceptance |
+
+
+## Active R1l — independently authored SVG/DXF and closed-offset goldens
+
+New branch feature/rust-r1l-cad-interchange-goldens starts from
+verified main 0fae0ede45acc840d1f29349347900ed08fdaa9f,
+including R1k PR #127's exact coincident-arc checks.
+
+Rust integration tests in crates/core/tests/interchange_goldens.rs
+reference two independently hand-authored 200 mm capsule fixtures
+in SVG and ASCII DXF. They compare analytic world XY endpoints,
+true arc centers/sweep directions, counts and closure across
+native import/export and SVG -> DXF -> SVG conversion, not brittle
+exact string equality. The same capsule is offset outward +3 mm
+and inward -2 mm with exact 23/18 mm radii and source/result
+global validation, then exported/imported as both formats.
+A six-node reentrant L-shaped closed contour must round five
+outer convex corners and one inner corner without flattening.
+The original source stays unchanged. The test matrix also adds
+a remote crossing open line-only vector: the legacy straight
+offset solver now runs full-chain analytic validation on source
+AND result, closing its earlier open self-intersection gap.
+
+Documentation, fixture meaning, and explicit external viewer/KDE
+manual acceptance: docs/INTERCHANGE_GOLDENS.md.
+
+**Status: code/fixtures committed on branch; CI and merge pending.**
+Independent viewer roundtrips and real Arch KDE/Wayland input QA
+remain unverified. CNC NC export is still disabled pending R6
+safety gates. Following work: adversarial multiple-loop/cubic
+interchange semantics, desktop usability acceptance before R2.
