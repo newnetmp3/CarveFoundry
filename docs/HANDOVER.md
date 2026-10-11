@@ -1386,3 +1386,35 @@ Wayland pointer tests and independent SVG/DXF correctness are also
 outstanding. CNC/NC remains disabled. Next R1k: safe concave
 circle-line/circle-circle trimming, same-center arc interval proof,
 offset golden contours, then remaining R1 acceptance before R2.
+
+
+## VERIFIED R1k — exact convex circular joins, PR #125
+
+[PR #125](https://github.com/newnetmp3/CarveFoundry/pull/125)
+merged to main as 3a2e107dd6d07f598788a3493e0e320eafccb5c2.
+Exact tested source head ca543417bd2deefbbebf6401c1f06f8b9ef3d82e
+passed [Rust CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548):
+**118 core + 18 studio = 136 Rust tests**, strict Clippy and
+native Linux release compilation. Initial run #38105710124 failed
+one incorrect regression assertion that had confused the layer ID
+with the independently allocated offset path ID; exact corrected
+feature head passed the full pipeline.
+
+The opt-in Create rounded offset (Editor Action::OffsetRounded)
+makes source-faithful radius-|offset| circular joins around convex
+sharp line/line, line/arc and arc/arc vertices. Original primitive
+IDs and circle centers are preserved, generated join elements get
+unique IDs, signed open/closed offset convention is maintained and
+source/result full-chain analytic crossing checks apply. Existing
+miter/tangent mode is unchanged. Layer locks, atomic Undo/Redo
+and save compatibility remain in force.
+
+**Not complete R1k:** sharp concave circle joins still need exact
+support trimming; coincident arc sweeps need overlap proof; general
+Bézier cubic parallels remain unsupported. No real KDE Plasma
+Wayland pointer QA, third-party SVG/DXF interoperability acceptance,
+CNC tests, R6 safety acceptance or NC export. Next: concave
+arc/line and arc/arc trimming, complex golden contours and
+real Wayland + external CAD QA before moving toward R2.
+
+| 2026-10-10/11 | PR #125 exact convex rounded offsets merged | [Rust CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548): 136 tests/Clippy/Linux release; merge 3a2e107d | Exact concave arc trims and real KDE/file interchange QA |
