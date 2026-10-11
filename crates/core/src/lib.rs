@@ -13,6 +13,7 @@ pub mod dxf;
 pub mod text;
 pub mod organization;
 pub mod topology;
+pub mod mixed_offsets;
 pub mod intersections;
 pub mod curve_extension;
 mod bezier_intersections;
