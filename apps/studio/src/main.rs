@@ -83,6 +83,8 @@ struct Studio {
     topology_selected_crossing:usize,
     topology_skipped_pairs:usize,
     topology_pick_crossing:bool,
+    topology_compound_checked:Vec<carvefoundry_core::AnalyticPath>,
+    topology_compound_roles:Vec<carvefoundry_core::CompoundLoop>,
     precise_selection:Vec<u64>,
     precise_x:f64,
     precise_y:f64,
@@ -145,7 +147,9 @@ impl Default for Studio {
             topology_scan_source:None,
             topology_selected_crossing:0,
             topology_skipped_pairs:0,
-            topology_pick_crossing:false,precise_selection:Vec::new(),precise_x:0.0,precise_y:0.0,
+            topology_pick_crossing:false,
+            topology_compound_checked:Vec::new(),topology_compound_roles:Vec::new(),
+            precise_selection:Vec::new(),precise_x:0.0,precise_y:0.0,
             drag: None,
             drawing: Vec::new(),
             draw_closed: false,
@@ -156,7 +160,11 @@ impl Default for Studio {
 impl Studio {
     fn apply(&mut self, action: Action) {
         match self.editor.apply(action) {
-            Ok(()) => self.status = "Design changed · No machine toolpaths exist".into(),
+            Ok(()) => {
+                self.topology_compound_checked.clear();
+                self.topology_compound_roles.clear();
+                self.status = "Design changed · No machine toolpaths exist".into();
+            },
             Err(reason) => self.status = format!("Edit rejected: {reason}"),
         }
     }

@@ -66,3 +66,10 @@ source fixtures, exact analytic closed-contour offset goldens and
 straight source/result crossing guards landed. Third-party CAD
 application and KDE Plasma Wayland manual acceptance still pending.
 [Read interchange goldens](INTERCHANGE_GOLDENS.md).
+
+
+**R1m active (pending CI):** read-only, analytic outline/hole/island
+hierarchy for separate non-touching closed line/true-circle loops.
+Native Drawing inspector shows depth and parent; all original CAD
+source identities remain. No compound machining region or NC output.
+[See compound contour proof and manual acceptance](COMPOUND_CONTOURS.md).

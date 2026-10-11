@@ -918,3 +918,25 @@ not completed third-party application execution. Real KDE
 Wayland gestures/display scaling, compound/hole CAD semantics
 and independent external SVG/DXF visual QA remain pending.
 R1 in progress. R2–R7 future/safety-gated. CNC NC export disabled.
+
+
+## Active R1m — source-accurate compound contour and hole nesting
+
+Pure Rust branch feature/rust-r1m-compound-loop-analysis provides a
+read-only CAD analysis of selected closed vectors, with true line/arc
+boundary intersections and ray containment. It rejects self-crossing
+or touching loop boundaries, cubic offsets/containment, open curves,
+coincident overlays and topology that is not provably simple.
+Nested independent circles/polygons are classified by even/odd depth
+as material outline, hole, island, deeper hole, with the parent vector
+ID. Native inspector displays results only while the same immutable
+source snapshot is selected. Tests cover up to four nesting levels,
+mixed arc/line contours, disjoint regions, SVG/DXF capsule inputs
+and fail-closed contact. No source curves, group membership, project
+schema or machining data are altered. No CNC toolpaths.
+
+**Status: branch unmerged, CI/desktop QA pending.** See
+[COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md). Following R1:
+real KDE/Wayland pointer checks, durable compound grouping/region
+Booleans only after topology proof, external CAD application QA;
+R2–R7 remain future/safety gated.

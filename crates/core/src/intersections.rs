@@ -313,6 +313,112 @@ pub fn validate_simple_analytic_chain(path:&AnalyticPath)->Result<(),String>{
     Ok(())
 }
 
+/// Require that two already-simple, closed source loops never intersect,
+/// share a tangent point, or occupy a common line/circle interval.
+/// No sampled preview points or tolerance-based polygon replacements.
+pub(crate) fn require_disjoint_closed_boundaries(
+    first:&AnalyticPath,second:&AnalyticPath,
+)->Result<(),String>{
+    if !first.closed || !second.closed{
+        return Err("Compound classification requires closed source loops".into());
+    }
+    for i in 0..first.segments.len(){
+        let a=Edge::in_world(first,i);
+        for j in 0..second.segments.len(){
+            let b=Edge::in_world(second,j);
+            let (hits,unresolved)=intersect(a,b);
+            if unresolved || !hits.is_empty(){
+                return Err(format!(
+                    "Compound boundaries {} and {} cross, touch, or have unresolved coincident curves",
+                    first.id,second.id
+                ));
+            }
+            // Parallel collinear LINE supports have no isolated roots
+            // in the point intersection solver. Their finite intervals
+            // still cannot even touch when constructing hole hierarchy.
+            if matches!(a.curve,Curve::Line) && matches!(b.curve,Curve::Line){
+                let u=sub(a.b,a.a);
+                let v=sub(b.b,b.a);
+                let la=norm(u);
+                let lb=norm(v);
+                if la<EPS||lb<EPS {
+                    return Err("Degenerate compound line boundary".into());
+                }
+                if cross(u,v).abs()<=1e-12*la*lb
+                    && cross(u,sub(b.a,a.a)).abs()<=1e-7*la{
+                    let ta=dot(sub(b.a,a.a),u)/(la*la);
+                    let tb=dot(sub(b.b,a.a),u)/(la*la);
+                    if ta.max(tb).min(1.0)>=ta.min(tb).max(0.0)-1e-7/la{
+                        return Err(format!(
+                            "Compound boundaries {} and {} have touching/overlapping collinear lines",
+                            first.id,second.id
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Analytic horizontal-ray even/odd containment, for validated non-touching
+/// closed contours made of straight segments or genuine circular arcs.
+/// Half-open vertex crossing rules avoid double-counting shared nodes.
+/// The query must be off the boundary (enforced by pairwise proof above).
+pub(crate) fn closed_line_arc_contains(
+    source:&AnalyticPath,query:Point,
+)->Result<bool,String>{
+    if !source.closed || source.segments.iter().any(|s|
+        matches!(s.curve,Curve::Cubic{..})){
+        return Err("Exact compound containment requires closed lines/true circular arcs".into());
+    }
+    let mut crossings=0usize;
+    for i in 0..source.segments.len(){
+        let edge=Edge::in_world(source,i);
+        match edge.curve{
+            Curve::Line=>{
+                if (edge.a.y>query.y)!=(edge.b.y>query.y){
+                    let x=edge.a.x+(query.y-edge.a.y)*
+                        (edge.b.x-edge.a.x)/(edge.b.y-edge.a.y);
+                    if x>query.x {crossings+=1;}
+                }
+            }
+            Curve::Arc{center,clockwise}=>{
+                let radius=dist(edge.a,center);
+                let dy=query.y-center.y;
+                // Exact circle is tangent to a horizontal ray at top/
+                // bottom; that point cannot change even/odd parity.
+                if dy.abs()>=radius-1e-10*radius.max(1.0){
+                    continue;
+                }
+                let dx=(radius*radius-dy*dy).max(0.0).sqrt();
+                for x in [center.x-dx,center.x+dx]{
+                    if x<=query.x {continue;}
+                    let hit=Point::new(x,query.y);
+                    let Some(t)=on_arc_parameter(edge,hit) else{continue;};
+                    let radial= sub(hit,center);
+                    // For a CCW circle tangent = (-radial.y, radial.x).
+                    let tangent_y=if clockwise{-radial.x}else{radial.x};
+                    // General interior intersections flip ray parity.
+                    // At a shared node count only edges that lie ABOVE
+                    // that node on their nearby interior side. This is
+                    // the same half-open rule as a straight segment.
+                    let crosses=if t<=1e-7{
+                        tangent_y>1e-10
+                    }else if t>=1.0-1e-7{
+                        tangent_y< -1e-10
+                    }else{
+                        tangent_y.abs()>1e-10
+                    };
+                    if crosses {crossings+=1;}
+                }
+            }
+            Curve::Cubic{..}=>unreachable!("Rejected before ray scan"),
+        }
+    }
+    Ok(crossings%2==1)
+}
+
 /// Extend a terminal straight-edge ray to the NEAREST source-accurate
 /// crossing with another path. The reference stays unchanged. An overlap
 /// (non-unique boundary) is a hard error, not an arbitrary guessed result.
