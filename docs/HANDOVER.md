@@ -1202,3 +1202,37 @@ as fallback. Locally rendered SVG passed XML parsing and measured text
 contrast ranging from 7.94:1 to 12.98:1. Owner KDE Firefox dark-mode
 plugin confirmation is not yet recorded. This was a documentation-only
 rendering/accessibility fix, not a change to CAD capabilities or CNC gates.
+
+## Active R1j — exact mixed line / circular-arc tangent offsets
+
+Next step after verified high-contrast roadmap PR #122:
+branch `feature/rust-r1j-mixed-line-arc-offsets` from
+main `2891401b595c972bf537684eadd3fe8c6e39c2e8`.
+
+Adds `crates/core/src/mixed_offsets.rs`, new source-exact parallel
+offset for OPEN/CLOSED paths composed of straight segments and true
+circular arcs at **tangent G1 curve joints**. Left-side signed offset
+on open, outward/inside independent of winding on closed; closed
+winding via exact Green's theorem line+circle sector area. Original
+circular centers, sweep direction, source IDs and undoable project
+geometry retained. Line/line corners in mixed chains use bounded
+analytic miters. Any non-tangent curved joint, radius collapse,
+excessive miter or general Bézier cubic offset is explicitly rejected
+instead of approximated with preview samples. An arbitrary cubic
+polynomial generally has no exact cubic polynomial offset.
+
+Native Drawing topology panel tooltip/help updated. Regression
+coverage includes tangent arc+line with exact shifted endpoints,
+closed racetrack with independent semicircle centers, inward/outward
+winding, line-line miter preceding arc, sharp arc/line refusal,
+and editor atomic Undo/layer locks, original not mutated.
+See `docs/TANGENT_OFFSETS.md` for actual KDE Wayland acceptance
+and important limitations. Global pathological offset topology
+certification remains future work. CAM/G-code/NC output still locked.
+
+**CI and merge pending**. Verify final exact Rust tests, strict Clippy
+and native Linux release, merge PR, then update HANDOVER, ROADMAP,
+high-contrast SVG milestone and Markdown fallback with verified refs.
+Next R1: sharp curved round/bevel join, cubic polynomial controlled
+approximation with explicit tolerance/type, global intersections,
+desktop usability and golden SVG/DXF QA before R2.
