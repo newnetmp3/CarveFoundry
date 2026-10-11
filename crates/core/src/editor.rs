@@ -736,11 +736,13 @@ impl Editor {
                         .ok_or("Compound region requires analytic source vectors")
                         .cloned()
                 ).collect::<Result<Vec<_>,_>>()?;
-                crate::compound::analyze_compound_paths(&sources)?;
+                let checked=crate::compound::analyze_compound_paths(&sources)?;
                 let id=next.next_id;
                 next.next_id=id.checked_add(1).ok_or("Compound region identity exhausted")?;
                 next.compound_regions.push(crate::compound::CompoundRegion{
                     id,name,path_ids:ids,
+                    parent_path_ids:checked.into_iter()
+                        .map(|role|role.parent_path_id).collect(),
                 });
             }
             Action::RenameCompoundRegion{id,name}=>{
