@@ -1651,3 +1651,40 @@ and real Wayland pointer QA checklists in
 [COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md). No durable compound
 group metadata, native fill/Booleans or cutter-safe hole machining.
 R1 remains in progress and G-code export stays disabled until R6.
+
+
+## VERIFIED R1m — analytic compound closed boundaries, PR #129
+
+[PR #129](https://github.com/newnetmp3/CarveFoundry/pull/129)
+merged into main as **e57620c289eb06c60dd33c5d243ab1a1ff0aff3a**.
+Exact tested source **16e3e20a904717c9be60f0a0bdbf3a526dd9656f**
+passed [Rust CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980):
+**127 core + 9 compound integration + 5 interchange golden
++ 18 studio = 159 Rust tests**, strict Clippy and native Linux
+release compilation. The first branch CI passed tests but failed
+two Clippy needless-range-loop diagnostics; final corrected source
+head passed all full workflow gates.
+
+Added pure Rust `compound::analyze_compound_paths` to classify
+non-touching nested closed line/true-circle vectors. Exact source
+boundary intersections and analytic ray casting derive deterministic
+outer material, holes, islands and their immediate parent vector IDs
+with parity-independent-of-winding depth. Selection order and
+clockwise direction do not change roles. Bounded to 32 loops/150,000
+cross-loop edge pairs; touching/crossing boundaries, unresolved
+overlaps, open/cubic paths, uncertain containment reject.
+Native Drawing/Edit Vector Topology has a read-only
+**Analyze selected closed contours** button and visible per-vector
+roles/depth/parent. Cached results clear after editor actions or
+when selected original curve snapshots no longer match (including
+direct node dragging). No mutation, grouping, source IDs or
+`.cfd` file format change. No CNC pocketing, Boolean fill or NC.
+See [COMPOUND_CONTOURS.md](COMPOUND_CONTOURS.md).
+
+**NEXT R1:** independent owner Arch KDE Plasma Wayland pointer QA
+and third-party CAD visual acceptance, then carefully scoped durable
+compound/Boolean regions and curved/cubic offset policy. R1 remains
+unfinished; R2–R7 future/safety-gated, CNC G-code export disabled.
+CI release build is not real-desktop input or physical-machine QA.
+
+| 2026-10-10/11 | PR #129 analytic hole/island hierarchy, native inspector and fail-closed crossing acceptance merged | [CI #38108671980](https://github.com/newnetmp3/CarveFoundry/actions/runs/38108671980): 159 tests/strict Clippy/Linux release; merge e57620c2 | R1 real KDE/Wayland UX and independent external CAD checks; durable compound Booleans |
