@@ -361,6 +361,43 @@ pub(crate) fn require_disjoint_closed_boundaries(
     Ok(())
 }
 
+/// Refuse Boolean point queries at exact retained boundaries. No
+/// sampled display polygon or fabricated machining clearance value.
+pub(crate) fn closed_line_arc_on_boundary(
+    source:&AnalyticPath,point:Point,
+)->Result<bool,String>{
+    if !source.closed{
+        return Err("Compound boundary query requires a closed loop".into());
+    }
+    for i in 0..source.segments.len(){
+        let edge=Edge::in_world(source,i);
+        match edge.curve{
+            Curve::Line=>{
+                let delta=sub(edge.b,edge.a);
+                let den=dot(delta,delta);
+                if den<EPS*EPS{
+                    return Err("Degenerate compound boundary line".into());
+                }
+                let t=dot(sub(point,edge.a),delta)/den;
+                if (-1e-9..=1.0+1e-9).contains(&t)
+                    && dist(add(edge.a,mul(delta,t.clamp(0.0,1.0))),point)<1e-7{
+                    return Ok(true);
+                }
+            }
+            Curve::Arc{center,..}=>{
+                let radius=dist(edge.a,center);
+                if (dist(point,center)-radius).abs()<1e-7
+                    && on_arc_parameter(edge,point).is_some(){
+                    return Ok(true);
+                }
+            }
+            Curve::Cubic{..}=>return Err(
+                "Compound boundary check has unsupported cubic source".into()),
+        }
+    }
+    Ok(false)
+}
+
 /// Analytic horizontal-ray even/odd containment, for validated non-touching
 /// closed contours made of straight segments or genuine circular arcs.
 /// Half-open vertex crossing rules avoid double-counting shared nodes.
