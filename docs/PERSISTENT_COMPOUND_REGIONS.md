@@ -34,8 +34,9 @@ than guessing interior/exterior.
 The native version-1 `.cfd` schema gains an **optional** JSON
 `compound_regions` field, defaulting to an empty list. Existing
 saved files require no migration and omit the new field when empty.
-A saved region stores just `id`, `name`, and its source
-`path_ids`. All original CAD paths retain their original analytic
+A saved region stores `id`, `name`, original source `path_ids`,
+and each member's proven `parent_path_ids` to keep original
+hole/island relationships stable. All original CAD paths retain their analytic
 lines, centers, circular sweeps and stable node/edge identities.
 
 Every project save/open, edit, and pointer drag preview runs
@@ -113,3 +114,15 @@ yet turn a subtraction into another material island. Such edits
 The same protects an original disconnected outline from unexpectedly
 becoming a nested hole. The format remains schema version 1 and
 the new field is present only for the newly optional region objects.
+
+
+## Verified automation and remaining checks
+
+[PR #130](https://github.com/newnetmp3/CarveFoundry/pull/130) merged as c3c32f3f05f60288bfc5dbb52995fa7cc9f79988.
+Exact PR head 2f4681207447f27d148ebcee13a5b46227041f03
+passed [CI #38109518506](https://github.com/newnetmp3/CarveFoundry/actions/runs/38109518506): **165 Rust tests**, strict Clippy,
+native Linux release. New six-case persistence suite includes
+the previously failing hole-escape regression, now blocked by
+saved parent identity; the original CI revision was not promoted.
+Real KDE desktop and independent third-party SVG/DXF visual
+acceptance remain unverified; NC/G-code output stays disabled.
