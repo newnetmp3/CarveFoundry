@@ -270,6 +270,10 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     if source.nodes.iter().any(|n|(dist(n.position,center)-radius).abs()>1e-7*radius.max(1.0)){
         return Err("Circular arc radii are inconsistent".into());
     }
+    // A common center and winding do not imply a simple circle: three
+    // 240-degree arcs can traverse the same circle twice. Verify actual
+    // swept intervals before accepting a source or derived offset.
+    crate::intersections::validate_simple_analytic_chain(source)?;
     let new_radius=radius+if source.closed || clockwise{mm}else{-mm};
     if new_radius<0.001 {
         return Err("Offset radius collapses or reverses direction".into());
@@ -281,6 +285,7 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     }
     draft.name=format!("{} arc offset {mm:.2} mm",source.name);
     draft.validate()?;
+    crate::intersections::validate_simple_analytic_chain(&draft)?;
     Ok(draft)
 }
 /// Dispatch only to mathematically exact offset types.
