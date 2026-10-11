@@ -182,6 +182,149 @@ pub fn offset_tangent_chain(source:&AnalyticPath,mm:f64)
     Ok(result)
 }
 
+
+/// A rounded offset is an explicit alternative to the legacy miter/tangent
+/// solver. It connects only *convex on the requested offset side* corners
+/// with a real circular arc centered at the original vertex, radius |mm|.
+/// Inward sharp curved corners need a trimmed intersection, not a bridge.
+#[derive(Clone,Copy)]
+enum RoundedVertex {
+    Common(Point),
+    Arc { incoming:Point, outgoing:Point, center:Point, clockwise:bool },
+}
+fn edge_tangent(edge:Shifted,at_end:bool)->Result<Point,String>{
+    let p=if at_end{edge.end}else{edge.start};
+    match edge.curve{
+        Curve::Line=>unit(sub(edge.end,edge.start)),
+        Curve::Arc{center,clockwise}=>{
+            let radial=unit(sub(p,center))?;
+            Ok(if clockwise{mul(left(radial),-1.0)}else{left(radial)})
+        }
+        Curve::Cubic{..}=>Err("Cubic curves do not have exact circular parallel offsets".into())
+    }
+}
+fn rounded_join(prev:Shifted,next:Shifted,vertex:Point,amount:f64)
+    ->Result<RoundedVertex,String>{
+    let incoming=edge_tangent(prev,true)?;
+    let outgoing=edge_tangent(next,false)?;
+    let turn=cross(incoming,outgoing).atan2(dot(incoming,outgoing));
+    if (std::f64::consts::PI-turn.abs()).abs()<1e-6 {
+        return Err("Reversing/U-turn corner has no safe round offset join".into());
+    }
+    if turn.abs()<1e-6 {
+        return join(prev,next,vertex,amount).map(RoundedVertex::Common);
+    }
+    if turn*amount<0.0 {
+        let radius=amount.abs();
+        let from=sub(prev.end,vertex);
+        let to=sub(next.start,vertex);
+        let tol=1e-7*radius.max(1.0);
+        if (len(from)-radius).abs()>tol || (len(to)-radius).abs()>tol {
+            return Err("Round join tangency radius does not match the offset distance".into());
+        }
+        let start=from.y.atan2(from.x);
+        let end=to.y.atan2(to.x);
+        let sweep=if turn<0.0 {
+            (start-end).rem_euclid(TAU)
+        }else{
+            (end-start).rem_euclid(TAU)
+        };
+        if sweep<=1e-6 || sweep>std::f64::consts::PI+1e-6
+            || (sweep-turn.abs()).abs()>1e-6{
+            return Err("Round join would create an invalid angular sweep".into());
+        }
+        return Ok(RoundedVertex::Arc{
+            incoming:prev.end,outgoing:next.start,center:vertex,clockwise:turn<0.0,
+        });
+    }
+    if matches!(prev.curve,Curve::Arc{..}) ||
+        matches!(next.curve,Curve::Arc{..}) {
+        return Err("Concave sharp circular offset needs an analytic trim; round bridge is unsafe".into());
+    }
+    // The converging straight supports have an exact bounded miter.
+    join(prev,next,vertex,amount).map(RoundedVertex::Common)
+}
+
+/// Source-faithful offset with true circular ROUND joins at convex corners.
+/// Existing normal OffsetLines behavior is unchanged. Both source and result
+/// must be globally simple; no display tessellation or CNC clearance claim.
+/// Sharp concave circular joints, curve offsets and ambiguous overlaps reject.
+pub fn offset_round_chain(source:&AnalyticPath,mm:f64)
+    ->Result<AnalyticPath,String>{
+    if !mm.is_finite() || !(0.001..=10000.0).contains(&mm.abs()) {
+        return Err("Round offset requires a signed 0.001–10000 mm distance".into());
+    }
+    if source.segments.iter().any(|s|matches!(s.curve,Curve::Cubic{..})) {
+        return Err("Cubic Bézier offsets are not exact circular/straight curves".into());
+    }
+    // Preserve the specialized entire-circle exact solver (including
+    // compatible adjacent same-center arcs) before global mixed validation.
+    if source.segments.iter().all(|s|matches!(s.curve,Curve::Arc{..})){
+        match crate::topology::offset_circular(source,mm) {
+            Ok(result)=>return Ok(result),
+            Err(problem) if source.segments.len()==1=>return Err(problem),
+            Err(_)=>{},
+        }
+    }
+    crate::intersections::validate_simple_analytic_chain(source)?;
+    let amount=if source.closed{
+        if exact_area(source)?>0.0{-mm}else{mm}
+    }else{mm};
+    let edges=(0..source.segments.len())
+        .map(|i|displaced(source,i,amount))
+        .collect::<Result<Vec<_>,_>>()?;
+    let n=source.nodes.len();
+    let mut corners=Vec::with_capacity(n);
+    for i in 0..n{
+        if !source.closed && i==0 {
+            corners.push(RoundedVertex::Common(edges[0].start));
+        }else if !source.closed && i+1==n {
+            corners.push(RoundedVertex::Common(edges[edges.len()-1].end));
+        }else{
+            let previous=if i==0{edges.len()-1}else{i-1};
+            corners.push(rounded_join(edges[previous],edges[i],
+                source.nodes[i].position,amount)?);
+        }
+    }
+    let extra=corners.iter().filter(|c|matches!(c,RoundedVertex::Arc{..})).count();
+    if n+extra>256 {
+        return Err("Round offset exceeds 256 analytic nodes; reduce corner count".into());
+    }
+    let mut result=source.clone();
+    result.name=format!("{} round offset {mm:.2} mm",source.name);
+    result.nodes.clear();
+    result.segments.clear();
+    for (i,corner) in corners.into_iter().enumerate(){
+        let original_id=source.nodes[i].id;
+        match corner {
+            RoundedVertex::Common(position)=>{
+                result.nodes.push(crate::PathNode{id:original_id,position});
+            }
+            RoundedVertex::Arc{incoming,outgoing,center,clockwise}=>{
+                let node_id=result.next_element_id;
+                let segment_id=node_id.checked_add(1)
+                    .ok_or("Round join element IDs exhausted")?;
+                result.next_element_id=segment_id.checked_add(1)
+                    .ok_or("Round join element IDs exhausted")?;
+                result.nodes.push(crate::PathNode{id:original_id,position:incoming});
+                result.nodes.push(crate::PathNode{id:node_id,position:outgoing});
+                result.segments.push(crate::PathSegment{
+                    id:segment_id,curve:Curve::Arc{center,clockwise},
+                });
+            }
+        }
+        if i<source.segments.len(){
+            result.segments.push(source.segments[i].clone());
+        }
+    }
+    result.validate()?;
+    if result.closed && exact_area(source)?.signum()!=exact_area(&result)?.signum(){
+        return Err("Round offset reverses the closed contour winding".into());
+    }
+    crate::intersections::validate_simple_analytic_chain(&result)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;
@@ -297,6 +440,92 @@ mod tests{
         let error=offset_exact(&source,2.0).unwrap_err();
         assert!(error.contains("cross/touch"),"Unexpected error: {error}");
         assert_eq!(source,before);
+    }
+
+    #[test]
+    fn sharp_line_to_circle_gets_real_tangent_round_join_only_by_opt_in(){
+        let mut p=AnalyticPath::preset(4,"Sharp".into(),
+            Point::new(7.0,11.0),Primitive::Line,10.0,10.0).unwrap();
+        p.nodes.push(PathNode{id:4,position:Point::new(20.0,-10.0)});
+        p.segments.push(PathSegment{id:5,curve:Curve::Arc{
+            center:Point::new(20.0,0.0),clockwise:false,
+        }});
+        p.next_element_id=6;
+        p.validate().unwrap();
+        assert!(offset_exact(&p,2.0).unwrap_err().contains("not tangent"));
+        let before=p.clone();
+        let rounded=offset_round_chain(&p,2.0).unwrap();
+        assert_eq!(p,before);
+        assert_eq!(rounded.nodes.len(),4);
+        assert_eq!(rounded.segments.len(),3);
+        assert_eq!(rounded.nodes[1].position,Point::new(10.0,2.0));
+        assert_eq!(rounded.nodes[2].position,Point::new(12.0,0.0));
+        assert_eq!(rounded.nodes[1].id,p.nodes[1].id);
+        assert_eq!(rounded.segments[0].id,p.segments[0].id);
+        assert_eq!(rounded.segments[2].id,p.segments[1].id);
+        assert!(matches!(rounded.segments[1].curve,
+            Curve::Arc{center,clockwise:true} if center==Point::new(10.0,0.0)));
+        assert!(matches!(rounded.segments[2].curve,
+            Curve::Arc{center,clockwise:false} if center==Point::new(20.0,0.0)));
+        rounded.validate().unwrap();
+        assert!(offset_round_chain(&p,-2.0).unwrap_err().contains("Concave sharp"));
+    }
+    #[test]
+    fn sharp_arc_to_arc_round_join_keeps_both_original_circle_centers(){
+        let p=AnalyticPath{
+            id:2,name:"Double circle".into(),origin:Point::new(3.0,4.0),
+            visible:true,locked:false,closed:false,
+            nodes:vec![
+                Point::new(-10.0,0.0),Point::new(0.0,-10.0),
+                Point::new(10.0,-20.0)
+            ].into_iter().enumerate().map(|(i,position)|PathNode{
+                id:i as u64+1,position}).collect(),
+            segments:vec![
+                PathSegment{id:4,curve:Curve::Arc{
+                    center:Point::new(0.0,0.0),clockwise:false}},
+                PathSegment{id:5,curve:Curve::Arc{
+                    center:Point::new(10.0,-10.0),clockwise:false}},
+            ],next_element_id:6,
+        };
+        p.validate().unwrap();
+        let result=offset_round_chain(&p,2.0).unwrap();
+        assert_eq!(result.nodes.len(),4);
+        assert_eq!(result.segments.len(),3);
+        assert_eq!(result.origin,p.origin);
+        assert!(matches!(result.segments[0].curve,Curve::Arc{
+            center,clockwise:false} if center==Point::new(0.0,0.0)));
+        assert!(matches!(result.segments[1].curve,Curve::Arc{
+            center,clockwise:true} if center==Point::new(0.0,-10.0)));
+        assert!(matches!(result.segments[2].curve,Curve::Arc{
+            center,clockwise:false} if center==Point::new(10.0,-10.0)));
+        crate::intersections::validate_simple_analytic_chain(&result).unwrap();
+    }
+    #[test]
+    fn closed_ccw_triangle_rounds_outside_without_changing_winding(){
+        let source=crate::shapes::polyline(5,"Triangle".into(),
+            Point::new(0.0,0.0),vec![
+                Point::new(0.0,0.0),Point::new(30.0,0.0),
+                Point::new(15.0,25.0)
+            ],true).unwrap();
+        let result=offset_round_chain(&source,2.0).unwrap();
+        assert_eq!(result.nodes.len(),6);
+        assert_eq!(result.segments.len(),6);
+        assert!(result.segments.iter().filter(|s|
+            matches!(s.curve,Curve::Arc{..})).count()==3);
+        assert!(exact_area(&result).unwrap()>exact_area(&source).unwrap());
+        assert!(result.closed);
+        crate::intersections::validate_simple_analytic_chain(&result).unwrap();
+    }
+    #[test]
+    fn rounded_solver_rejects_reversals_cubics_and_nonfinite_offsets(){
+        let p=crate::shapes::polyline(7,"Backtrack".into(),Point::new(0.0,0.0),
+            vec![Point::new(0.0,0.0),Point::new(10.0,0.0),
+                Point::new(5.0,0.0)],false).unwrap();
+        assert!(offset_round_chain(&p,1.0).is_err());
+        let cubic=AnalyticPath::preset(1,"Cubic".into(),
+            Point::new(0.0,0.0),Primitive::Cubic,15.0,10.0).unwrap();
+        assert!(offset_round_chain(&cubic,2.0).is_err());
+        assert!(offset_round_chain(&cubic,f64::NAN).is_err());
     }
 
 }
