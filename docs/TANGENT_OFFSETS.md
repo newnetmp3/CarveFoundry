@@ -156,5 +156,10 @@ bounded miter behavior. This is artwork, not an NC clearance contour.
 - [ ] Check the original Create offset vector continues to use
       existing miter/tangent behavior, with no automatic rounding.
 
-**Status:** branch implementation; native CI, real KDE pointer work
-and independent file-format acceptance pending. No CNC machine tests.
+**Verified implementation:** [PR #125](https://github.com/newnetmp3/CarveFoundry/pull/125)
+merged to main 3a2e107dd6d07f598788a3493e0e320eafccb5c2.
+Exact head ca543417bd2deefbbebf6401c1f06f8b9ef3d82e passed
+[CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548):
+118 core + 18 studio = 136 tests, Clippy and native release.
+Real KDE pointer and external file-format acceptance remain pending.
+No CNC machine tests or NC export.
