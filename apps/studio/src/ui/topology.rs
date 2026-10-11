@@ -181,6 +181,61 @@ impl Studio {
         }else{
             ui.small("Select one source vector, then scan against other visible vectors.");
         }
+        // Read-only source-accurate compound contour analysis. Cache only
+        // a display interpretation; compare all original vector geometry
+        // every frame so drag, document load or selection changes cannot
+        // leave stale hole classifications on screen.
+        let picked=self.selected_ids.iter().filter_map(|id|
+            self.editor.project.paths.iter().find(|p|p.id==*id).cloned()
+        ).collect::<Vec<_>>();
+        if self.topology_compound_checked!=picked {
+            self.topology_compound_checked.clear();
+            self.topology_compound_roles.clear();
+        }
+        if self.selected_ids.len()>=2 {
+            ui.separator();
+            ui.strong("COMPOUND CONTOURS · HOLES / ISLANDS");
+            ui.small("Select 2–32 closed line/true-circle vectors. Check boundaries analytically and classify outer regions, holes and nested islands without changing CAD geometry. Cubic curves or touching/crossing loops are refused.");
+            if ui.button("Analyze selected closed contours")
+                .on_hover_text("Read-only analytic containment. Rejects open vectors, cubics, self-crossings, coincident overlaps, boundary contact and excessive edge-pair counts. The resulting roles are CAD design information only, NOT pocket machining or cutter clearance.").clicked(){
+                self.topology_compound_roles.clear();
+                self.topology_compound_checked.clear();
+                if picked.len()!=self.selected_ids.len() {
+                    self.status="Compound analysis requires only editable analytic closed vectors, not polygon contour objects".into();
+                }else{
+                    match carvefoundry_core::analyze_compound_paths(&picked){
+                        Ok(roles)=>{
+                            let holes=roles.iter().filter(|r|
+                                r.role==carvefoundry_core::CompoundRole::Hole
+                            ).count();
+                            self.status=format!(
+                                "Compound CAD: {} loops, {} holes; read-only, no machining output",
+                                roles.len(),holes);
+                            self.topology_compound_checked=picked.clone();
+                            self.topology_compound_roles=roles;
+                        }
+                        Err(problem)=>{
+                            self.status=format!("Compound analysis refused: {problem}");
+                        }
+                    }
+                }
+            }
+            if !self.topology_compound_roles.is_empty(){
+                ui.weak("Verified nested boundary roles (not toolpaths):");
+                for role in &self.topology_compound_roles{
+                    let kind=match role.role{
+                        carvefoundry_core::CompoundRole::Outline=>"Outline / island",
+                        carvefoundry_core::CompoundRole::Hole=>"Hole / empty region",
+                    };
+                    let parent=role.parent_path_id
+                        .map_or_else(||"none".to_string(),|id|format!("#{id}"));
+                    ui.small(format!(
+                        "Vector #{} · {} · depth {} · parent {}",
+                        role.path_id,kind,role.depth,parent
+                    ));
+                }
+            }
+        }
         let Some(path)=selected else{
             ui.small("Select one editable analytic vector, or two open paths to Join.");
             return;
