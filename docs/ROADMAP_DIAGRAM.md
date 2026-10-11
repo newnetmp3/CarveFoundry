@@ -50,3 +50,11 @@ The high-contrast graphic keeps R1 in progress.
 exact 138-test CI green. Ambiguous coincident supports remain unsupported.
 R1 still in progress, no CNC output. See
 [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
+
+
+**R1k in progress — angular overlap QA:** The feature branch
+feature/rust-r1k-coincident-arc-sweeps distinguishes isolated adjoining
+source-arc endpoints from overlapping same-circle sweeps (including
+wraparound and repeated loops). This is not yet CI/merge verified;
+the high-contrast overview retains R1 "in progress." See
+[COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
