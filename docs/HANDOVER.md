@@ -1726,3 +1726,11 @@ contract and owner manual KDE checklist:
 **Status: feature branch, CI and PR merge not yet verified.**
 Owner KDE Wayland input and independent external CAD visual QA
 remain unverified. R1 incomplete, R2–R7 gated, R6 NC off.
+
+
+**R1n nesting-safety refinement:** saved regions retain each
+member's verified parent path ID and recheck it after edits.
+A hole moved completely outside its host is no longer silently
+interpreted as a new independent outline. Changing the Boolean
+relationship requires unlinking/rebuilding the region. This is
+part of the pending R1n CI branch, not a finished merge.
