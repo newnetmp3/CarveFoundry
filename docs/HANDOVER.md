@@ -1482,3 +1482,35 @@ acceptance, physical router trials, CAM, safety preflight or G-code.
 R1 is still IN PROGRESS; R2–R7 remain planned/safety gated.
 
 | 2026-10-10/11 | PR #126 exact concave arc/line and arc/arc finite-sweep trims merged | [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405): 138 tests, strict Clippy, native Linux release; merge 907b1509 | R1k coincident arc sweeps and goldens; owner KDE/Wayland and third-party interchange |
+
+
+## Active R1k — coincident true-circle angular sweep proof
+
+Feature branch feature/rust-r1k-coincident-arc-sweeps follows the
+verified PR #126 baseline (main 7b3d884c11847f05381e70017dbab3364dcdf5c4).
+
+Pure Rust intersections.rs now classifies pairs of source-true arcs
+with the same center using split CCW angular intervals over 0°/360°,
+regardless of clockwise/counterclockwise traversal. It distinguishes
+one isolated common endpoint (eligible when it is the actual
+neighboring node) from a **nonzero angular overlap** (hard error).
+Separate concentric radii are disjoint; numerically near-coincident
+but not exact supports remain conservatively unresolved. Wrong
+nonadjacent contacts still reject, and repeated circle traversals
+fail before any offset. The special all-circular closed solver now
+validates both source and result against remote overlapping sweeps.
+Split true arcs with one common center remain source-retained and
+can be offset using the prior exact circle/mixed solver and round
+mode. Stable IDs, project schema, atomic Undo, layer locks, and
+R6 safety gates are unchanged.
+
+Unit regressions include angular seam endpoints, reversed parameter
+order, different-radius concentric circles, backtracking and
+multi-revolution overlap, nonadjacent touches, closed four-quarter
+circles and split-arc+line exact offsets. See
+[COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+
+**Status: implementation on branch, CI/PR merge pending.** No real
+KDE Wayland owner tests or independent SVG/DXF visual validation.
+Next after verified CI: adversarial closed offset golden shapes,
+SVG/DXF roundtrips and interaction QA. CAM/NC still intentionally off.
