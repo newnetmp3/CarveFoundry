@@ -71,7 +71,11 @@ No NC toolpath or CNC export is implemented.
 - [ ] Test self-overlap, source zero-length, large offset radius
       collapse, many corner nodes and ambiguous support intersections.
 
-**Verification state:** implemented on branch
-feature/rust-r1k-concave-circular-trims. Rust CI, independent external
-CAD roundtrips and real Wayland GUI acceptance pending. R1 remains
-in progress and machine G-code stays disabled.
+**Automated verification:** [PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126)
+merged 907b1509133d09b55503d5ea75253a81abe13ee7;
+exact tested source ded15b52f95cdededbd2492a63c1a18208553e44
+passed [native CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405):
+120 core + 18 studio = 138 tests, strict Clippy and native Linux release.
+**Still pending:** independent external CAD roundtrips, real KDE
+Wayland GUI acceptance, global complex-offset QA and all CNC gates.
+R1 remains in progress; G-code stays disabled.
