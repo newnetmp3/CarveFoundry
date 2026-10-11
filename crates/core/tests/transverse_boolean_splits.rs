@@ -1,7 +1,7 @@
 //! Exact intersection splitting; only line sources with strictly
 //! transverse, interior/interior crossing points may reconstruct.
 use carvefoundry_core::{Action,Editor,Point,Project,RegionBoolean,Curve,
-    boolean_region_boundaries};
+    boolean_region_boundaries,polygon_contains};
 fn rect(editor:&mut Editor,name:&str,lo:Point,hi:Point,reverse:bool)->u64{
     let id=editor.project.next_id;
     let mut pts=vec![Point::new(lo.x,lo.y),Point::new(hi.x,lo.y),
@@ -76,11 +76,26 @@ fn transverse_intersection_and_differences_reconstruct_expected_material(){
             run(&mut e,operation);
             assert!(e.project.paths.len()>original.paths.len());
             let generated=e.project.paths.len()-original.paths.len();
-            let last=e.project.compound_regions.last().unwrap();
-            assert_eq!(last.path_ids.len(),generated);
+            if generated>1{
+                let last=e.project.compound_regions.last().unwrap();
+                assert_eq!(last.path_ids.len(),generated);
+            }else{
+                assert_eq!(e.project.compound_regions.len(),2,
+                    "One output loop is a standalone editable path, not an extra saved region");
+            }
             for (point,expected) in checks{
-                assert_eq!(e.project.compound_material_at(last.id,point).unwrap(),
-                    expected,"reversed {reversed} op {operation:?} at {point:?}");
+                let is_material=if generated>1{
+                    let last=e.project.compound_regions.last().unwrap();
+                    e.project.compound_material_at(last.id,point).unwrap()
+                }else{
+                    let loop_path=&e.project.paths[4];
+                    let world=loop_path.nodes.iter().map(|n|
+                        n.position.offset(loop_path.origin.x,loop_path.origin.y)
+                    ).collect::<Vec<_>>();
+                    polygon_contains(&world,point)
+                };
+                assert_eq!(is_material,expected,
+                    "reversed {reversed} op {operation:?} at {point:?}");
             }
             assert_eq!(e.project.paths[..4],original.paths);
         }
