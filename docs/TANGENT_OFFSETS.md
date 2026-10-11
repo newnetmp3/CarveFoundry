@@ -179,5 +179,9 @@ result global analytic intersection guards remain enforced.
 Coincident circles and unresolved overlaps still fail closed.
 This is not a CNC cutter-compensation or NC safety signoff.
 
-**Branch implementation:** feature/rust-r1k-concave-circular-trims.
-CI/merge, real KDE Wayland and independent SVG/DXF checks pending.
+**Verified implementation:** [PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126)
+merged 907b1509133d09b55503d5ea75253a81abe13ee7;
+exact head ded15b52f95cdededbd2492a63c1a18208553e44 passed
+[CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405):
+120 core + 18 studio = 138 tests, strict Clippy, Linux release.
+Real KDE Wayland and independent SVG/DXF QA still outstanding.
