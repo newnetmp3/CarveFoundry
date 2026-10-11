@@ -9,6 +9,8 @@ passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/
 Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
 remain merged; the high-contrast static roadmap is retained.
 
+**LATEST R1k VERIFIED:** [Convex true-circular rounded offsets PR #125](https://github.com/newnetmp3/CarveFoundry/pull/125) merged 3a2e107dd6d07f598788a3493e0e320eafccb5c2; exact tested source ca543417bd2deefbbebf6401c1f06f8b9ef3d82e passed [CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548): **136 tests, strict Clippy, native Linux release**. Opt-in round joins preserve original geometry. Concave circular trims and real KDE/file QA remain unfinished.
+
 ![Full CarveFoundry R0–R7 roadmap — high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg)
 
 [Open the full-size high-contrast SVG](ROADMAP_HIGH_CONTRAST.svg). This graphic has explicit foreground/background colors and requires **no Mermaid parser or theme initialization**. If an extension blocks images, the phase/status table below contains the same information.
@@ -18,7 +20,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Active:** opt-in exact convex round joins; still need safe concave circular trims, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** opt-in exact convex round joins. Remaining: concave circular trims, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
