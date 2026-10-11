@@ -1889,3 +1889,49 @@ limitations and user desktop checklist:
 **Status: feature branch committed, CI + PR pending.** R1 still
 in progress. Owner KDE/Wayland pointer QA and independent external
 SVG/DXF CAD viewer acceptance remain unverified. R6 CNC NC locked.
+
+
+## VERIFIED R1p — exact transverse line/line Boolean splits and stitched contours
+
+[PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132) merged into main as **dcfa2f32b88d523de700551af02d8cad3353179f**.
+Final tested source head **8f6c92fad0dcd56907271404ad34d8ed4d4c966c**
+passed [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): **127 core + 9 compound + 8 R1o Boolean
++ 5 SVG/DXF interchange + 6 persisted regions + 5 R1p
+transverse Boolean + 18 studio = 178 Rust tests**, strict
+Clippy and native Linux desktop release. Initial PR validation
+found an older R1o test still expecting all crossing boundaries
+to refuse; later a new integration test incorrectly assumed
+that one-loop output must create a saved multi-loop region.
+Both test contracts were corrected, and exact final HEAD
+passed the complete CI workflow. No original-source mutation.
+
+Source-true crossing `crates/core/src/crossing_booleans.rs`
+calculates strict interior-interior bounded straight segment
+intersections, separates source line edges at exact analytical
+parameters, classifies material-sided fragments using saved
+hole parity, and stitches directed one-in/one-out closed
+loops. The reconstructed result is native editable analytic
+straight-line source geometry. The already merged R1o
+disjoint/nested true-circle solver remains unchanged and
+never samples arcs into line segments. New Rust regression
+tests verify shifted partially overlapping rectangles,
+both saved holes, exact union/intersection/ordered difference,
+winding reversal, output persistence/Undo and failed
+collinear/vertex/T-junction/near-coincident contact.
+
+Native Drawing topology inspector describes the newly
+supported strict transverse straight-line scope.
+**Still REFUSES** shared collinear input edges, any
+endpoint/T-junction touch, ambiguous near intersections,
+mixed crossing circular arcs, cubic curves, >1024 input
+line edges, >256 crossing points, non-simple output
+and excessive result sizes. No CNC CAM/NC output.
+Review [TRANSVERSE_BOOLEAN_SPLITS.md](TRANSVERSE_BOOLEAN_SPLITS.md).
+
+**NEXT R1:** dedicated coincident collinear/endpoint graph proof,
+source-exact arc-crossing clipping (not preview sampling),
+owner real Arch KDE Wayland pointer QA, third-party CAD
+SVG/DXF inspection. R1 remains IN PROGRESS; R2–R7 future/safety
+gated, CNC G-code export intentionally disabled.
+
+| 2026-10-11 | PR #132 exact transverse rectangle region booleans merged | [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): 178 tests, strict Clippy, Linux release; merge dcfa2f32 | Collinear/contact/arc crossing support & real KDE/third-party CAD acceptance |
