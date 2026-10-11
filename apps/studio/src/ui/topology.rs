@@ -250,9 +250,9 @@ impl Studio {
         });
         ui.separator();
         ui.label("PARALLEL OFFSETS AND CORNERS");
-        ui.small("Exact offsets: straight contours, true circular arcs, and tangent line/arc chains. Sharp curved junctions and cubic offsets are rejected.");
+        ui.small("Exact offsets: straight contours, true circular arcs, and tangent line/arc chains. Mixed offsets also reject crossing/overlapping source and result edges. Sharp curved joins and cubic offsets remain unavailable.");
         if ui.add_enabled(eligible,egui::Button::new("Create offset vector"))
-            .on_hover_text("Create a new independent analytic offset. Supports lines with bounded miters, true circular arcs, and tangent line/arc chains; all retained as original primitives. Open: + left / - right. Closed: + outward / - inward. Non-tangent curved corners and cubic Béziers require a different solver.").clicked(){
+            .on_hover_text("Create a new independent analytic offset. Supports lines with bounded miters, true circular arcs, and tangent line/arc chains; all retained as original primitives. Open: + left / - right. Closed: + outward / - inward. Self-crossing contours, non-tangent curved corners and cubic Béziers are refused without changing the project.").clicked(){
             let newid=self.editor.project.next_id;
             self.apply(Action::OffsetLines{path_id,
                 distance_mm:self.topology_distance_mm});
@@ -277,7 +277,7 @@ impl Studio {
                     size_mm:self.topology_distance_mm,fillet:false});
             }
         });
-        ui.small("Corners: line-line (open/closed). Exact offsets require straight edges or tangent circular joins; cubic and sharp curved offsets remain gated.");
+        ui.small("Corners: line-line (open/closed). Exact mixed offsets validate the whole analytic contour; cubic and sharp curved offset joins remain gated.");
     }
 }
 fn curve_name(c:Curve)->&'static str{
