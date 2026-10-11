@@ -275,3 +275,12 @@ original cubic polynomial continues smoothly to an actual source-curve
 intersection; arcs remain circular. Closed shapes may serve as references,
 not sources. Failures explain missing crossings instead of quietly
 changing geometry. See [Curve Extension](docs/CURVE_EXTENSION.md).
+
+### Exact tangent line/circular-arc offsets (R1j)
+
+**Drawing → Edit Vector Topology → Create offset vector** accepts
+straight contours, true circular arcs, and tangent mixed line/arc
+chains with retained analytic geometry. Open offsets are signed
+left/right; closed offsets are signed outward/inward. Sharp curved
+corners and general Bézier offsets are refused rather than flattened.
+See [offset geometry and desktop QA](docs/TANGENT_OFFSETS.md).

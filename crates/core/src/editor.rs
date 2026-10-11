@@ -1073,6 +1073,35 @@ mod tests {
         assert_eq!(e.project,before);
     }
     #[test]
+    fn tangent_arc_line_offset_is_atomic_undoable_and_layer_safe(){
+        let mut e=Editor::default();
+        let mut source=AnalyticPath::preset(6,"Tangent chain".into(),
+            Point::new(15.0,15.0),Primitive::Arc,20.0,10.0).unwrap();
+        source.nodes.push(crate::PathNode{
+            id:4,position:Point::new(20.0,-10.0),
+        });
+        source.segments.push(PathSegment{id:5,curve:Curve::Line});
+        source.next_element_id=6;
+        source.validate().unwrap();
+        e.apply(Action::ImportPaths{paths:vec![source]}).unwrap();
+        e.apply(Action::AddLayer{name:"Exact profiles".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1],layer_id:layer}).unwrap();
+        let before=e.project.clone();
+        e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!(e.project.paths[0],before.paths[0]);
+        assert_eq!(e.project.layer_for(e.project.paths[1].id),layer);
+        assert_eq!(e.project.paths[1].nodes[1].position,Point::new(22.0,0.0));
+        assert!(matches!(e.project.paths[1].segments[0].curve,Curve::Arc{..}));
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+        e.apply(Action::SetLayerLocked{id:layer,locked:true}).unwrap();
+        let locked=e.project.clone();
+        assert!(e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).is_err());
+        assert_eq!(e.project,locked);
+    }
+    #[test]
     fn offset_creates_new_editable_vector_not_a_mutated_original(){
         let mut e=Editor::default();
         e.apply(Action::AddShape{kind:ShapeKind::Rectangle,name:"Box".into(),

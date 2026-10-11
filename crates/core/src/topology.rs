@@ -283,15 +283,24 @@ pub fn offset_circular(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>
     draft.validate()?;
     Ok(draft)
 }
-/// Dispatch to a mathematically representable exact parallel.
-/// Cubics, multi-center arc chains and mixed edges fail closed.
+/// Dispatch only to mathematically exact offset types.
+/// Straight contours retain bounded miters. Circular arcs preserve
+/// source centers/radii; tangent line/arc chains retain true primitives.
+/// Cubic polynomial offsets and sharp arc joins remain explicitly gated.
 pub fn offset_exact(source:&AnalyticPath,mm:f64)->Result<AnalyticPath,String>{
     if source.segments.iter().all(|s|matches!(s.curve,Curve::Line)){
         offset_lines(source,mm)
     }else if source.segments.iter().all(|s|matches!(s.curve,Curve::Arc{..})){
-        offset_circular(source,mm)
+        // Preserve the direct circular solver, including its specific
+        // rejection reason for an invalid single arc. Multi-arc chains
+        // can use the tangent junction solver when centers differ.
+        match offset_circular(source,mm) {
+            Ok(result)=>Ok(result),
+            Err(problem) if source.segments.len()==1=>Err(problem),
+            Err(_)=>crate::mixed_offsets::offset_tangent_chain(source,mm),
+        }
     }else{
-        Err("Exact mixed-curve/cubic offset unavailable; source remains unchanged".into())
+        crate::mixed_offsets::offset_tangent_chain(source,mm)
     }
 }
 /// Exact chamfer/fillet of a selected line-line corner (interior for open,

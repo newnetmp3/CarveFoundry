@@ -652,3 +652,16 @@ The [full R0–R7 roadmap](ROADMAP_DIAGRAM.md) now embeds a
 Mermaid theme initialization and client-side diagram parsing. The accompanying
 Markdown status table is the text-only accessible fallback. This is a docs
 fix only; project implementation status is unchanged.
+
+## Active R1j — source-exact tangent line/arc chains
+
+Add exact parallel offsets for open/closed analytic paths mixing
+true circular arcs and straight runs at G1-tangent curved joints.
+Use Green's theorem analytic area for closed winding, signed offsets,
+bounded straight miters and source circle-center/radius changes.
+Reject sharp arc corners, invalid radii, general cubic Bézier
+offsets and unsupported topology rather than storing a preview
+polyline. One atomic Undo, original kept, layer membership retained.
+See [TANGENT_OFFSETS.md](TANGENT_OFFSETS.md). Native Rust CI, KDE
+Wayland UI and independent DXF/SVG acceptance remain gates;
+machine NC output remains disabled.
