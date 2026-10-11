@@ -139,7 +139,7 @@ pub fn offset_tangent_chain(source:&AnalyticPath,mm:f64)
         return Err("Mixed/Cubic Bézier offsets are not exact cubic curves and remain unsupported".into());
     }
     let amount=if source.closed{
-        if exact_area(source)?>0.0{-mm}else{mm}
+        if exact_area(source)? > 0.0{-mm}else{mm}
     }else{mm};
     let edges=(0..source.segments.len())
         .map(|i|displaced(source,i,amount))
