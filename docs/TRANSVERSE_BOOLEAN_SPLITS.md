@@ -117,3 +117,18 @@ continue to run unchanged.
 
 **CI / PR merge:** recorded separately after exact head succeeds.
 R1 unfinished. R2–R7 future/safety gated. R6 CNC NC export locked.
+
+
+## Verified CI and merge
+
+[PR #132](https://github.com/newnetmp3/CarveFoundry/pull/132) merged as **dcfa2f32b88d523de700551af02d8cad3353179f**.
+Final exact PR head **8f6c92fad0dcd56907271404ad34d8ed4d4c966c**
+passed [CI #38159106449](https://github.com/newnetmp3/CarveFoundry/actions/runs/38159106449): **178 Rust tests** (127
+core, 9 compound, 8 earlier Boolean, 5 interchange, 6
+persistent, 5 new transverse, 18 studio); strict Clippy
+and native Linux release compilation. Existing old
+crossing-refusal regression and single-loop output expectation
+were updated to reflect the strictly supported new geometry.
+Manual owner Arch KDE Plasma Wayland UI and independent CAD
+application verification remain **unperformed**. Physical NC/
+G-code remains disabled pending separate R6 safety signoff.
