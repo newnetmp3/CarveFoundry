@@ -753,7 +753,7 @@ impl Editor {
             }
             Action::RemoveCompoundRegion{id}=>{
                 if !next.compound_regions.iter().any(|r|r.id==id){
-                    return Err("Unknown saved compound region");
+                    return Err("Unknown saved compound region".into());
                 }
                 next.compound_regions.retain(|r|r.id!=id);
             }
