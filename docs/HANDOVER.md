@@ -1450,3 +1450,35 @@ described in docs/CONCAVE_OFFSET_TRIMS.md.
 Follow-on: coincident arc sweep interval classification, larger offset
 topology goldens, external SVG/DXF interoperability, Wayland QA.
 Do not treat CI as physical CNC safety validation.
+
+
+## VERIFIED R1k — finite-sweep concave circular offset trimming, PR #126
+
+[PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126)
+merged into main as **907b1509133d09b55503d5ea75253a81abe13ee7**.
+Exact feature head **ded15b52f95cdededbd2492a63c1a18208553e44**
+passed [native Rust CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405):
+**120 core + 18 studio = 138 tests**, strict Clippy, native
+Linux desktop release build, with no failed CI stages.
+
+Source-exact concave support trimming for opt-in Create rounded offset
+uses algebraic line-circle and circle-circle intersections and accepts
+only a unique crossing proven to lie inside the finite sweeps of BOTH
+displaced incoming/outgoing segments, with nonzero retained lengths,
+bounded trim reach and no reversal/extrapolation. Invalid short arcs,
+ambiguous overlapping circles, two valid intersections, cubic offsets,
+global self-crossings and radius collapse reject without changing the
+design. The previous exact convex round joins and original tangent/
+miter Create offset vector remain intact. Original analytic segment
+IDs, centers and sweep directions, Undo/Redo and layer locks remain
+covered by the same editor transaction. Detailed proof and manual
+checklist: [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
+
+**Next R1k:** coincident-circle sweep interval classification, richer
+adversarial closed-contour golden tests, whole-offset topology
+verification and real owner Arch KDE Plasma Wayland interactions plus
+independent external SVG/DXF file QA. No claim of completed desktop
+acceptance, physical router trials, CAM, safety preflight or G-code.
+R1 is still IN PROGRESS; R2–R7 remain planned/safety gated.
+
+| 2026-10-10/11 | PR #126 exact concave arc/line and arc/arc finite-sweep trims merged | [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405): 138 tests, strict Clippy, native Linux release; merge 907b1509 | R1k coincident arc sweeps and goldens; owner KDE/Wayland and third-party interchange |
