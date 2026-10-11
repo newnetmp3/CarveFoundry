@@ -117,3 +117,44 @@ release. Real owner KDE/Wayland and independent file QA are **not**
 verified. Later R1k tasks remain: sharp round/bevel circular junctions,
 proven closed contour offset topology, cubic approximation with a
 stated tolerance if added, and golden file interoperability tests.
+
+
+## Active R1k follow-on — explicit true round joins
+
+A second **Create rounded offset** button in Drawing > Edit Vector
+Topology offers an opt-in CAD-only rounded style. For a sharp vertex
+that is convex relative to the requested offset side, it inserts a
+real tangent circular sector centered at the original node, radius
+equal to the absolute offset. The existing line/arc edges keep their
+true analytic geometry and retained IDs; new join nodes and segments
+receive stable unique IDs. It works on open and closed contours,
+including line/line, line/circular arc and circular-arc/arc joins.
+It reuses source/result full-chain intersection validation.
+
+A sharp concave corner containing any arc is **not** eligible: safe
+inside trimming must locate, order and preserve true circle-line/circle
+intersections; simply drawing a round bridge would be wrong. Reversals,
+invalid offset radii, unsupported coincident circular supports,
+unsuitable topology and all cubic Bézier offsets reject. The normal
+Create offset vector button still offers the existing exact tangent/
+bounded miter behavior. This is artwork, not an NC clearance contour.
+
+### Additional native UI acceptance
+
+- [ ] Use open horizontal line ending in a CCW circular quarter, turning
+      sharply clockwise. Positive 2 mm with Create rounded offset
+      should insert a clockwise radius-2-mm sector at the vertex and
+      retain the original true source arc center.
+- [ ] Reverse to negative 2 mm at the same concave corner: reject
+      and leave source and project unchanged.
+- [ ] Offset sharp arc/arc case. Inspect each original center, added
+      vertex-centered circle, unique node IDs and saved SVG/DXF.
+- [ ] Closed CCW polygon outward rounded offset creates outward
+      circular corners with unchanged winding.
+- [ ] Verify layer locks, Undo/Redo, save/reopen, display/selection
+      on Arch KDE Plasma Wayland at 100%/125%/150% scaling.
+- [ ] Check the original Create offset vector continues to use
+      existing miter/tangent behavior, with no automatic rounding.
+
+**Status:** branch implementation; native CI, real KDE pointer work
+and independent file-format acceptance pending. No CNC machine tests.

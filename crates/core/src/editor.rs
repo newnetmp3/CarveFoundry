@@ -41,6 +41,8 @@ pub enum Action {
     Corner{path_id:u64,node_id:u64,size_mm:f64,fillet:bool},
     JoinOpen{first_id:u64,second_id:u64,tolerance_mm:f64},
     OffsetLines{path_id:u64,distance_mm:f64},
+    /// Explicit true-circular round joins for convex offset corners only.
+    OffsetRounded{path_id:u64,distance_mm:f64},
     InsertNodeAfter { path_id: u64, node_id: u64 },
     RemoveNode { path_id: u64, node_id: u64 },
     SetPathClosed { id: u64, closed: bool },
@@ -114,6 +116,7 @@ impl Editor {
             Action::ExtendLine{path_id,..}|
             Action::Corner{path_id,..}|
             Action::OffsetLines{path_id,..}|
+            Action::OffsetRounded{path_id,..}|
             Action::MoveNode{path_id,..}|Action::MoveControl{path_id,..}|
             Action::InsertNodeAfter{path_id,..}|Action::RemoveNode{path_id,..}
                 =>Some(*path_id),
@@ -542,6 +545,21 @@ impl Editor {
                 parallel.id=next.next_id;
                 next.next_id=next.next_id.checked_add(1)
                     .ok_or("Offset path identity exhausted")?;
+                if layer!=0{
+                    next.layer_members.push(crate::organization::LayerMember{
+                        vector_id:parallel.id,layer_id:layer,
+                    });
+                }
+                next.paths.push(parallel);
+            }
+            Action::OffsetRounded{path_id,distance_mm}=>{
+                let original=next.paths.iter().find(|p|p.id==path_id)
+                    .ok_or("Selected vector is not an analytic path")?;
+                let layer=next.layer_for(path_id);
+                let mut parallel=crate::mixed_offsets::offset_round_chain(original,distance_mm)?;
+                parallel.id=next.next_id;
+                next.next_id=next.next_id.checked_add(1)
+                    .ok_or("Rounded offset path identity exhausted")?;
                 if layer!=0{
                     next.layer_members.push(crate::organization::LayerMember{
                         vector_id:parallel.id,layer_id:layer,
@@ -1099,6 +1117,38 @@ mod tests {
         e.apply(Action::SetLayerLocked{id:layer,locked:true}).unwrap();
         let locked=e.project.clone();
         assert!(e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).is_err());
+        assert_eq!(e.project,locked);
+    }
+
+    #[test]
+    fn rounded_offset_is_one_undo_layer_safe_and_locked_atomic(){
+        let mut e=Editor::default();
+        let mut source=AnalyticPath::preset(5,"Corner".into(),
+            Point::new(15.0,15.0),Primitive::Line,10.0,10.0).unwrap();
+        source.nodes.push(crate::PathNode{id:4,position:Point::new(20.0,-10.0)});
+        source.segments.push(PathSegment{id:5,curve:Curve::Arc{
+            center:Point::new(20.0,0.0),clockwise:false}});
+        source.next_element_id=6;
+        source.validate().unwrap();
+        e.apply(Action::ImportPaths{paths:vec![source]}).unwrap();
+        e.apply(Action::AddLayer{name:"Rounded contours".into()}).unwrap();
+        let layer=e.project.layers[0].id;
+        e.apply(Action::AssignLayer{ids:vec![1],layer_id:layer}).unwrap();
+        let before=e.project.clone();
+        assert!(e.apply(Action::OffsetLines{path_id:1,distance_mm:2.0}).is_err());
+        assert_eq!(e.project,before);
+        e.apply(Action::OffsetRounded{path_id:1,distance_mm:2.0}).unwrap();
+        assert_eq!(e.project.paths.len(),2);
+        assert_eq!(e.project.paths[0],before.paths[0]);
+        assert_eq!(e.project.layer_for(e.project.paths[1].id),layer);
+        assert_eq!(e.project.paths[1].segments.len(),3);
+        assert!(e.undo());
+        assert_eq!(e.project,before);
+        assert!(e.redo());
+        assert_eq!(e.project.paths.len(),2);
+        e.apply(Action::SetLayerLocked{id:layer,locked:true}).unwrap();
+        let locked=e.project.clone();
+        assert!(e.apply(Action::OffsetRounded{path_id:1,distance_mm:2.0}).is_err());
         assert_eq!(e.project,locked);
     }
     #[test]

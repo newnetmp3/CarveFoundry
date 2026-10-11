@@ -18,7 +18,7 @@
 <path d="M795 266 V283" stroke="#e2e8f0" stroke-width="3" fill="none"/>
 <rect x="70" y="285" width="1450" height="75" rx="14" fill="#1e3a8a" stroke="#93c5fd" stroke-width="2.5"/>
 <text x="90" y="317" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R1  —  Professional 2D vector CAD  ·  IN PROGRESS</text>
-<text x="90" y="346" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Major capabilities implemented; advanced topology and KDE acceptance remain</text>
+<text x="90" y="346" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Major CAD implemented; convex round joins in development • KDE QA pending</text>
 <rect x="70" y="367" width="460" height="83" rx="14" fill="#123c2f" stroke="#86efac" stroke-width="2.5"/>
 <text x="90" y="399" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">Analytic geometry</text>
 <text x="90" y="428" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Lines • true arcs • Béziers • node editing</text>
@@ -39,7 +39,7 @@
 <text x="1080" y="533" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Straight • arc • Bézier sources</text>
 <rect x="70" y="585" width="1450" height="89" rx="14" fill="#774511" stroke="#fcd34d" stroke-width="2.5"/>
 <text x="90" y="617" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">NEXT  —  Complete remaining R1 CAD and desktop acceptance</text>
-<text x="90" y="646" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Sharp curved joins • cubic offsets • KDE/Wayland and SVG/DXF QA</text>
+<text x="90" y="646" fill="#f1f5f9" font-family="DejaVu Sans, Arial, sans-serif" font-weight="500" font-size="17">Concave circular trims • cubic offsets • KDE/Wayland and SVG/DXF QA</text>
 <text x="70" y="714" fill="#e2e8f0" font-family="DejaVu Sans, Arial, sans-serif" font-weight="800" font-size="22">FUTURE PHASES  —  NOT YET IMPLEMENTED</text>
 <rect x="70" y="738" width="460" height="88" rx="14" fill="#253244" stroke="#cbd5e1" stroke-width="2.5"/>
 <text x="90" y="770" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="22">R2  —  3D geometry</text>

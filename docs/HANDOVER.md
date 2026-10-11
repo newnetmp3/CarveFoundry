@@ -1348,3 +1348,41 @@ actual Arch KDE Wayland gestures; then proceed to R2 (3D CAD) only after
 priority desktop R1 usability is acceptable.
 
 | 2026-10-10/11 | PR #124 mixed-offset analytic simple-chain validation merged to main 108a93a2 | [CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105033834): 131 tests, strict Clippy, Linux release | R1k sharp curved joins and KDE/Wayland/third-party file QA |
+
+
+## Active R1k convex round-join slice — after verified PR #124
+
+Branch feature/rust-r1k-rounded-convex-offset-joins starts from
+main e66401f538eff6d918fbba7ed07b91180f14effa.
+Adds a **separate opt-in action** named Create rounded offset in the
+native Drawing topology inspector. Existing default Create offset
+vector and its rejection behavior are unchanged.
+
+Pure Rust mixed_offsets::offset_round_chain constructs true retained
+circle sectors centered on a source vertex, of radius equal to the
+signed offset magnitude, for geometrically **convex-on-the-offset-side**
+sharp line/line, line/circle and circle/circle seams. Original segment
+identities and exact line/circle centers/radii survive; inserted join
+nodes/segments get distinct increasing IDs. Open positive means left,
+negative right; closed positive means outward independent of winding.
+Line-line concave joints use existing bounded analytic miters; sharp
+**concave curved** joints reject rather than bridging across the inside
+or inventing trimmed arcs. Reversals, cubic offsets, circle collapse,
+degenerate sweeps, too many nodes, self-crossings and unresolved circle
+overlaps fail closed. Source and output are validated with the R1k
+whole-chain analytic check. Standalone concentric circle solver survives.
+
+Editor adds Action::OffsetRounded with project atomic Undo/Redo,
+source lock/layer enforcement and independent new offset vector.
+Tests cover line→circle and circle→circle sharp joins, outward closed
+triangle round joins, rejected inward curved corner and editor
+Undo/locked-layer rollback. This does **not** implement concave
+circular trimming, general cubic parallel offset or machining safety.
+
+CI verification is pending for this feature branch; do not claim
+a merged milestone until the exact head passes tests, strict Clippy
+and Linux native release, and PR merge completes. Manual KDE Plasma
+Wayland pointer tests and independent SVG/DXF correctness are also
+outstanding. CNC/NC remains disabled. Next R1k: safe concave
+circle-line/circle-circle trimming, same-center arc interval proof,
+offset golden contours, then remaining R1 acceptance before R2.

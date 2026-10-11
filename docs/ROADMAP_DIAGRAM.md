@@ -18,7 +18,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier source extension, tangent line/circular offsets and mixed-offset analytic self-crossing checks | Sharp curved junction joins, cubic offsets, coincident-circle sweep classification, whole-offset topology acceptance, KDE UX and independent SVG/DXF fixtures |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Active:** opt-in exact convex round joins; still need safe concave circular trims, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -35,3 +35,11 @@ See [INTERSECTION_EDITING.md](INTERSECTION_EDITING.md) for supported
 line/arc/Bézier intersections, [CURVE_EXTENSION.md](CURVE_EXTENSION.md)
 for exact Bézier/arc extension, and [TOPOLOGY_EDITING.md](TOPOLOGY_EDITING.md)
 for other source-preserving numeric edits. See [TANGENT_OFFSETS.md](TANGENT_OFFSETS.md) for exact line/arc offsets and R1k whole-chain intersection validation, plus explicit refusal cases.
+
+
+**R1k in-development (not yet verified/merged):**
+Exact opt-in convex round joins at line/circle/circle corners on branch
+feature/rust-r1k-rounded-convex-offset-joins. Sharp concave circle joins,
+cubic parallels, real KDE desktop acceptance and external CAD goldens
+remain unfinished. The high-contrast graphic keeps R1 in progress until
+independent CI and merge verification.

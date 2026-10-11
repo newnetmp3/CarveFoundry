@@ -737,3 +737,25 @@ This closes the first R1k **subset**, not all of R1.
 interval classification, fuller offset topology guarantees, real KDE
 Wayland pointer testing and independent SVG/DXF golden interoperability.
 R2–R7 remain future/gated; CNC/NC export is still disabled.
+
+
+## Active R1k convex exact round joins (CI/merge pending)
+
+The previous [PR #124](https://github.com/newnetmp3/CarveFoundry/pull/124)
+global mixed-offset integrity gate is merged and verified. The new
+feature/rust-r1k-rounded-convex-offset-joins branch adds an **explicit**
+Create rounded offset native action, separate from existing miter mode.
+At a convex sharp line/line, line/true-circle, or true-circle/true-circle
+vertex the parallel edges are bridged by a genuine vertex-centered
+circular arc of radius exactly the requested offset magnitude, with
+the original primitive edges and their stable identities retained.
+Open offset sign follows path left/right; closed positive is outward.
+All-edge-pair analytic validation applies to source and finished offset.
+Concave sharp circular joins, same-center ambiguous overlaps,
+arbitrary cubic parallel offsets, excessive topology and unsafe
+geometry are rejected. Legacy tangent/miter button unchanged.
+
+Tests plus native Clippy/release CI and separate KDE/Wayland interaction
+checks are acceptance gates; do not mark this branch merged until
+CI and PR merge are independently verified. See TANGENT_OFFSETS.md.
+R2–R7 remain future/locked, CNC G-code export disabled.
