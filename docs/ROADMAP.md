@@ -893,3 +893,28 @@ mitered into unsafe geometry.
 application and real KDE Wayland GUI acceptance are still NOT
 automatically certified. See [INTERCHANGE_GOLDENS.md](INTERCHANGE_GOLDENS.md).
 R1 remains incomplete; R2–R7 future/safety gated, NC export disabled.
+
+
+## VERIFIED R1l — source-format SVG/DXF goldens and full-chain straight offsets
+
+[PR #128](https://github.com/newnetmp3/CarveFoundry/pull/128) merged as **c34817881242f13ab55fa415c06fa4e22c4ac3ec**;
+exact tested head **79a32dde6121585c84de0553fefd56439f74191f**
+passed [CI #38107633335](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107633335): **127 core + 5 integration goldens + 18 studio =
+150 tests**, strict Clippy and Linux native desktop release.
+
+Two independent hand-authored capsule files (200 mm SVG and ASCII
+DXF millimetres with exact circular bulges) must decode as the
+same true-circle path; both native exporters and cross-format
+roundtrips preserve endpoint geometry, circle centers/sweep
+flags, segment counts and closure. The test matrix includes
+exact +3/-2 mm rounded capsule offsets and reentrant L-profile
+round offsets; radius collapse rejects. All-straight offsets
+now use the same whole-chain source/output self-crossing gate
+as mixed analytic offset paths. See
+[INTERCHANGE_GOLDENS.md](INTERCHANGE_GOLDENS.md).
+
+**Not sign-off:** the golden input files are hand-authored tests,
+not completed third-party application execution. Real KDE
+Wayland gestures/display scaling, compound/hole CAD semantics
+and independent external SVG/DXF visual QA remain pending.
+R1 in progress. R2–R7 future/safety-gated. CNC NC export disabled.
