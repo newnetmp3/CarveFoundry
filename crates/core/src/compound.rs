@@ -72,9 +72,9 @@ pub fn analyze_compound_paths(paths:&[AnalyticPath])
             }
         }
     }
-    for i in 0..n {
-        for j in i+1..n {
-            if within[i][j] && within[j][i]{
+    for (i,row) in within.iter().enumerate(){
+        for (j,other_row) in within.iter().enumerate().skip(i+1){
+            if row[j] && other_row[i]{
                 return Err("Compound nesting is contradictory; ambiguous containment refused".into());
             }
         }
