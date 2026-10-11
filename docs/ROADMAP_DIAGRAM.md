@@ -45,3 +45,10 @@ feature/rust-r1k-rounded-convex-offset-joins. Sharp concave circle joins,
 cubic parallels, real KDE desktop acceptance and external CAD goldens
 remain unfinished. The high-contrast graphic keeps R1 in progress until
 independent CI and merge verification.
+
+
+**R1k active trim follow-on (unverified):** finite-sweep concave
+line/arc and arc/arc support trimming on branch
+feature/rust-r1k-concave-circular-trims, with explicit rejection of
+ambiguous/overlapping supports. R1 remains in progress; no CNC output.
+See [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).

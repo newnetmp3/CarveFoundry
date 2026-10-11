@@ -781,3 +781,24 @@ arc interval classification and golden contour cases. Real KDE
 Plasma Wayland interaction and third-party SVG/DXF still need
 manual acceptance. R1 is not fully complete. R2–R7 remain
 future/locked and CNC NC output remains disabled.
+
+
+## Active R1k — bounded concave circular trim intersections
+
+After the verified convex round-join PR #125, native Rounded offset
+adds an exact **concave sharp corner** path: finite line/circle or
+circle/circle parallel supports are intersected analytically.
+Only a UNIQUE in-sweep hit that strictly trims both original edges
+is accepted. Circle center, radius, segment identity and sweep
+direction are retained. No extension outside original edge sweeps,
+no invented round bridge, no preview tessellation. Ambiguous
+same-center circles, two viable hits, short-arc misses, collapsing
+radii or global self-crossings fail without mutation. Previous
+convex joins, default tangent/miter mode, source/layer locks and
+atomic Undo continue unchanged.
+
+Branch feature/rust-r1k-concave-circular-trims is **under CI review,
+not yet merged**. See docs/CONCAVE_OFFSET_TRIMS.md.
+Next R1: coincident-circle sweep analysis, adversarial golden
+contours, real KDE Plasma Wayland input and external SVG/DXF QA.
+R2–R7 remain future/planned or safety-locked. No G-code export.

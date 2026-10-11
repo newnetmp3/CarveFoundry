@@ -250,9 +250,9 @@ impl Studio {
         });
         ui.separator();
         ui.label("PARALLEL OFFSETS AND CORNERS");
-        ui.small("Exact offsets: straight contours, true circular arcs, and tangent line/arc chains. Mixed offsets also reject crossing/overlapping source and result edges. Explicit convex round joins are available below; concave circular joins and cubic offsets remain unavailable.");
+        ui.small("Exact offsets: straight contours, true circular arcs, and tangent line/arc chains. Mixed offsets also reject crossing/overlapping source and result edges. Rounded mode below supports convex circular joins and bounded concave circular trims. Cubic offsets remain unavailable.");
         if ui.add_enabled(eligible,egui::Button::new("Create offset vector"))
-            .on_hover_text("Create a new independent analytic offset. Supports lines with bounded miters, true circular arcs, and tangent line/arc chains; all retained as original primitives. Open: + left / - right. Closed: + outward / - inward. Self-crossing contours, non-tangent curved corners and cubic Béziers are refused without changing the project.").clicked(){
+            .on_hover_text("Create a new independent analytic offset. Supports lines with bounded miters, true circular arcs, and tangent line/arc chains; all retained as original primitives. Open: + left / - right. Closed: + outward / - inward. Default offset mode rejects sharp curved corners. Use the separate Rounded offset for convex round joins and proven concave circular trims; cubic/overlapping sources remain unsupported.").clicked(){
             let newid=self.editor.project.next_id;
             self.apply(Action::OffsetLines{path_id,
                 distance_mm:self.topology_distance_mm});
@@ -261,7 +261,7 @@ impl Studio {
             }
         }
         if ui.add_enabled(eligible,egui::Button::new("Create rounded offset"))
-            .on_hover_text("EXPLICIT round-join mode: create true circular arcs centered on convex sharp corners (line/line, line/arc, arc/arc). Exact original lines and circles remain editable. Open: + left / - right. Closed: + outward / - inward. Concave sharp circular seams, self-crossings, overlaps and Bézier offsets fail closed; this is CAD only, NOT toolpath clearance.").clicked(){
+            .on_hover_text("EXPLICIT round-join mode: create true circular arcs on convex sharp corners and trim concave line/arc or arc/arc corners only where both offset segments meet within their original finite sweeps. No extrapolation. Open: + left / - right. Closed: + outward / - inward. Ambiguous intersections, collapsing geometry, overlaps and cubic offsets fail closed. CAD only, NOT machine toolpath clearance.").clicked(){
             let newid=self.editor.project.next_id;
             self.apply(Action::OffsetRounded{path_id,
                 distance_mm:self.topology_distance_mm});
@@ -269,7 +269,7 @@ impl Studio {
                 self.select_vector(Some(newid),false);
             }
         }
-        ui.small("Rounded offset: convex sharp corners use true circular arcs. Inward/concave curved corners still require analytic trims and are rejected.");
+        ui.small("Rounded offset: convex corners use true circular arcs; concave circular corners are trimmed only at one validated in-sweep crossing. Unresolvable joins show an error.");
         let node=self.selected_node;
         ui.horizontal_wrapped(|ui|{
             if ui.add_enabled(eligible&&node.is_some(),
@@ -287,7 +287,7 @@ impl Studio {
                     size_mm:self.topology_distance_mm,fillet:false});
             }
         });
-        ui.small("Corners: line-line (open/closed). Exact mixed offsets validate the whole analytic contour; convex round joins require the dedicated Rounded button.");
+        ui.small("Corners: line-line (open/closed). Exact mixed offsets validate the whole analytic contour; round/trim joins require the dedicated Rounded button.");
     }
 }
 fn curve_name(c:Curve)->&'static str{

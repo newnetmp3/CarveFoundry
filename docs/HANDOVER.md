@@ -1418,3 +1418,35 @@ arc/line and arc/arc trimming, complex golden contours and
 real Wayland + external CAD QA before moving toward R2.
 
 | 2026-10-10/11 | PR #125 exact convex rounded offsets merged | [Rust CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548): 136 tests/Clippy/Linux release; merge 3a2e107d | Exact concave arc trims and real KDE/file interchange QA |
+
+
+## Active R1k — finite-sweep concave circular offset trim
+
+New development branch **feature/rust-r1k-concave-circular-trims**
+from verified main e6990a3f1a4615d40aa3033dad457f11e0ef5042
+(after merged PR #125, exact CI #38105790548).
+
+The existing opt-in **Create rounded offset** action now accepts a
+concave sharp line/circular or circular/circular joint when the
+displaced supports yield exactly ONE point that lies strictly inside
+BOTH original finite segment sweeps. True line/circle and circle/circle
+support intersections are computed mathematically, and each candidate
+is tested against the actual bounded arc angles and line parameters.
+This removes only edge portions: no circle extrapolation, no reversed
+traversal, no zero-length edges, no silent major-arc insertion.
+The trim reach is bounded and the R1k source/result global analytic
+intersection guard still applies. Convex true radius-|distance|
+joins and default legacy tangent/miter offset stay as before.
+Same-center circles, ambiguous multiple hits, candidates outside
+short arcs, cubic parallels and unsafe radius/topology remain rejected.
+No new .cfd schema, CAM or G-code.
+
+Added regression cases for concave line->arc, arc->line, arc->arc,
+short-arc refusal and original-identity preservation in
+crates/core/src/mixed_offsets.rs. Owner KDE/Wayland acceptance is
+described in docs/CONCAVE_OFFSET_TRIMS.md.
+
+**Status: branch implementation, CI / merge not yet verified.**
+Follow-on: coincident arc sweep interval classification, larger offset
+topology goldens, external SVG/DXF interoperability, Wayland QA.
+Do not treat CI as physical CNC safety validation.

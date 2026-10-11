@@ -131,9 +131,10 @@ receive stable unique IDs. It works on open and closed contours,
 including line/line, line/circular arc and circular-arc/arc joins.
 It reuses source/result full-chain intersection validation.
 
-A sharp concave corner containing any arc is **not** eligible: safe
-inside trimming must locate, order and preserve true circle-line/circle
-intersections; simply drawing a round bridge would be wrong. Reversals,
+At the PR #125 checkpoint, a sharp concave corner containing any arc
+was **not** eligible: inside trimming requires bounded, source-accurate
+circle-line/circle-circle intersections. The follow-on R1k trim solver
+implements the finite-sweep uniquely intersecting cases (see below). Reversals,
 invalid offset radii, unsupported coincident circular supports,
 unsuitable topology and all cubic Bézier offsets reject. The normal
 Create offset vector button still offers the existing exact tangent/
@@ -145,8 +146,9 @@ bounded miter behavior. This is artwork, not an NC clearance contour.
       sharply clockwise. Positive 2 mm with Create rounded offset
       should insert a clockwise radius-2-mm sector at the vertex and
       retain the original true source arc center.
-- [ ] Reverse to negative 2 mm at the same concave corner: reject
-      and leave source and project unchanged.
+- [ ] Reverse to negative 2 mm at the same concave corner: the new
+      finite-sweep trim should shorten both edges to one true intersection.
+      If no single point lies on both finite sweeps, reject unchanged.
 - [ ] Offset sharp arc/arc case. Inspect each original center, added
       vertex-centered circle, unique node IDs and saved SVG/DXF.
 - [ ] Closed CCW polygon outward rounded offset creates outward
@@ -163,3 +165,19 @@ Exact head ca543417bd2deefbbebf6401c1f06f8b9ef3d82e passed
 118 core + 18 studio = 136 tests, Clippy and native release.
 Real KDE pointer and external file-format acceptance remain pending.
 No CNC machine tests or NC export.
+
+
+## Active finite concave circular trims (after PR #125)
+
+See [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md) for proof
+obligations, exact geometry, strict rejection cases and desktop
+acceptance. The Rounded offset mode now allows only **one** analytic
+intersecting support point within the interior of both displaced
+segments for concave line/arc and arc/arc joints. It does not
+approximate or extend the original edge sweep. Existing source and
+result global analytic intersection guards remain enforced.
+Coincident circles and unresolved overlaps still fail closed.
+This is not a CNC cutter-compensation or NC safety signoff.
+
+**Branch implementation:** feature/rust-r1k-concave-circular-trims.
+CI/merge, real KDE Wayland and independent SVG/DXF checks pending.
