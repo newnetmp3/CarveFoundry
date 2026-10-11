@@ -9,7 +9,7 @@ passed [Rust CI #38105033834](https://github.com/newnetmp3/CarveFoundry/actions/
 Previous R1j tangent mixed line/arc offsets PR #123 and R1a–R1i
 remain merged; the high-contrast static roadmap is retained.
 
-**LATEST R1k VERIFIED:** [Convex true-circular rounded offsets PR #125](https://github.com/newnetmp3/CarveFoundry/pull/125) merged 3a2e107dd6d07f598788a3493e0e320eafccb5c2; exact tested source ca543417bd2deefbbebf6401c1f06f8b9ef3d82e passed [CI #38105790548](https://github.com/newnetmp3/CarveFoundry/actions/runs/38105790548): **136 tests, strict Clippy, native Linux release**. Opt-in round joins preserve original geometry. Concave circular trims and real KDE/file QA remain unfinished.
+**LATEST R1k VERIFIED:** [Finite-sweep concave circular offsets PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126) merged 907b1509133d09b55503d5ea75253a81abe13ee7; exact tested source ded15b52f95cdededbd2492a63c1a18208553e44 passed [CI #38106382405](https://github.com/newnetmp3/CarveFoundry/actions/runs/38106382405): **138 tests, strict Clippy, native Linux release**. Adds bounded concave line/arc/arc trims alongside the previous exact convex round joins. Coincident-circle overlap, real KDE/file QA and comprehensive topology certification remain unfinished.
 
 ![Full CarveFoundry R0–R7 roadmap — high-contrast static SVG](ROADMAP_HIGH_CONTRAST.svg)
 
@@ -20,7 +20,7 @@ remain merged; the high-contrast static roadmap is retained.
 | Phase | Verified software so far | Outstanding acceptance |
 |---|---|---|
 | R0 | Rust CAD foundation, desktop and project/Undo tests | Comprehensive real KDE/Wayland user testing |
-| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** opt-in exact convex round joins. Remaining: concave circular trims, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
+| **R1** | Baseline 2D CAD, SVG/DXF, text, groups/layers, exact splits/trims/intersections, straight/arc/Bézier extension and CI-verified mixed-offset integrity | **Verified:** convex round joins and bounded concave circular trims. Remaining: coincident arc overlaps, complex contour QA, cubic offset policy, KDE UX and third-party SVG/DXF fixtures |
 | R2 | Not implemented in pure Rust reboot | 3D mesh/relief workspace and viewport |
 | R3 | Not implemented | CNC job, tool/material catalogs, dependency invalidation |
 | R4 | Not implemented | 2D/2.5D machining and safe operation geometry |
@@ -39,16 +39,14 @@ for exact Bézier/arc extension, and [TOPOLOGY_EDITING.md](TOPOLOGY_EDITING.md)
 for other source-preserving numeric edits. See [TANGENT_OFFSETS.md](TANGENT_OFFSETS.md) for exact line/arc offsets and R1k whole-chain intersection validation, plus explicit refusal cases.
 
 
-**R1k in-development (not yet verified/merged):**
-Exact opt-in convex round joins at line/circle/circle corners on branch
-feature/rust-r1k-rounded-convex-offset-joins. Sharp concave circle joins,
-cubic parallels, real KDE desktop acceptance and external CAD goldens
-remain unfinished. The high-contrast graphic keeps R1 in progress until
-independent CI and merge verification.
+**R1k continuing:** PRs #125 and #126 have verified source-accurate
+convex round joins and finite concave circular trims. Coincident arc
+overlap proof, cubic parallels, complex closed contours, real KDE
+desktop acceptance and external CAD goldens remain unfinished.
+The high-contrast graphic keeps R1 in progress.
 
 
-**R1k active trim follow-on (unverified):** finite-sweep concave
-line/arc and arc/arc support trimming on branch
-feature/rust-r1k-concave-circular-trims, with explicit rejection of
-ambiguous/overlapping supports. R1 remains in progress; no CNC output.
-See [CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
+**R1k concave trim follow-on verified:** [PR #126](https://github.com/newnetmp3/CarveFoundry/pull/126),
+exact 138-test CI green. Ambiguous coincident supports remain unsupported.
+R1 still in progress, no CNC output. See
+[CONCAVE_OFFSET_TRIMS.md](CONCAVE_OFFSET_TRIMS.md).
