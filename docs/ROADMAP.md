@@ -846,3 +846,29 @@ Manual KDE Wayland and third-party SVG/DXF checks also outstanding.
 Detailed examples: [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
 Next R1: complex closed contour golden fixtures, external CAD
 interchange, owner UI/interaction validation. R2–R7 remain gated.
+
+
+## VERIFIED R1k — source-accurate coincident arc sweep proof
+
+[PR #127](https://github.com/newnetmp3/CarveFoundry/pull/127)
+merged as **28d01d35b65a21eba9e2446f1f22d2a04f57a8c4**,
+exact feature head **12b8b275c00ecc9351117ff727b5c0606f6593d1**
+passed [CI #38107164700](https://github.com/newnetmp3/CarveFoundry/actions/runs/38107164700):
+**127 core + 18 studio = 145 tests**, strict Clippy and
+Linux release build.
+
+The native Rust intersection checker now differentiates isolated
+adjacent same-circle arc endpoint contact from **positive-length
+angular overlap**, including reverse winding and 0°/360° seam
+crossings. Remote contacts and multi-revolution circular offsets
+remain invalid; distinct concentric radii correctly return no
+crossing. Simple same-center split circular arcs may now be
+offset without a spurious overlapping-support error. No
+geometry-source sampling or project-format change. The dedicated
+circular offset path now also validates source/output intervals.
+See [COINCIDENT_ARC_SWEEPS.md](COINCIDENT_ARC_SWEEPS.md).
+
+**NEXT:** independent SVG/DXF golden-file interoperability and
+complex closed offset fixtures; real KDE Plasma Wayland desktop
+acceptance remains required. R1 still unfinished, R2–R7
+future/planned or safety-gated, CNC/NC G-code output disabled.
