@@ -63,3 +63,13 @@ G-code. NC export remains locked behind dedicated R6 safety gates.
 
 The Rust CI checks geometry and build behavior; actual KDE UI and
 third-party interchange acceptance are still outstanding.
+
+## Verified Rust implementation checkpoint
+
+[PR #123](https://github.com/newnetmp3/CarveFoundry/pull/123)
+merged to main at `4f8ee59b5d3cabb45ae0ce5ebe24021336c18d5c`.
+The exact tested head `0cb5f1e19e3cbc5a88e48f7eaacc1d530e156049`
+passed [Rust CI #38104323749](https://github.com/newnetmp3/CarveFoundry/actions/runs/38104323749):
+**127 Rust tests, strict Clippy and Linux native release build**.
+Real KDE visual/interaction acceptance and independent source
+SVG/DXF validation in the checklist above remain pending.
