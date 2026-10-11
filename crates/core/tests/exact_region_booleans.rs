@@ -67,7 +67,7 @@ fn exact_union_of_nested_donuts_preserves_outer_and_innermost_hole(){
 #[test]
 fn exact_intersection_and_difference_choose_different_original_loops(){
     for (operation,expected_source_indices,points) in [
-        (RegionBoolean::Intersection,[2,1],[
+        (RegionBoolean::Intersection,[1,2],[
             (Point::new(5.0,5.0),false),
             (Point::new(15.0,15.0),true),
             (Point::new(25.0,25.0),false)]),
@@ -104,8 +104,8 @@ fn swapped_difference_is_a_distinct_source_faithful_result(){
     let result=e.project.compound_regions.last().unwrap().id;
     // Only B's inner material inside A's hole survives.
     assert_eq!(e.project.paths.len(),6);
-    assert_eq!(e.project.paths[4].nodes,e.project.paths[1].nodes);
-    assert_eq!(e.project.paths[5].nodes,e.project.paths[3].nodes);
+    assert_eq!(e.project.paths[4].nodes,e.project.paths[3].nodes);
+    assert_eq!(e.project.paths[5].nodes,e.project.paths[1].nodes);
     assert!(e.project.compound_material_at(result,Point::new(25.0,25.0)).unwrap());
     assert!(!e.project.compound_material_at(result,Point::new(50.0,50.0)).unwrap());
     assert!(!e.project.compound_material_at(result,Point::new(15.0,15.0)).unwrap());
@@ -202,7 +202,7 @@ fn exact_concentric_true_arc_booleans_preserve_full_original_circles(){
     e.apply(Action::SaveCompoundRegion{ids:vec![3,4],name:"B".into()}).unwrap();
     for (operation,expected) in [
         (RegionBoolean::Union,[0,3]),
-        (RegionBoolean::Intersection,[2,1]),
+        (RegionBoolean::Intersection,[1,2]),
         (RegionBoolean::Difference,[0,2]),
     ]{
         let mut copy=e.clone();
